@@ -513,10 +513,6 @@ export const UsersManagement: React.FC = () => {
     });
   };
 
-  if (loading && rows.length === 0) {
-    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
-  }
-
   const usersHero = useMemo(
     () => [
       { key: 'total', label: 'إجمالي', value: rows.length },
@@ -526,6 +522,10 @@ export const UsersManagement: React.FC = () => {
     ],
     [rows.length, linkedCount, activeCount, pendingCount],
   );
+
+  if (loading && rows.length === 0) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
 
   return (
     <ModuleOpsPageShell

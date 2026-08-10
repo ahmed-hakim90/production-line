@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '@/components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
@@ -827,11 +826,30 @@ export const SupervisorDetails: React.FC = () => {
 
   // â”€â”€ Loading / Not Found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+  const supervisorShellActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {shellBackAction}
+      {!isSelfSupervisorPage && employee ? (
+        <Button type="button" variant="outline" onClick={() => navigate(`/hr/employees/${employee.id || id}`)}>
+          الملف الشخصي
+        </Button>
+      ) : null}
+      {can('print') ? (
+        <Button type="button" variant="outline" onClick={() => { handlePrint(); }}>
+          طباعة
+        </Button>
+      ) : null}
+    </div>
+  );
+
   if (loading) {
     return (
-      <ModuleOpsPageShell eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} actions={shellBackAction}>
+      <ModuleOpsPageShell
+        eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'}
+        rangeLabel="جاري التحميل"
+        actions={supervisorShellActions}
+      >
         <DetailPageStickyHeader>
-          <PageHeader title={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} loading backAction={false} />
           <OpsDashPanel title="جاري التحميل" accent="hr">
             <SectionSkeleton rows={2} height={38} />
           </OpsDashPanel>
@@ -863,29 +881,23 @@ export const SupervisorDetails: React.FC = () => {
   const scoreBadge = performanceScore >= 85 ? { variant: 'success' as const, label: 'ممتاز' } : performanceScore >= 70 ? { variant: 'warning' as const, label: 'جيد' } : { variant: 'danger' as const, label: 'ضعيف' };
 
   return (
-    <ModuleOpsPageShell eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} actions={shellBackAction}>
+    <ModuleOpsPageShell
+      eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'}
+      rangeLabel={`${employee.name} — ${supervisorPageSubtitle} · متوسط ${avgWorkersPerReport} عامل`}
+      actions={supervisorShellActions}
+    >
       <DetailPageStickyHeader>
-        <PageHeader
-          title={employee.name}
-          subtitle={`${supervisorPageSubtitle} · متوسط ${avgWorkersPerReport} عامل`}
-          icon="user"
-          backAction={false}
-          secondaryAction={!isSelfSupervisorPage ? { label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/hr/employees/${employee.id || id}`) } : undefined}
-          moreActions={can('print') ? [{ label: 'طباعة', icon: 'print', onClick: () => { handlePrint(); }, group: 'تصدير' }] : undefined}
-          extra={(
-            <div className="flex flex-wrap items-center gap-2">
-              {employee.code && (
-                <span className="rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
-                  {employee.code}
-                </span>
-              )}
-              <Badge variant={scoreBadge.variant}>{scoreBadge.label} ({performanceScore})</Badge>
-              <Badge variant={employee.isActive ? 'success' : 'danger'}>
-                {employee.isActive ? 'نشط' : 'غير نشط'}
-              </Badge>
-            </div>
-          )}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          {employee.code ? (
+            <span className="rounded-md border border-border bg-muted px-2 py-1 font-mono text-xs text-muted-foreground">
+              {employee.code}
+            </span>
+          ) : null}
+          <Badge variant={scoreBadge.variant}>{scoreBadge.label} ({performanceScore})</Badge>
+          <Badge variant={employee.isActive ? 'success' : 'danger'}>
+            {employee.isActive ? 'نشط' : 'غير نشط'}
+          </Badge>
+        </div>
         <OpsDashPanel title="الفترة" accent="hr">
           <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">

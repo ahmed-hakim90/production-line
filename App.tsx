@@ -71,7 +71,12 @@ import { AppSplashScreen } from './components/system-ui/AppSplashScreen';
 import { useAppInitialization } from './hooks/useAppInitialization';
 import { useAuthStore } from './store/useAuthStore';
 import { dismissHtmlSplash } from './lib/dismissHtmlSplash';
-import { clearCachedAppSession } from './lib/appSessionCache';
+import { clearCachedAppSession, hasValidCachedAppSession, peekAnyActiveCachedAppSession, readCachedAppSession } from './lib/appSessionCache';
+import {
+  buildBootDecision,
+  type BootPhase,
+} from './lib/appBootDecision';
+import { AppShellSkeleton } from './src/shared/ui/skeletons';
 
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
 
@@ -100,18 +105,8 @@ const MODAL_WORKSPACE_CLEARED_FLAG = 'erp_modal_workspace_cleared_v1';
 /** One recovery reload per tab session when a lazy chunk 404s (stale SW / cache after deploy). */
 const DYNAMIC_IMPORT_RELOAD_KEY = 'erp_dynamic_import_recovery_v1';
 
-const BOOTSTRAP_SPLASH_SUBTITLE = 'جاري تحميل النظام...';
 const APP_BOOTSTRAP_TIMEOUT_MS = 15_000;
 const TENANT_RESOLVE_TIMEOUT_MS = 10_000;
-
-type BootPhase = 'auth' | 'tenant' | 'app-data' | 'ready' | 'error';
-
-type BootDecision = {
-  showSplash: boolean;
-  subtitle: string;
-  allowRoutes: boolean;
-  error?: string;
-};
 
 const withTimeout = async <T,>(
   promise: Promise<T>,
@@ -158,31 +153,6 @@ const resolveTenantSlugOnce = (slug: string): Promise<TenantSlugResolution> => {
 
 const getCachedTenantSlugResolution = (slug: string): TenantSlugResolution | undefined =>
   tenantResolveResultCache.get(normalizeTenantSlug(slug));
-
-const buildBootDecision = (phase: BootPhase, error?: string): BootDecision => {
-  if (phase === 'ready') {
-    return {
-      showSplash: false,
-      subtitle: '',
-      allowRoutes: true,
-      error,
-    };
-  }
-
-  const subtitleByPhase: Record<Exclude<BootPhase, 'ready'>, string> = {
-    auth: BOOTSTRAP_SPLASH_SUBTITLE,
-    tenant: 'جاري تحميل بيانات الشركة...',
-    'app-data': BOOTSTRAP_SPLASH_SUBTITLE,
-    error: error || 'تعذر تحميل النظام. جارٍ فتح التطبيق...',
-  };
-
-  return {
-    showSplash: true,
-    subtitle: subtitleByPhase[phase],
-    allowRoutes: false,
-    error,
-  };
-};
 
 const tenantSlugForInitialBootPath = (pathname: string): string | undefined => {
   const slug = tenantSlugFromPathname(pathname);
@@ -318,11 +288,17 @@ const TenantCatchAll: React.FC = () => {
 };
 
 const TenantPathRedirect: React.FC<{ redirectTo: string }> = ({ redirectTo }) => {
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const params = useParams<Record<string, string | undefined>>();
+  const tenantSlug = params.tenantSlug;
+  let resolved = redirectTo;
+  for (const [key, value] of Object.entries(params)) {
+    if (!value || key === 'tenantSlug' || key === '*') continue;
+    resolved = resolved.replaceAll(`:${key}`, value);
+  }
   const target =
-    redirectTo === '/' || redirectTo === ''
+    resolved === '/' || resolved === ''
       ? tenantHomePath(tenantSlug)
-      : withTenantPath(tenantSlug, redirectTo);
+      : withTenantPath(tenantSlug, resolved);
   return <Navigate to={target} replace />;
 };
 
@@ -380,8 +356,20 @@ const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApprov
     return <WrongCompanyLinkScreen />;
   }
 
-  if (loading) {
-    return <PageRouteFallback />;
+  // Authenticated shell stays mounted; bootstrap/refresh only skeletons page content.
+  if (isAuthenticated && !isPendingApproval) {
+    return (
+      <RouteErrorBoundary homeHref={tenantHomePath(tenantSlug)}>
+        <Layout contentLoading={loading}>
+          <Outlet />
+        </Layout>
+      </RouteErrorBoundary>
+    );
+  }
+
+  // Warm resume / auth resolve: shell skeleton only — never branded splash.
+  if (loading || hasValidCachedAppSession()) {
+    return <AppShellSkeleton />;
   }
 
   if (!isAuthenticated) {
@@ -389,17 +377,7 @@ const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApprov
     return <Navigate to={`/t/${tenantSlug}/login`} replace />;
   }
 
-  if (isPendingApproval) {
-    return <Navigate to={`/t/${tenantSlug}/pending`} replace />;
-  }
-
-  return (
-    <RouteErrorBoundary homeHref={tenantHomePath(tenantSlug)}>
-      <Layout>
-        <Outlet />
-      </Layout>
-    </RouteErrorBoundary>
-  );
+  return <Navigate to={`/t/${tenantSlug}/pending`} replace />;
 };
 
 const TenantLazyRoute: React.FC<{ component: React.ComponentType }> = ({ component: Component }) => {
@@ -833,13 +811,13 @@ const TenantLayout: React.FC = () => {
   }, [gate, tenantSlug]);
 
   if (gate === 'loading') {
-    return <PageRouteFallback />;
+    return <AppShellSkeleton />;
   }
 
   if (gate === 'missing') {
     const tenantLoginPath = `/t/${encodeURIComponent(tenantSlug)}/login`;
     if (loading) {
-      return <PageRouteFallback />;
+      return <AppShellSkeleton />;
     }
     if (isAuthenticated) {
       return <Navigate to={forbiddenRedirectPath || resolvePreferredTenantHomePath()} replace />;
@@ -887,6 +865,24 @@ const RootFallbackRedirect: React.FC = () => {
   return <Navigate to={resolvePreferredTenantHomePath()} replace />;
 };
 
+/** Sync hydrate from localStorage before first paint when F5 / warm session exists. */
+let warmBootHydrated = false;
+const ensureWarmBootHydrateFromCache = (): boolean => {
+  if (warmBootHydrated) return hasValidCachedAppSession();
+  warmBootHydrated = true;
+  const cached = peekAnyActiveCachedAppSession();
+  if (!cached?.uid) return false;
+  useAppStore.getState().hydrateFromCachedSession(cached.uid);
+  useAppStore.setState({ loading: true });
+  useAuthStore.setState({
+    loading: true,
+    isAuthenticated: true,
+    isPendingApproval: false,
+    uid: cached.uid,
+  });
+  return true;
+};
+
 const TrackLegacyRedirect: React.FC = () => {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
@@ -927,6 +923,9 @@ const DailyWelcomeLauncher: React.FC = () => {
 };
 
 const App: React.FC = () => {
+  // F5 / warm resume: hydrate auth+role from cache before first paint (no splash screens).
+  ensureWarmBootHydrateFromCache();
+
   useTenantTheme();
 
   const initializeApp = useAppInitialization();
@@ -942,13 +941,25 @@ const App: React.FC = () => {
   const userLanguage = useAppStore((s) => (s.userProfile?.uiPreferences?.language as SupportedLanguage | undefined));
   const activeSessionUidRef = useRef<string | null>(null);
   const cleanupSubsRef = useRef<(() => void) | null>(null);
-  const [bootPhase, setBootPhase] = useState<BootPhase>('auth');
+  const [bootPhase, setBootPhase] = useState<BootPhase>(() =>
+    hasValidCachedAppSession() ? 'ready' : 'auth',
+  );
   const [bootError, setBootError] = useState<string | undefined>();
   const [dynamicImportRecoveryNeeded, setDynamicImportRecoveryNeeded] = useState(false);
   const bootDecision = useMemo(
-    () => buildBootDecision(bootPhase, bootError),
+    () =>
+      buildBootDecision(bootPhase, {
+        error: bootError,
+        hasCachedSession: hasValidCachedAppSession(),
+      }),
     [bootPhase, bootError],
   );
+
+  // Warm resume: dismiss static HTML shell skeleton as soon as React paints.
+  useLayoutEffect(() => {
+    if (!hasValidCachedAppSession() && document.documentElement.dataset.erpBoot !== 'warm') return;
+    dismissHtmlSplash();
+  }, []);
 
   useEffect(() => {
     useAuthStore.setState({
@@ -971,6 +982,12 @@ const App: React.FC = () => {
     const lang = userLanguage ?? 'ar';
     void setAppLanguage(lang);
   }, [bootDecision.allowRoutes, userLanguage]);
+
+  // Warm resume: kill HTML splash immediately (do not wait for branded/resume screens).
+  useLayoutEffect(() => {
+    if (bootDecision.showSplash) return;
+    dismissHtmlSplash();
+  }, [bootDecision.showSplash]);
 
   useEffect(() => {
     const clearSubscriptions = () => {
@@ -1017,45 +1034,65 @@ const App: React.FC = () => {
         return;
       }
 
+      const finishAuthenticatedBoot = () => {
+        useAuthStore.getState().syncFromLegacyStore();
+        setBootPhase('ready');
+        const state = useAppStore.getState();
+        if (!state.isAuthenticated || state.isPendingApproval) {
+          activeSessionUidRef.current = user.uid;
+          return;
+        }
+
+        activeSessionUidRef.current = user.uid;
+
+        const cleanupEvents = registerSystemEventListeners();
+        cleanupSubsRef.current = () => {
+          cleanupEvents();
+        };
+        sessionTrackerService.start({
+          uid: user.uid,
+          userName: user.displayName ?? user.email ?? user.uid,
+        });
+      };
+
+      const runBootstrap = async () => {
+        clearSubscriptions();
+        try {
+          await Promise.all([
+            withTimeout(initializeApp(), APP_BOOTSTRAP_TIMEOUT_MS, 'initializeApp timeout'),
+            initialTenantSlug
+              ? resolveTenantSlugOnce(initialTenantSlug).catch((error) => {
+                  setBootError((error as Error).message || 'tenant slug resolve failed');
+                  return null;
+                })
+              : Promise.resolve(null),
+          ]);
+        } catch {
+          useAppStore.setState({ loading: false });
+          useAuthStore.getState().syncFromLegacyStore();
+          setBootError('initializeApp timeout');
+          setBootPhase('ready');
+          return;
+        }
+        finishAuthenticatedBoot();
+      };
+
+      // Warm resume: cached profile/role → open routes immediately, validate in background.
+      const cachedSession = readCachedAppSession(user.uid);
+      if (cachedSession?.userProfile?.isActive) {
+        useAppStore.getState().hydrateFromCachedSession(user.uid);
+        useAppStore.setState({ loading: true });
+        useAuthStore.getState().syncFromLegacyStore();
+        setBootPhase('ready');
+        activeSessionUidRef.current = user.uid;
+        void runBootstrap();
+        return;
+      }
+
+      // Cold boot / first login: branded splash until app data is ready.
       setBootPhase('app-data');
       useAppStore.setState({ loading: true });
-
-      clearSubscriptions();
-      try {
-        await Promise.all([
-          withTimeout(initializeApp(), APP_BOOTSTRAP_TIMEOUT_MS, 'initializeApp timeout'),
-          initialTenantSlug
-            ? resolveTenantSlugOnce(initialTenantSlug).catch((error) => {
-                setBootError((error as Error).message || 'tenant slug resolve failed');
-                return null;
-              })
-            : Promise.resolve(null),
-        ]);
-      } catch {
-        useAppStore.setState({ loading: false });
-        useAuthStore.getState().syncFromLegacyStore();
-        setBootError('initializeApp timeout');
-        setBootPhase('ready');
-        return;
-      }
-      useAuthStore.getState().syncFromLegacyStore();
-      setBootPhase('ready');
-      const state = useAppStore.getState();
-      if (!state.isAuthenticated || state.isPendingApproval) {
-        activeSessionUidRef.current = user.uid;
-        return;
-      }
-
-      activeSessionUidRef.current = user.uid;
-
-      const cleanupEvents = registerSystemEventListeners();
-      cleanupSubsRef.current = () => {
-        cleanupEvents();
-      };
-      sessionTrackerService.start({
-        uid: user.uid,
-        userName: user.displayName ?? user.email ?? user.uid,
-      });
+      await runBootstrap();
     });
 
     return () => {
@@ -1163,7 +1200,12 @@ const App: React.FC = () => {
   }
 
   if (bootDecision.showSplash || !bootDecision.allowRoutes) {
-    return <AppSplashScreen subtitle={bootDecision.subtitle} />;
+    return (
+      <AppSplashScreen
+        subtitle={bootDecision.subtitle}
+        variant={bootDecision.splashVariant}
+      />
+    );
   }
 
   return (

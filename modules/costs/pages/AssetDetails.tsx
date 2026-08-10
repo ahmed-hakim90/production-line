@@ -71,7 +71,7 @@ export const AssetDetails: React.FC = () => {
     : 'منتهي / غير متاح';
 
   const backAction = (
-    <Button type="button" variant="ghost" onClick={() => navigate('/costs/assets')}>
+    <Button type="button" variant="ghost" onClick={() => navigate('/accounting/assets')}>
       الرجوع
     </Button>
   );
@@ -81,7 +81,7 @@ export const AssetDetails: React.FC = () => {
       <ModuleOpsPageShell eyebrow="تفاصيل الأصل" actions={backAction}>
         <OpsDashPanel title="لم يتم العثور على الأصل" accent="costs">
           <p className="text-sm text-muted-foreground">لم يتم العثور على الأصل مسجل</p>
-          <Button variant="outline" className="mt-3" onClick={() => navigate('/costs/assets')}>
+          <Button variant="outline" className="mt-3" onClick={() => navigate('/accounting/assets')}>
             عودة إلى قائمة الأصول
           </Button>
         </OpsDashPanel>
@@ -107,7 +107,7 @@ export const AssetDetails: React.FC = () => {
     setDeleting(true);
     try {
       await deleteAsset(asset.id);
-      navigate('/costs/assets');
+      navigate('/accounting/assets');
     } finally {
       setDeleting(false);
     }

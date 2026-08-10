@@ -85,14 +85,14 @@ const CustomIcon: React.FC<IconSvgProps> = ({ className, color = "#6B7280" }) =>
 
 const ICON_CONFIG: Record<IndirectCostItem["iconType"], { bg: string; svg: React.FC<IconSvgProps> }> = {
   packaging: { bg: "bg-[rgb(var(--color-primary)/0.12)]", svg: PackagingIcon },
-  storage: { bg: "bg-[#E6F1FB]", svg: StorageIcon },
-  salaries: { bg: "bg-[#EEEDFE]", svg: SalariesIcon },
-  tools: { bg: "bg-[#FAEEDA]", svg: ToolsIcon },
-  rent: { bg: "bg-[#F1EFE8]", svg: RentIcon },
-  depreciation: { bg: "bg-[#FAECE7]", svg: DepreciationIcon },
-  electricity: { bg: "bg-[#FAEEDA]", svg: ElectricityIcon },
+  storage: { bg: "bg-[rgb(var(--color-secondary)/0.12)]", svg: StorageIcon },
+  salaries: { bg: "bg-[rgb(var(--color-primary)/0.1)]", svg: SalariesIcon },
+  tools: { bg: "bg-[rgb(var(--color-warning)/0.12)]", svg: ToolsIcon },
+  rent: { bg: "bg-[var(--color-bg)]", svg: RentIcon },
+  depreciation: { bg: "bg-[rgb(var(--color-danger)/0.1)]", svg: DepreciationIcon },
+  electricity: { bg: "bg-[rgb(var(--color-warning)/0.12)]", svg: ElectricityIcon },
   "compressed-air": { bg: "bg-[rgb(var(--color-primary)/0.12)]", svg: AirIcon },
-  custom: { bg: "bg-gray-100", svg: CustomIcon },
+  custom: { bg: "bg-[var(--color-surface-hover)]", svg: CustomIcon },
 };
 
 function CostCard({ item }: { item: IndirectCostItem }) {
@@ -103,34 +103,31 @@ function CostCard({ item }: { item: IndirectCostItem }) {
 
   return (
     <article
-      className="rounded-[12px] bg-white p-[16px] text-right"
-      style={{ border: "0.5px solid rgba(0,0,0,0.12)" }}
-     
+      className="rounded-[12px] bg-[var(--color-card)] p-[16px] text-right border border-[var(--color-border)]"
     >
       <div className="flex items-start gap-3">
         <div
-          className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px]", config.bg)}
-          style={{ border: "0.5px solid rgba(0,0,0,0.12)" }}
+          className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] border border-[var(--color-border)]", config.bg)}
         >
           <Icon className="h-5 w-5" color={customColor} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-medium text-[#252521]">{item.name}</p>
-          <p className="mt-1 text-[12px] font-normal text-[#6B6B64]">{item.subLabel}</p>
+          <p className="truncate text-[14px] font-medium text-[var(--color-text)]">{item.name}</p>
+          <p className="mt-1 text-[12px] font-normal text-[var(--color-text-muted)]">{item.subLabel}</p>
         </div>
       </div>
 
-      <div className="my-3 h-px bg-[#E7E5DF]" />
+      <div className="my-3 h-px bg-[var(--color-border)]" />
 
       <div className="space-y-1">
-        <p className="text-[14px] font-medium text-[#252521]">
+        <p className="text-[14px] font-medium text-[var(--color-text)]">
           {item.costPerUnit.toLocaleString("ar-EG", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           })}{" "}
           {t("erpComponents.indirectCostCards.currencyPerUnit")}
         </p>
-        <p className="text-[12px] font-normal text-[#6B6B64]">
+        <p className="text-[12px] font-normal text-[var(--color-text-muted)]">
           {item.monthlyTotal.toLocaleString("ar-EG", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
@@ -155,10 +152,9 @@ export function IndirectCostCards({ items, className }: IndirectCostCardsProps) 
   return (
     <section className={cn("space-y-3", className)}>
       <div
-        className="rounded-[12px] bg-white px-[18px] py-[12px]"
-        style={{ border: "0.5px solid rgba(0,0,0,0.12)" }}
+        className="rounded-[12px] bg-[var(--color-card)] px-[18px] py-[12px] border border-[var(--color-border)]"
       >
-        <p className="text-[13px] font-medium text-[#444441]">
+        <p className="text-[13px] font-medium text-[var(--color-text)]">
           {t("erpComponents.indirectCostCards.headerTitle", { count: items.length.toLocaleString("ar-EG") })}
         </p>
       </div>

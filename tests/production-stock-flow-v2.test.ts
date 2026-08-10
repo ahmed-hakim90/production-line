@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { WAREHOUSE_ROLE_LABELS, transferRequestTypeLabel } from '../modules/inventory/lib/stockLabels.ts';
-import { pickConsumptionWarehouse, assertDistinctProductionRoutingWarehouses, resolveInventoryRoutingV1 } from '../modules/inventory/lib/inventoryRoutingResolver.ts';
+import { pickConsumptionWarehouse, assertDistinctProductionRoutingWarehouses, resolveInventoryRoutingV1, resolveWarehouseRoleFromRouting } from '../modules/inventory/lib/inventoryRoutingResolver.ts';
 import { RECOMMENDED_INVENTORY_ROUTING_POLICY } from '../modules/inventory/lib/recommendedInventoryRouting.ts';
 import { summarizePendingTransfersForDecision, summarizePackagingQueue } from '../modules/dashboards/lib/decisionMetrics.ts';
 import {
@@ -121,6 +121,23 @@ function testRoutingResolvesFloorAndHandoverFlag() {
   } as SystemSettings);
   assert.equal(routing.productionFloorWarehouseId, 'floor-1');
   assert.equal(routing.requirePackagingHandoverReceipt, true);
+}
+
+function testWarehouseRoleResolvedFromRoutingOverDocument() {
+  const routing = {
+    rawMaterialWarehouseId: 'raw',
+    decomposedWarehouseId: 'dec',
+    productionFloorWarehouseId: 'floor',
+    productionWipWarehouseId: 'wip',
+    finishedStagingWarehouseId: 'stg',
+    finalProductWarehouseId: 'fin',
+    packagingSourceWarehouseId: 'pkg-src',
+    packagingTargetWarehouseId: 'pkg-tgt',
+    wasteWarehouseId: 'waste',
+  };
+  assert.equal(resolveWarehouseRoleFromRouting('stg', routing, 'general'), 'finished_staging');
+  assert.equal(resolveWarehouseRoleFromRouting('wip', routing, 'general'), 'production_wip');
+  assert.equal(resolveWarehouseRoleFromRouting('other', routing, 'spare_parts_central'), 'spare_parts_central');
 }
 
 function testPartialHandoverRemainingMath() {
@@ -249,6 +266,7 @@ testPickConsumptionPrefersFloor();
 testDistinctWarehouses();
 testHandoverDecisionMetrics();
 testRoutingResolvesFloorAndHandoverFlag();
+testWarehouseRoleResolvedFromRoutingOverDocument();
 testPartialHandoverRemainingMath();
 testDeterministicReportInventoryIdentities();
 testInventoryOperationStateDecisions();

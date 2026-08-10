@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { Badge, Button, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { FirestoreRole } from '../../../types';
 import { useTranslation } from 'react-i18next';
 
@@ -95,6 +96,7 @@ export const GlobalManageUserModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !submitting && close()}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl border border-[var(--color-border)]"
@@ -298,5 +300,6 @@ export const GlobalManageUserModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

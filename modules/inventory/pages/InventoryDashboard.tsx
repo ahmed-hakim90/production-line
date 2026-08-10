@@ -57,7 +57,7 @@ export const InventoryDashboard: React.FC = () => {
     return <Navigate to={withTenantPath(tenantSlug, home)} replace />;
   }
 
-  if (data.loading && data.warehousesCount === 0) {
+  if (data.loading && data.warehousesCount === 0 && !data.loadError) {
     return <PageContentSkeleton variant="dashboard" kpiCount={8} />;
   }
 
@@ -209,8 +209,13 @@ export const InventoryDashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <OpsDashPanel title="تحليل الحركة" accent="inventory">
+        <OpsDashPanel title="تحليل الحركة (الفترة)" accent="inventory">
           <div className="ops-module-charts__chart" dir="ltr">
+            {data.movementSummaryTruncated ? (
+              <p className="ops-module-charts__hint px-2 pt-1 text-right" dir="rtl">
+                عُدّت حتى {formatNumber(data.movementSummaryScanned)} حركة — قد تكون هناك حركات أقدم خارج العينة.
+              </p>
+            ) : null}
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.movementBars} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />

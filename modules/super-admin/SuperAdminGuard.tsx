@@ -2,7 +2,7 @@ import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { useAuthUiSlice } from '../../store/selectors';
-import { AppSplashScreen } from '../../components/system-ui/AppSplashScreen';
+import { AppShellSkeleton } from '../../src/shared/ui/skeletons';
 import { AccessDeniedPanel } from '../../components/system-ui/AccessDeniedPanel';
 import { tenantHomePath } from '../../lib/tenantPaths';
 
@@ -11,7 +11,7 @@ export const SuperAdminGuard: React.FC = () => {
   const isSuperAdmin = useAppStore((s) => Boolean(s.userProfile?.isSuperAdmin));
 
   if (loading) {
-    return <AppSplashScreen subtitle="جاري التحقق من الصلاحيات..." />;
+    return <AppShellSkeleton />;
   }
 
   if (!isAuthenticated) {

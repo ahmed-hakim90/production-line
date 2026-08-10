@@ -14,12 +14,12 @@ import {
 import { monthlyProductionCostService } from '@/modules/costs/services/monthlyProductionCostService';
 import { stockService } from '@/modules/inventory/services/stockService';
 import { customerService } from '@/modules/customers/services/customerService';
-import { repairJobService } from '@/modules/repair/services/repairJobService';
+import { repairJobService, REPAIR_JOB_DASHBOARD_LIMIT } from '@/modules/repair/services/repairJobService';
 import { resolveRepairSettings } from '@/modules/repair/config/repairSettings';
 import { summarizeRepairJobs } from '@/modules/repair/utils/repairBusinessLogic';
 import { qualityRatesFromTotals } from '../lib/decisionMetrics';
+import { countsTowardFinishedGoodsProduction } from '@/modules/production/utils/packagingLine';
 import {
-  inclusiveDayCount,
   monthsOverlappingPeriod,
   type HomeChartsPeriod,
 } from '../lib/homeChartsPeriod';
@@ -56,6 +56,7 @@ export type HomeModuleChartsModel = {
   hrBars: ModuleChartSeries;
   hrActiveCount: number;
   qualityBars: ModuleChartSeries;
+  qualityRates: { failRate: number; reworkRate: number; avgFpy: number } | null;
   qualitySource: 'work_orders' | 'production' | 'empty';
   repairBars: ModuleChartSeries;
   customersBars: ModuleChartSeries;
@@ -125,6 +126,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
   const attendanceRecords = useAppStore((s) => s.attendanceRecords);
   const productionPlans = useAppStore((s) => s.productionPlans);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const _rawLines = useAppStore((s) => s._rawLines);
 
   const { snapshot: decision, loading: decisionLoading } = useOperationalDecisionSnapshot();
 
@@ -186,7 +188,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
         ? customerService.listAll({ includeInactive: false, max: 500 }).catch(() => [])
         : Promise.resolve([]),
       modules.repair
-        ? repairJobService.listAllBranches().catch(() => [])
+        ? repairJobService.listAllBranches({ limit: REPAIR_JOB_DASHBOARD_LIMIT }).catch(() => [])
         : Promise.resolve([]),
     ])
       .then(([todayRows, periodRows, , , , , inv, cost, customers, repairJobs]) => {
@@ -227,7 +229,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
         }
         if (Array.isArray(repairJobs)) {
           const summary = summarizeRepairJobs(repairJobs, openStatusIds);
-          setRepairOpenCount(summary.open + summary.overdue);
+          setRepairOpenCount(summary.open);
           setRepairBars([
             { name: 'مفتوح', value: summary.open },
             { name: 'جاهز', value: summary.ready },
@@ -270,13 +272,22 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     systemSettings,
   ]);
 
+  const finishedTodayReports = useMemo(
+    () => todayReports.filter((r) => countsTowardFinishedGoodsProduction(r, _rawLines)),
+    [todayReports, _rawLines],
+  );
+  const finishedPeriodReports = useMemo(
+    () => periodReports.filter((r) => countsTowardFinishedGoodsProduction(r, _rawLines)),
+    [periodReports, _rawLines],
+  );
+
   const periodKpis = useMemo(
-    () => buildDashboardKPIs(todayReports, periodReports),
-    [todayReports, periodReports],
+    () => buildDashboardKPIs(finishedTodayReports, finishedPeriodReports),
+    [finishedTodayReports, finishedPeriodReports],
   );
 
   const productionDaily = useMemo(() => {
-    if (periodReports.length === 0) return [];
+    if (finishedPeriodReports.length === 0 && periodReports.length === 0) return [];
     if (modules.costs) {
       const hourlyRate = laborSettings?.hourlyRate ?? 0;
       const months = monthsOverlappingPeriod(period.start, period.end);
@@ -320,7 +331,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
         }));
     }
     const byDay = new Map<string, number>();
-    periodReports.forEach((r) => {
+    finishedPeriodReports.forEach((r) => {
       const day = String(r.date || '');
       if (!day || day < period.start || day > period.end) return;
       byDay.set(day, (byDay.get(day) || 0) + Number(r.quantityProduced || 0));
@@ -328,16 +339,21 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     return Array.from(byDay.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([day, production]) => ({ day: day.slice(5), production, costPerUnit: 0 }));
-  }, [modules.costs, periodReports, period.start, period.end, laborSettings, costCenters, costCenterValues, costAllocations]);
+  }, [modules.costs, periodReports, finishedPeriodReports, period.start, period.end, laborSettings, costCenters, costCenterValues, costAllocations]);
 
   const costSummary = useMemo<HomeModuleChartsModel['costSummary']>(() => {
     if (!modules.costs) return null;
     const approvedHasData = Boolean(
       approvedCost && (approvedCost.totalCost > 0 || approvedCost.producedQty > 0),
     );
-    const periodIsCurrentMonth =
-      period.start.startsWith(getCurrentMonth()) && period.end.startsWith(getCurrentMonth());
-    if (approvedHasData && approvedCost && periodIsCurrentMonth) {
+    // Approved monthly totals only match calendar-month-to-date ranges (start on day 01).
+    // A week inside the month must stay on live period costs.
+    const monthKey = period.start.slice(0, 7);
+    const isCalendarMonthToDate =
+      Boolean(monthKey)
+      && period.start === `${monthKey}-01`
+      && period.end.slice(0, 7) === monthKey;
+    if (approvedHasData && approvedCost && isCalendarMonthToDate) {
       return { ...approvedCost, source: 'approved' };
     }
     const producedQty = productionDaily.reduce((s, d) => s + d.production, 0);
@@ -349,9 +365,6 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
         producedQty,
         source: 'live',
       };
-    }
-    if (approvedHasData && approvedCost) {
-      return { ...approvedCost, source: 'approved' };
     }
     return {
       averageUnitCost: 0,
@@ -397,15 +410,19 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     });
     const present = inRange.filter((r) => {
       const s = String(r.status || '');
-      return s === 'present' || s === 'late' || s.startsWith('present');
+      return s === 'present' || s === 'overtime';
     }).length;
     const absent = inRange.filter((r) => String(r.status || '') === 'absent').length;
     const late = inRange.filter((r) => {
       const s = String(r.status || '');
-      return s === 'late' || s.includes('late');
+      return s === 'late' || s === 'present_late' || s === 'present_late_early';
     }).length;
-    const days = inclusiveDayCount(period.start, period.end);
-    const unrecorded = Math.max(0, hrActiveCount * days - inRange.length);
+    // Gap for the period end day only — multi-day "active × days − rows" inflates weekends/holidays.
+    const focusDate = period.end;
+    const focusEmployeeIds = new Set(
+      inRange.filter((r) => String(r.date || '') === focusDate).map((r) => String(r.employeeId || '')),
+    );
+    const unrecorded = Math.max(0, hrActiveCount - focusEmployeeIds.size);
     return [
       { name: 'حضور', value: present },
       { name: 'غياب', value: absent },
@@ -414,9 +431,13 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     ];
   }, [modules.hr, attendanceRecords, hrActiveCount, period.start, period.end]);
 
-  const { qualityBars, qualitySource } = useMemo(() => {
+  const { qualityBars, qualityRates, qualitySource } = useMemo(() => {
     if (!modules.quality) {
-      return { qualityBars: [] as ModuleChartSeries, qualitySource: 'empty' as const };
+      return {
+        qualityBars: [] as ModuleChartSeries,
+        qualityRates: null as { failRate: number; reworkRate: number; avgFpy: number } | null,
+        qualitySource: 'empty' as const,
+      };
     }
     const active = workOrders.filter(
       (w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed',
@@ -439,42 +460,44 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     const hasWoQuality = totals.inspected > 0 || pending > 0 || rates.avgFpy > 0;
     if (hasWoQuality) {
       return {
+        // Counts only on one axis — percentages shown as meta under the chart.
         qualityBars: [
           { name: 'مفحوص', value: totals.inspected },
-          { name: 'فشل %', value: rates.failRate },
-          { name: 'إعادة %', value: rates.reworkRate },
-          { name: 'FPY', value: rates.avgFpy },
+          { name: 'فاشل', value: totals.failed },
+          { name: 'إعادة', value: totals.rework },
           { name: 'بانتظار', value: pending },
         ],
+        qualityRates: {
+          failRate: rates.failRate,
+          reworkRate: rates.reworkRate,
+          avgFpy: rates.avgFpy,
+        },
         qualitySource: 'work_orders' as const,
       };
     }
-    const produced = periodReports.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
-    const waste = periodReports.reduce((s, r) => s + getReportWaste(r), 0);
-    const base = produced + waste;
-    const wastePct = base > 0 ? Number(((waste / base) * 100).toFixed(1)) : 0;
+    const produced = finishedPeriodReports.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
+    const waste = finishedPeriodReports.reduce((s, r) => s + getReportWaste(r), 0);
     if (produced > 0 || waste > 0) {
       return {
         qualityBars: [
           { name: 'إنتاج', value: produced },
           { name: 'هالك', value: waste },
-          { name: 'هالك %', value: wastePct },
-          { name: 'سليم', value: produced },
         ],
+        qualityRates: null,
         qualitySource: 'production' as const,
       };
     }
     return {
       qualityBars: [
         { name: 'مفحوص', value: 0 },
-        { name: 'فشل %', value: 0 },
-        { name: 'إعادة %', value: 0 },
-        { name: 'FPY', value: 0 },
+        { name: 'فاشل', value: 0 },
+        { name: 'إعادة', value: 0 },
         { name: 'بانتظار', value: 0 },
       ],
+      qualityRates: { failRate: 0, reworkRate: 0, avgFpy: 0 },
       qualitySource: 'empty' as const,
     };
-  }, [modules.quality, workOrders, periodReports]);
+  }, [modules.quality, workOrders, finishedPeriodReports]);
 
   const resolvedRepairBars = useMemo<ModuleChartSeries>(() => {
     if (!modules.repair) return [];
@@ -493,14 +516,14 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     const inProgress = productionPlans.filter((p) => p.status === 'in_progress').length;
     const completed = productionPlans.filter((p) => p.status === 'completed').length;
     const cancelled = productionPlans.filter((p) => p.status === 'cancelled').length;
+    // Status partition only — behind-schedule is a schedule KPI, not a status bucket.
     return [
       { name: 'مخطط', value: planned },
       { name: 'جاري', value: inProgress },
       { name: 'مكتمل', value: completed },
-      { name: 'متأخر', value: decision.behindScheduleCount },
       { name: 'ملغي', value: cancelled },
     ];
-  }, [productionPlans, decision.behindScheduleCount]);
+  }, [productionPlans]);
 
   const planTotalCount = productionPlans.length;
   const planAchievement = decision.planVolumeAchievement;
@@ -509,7 +532,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     ? Math.max(inventoryKpi.lowStockCount, decision.inventory.lowStockCount)
     : decision.inventory.lowStockCount;
 
-  const periodProduction = periodReports.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
+  const periodProduction = finishedPeriodReports.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
 
   return {
     loading: decisionLoading || extraLoading,
@@ -533,6 +556,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
     hrBars,
     hrActiveCount,
     qualityBars,
+    qualityRates,
     qualitySource,
     repairBars: resolvedRepairBars,
     customersBars: modules.customers ? customerBars : [],

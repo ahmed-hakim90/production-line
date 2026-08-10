@@ -520,7 +520,7 @@ export function SmartFilterBar({
                   handleClearAll();
                   setMenuOpen(false);
                 }}
-                className="mt-1 w-full rounded-md px-2 py-1.5 text-start text-xs text-[var(--color-text-muted)] hover:bg-slate-50 hover:text-[var(--color-text)]"
+                className="mt-1 w-full rounded-md px-2 py-1.5 text-start text-xs text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"
               >
                 {t('erpComponents.smartFilterBar.clearAll')}
               </button>
@@ -543,7 +543,7 @@ export function SmartFilterBar({
                   {favorites.map((favorite) => (
                     <li
                       key={favorite.id}
-                      className="group flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-slate-50"
+                      className="group flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-[var(--color-surface-hover)]"
                     >
                       <button
                         type="button"

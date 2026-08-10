@@ -85,7 +85,7 @@ function getIconClasses(
 ): { iconColor: string; activeBg: string } {
   if (style === 'colorful') {
     return {
-      iconColor: COLORFUL_ICON[groupKey] ?? 'text-slate-500',
+      iconColor: COLORFUL_ICON[groupKey] ?? 'text-[var(--color-text-muted)]',
       activeBg:  COLORFUL_BG[groupKey]  ?? 'bg-primary/5',
     };
   }
@@ -93,7 +93,7 @@ function getIconClasses(
     return { iconColor: 'text-primary', activeBg: 'bg-primary/8' };
   }
   // muted
-  return { iconColor: 'text-slate-400', activeBg: 'bg-slate-100' };
+  return { iconColor: 'text-[var(--color-text-muted)]', activeBg: 'bg-[var(--color-surface-hover)]' };
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
@@ -503,7 +503,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                               <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-rose-500 rounded-full" />
                             )}
                           </NavLink>
-                          <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]`}>
+                          <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[var(--color-text)] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]`}>
                             {item.label}
                           </span>
                         </div>
@@ -571,7 +571,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                     )}
                   </button>
                   {/* Tooltip towards content (left side for RTL right sidebar) */}
-                  <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]`}>
+                  <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[var(--color-text)] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]`}>
                     {group.label}
                   </span>
                 </div>
@@ -695,7 +695,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 <span className="text-primary font-bold text-xs">
                   {(userDisplayName ?? 'U').charAt(0).toUpperCase()}
                 </span>
-                <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[#1f272e] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/prof:opacity-100 transition-opacity shadow-lg z-[60]`}>
+                <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[var(--color-text)] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/prof:opacity-100 transition-opacity shadow-lg z-[60]`}>
                   {userDisplayName ?? t('sidebar.user')}
                 </span>
               </button>
@@ -732,7 +732,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
               {profileOpen && (
                 <div className="mt-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden bg-[var(--color-card)]" style={{ boxShadow: 'var(--shadow-dropdown)' }}>
-                  <div className="px-3 py-2 border-b border-[var(--color-border)] bg-[#f8f9fa]">
+                  <div className="px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
                     <p className="text-[10px] text-[var(--color-text-muted)] font-mono truncate" dir="ltr">
                       {userEmail}
                     </p>

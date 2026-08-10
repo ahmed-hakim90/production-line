@@ -25,10 +25,6 @@ const AccountingChartOfAccounts = lazyNamed(
   () => import("../pages/AccountingChartOfAccounts"),
   "AccountingChartOfAccounts",
 );
-const AccountingCostCenters = lazyNamed(
-  () => import("../pages/AccountingCostCenters"),
-  "AccountingCostCenters",
-);
 const AccountingSettingsPage = lazyNamed(
   () => import("../pages/AccountingSettings"),
   "AccountingSettingsPage",
@@ -74,11 +70,7 @@ export const ACCOUNTING_ROUTES: AppRouteDef[] = [
     permission: "accounting.view",
     component: AccountingChartOfAccounts,
   },
-  {
-    path: "/accounting/cost-centers",
-    permission: "accounting.view",
-    component: AccountingCostCenters,
-  },
+  // Cost centers + production costing routes are owned by COST_ROUTES under /accounting/*
   {
     path: "/accounting/settings",
     permission: "accounting.view",

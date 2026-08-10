@@ -1008,6 +1008,32 @@ button {
   }
 }
 
+/* Warm resume: same brand tokens, no marketing panel — brief gate only */
+.app-splash--resume {
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #f8f4f4;
+  color: var(--color-text, #1e1b4b);
+}
+
+.app-splash--resume .app-splash__main {
+  flex: 0 1 auto;
+  width: 100%;
+  max-width: 420px;
+  min-height: auto;
+  padding: 32px 24px;
+}
+
+.app-splash--resume .app-splash__icon-shell {
+  width: 72px;
+  height: 72px;
+}
+
+.app-splash--resume .app-splash__status {
+  color: var(--color-text-muted, #64748b);
+}
+
 .app-splash__panel {
   display: none;
 }
@@ -1285,12 +1311,32 @@ button {
   pointer-events: none;
 }
 
+/* F5 warm resume: keep shell skeleton layout (do not re-apply branded flex centering) */
+#html-splash.html-splash--warm {
+  display: block;
+  background: var(--color-bg, #f7f9fc);
+  color: var(--color-text, #0f172a);
+  padding: 0;
+  gap: 0;
+  align-items: stretch;
+  justify-content: flex-start;
+}
+
+#html-splash.html-splash--warm.html-splash--exit {
+  transition: none;
+  opacity: 0;
+}
+
 #html-splash img {
   width: 80px;
   height: 80px;
   border-radius: 20px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
   animation: app-splash-logo-pulse 2.4s ease-in-out infinite;
+}
+
+#html-splash.html-splash--warm img {
+  animation: none;
 }
 
 #html-splash p {
@@ -1809,15 +1855,14 @@ html.dark [class*="text-slate-500"] {
    ERPNext MODAL SYSTEM
    ══════════════════════════════════════════════════════════ */
 
-/* Modal overlay backdrop */
+/* Modal overlay backdrop — never invent stacking under topbar with negative margin */
 .erp-modal-overlay {
-  margin-top: -50px!important;
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  z-index: 100;
+  z-index: 10050;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2897,7 +2942,8 @@ input[type="radio"] {
 }
 
 /* ══════════════════════════════════════════════════════════
-   ERPNext Dashboard Theme Harmonization
+   Dashboard theme — token overlays only (no hardcoded brand hex).
+   Legacy attribute selectors remap leftover slate/hex utilities to CSS vars.
    ══════════════════════════════════════════════════════════ */
 .erp-dashboard-theme [class*="bg-[#f8f9fa]"],
 .erp-dashboard-theme [class*="bg-[#f8f9fa]/"],
@@ -2958,10 +3004,11 @@ input[type="radio"] {
   position: relative;
 }
 
-.ops-dash-board > * {
-  position: relative;
-  z-index: 1;
-}
+/*
+ * Do NOT put z-index on toolbar/body children.
+ * Page-local `position:fixed` modals render inside `.ops-dash-domain-body`;
+ * a stacking context here traps them under the toolbar border (visible “line over modal”).
+ */
 
 /* Data-first: KPIs first, slim period tools, then charts */
 .ops-dash-board--data-first {
@@ -2977,6 +3024,16 @@ input[type="radio"] {
   border-top: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
   padding: 0 0.1rem 0.55rem;
+}
+
+.ops-dash-board--data-first .ops-dash-toolbar:has(+ .ops-dash-toolbar--actions) {
+  border-bottom: 0;
+  padding-bottom: 0.2rem;
+}
+
+.ops-dash-board--data-first .ops-dash-toolbar--actions {
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+  padding: 0.1rem 0.1rem 0.55rem;
 }
 
 .ops-dash-board--data-first .ops-module-charts {
@@ -3036,7 +3093,9 @@ input[type="radio"] {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  flex-shrink: 0;
+  flex: 1 1 10rem;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .ops-dash-toolbar__range {
@@ -3044,7 +3103,171 @@ input[type="radio"] {
   font-weight: 600;
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  white-space: normal;
+  max-width: min(28rem, 100%);
+  text-align: end;
+}
+
+/* Dedicated page-action strip — compact pills aligned with ops chrome */
+.ops-dash-toolbar--actions {
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding-top: 0.15rem;
+  border-top: 0;
+}
+
+.ops-dash-toolbar__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+  width: 100%;
+}
+
+/* Keep page wrappers as flex groups — do not flatten with display:contents
+   (breaks segmented toggles / menus that need their own chrome). */
+.ops-dash-toolbar__actions > div {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+}
+
+.ops-dash-toolbar__actions .btn,
+.ops-dash-toolbar__actions > button,
+.ops-dash-toolbar__actions > div:not(.ops-toolbar-seg) > button,
+.ops-dash-toolbar__actions button[type='button']:not(.ops-dash-period-chip):not(.ops-dash-refresh__btn) {
+  min-height: 1.85rem !important;
+  height: 1.85rem !important;
+  padding: 0 0.75rem !important;
+  font-size: 0.72rem !important;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 999px !important;
+  gap: 0.3rem;
+  box-shadow: none;
   white-space: nowrap;
+}
+
+.ops-dash-toolbar__actions .btn .material-icons-round,
+.ops-dash-toolbar__actions button[type='button'] .material-icons-round {
+  font-size: 0.95rem !important;
+  line-height: 1;
+}
+
+.ops-dash-toolbar__actions .btn svg,
+.ops-dash-toolbar__actions button[type='button'] svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex-shrink: 0;
+}
+
+.ops-dash-toolbar__actions .btn-secondary,
+.ops-dash-toolbar__actions button[type='button'].border,
+.ops-dash-toolbar__actions button[type='button'][data-variant='outline'],
+.ops-dash-toolbar__actions .btn[class*='outline'] {
+  background: var(--color-card);
+  border-color: var(--color-border);
+}
+
+.ops-dash-toolbar__actions .btn-secondary:hover,
+.ops-dash-toolbar__actions button[type='button'].border:hover,
+.ops-dash-toolbar__actions .btn[class*='outline']:hover {
+  border-color: rgb(var(--color-primary) / 0.35);
+  background: color-mix(in srgb, var(--color-card) 70%, rgb(var(--color-primary) / 0.08) 30%);
+}
+
+.ops-dash-toolbar__actions .btn-destructive,
+.ops-dash-toolbar__actions button[type='button'][data-variant='destructive'],
+.ops-dash-toolbar__actions .btn[class*='destructive'] {
+  border-radius: 999px !important;
+}
+
+/* Compact selects / month filters sitting in the action strip */
+.ops-dash-toolbar__actions input[type='month'],
+.ops-dash-toolbar__actions input[type='date'],
+.ops-dash-toolbar__actions input[type='text'],
+.ops-dash-toolbar__actions select,
+.ops-dash-toolbar__actions [data-slot='select-trigger'],
+.ops-dash-toolbar__actions button[role='combobox'] {
+  min-height: 1.85rem !important;
+  height: 1.85rem !important;
+  border-radius: 999px !important;
+  font-size: 0.72rem !important;
+  font-weight: 650;
+  padding-block: 0 !important;
+  padding-inline: 0.75rem !important;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  box-shadow: none;
+}
+
+/* Segmented view toggles (table / kanban / …) */
+.ops-dash-toolbar__actions .ops-toolbar-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-muted) 55%, var(--color-card));
+}
+
+.ops-dash-toolbar__actions .ops-toolbar-seg > button {
+  min-height: 1.55rem !important;
+  height: 1.55rem !important;
+  width: 1.85rem !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  border: 0 !important;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.ops-dash-toolbar__actions .ops-toolbar-seg > button.is-active,
+.ops-dash-toolbar__actions .ops-toolbar-seg > button[aria-pressed='true'] {
+  background: var(--color-card) !important;
+  color: rgb(var(--color-primary)) !important;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+}
+
+.ops-dash-toolbar__actions .ops-toolbar-seg .material-icons-round {
+  font-size: 1rem !important;
+}
+
+/* Status / info chips mixed into the action strip */
+.ops-dash-toolbar__actions [class*='Badge'],
+.ops-dash-toolbar__actions [class*='badge'],
+.ops-dash-toolbar__actions [class*='StatusBadge'] {
+  min-height: 1.85rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding-inline: 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+@media (max-width: 639px) {
+  .ops-dash-toolbar__meta {
+    justify-content: flex-start;
+    flex: 1 1 100%;
+  }
+
+  .ops-dash-toolbar__range {
+    text-align: start;
+    max-width: 100%;
+  }
+
+  .ops-dash-toolbar__actions,
+  .ops-dash-toolbar__actions > div {
+    justify-content: flex-start;
+  }
 }
 
 .ops-dash-refresh {
@@ -3145,7 +3368,10 @@ input[type="radio"] {
 }
 
 .ops-dash-panel {
-  height: 100%;
+  /* Auto height by default: stacked panels on ops pages must NOT each claim 100%
+     of a stretched grid column — that caused overlapping nested white boxes. */
+  height: auto;
+  width: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -3155,6 +3381,13 @@ input[type="radio"] {
   box-shadow: var(--shadow-desk-card, 0 4px 20px rgba(15, 23, 42, 0.05));
   overflow: hidden;
   transition: box-shadow 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+/* Equal-height fill only inside dashboard slot/chart grids (one panel per cell). */
+.ops-dash-slot > .ops-dash-panel,
+.ops-module-charts .ops-dash-panel {
+  height: 100%;
+  min-height: 100%;
 }
 
 .ops-module-charts .ops-dash-panel:hover {
@@ -3443,10 +3676,6 @@ input[type="radio"] {
   grid-column: 1 / -1;
 }
 
-.ops-module-charts .ops-dash-panel {
-  min-height: 100%;
-}
-
 .ops-module-charts__chart {
   width: 100%;
   height: 210px;
@@ -3654,8 +3883,8 @@ input[type="radio"] {
   }
 }
 
-/* Repair module — scoped to main content (see AppLayout `erp-repair-theme`).
-   Stripe-like: airy padding, hairline borders, soft elevation, warm accent. */
+/* Repair module — scoped token remaps only (see AppLayout `erp-repair-theme`).
+   Overrides --color-primary* for the module accent; surfaces stay on global theme vars. */
 .erp-repair-theme {
   --layout-main-padding-y: 1.35rem;
   /* orange-600 channels — module accent without changing global tenant shell */
@@ -3735,7 +3964,10 @@ input[type="radio"] {
     box-shadow: none !important;
     break-inside: avoid-page;
     page-break-inside: avoid;
-    max-width: 100% !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
   }
   .repair-invoice-print-sheet .repair-invoice-table {
     width: 100%;

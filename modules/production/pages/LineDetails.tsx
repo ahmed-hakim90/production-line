@@ -2,7 +2,6 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '@/components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,7 @@ import {
   SectionSkeleton,
   SURFACE_CARD,
 } from '@/src/components/erp/DetailPageChrome';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { KPIBox, Badge } from '../components/UI';
 import { LineProductWorkerTargetsSection } from '../components/LineProductWorkerTargetsSection';
 import { useAppStore } from '../../../store/useAppStore';
@@ -272,9 +272,12 @@ export const LineDetails: React.FC = () => {
 
   const planActualProduced = useMemo(() => {
     if (!activePlan) return 0;
-    const key = `${activePlan.lineId}_${activePlan.productId}`;
-    const pReports = planReports[key] || [];
-    return pReports.reduce((sum, r) => sum + (r.quantityProduced || 0), 0);
+    const pReports =
+      (activePlan.id && planReports[activePlan.id])
+      || planReports[`${activePlan.lineId}_${activePlan.productId}`]
+      || [];
+    const fromReports = pReports.reduce((sum, r) => sum + (r.quantityProduced || 0), 0);
+    return Math.max(Number(activePlan.producedQuantity || 0), fromReports);
   }, [activePlan, planReports]);
 
   const activePlanProduct = useMemo(
@@ -694,9 +697,8 @@ export const LineDetails: React.FC = () => {
 
   if (loading) {
     return (
-      <ModuleOpsPageShell eyebrow="تفاصيل الخط" actions={shellBackAction}>
+      <ModuleOpsPageShell eyebrow="تفاصيل الخط" rangeLabel="جاري التحميل" actions={shellBackAction}>
         <DetailPageStickyHeader>
-          <PageHeader title="تفاصيل الخط" loading backAction={false} />
           <OpsDashPanel title="جاري التحميل" accent="production">
             <SectionSkeleton rows={2} height={38} />
           </OpsDashPanel>
@@ -728,19 +730,17 @@ export const LineDetails: React.FC = () => {
   const healthCfg = planHealth ? HEALTH_STATUS_CONFIG[planHealth.status] : null;
 
   return (
-    <ModuleOpsPageShell eyebrow="تفاصيل الخط" actions={shellBackAction}>
+    <ModuleOpsPageShell
+      eyebrow="تفاصيل الخط"
+      rangeLabel={line ? `${line.name} — ${linePageSubtitle}` : undefined}
+      actions={shellBackAction}
+    >
       <DetailPageStickyHeader>
-        <PageHeader
-          title={line?.name ?? 'تفاصيل الخط'}
-          subtitle={linePageSubtitle}
-          icon="factory"
-          backAction={false}
-          extra={(
-            <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
-              {statusCfg.label}
-            </Badge>
-          )}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
+            {statusCfg.label}
+          </Badge>
+        </div>
         <OpsDashPanel title="الفترة" accent="production">
           <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
@@ -1346,6 +1346,7 @@ export const LineDetails: React.FC = () => {
 
       {/* View Workers Modal */}
       {viewWorkersData && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewWorkersData(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-md max-h-[90dvh] flex flex-col border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -1392,6 +1393,7 @@ export const LineDetails: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

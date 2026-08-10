@@ -26,6 +26,8 @@ Defined in `src/index.css` `:root` and `DEFAULT_THEME` (`utils/dashboardConfig.t
 - **Domain homes:** `DomainHomeShell` — KPI hero → period chips → panels → secondary actions
 - **Ops lists:** `ModuleOpsPageShell` — same chrome without huge secondary panel
 - **Panels:** `OpsDashPanel` with module `accent`
+- **Action strip:** page CTAs go in shell `actions` (separate toolbar row). Compact pill buttons via `.ops-dash-toolbar__actions`. Use `OpsMoreActionsMenu` when overflow > ~4 secondary actions. Segmented toggles use `.ops-toolbar-seg`.
+- **Modals:** mount via `ManagedModalPortal` / `#erp-modal-root` (or Radix `getRootPortalContainer`). Never put `z-index` on `.ops-dash-toolbar` / `.ops-dash-domain-body` — it traps page-local fixed overlays under the toolbar border.
 
 ## Module apps
 

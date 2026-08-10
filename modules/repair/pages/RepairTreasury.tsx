@@ -26,7 +26,13 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
-import { type FirestoreUserWithRepair, type RepairBranch, type RepairTreasuryEntry, type RepairTreasurySession } from '../types';
+import {
+  type FirestoreUserWithRepair,
+  type RepairBranch,
+  type RepairTreasuryEntry,
+  type RepairTreasurySession,
+  type RepairTreasurySettlement,
+} from '../types';
 import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { REPAIR_TREASURY_EXPENSE_TYPES, type RepairTreasuryExpenseTypeKey } from '../lib/repairTreasuryExpenseTypes';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
@@ -56,6 +62,14 @@ const entryTypeMeta: Record<string, { amountClass: string; signed: (n: number) =
   },
   TRANSFER_IN: {
     amountClass: 'text-violet-700',
+    signed: (n) => `+${fmt(n)}`,
+  },
+  SETTLEMENT_OUT: {
+    amountClass: 'text-orange-700',
+    signed: (n) => `−${fmt(n)}`,
+  },
+  SETTLEMENT_IN: {
+    amountClass: 'text-emerald-800',
     signed: (n) => `+${fmt(n)}`,
   },
   CLOSING: {
@@ -114,6 +128,14 @@ export const RepairTreasury: React.FC = () => {
   const [currentMonthKey, setCurrentMonthKey] = useState(() => new Date().toISOString().slice(0, 7));
   const [entriesPage, setEntriesPage] = useState(1);
   const [sessionsPage, setSessionsPage] = useState(1);
+  const [settlements, setSettlements] = useState<RepairTreasurySettlement[]>([]);
+  const [settleCounted, setSettleCounted] = useState('');
+  const [settleNote, setSettleNote] = useState('');
+  const [settleVarianceReason, setSettleVarianceReason] = useState('');
+  const canApproveSettlements = canManage && (
+    can('repair.branches.manage')
+    || can('repair.callCenter.viewAll')
+  );
 
   const allowedBranches = useMemo(() => {
     if (repairCtx.canViewAllBranches) return branches;
@@ -264,8 +286,16 @@ export const RepairTreasury: React.FC = () => {
     if (!openSession) return 0;
     return sessionEntries.reduce((sum, entry) => {
       if (entry.entryType === 'OPENING') return sum + Number(entry.amount || 0);
-      if (entry.entryType === 'INCOME' || entry.entryType === 'TRANSFER_IN') return sum + Number(entry.amount || 0);
-      if (entry.entryType === 'EXPENSE' || entry.entryType === 'TRANSFER_OUT') return sum - Number(entry.amount || 0);
+      if (
+        entry.entryType === 'INCOME'
+        || entry.entryType === 'TRANSFER_IN'
+        || entry.entryType === 'SETTLEMENT_IN'
+      ) return sum + Number(entry.amount || 0);
+      if (
+        entry.entryType === 'EXPENSE'
+        || entry.entryType === 'TRANSFER_OUT'
+        || entry.entryType === 'SETTLEMENT_OUT'
+      ) return sum - Number(entry.amount || 0);
       return sum;
     }, 0);
   }, [openSession, sessionEntries]);
@@ -275,11 +305,33 @@ export const RepairTreasury: React.FC = () => {
     let expense = 0;
     sessionEntries.forEach((entry) => {
       const amount = Number(entry.amount || 0);
-      if (entry.entryType === 'INCOME' || entry.entryType === 'TRANSFER_IN') income += amount;
-      if (entry.entryType === 'EXPENSE' || entry.entryType === 'TRANSFER_OUT') expense += amount;
+      if (
+        entry.entryType === 'INCOME'
+        || entry.entryType === 'TRANSFER_IN'
+        || entry.entryType === 'SETTLEMENT_IN'
+      ) income += amount;
+      if (
+        entry.entryType === 'EXPENSE'
+        || entry.entryType === 'TRANSFER_OUT'
+        || entry.entryType === 'SETTLEMENT_OUT'
+      ) expense += amount;
     });
     return { income, expense, count: sessionEntries.length };
   }, [sessionEntries]);
+
+  const mainBranch = useMemo(
+    () => branches.find((branch) => branch.isMain) || null,
+    [branches],
+  );
+  const isMainBranchSelected = Boolean(activeBranch?.isMain);
+  const pendingSettlements = useMemo(
+    () => settlements.filter((row) => row.status === 'submitted'),
+    [settlements],
+  );
+  const branchSettlements = useMemo(
+    () => settlements.filter((row) => row.fromBranchId === branchId || row.toBranchId === branchId).slice(0, 12),
+    [settlements, branchId],
+  );
 
   const parsedClosingBalance = Number(closingBalance);
   const hasClosingBalanceInput = String(closingBalance).trim() !== '';
@@ -342,10 +394,26 @@ export const RepairTreasury: React.FC = () => {
     }
   }
 
+  const loadSettlements = async () => {
+    try {
+      const rows = await repairTreasuryService.listSettlements({ limitCount: 80 });
+      setSettlements(rows);
+    } catch {
+      setSettlements([]);
+    }
+  };
+
   const refreshAll = async (selectedBranchId = branchId) => {
     await load(selectedBranchId, { force: true });
-    await loadAllBranchSessions(allowedBranches.map((branch) => String(branch.id || '')).filter(Boolean));
+    await Promise.all([
+      loadAllBranchSessions(allowedBranches.map((branch) => String(branch.id || '')).filter(Boolean)),
+      loadSettlements(),
+    ]);
   };
+
+  useEffect(() => {
+    void loadSettlements();
+  }, []);
 
   const openSessionDetails = async (session: RepairTreasurySession) => {
     const sessionId = String(session.id || '');
@@ -472,6 +540,74 @@ export const RepairTreasury: React.FC = () => {
     }
   };
 
+  const handleSubmitSettlement = async () => {
+    if (!canMutate || busy || !branchId || isMainBranchSelected) return;
+    const counted = Number(settleCounted);
+    if (!Number.isFinite(counted) || counted <= 0) {
+      toast.error('أدخل مبلغ التسوية الفعلي.');
+      return;
+    }
+    const variance = Math.abs(counted - computedBalance);
+    if (variance > 0.01 && settleVarianceReason.trim().length < 3) {
+      toast.error('اكتب سبب فرق العدّ عن رصيد النظام.');
+      return;
+    }
+    if (!mainBranch?.id) {
+      toast.error('عيّن فرعًا رئيسيًا واحدًا قبل إرسال التسوية.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await repairTreasuryService.submitSettlement({
+        branchId,
+        countedAmount: counted,
+        expectedAmount: computedBalance,
+        note: settleNote.trim() || `تسوية نقدية إلى ${mainBranch.name}`,
+        varianceReason: settleVarianceReason.trim() || undefined,
+      });
+      setSettleCounted('');
+      setSettleNote('');
+      setSettleVarianceReason('');
+      toast.success('تم إرسال طلب التسوية لاعتماد الإدارة.');
+      await refreshAll(branchId);
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر إرسال التسوية.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleApproveSettlement = async (settlementId: string) => {
+    if (!canApproveSettlements || busy || !settlementId) return;
+    if (!window.confirm('اعتماد التسوية وترحيل النقدية من الفرع إلى الخزينة الرئيسية؟')) return;
+    setBusy(true);
+    try {
+      await repairTreasuryService.approveSettlement(settlementId);
+      toast.success('تم اعتماد التسوية وترحيل القيود.');
+      await refreshAll(branchId);
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر اعتماد التسوية.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRejectSettlement = async (settlementId: string) => {
+    if (!canApproveSettlements || busy || !settlementId) return;
+    const reason = window.prompt('سبب رفض التسوية:');
+    if (!reason?.trim()) return;
+    setBusy(true);
+    try {
+      await repairTreasuryService.rejectSettlement(settlementId, reason.trim());
+      toast.success('تم رفض طلب التسوية.');
+      await refreshAll(branchId);
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر رفض التسوية.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!canView) {
     return (
       <RepairOpsPageShell eyebrow="خزينة الصيانة" dir={dir}>
@@ -529,6 +665,75 @@ export const RepairTreasury: React.FC = () => {
         </div>
       )}
 
+      {canApproveSettlements && pendingSettlements.length > 0 ? (
+        <OpsDashPanel title={`طلبات تسوية بانتظار الاعتماد (${pendingSettlements.length})`} accent="repair">
+          <div className="space-y-2">
+            {pendingSettlements.map((row) => (
+              <div
+                key={row.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50/50 p-3"
+              >
+                <div className="min-w-0 text-sm">
+                  <p className="font-semibold">
+                    {branchNameMap[row.fromBranchId] || row.fromBranchId}
+                    {' → '}
+                    {row.toBranchName || branchNameMap[row.toBranchId] || 'الرئيسي'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    معدود {fmt(Number(row.countedAmount || 0))} ج.م
+                    {Math.abs(Number(row.variance || 0)) > 0.01
+                      ? ` · فرق ${fmt(Number(row.variance || 0))} · ${row.varianceReason || '—'}`
+                      : ''}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <Button size="sm" disabled={busy} onClick={() => void handleApproveSettlement(String(row.id || ''))}>
+                    اعتماد
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void handleRejectSettlement(String(row.id || ''))}
+                  >
+                    رفض
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </OpsDashPanel>
+      ) : null}
+
+      {branchSettlements.length > 0 ? (
+        <OpsDashPanel title="آخر تسويات هذا الفرع" accent="repair">
+          <div className="space-y-1.5 text-sm">
+            {branchSettlements.map((row) => (
+              <div key={`hist-${row.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2">
+                <span>
+                  {fmt(Number(row.countedAmount || row.amount || 0))} ج.م
+                  <span className="ms-2 text-xs text-muted-foreground">
+                    {row.submittedAt ? new Date(row.submittedAt).toLocaleString('ar-EG') : '—'}
+                  </span>
+                </span>
+                <ErpStatusBadge
+                  label={
+                    row.status === 'approved' ? 'معتمدة'
+                      : row.status === 'rejected' ? 'مرفوضة'
+                        : 'بانتظار الاعتماد'
+                  }
+                  type={
+                    row.status === 'approved' ? 'success'
+                      : row.status === 'rejected' ? 'danger'
+                        : 'warning'
+                  }
+                />
+              </div>
+            ))}
+          </div>
+        </OpsDashPanel>
+      ) : null}
+
       <OpsDashPanel title="الفرع والحالة" accent="repair">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
           <div className="sm:col-span-2 lg:col-span-2">
@@ -552,7 +757,7 @@ export const RepairTreasury: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-          <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+          <div className="px-1 py-2.5">
             <div className="text-xs text-muted-foreground">الحالة الحالية</div>
             <div className="mt-1 flex items-center gap-2">
               <ErpStatusBadge
@@ -567,7 +772,7 @@ export const RepairTreasury: React.FC = () => {
               )}
             </div>
           </div>
-          <div className="rounded-lg border bg-muted/20 px-3 py-2.5">
+          <div className="px-1 py-2.5">
             <div className="text-xs text-muted-foreground">صلاحية الإدارة</div>
             <div className="mt-1 text-sm font-semibold">
               {!canManage ? 'عرض فقط' : monthClosed ? 'مقفول شهريًا' : 'متاحة'}
@@ -576,7 +781,7 @@ export const RepairTreasury: React.FC = () => {
         </div>
       </OpsDashPanel>
 
-      <div className="grid gap-4 xl:grid-cols-12">
+      <div className="grid items-start gap-4 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-5">
           <OpsDashPanel title={openSession ? 'تقفيل الخزينة' : 'فتح الخزينة'} accent="repair">
             <div className="space-y-4">
@@ -668,12 +873,15 @@ export const RepairTreasury: React.FC = () => {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="INCOME">إيراد</SelectItem>
+                        <SelectItem value="INCOME">إيراد يدوي</SelectItem>
                         <SelectItem value="EXPENSE">مصروف</SelectItem>
-                        <SelectItem value="TRANSFER_OUT">تحويل للخزينة الرئيسية</SelectItem>
-                        <SelectItem value="TRANSFER_IN">تحويل وارد من الرئيسي</SelectItem>
+                        <SelectItem value="TRANSFER_OUT">تحويل بنكي داخلي (نقد → بنك)</SelectItem>
+                        <SelectItem value="TRANSFER_IN">وارد بنكي داخلي (بنك → نقد)</SelectItem>
                       </SelectContent>
                     </Select>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      التحويل البنكي الداخلي ليس تسوية للإدارة. استخدم لوحة «تسوية للإدارة» أدناه.
+                    </p>
                   </div>
                   {entryType === 'EXPENSE' ? (
                     <div>
@@ -739,6 +947,71 @@ export const RepairTreasury: React.FC = () => {
               )}
             </div>
           </OpsDashPanel>
+
+          {!isMainBranchSelected && canManage ? (
+            <OpsDashPanel title="تسوية للإدارة (الفرع الرئيسي)" accent="repair">
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  يُرسل مبلغًا نقديًا للاعتماد ثم يُخصم من خزينة هذا الفرع ويُضاف لخزينة{' '}
+                  <span className="font-semibold">{mainBranch?.name || 'الفرع الرئيسي'}</span>.
+                </p>
+                {!openSession ? (
+                  <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                    افتح الخزينة أولًا قبل إرسال تسوية.
+                  </p>
+                ) : (
+                  <>
+                    <div className="rounded-lg border bg-muted/20 px-3 py-2 text-sm">
+                      رصيد النظام الحالي:{' '}
+                      <span className="font-semibold tabular-nums">{fmt(computedBalance)} ج.م</span>
+                    </div>
+                    <div>
+                      <Label>المبلغ المعدود / المُسلَّم</Label>
+                      <Input
+                        className="mt-2"
+                        type="number"
+                        min={0}
+                        value={settleCounted}
+                        onChange={(e) => setSettleCounted(e.target.value)}
+                        placeholder={String(computedBalance || 0)}
+                        disabled={!canMutate || busy}
+                      />
+                    </div>
+                    {Math.abs(Number(settleCounted || 0) - computedBalance) > 0.01 ? (
+                      <div>
+                        <Label>سبب فرق العدّ</Label>
+                        <Input
+                          className="mt-2"
+                          value={settleVarianceReason}
+                          onChange={(e) => setSettleVarianceReason(e.target.value)}
+                          placeholder="مثال: نقص عهدة / فرق صرف"
+                          disabled={!canMutate || busy}
+                        />
+                      </div>
+                    ) : null}
+                    <div>
+                      <Label>ملاحظة</Label>
+                      <Input
+                        className="mt-2"
+                        value={settleNote}
+                        onChange={(e) => setSettleNote(e.target.value)}
+                        placeholder="اختياري"
+                        disabled={!canMutate || busy}
+                      />
+                    </div>
+                    <Button
+                      className="w-full"
+                      variant="secondary"
+                      disabled={!canMutate || busy || !branchId}
+                      onClick={() => void handleSubmitSettlement()}
+                    >
+                      {busy ? 'جارٍ الإرسال…' : 'إرسال تسوية للاعتماد'}
+                    </Button>
+                  </>
+                )}
+              </div>
+            </OpsDashPanel>
+          ) : null}
         </div>
 
         <OpsDashPanel title="حركات الجلسة الحالية" accent="repair" bodyClassName="p-0" className="xl:col-span-7">

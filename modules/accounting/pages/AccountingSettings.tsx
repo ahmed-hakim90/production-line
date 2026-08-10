@@ -78,7 +78,7 @@ export const AccountingSettingsPage: React.FC = () => {
       rangeLabel="السنة المالية والتقريب والتقييم والفترات المحاسبية"
       dir="rtl"
     >
-      <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
+      <div className="grid items-start gap-4 xl:grid-cols-[1fr_380px]">
         <OpsDashPanel title="السياسات المحاسبية">
           <div className="grid gap-4 md:grid-cols-2">
             <div>

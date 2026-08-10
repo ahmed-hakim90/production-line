@@ -13,3 +13,6 @@ export const Factory_IMAGE_WORKERS_STRIP = '#60a5fa'
 export const Factory_DEFAULT_FOOTER_TAGLINE = 'هذا التقرير تم إنشاؤه آلياً من نظام إدارة الإنتاج'
 
 export const Factory_TRANSFER_FOOTER_TAGLINE = 'هذا الإذن تم إنشاؤه آلياً من نظام إدارة المخزون'
+
+/** Default Arabic footer for repair / maintenance print documents. */
+export const Factory_REPAIR_FOOTER_TAGLINE = 'هذا المستند تم إنشاؤه آلياً من نظام إدارة الصيانة'

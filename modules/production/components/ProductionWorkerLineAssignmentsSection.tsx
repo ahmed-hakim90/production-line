@@ -5,6 +5,7 @@ import { productionLineWorkerAssignmentService } from '../services/productionLin
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge, Button } from './UI';
 import { useAppStore } from '@/store/useAppStore';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import {
   PERMANENT_WORKER_ASSIGNMENT_PATHS,
   WORKER_ASSIGNMENT_OPERATION_KEYS,
@@ -191,6 +192,7 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
       </OpsDashPanel>
 
       {showModal && canManage && (
+        <ManagedModalPortal>
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={closeModal}
@@ -246,6 +248,7 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </>
   );

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { useManagedPrint } from '@/utils/printManager';
 import { KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../components/SelectableTable';
@@ -1369,6 +1370,7 @@ export const Supervisors: React.FC = () => {
                 ? 'text-rose-600'
                 : 'text-amber-600';
         return (
+          <ManagedModalPortal>
           <>
             <div
               className="fixed inset-0 bg-black/35 z-[60] mt-0"
@@ -1543,6 +1545,7 @@ export const Supervisors: React.FC = () => {
               </div>
             </aside>
           </>
+          </ManagedModalPortal>
         );
       })()}
 

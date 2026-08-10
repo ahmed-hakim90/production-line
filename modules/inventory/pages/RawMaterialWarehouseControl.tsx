@@ -107,6 +107,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
   const {
     data: controlData,
     loading,
+    error: controlLoadError,
     reload: reloadCached,
   } = useCachedPageLoad<RawMaterialControlPageData>(
     controlCacheKey,
@@ -121,19 +122,13 @@ export const RawMaterialWarehouseControl: React.FC = () => {
           assemblableError: null,
         };
       }
-      const [bals, txs, pending, issues, assemblableResult] = await Promise.all([
+      // Core board only — assemblable capacity loads in a follow-up effect so the shell
+      // is not blocked by BOM/product scans.
+      const [bals, txs, pending, issues] = await Promise.all([
         stockService.getBalances(warehouseId),
         stockService.getTransactions(warehouseId),
         transferApprovalService.getByStatus('pending'),
         productionIssueService.getAll(),
-        assemblableCapacityService.getForWarehouse(warehouseId).then(
-          (rows) => ({ ok: true as const, rows }),
-          (error: unknown) => ({
-            ok: false as const,
-            rows: [] as AssemblableCapacityRow[],
-            error: error instanceof Error ? error.message : 'تعذر حساب المتاح للتجميع',
-          }),
-        ),
       ]);
       return {
         balances: bals,
@@ -146,10 +141,8 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             row.sourceWarehouseId === warehouseId &&
             (row.status === 'draft' || row.status === 'submitted' || row.status === 'requested'),
         ).length,
-        assemblableRows: assemblableResult.rows,
-        assemblableError: assemblableResult.ok
-          ? null
-          : ('error' in assemblableResult ? assemblableResult.error : 'تعذر حساب التجميع'),
+        assemblableRows: [],
+        assemblableError: null,
       };
     },
     { maxAgeMs: 45_000 },
@@ -159,8 +152,39 @@ export const RawMaterialWarehouseControl: React.FC = () => {
   const transactions = controlData?.transactions ?? [];
   const pendingTransfers = controlData?.pendingTransfers ?? 0;
   const pendingIssues = controlData?.pendingIssues ?? 0;
-  const assemblableRows = controlData?.assemblableRows ?? [];
-  const assemblableError = controlData?.assemblableError ?? null;
+
+  const [assemblableRows, setAssemblableRows] = useState<AssemblableCapacityRow[]>([]);
+  const [assemblableError, setAssemblableError] = useState<string | null>(null);
+  const [assemblableLoading, setAssemblableLoading] = useState(false);
+
+  useEffect(() => {
+    if (!warehouseId || !controlData) {
+      setAssemblableRows([]);
+      setAssemblableError(null);
+      setAssemblableLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAssemblableLoading(true);
+    setAssemblableError(null);
+    void assemblableCapacityService
+      .getForWarehouse(warehouseId, { balances: controlData.balances })
+      .then((rows) => {
+        if (cancelled) return;
+        setAssemblableRows(rows);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAssemblableRows([]);
+        setAssemblableError('تعذر حساب المتاح للتجميع. يمكنك متابعة باقي عمليات المخزن.');
+      })
+      .finally(() => {
+        if (!cancelled) setAssemblableLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [warehouseId, controlData]);
 
   const loadData = useCallback(async () => {
     if (!controlCacheKey) return;
@@ -509,7 +533,17 @@ export const RawMaterialWarehouseControl: React.FC = () => {
   const visibleOpCards = opCards.filter((card) => !card.permission || can(card.permission));
   const visibleTools = toolLinks.filter((t) => !t.permission || can(t.permission));
 
-  if (loadingWarehouse || (loading && configured && balances.length === 0 && transactions.length === 0)) {
+  const warehouseHero = useMemo(
+    () => [
+      { key: 'sku', label: 'أصناف في المخزن', value: kpis.skuCount },
+      { key: 'qty', label: 'إجمالي الكمية', value: formatNumber(kpis.totalQty) },
+      { key: 'alerts', label: 'تنبيهات الرصيد', value: kpis.alertCount, toneClassName: kpis.alertCount > 0 ? 'ops-dash-kpi-card--tone-amber' : undefined },
+      { key: 'pending', label: 'معلّقات', value: pendingTransfers + pendingIssues },
+    ],
+    [kpis, pendingTransfers, pendingIssues],
+  );
+
+  if (loadingWarehouse) {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
@@ -536,15 +570,29 @@ export const RawMaterialWarehouseControl: React.FC = () => {
     );
   }
 
-  const warehouseHero = useMemo(
-    () => [
-      { key: 'sku', label: 'أصناف في المخزن', value: kpis.skuCount },
-      { key: 'qty', label: 'إجمالي الكمية', value: formatNumber(kpis.totalQty) },
-      { key: 'alerts', label: 'تنبيهات الرصيد', value: kpis.alertCount, toneClassName: kpis.alertCount > 0 ? 'ops-dash-kpi-card--tone-amber' : undefined },
-      { key: 'pending', label: 'معلّقات', value: pendingTransfers + pendingIssues },
-    ],
-    [kpis, pendingTransfers, pendingIssues],
-  );
+  if (loading && balances.length === 0 && transactions.length === 0) {
+    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
+  }
+
+  if (controlLoadError && balances.length === 0) {
+    return (
+      <ModuleOpsPageShell
+        eyebrow="تحكم مخزن المستلزمات"
+        rangeLabel={warehouseName || 'مخزن المستلزمات'}
+        onRefresh={() => void loadData()}
+        refreshing={loading}
+      >
+        <OpsDashPanel accent="inventory">
+          <div className="py-10 text-center space-y-4">
+            <p className="text-sm text-rose-700">تعذر تحميل بيانات مخزن المستلزمات. حاول مرة أخرى.</p>
+            <GhostButton iconName="refresh" onClick={() => void loadData()}>
+              إعادة المحاولة
+            </GhostButton>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
+    );
+  }
 
   return (
     <ModuleOpsPageShell
@@ -714,9 +762,12 @@ export const RawMaterialWarehouseControl: React.FC = () => {
       >
         {assemblableOpen && (
             <>
+            {assemblableLoading && !assemblableError && assemblableRows.length === 0 && (
+              <p className="mx-4 mb-3 text-sm text-[var(--color-text-muted)]">جاري حساب المتاح للتجميع…</p>
+            )}
             {assemblableError && (
               <p className="mx-4 mb-3 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
-                تعذر حساب المتاح للتجميع: {assemblableError}
+                {assemblableError}
               </p>
             )}
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
@@ -907,7 +958,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
       </OpsDashPanel>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <OpsDashPanel title="آخر حركات المخزن" accent="inventory">
             {loading ? (
               <p className="text-sm text-slate-400">جاري التحميل…</p>

@@ -128,8 +128,9 @@ import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
-import { PageHeader } from '../../../components/PageHeader';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
@@ -4003,10 +4004,8 @@ export const Reports: React.FC = () => {
               إنشاء تقرير
             </Button>
           ) : null}
-          <PageHeader
-        title=""
-        backAction={false}
-        moreActions={[
+          <OpsMoreActionsMenu
+            items={[
           {
             label: 'إنشاء تقرير مكون حقن',
             icon: 'add_circle',
@@ -4421,13 +4420,13 @@ export const Reports: React.FC = () => {
         printSettings={printTemplate}
       />
 
-      {/* Hidden print components (off-screen, only rendered for print) */}
+      {/* Hidden print components (parked off-screen — never use right:0 + z-index:-1; it shows through page gaps) */}
       <div
+        aria-hidden
         style={{
           position: 'fixed',
+          left: '-9999px',
           top: 0,
-          right: 0,
-          zIndex: -1,
           pointerEvents: 'none',
           direction: 'rtl',
           width: 'max-content',
@@ -4459,6 +4458,7 @@ export const Reports: React.FC = () => {
 
       {/* Unit cost breakdown modal */}
       {costDetailReport && canViewCosts && (
+        <ManagedModalPortal>
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[62] flex items-center justify-center p-4"
           onClick={() => setCostDetailReport(null)}
@@ -4501,6 +4501,7 @@ export const Reports: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Report Drawer */}
@@ -4523,6 +4524,7 @@ export const Reports: React.FC = () => {
             : 'تقرير منتج نهائي';
         const reapplyingInventory = Boolean(row.id && reapplyingReportInventoryId === row.id);
         return (
+          <ManagedModalPortal>
           <>
             <div
               className="fixed inset-0 bg-black/35 z-[60]"
@@ -4766,11 +4768,13 @@ export const Reports: React.FC = () => {
               </div>
             </aside>
           </>
+          </ManagedModalPortal>
         );
       })()}
 
       {/* Create / Edit Report Modal */}
       {showModal && (canCreateFinishedReports || can('reports.packaging.create') || can('reports.edit') || canManageComponentInjectionReports) && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div
             className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
@@ -5581,10 +5585,12 @@ export const Reports: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Delete Confirmation */}
       {deleteConfirmId && can("reports.delete") && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -5610,10 +5616,12 @@ export const Reports: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Bulk Delete Confirmation */}
       {bulkDeleteItems && can("reports.delete") && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -5639,10 +5647,12 @@ export const Reports: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Import from Excel Modal */}
       {showImportModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
@@ -6060,6 +6070,7 @@ export const Reports: React.FC = () => {
             )}
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Work Order Detail Modal */}
@@ -6084,6 +6095,7 @@ export const Reports: React.FC = () => {
           { label: 'العمالة', planned: String(wo.maxWorkers), actual: String(viewWOReport.workersCount), icon: 'groups' },
         ];
         return (
+          <ManagedModalPortal>
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewWOReport(null)}>
             <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -6136,6 +6148,7 @@ export const Reports: React.FC = () => {
               </div>
             </div>
           </div>
+          </ManagedModalPortal>
         );
       })()}
 
@@ -6145,6 +6158,7 @@ export const Reports: React.FC = () => {
         const qualityCode = getQualityReportCode(wo ?? undefined, viewQualityReport.reportCode);
         if (!wo || (!wo.qualitySummary && !wo.qualityStatus && !wo.qualityReportCode)) {
           return (
+            <ManagedModalPortal>
             <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
               <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
@@ -6156,11 +6170,13 @@ export const Reports: React.FC = () => {
                 <p className="text-sm text-slate-500">لا يوجد تقرير جودة مرتبط بهذا التقرير حتى الآن.</p>
               </div>
             </div>
+            </ManagedModalPortal>
           );
         }
         const qm = qualityStatusMeta(wo.qualityStatus);
         const qs = wo.qualitySummary;
         return (
+          <ManagedModalPortal>
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
             <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -6236,11 +6252,13 @@ export const Reports: React.FC = () => {
               </div>
             </div>
           </div>
+          </ManagedModalPortal>
         );
       })()}
 
       {/* View Workers Modal */}
       {viewWorkersData && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg max-h-[85vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -6419,6 +6437,7 @@ export const Reports: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
     </ModuleOpsPageShell>

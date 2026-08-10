@@ -17,6 +17,7 @@ import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
 import { lineAssignmentService } from '../services/lineAssignmentService';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { useProductionWorkersPageQueries } from '../hooks/useProductionWorkersPageQueries';
 import { ProductionWorkerReports } from './ProductionWorkerReports';
 import { ProductionWorkerRatingsReview } from './ProductionWorkerRatingsReview';
@@ -783,6 +784,7 @@ export const ProductionWorkers: React.FC = () => {
       </OpsDashPanel>
 
       {lineTransfer && canManage && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={closeLineTransfer}>
           <div
             className="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto"
@@ -873,6 +875,7 @@ export const ProductionWorkers: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
         </>

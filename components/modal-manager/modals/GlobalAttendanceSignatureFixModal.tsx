@@ -2,6 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button, SearchableSelect } from '@/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { MODAL_KEYS } from '../modalKeys';
 import { useAppStore } from '@/store/useAppStore';
 import type { AttendanceRecord } from '@/modules/hr/attendance/types';
@@ -111,6 +112,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="erp-modal-overlay" onClick={() => { if (!savingId) close(); }}>
       <div
         className="erp-modal-panel w-[96vw] max-w-5xl max-h-[92dvh] overflow-hidden"
@@ -230,6 +232,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
 

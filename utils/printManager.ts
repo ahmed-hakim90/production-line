@@ -34,12 +34,25 @@ export const buildGlobalPrintPageStyle = (settings?: PrintTemplateSettings): str
     }
     @media print {
       html, body {
+        width: 100% !important;
+        height: auto !important;
         margin: 0 !important;
         padding: 0 !important;
       }
       body {
         -webkit-print-color-adjust: ${colorAdjust};
         print-color-adjust: ${colorAdjust};
+      }
+      /* Fill the printable area inside @page margins — never keep a centered card. */
+      .print-root,
+      .print-report,
+      .arabic-export-root {
+        width: 100% !important;
+        max-width: none !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        margin-inline: 0 !important;
+        box-sizing: border-box !important;
       }
     }
   `;

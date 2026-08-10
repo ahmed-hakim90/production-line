@@ -3,6 +3,7 @@ import { Loader2, Save, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { vehicleService } from '../../../modules/hr/vehicleService';
 import { employeeService } from '../../../modules/hr/employeeService';
 import type { FirestoreVehicle } from '../../../modules/hr/types';
@@ -119,6 +120,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -218,6 +220,6 @@ export const GlobalCreateVehicleModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

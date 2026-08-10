@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-09 (activity packs + CRUD permission engine)
+**Last updated:** 2026-08-10 (accounting + costs nav merge)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -30,7 +30,8 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 - Vite + React SPA → Firebase Auth, Firestore, Cloud Functions, Storage/FCM
 - Tenant-scoped routes under `/t/:tenantSlug/...`
 - Shared permissions (`utils/permissions.ts`), menu (`config/menu.config.ts`), inventory warehouse scope
-- Visual language: **Hakimo Flow** — tokens in `src/index.css` / `DEFAULT_THEME`; shells `DomainHomeShell` + `ModuleOpsPageShell`; doc `docs/HAKIMO_FLOW.md`
+- Visual language: **Hakimo Flow** — tokens in `src/index.css` / `DEFAULT_THEME`; runtime apply via `applyAppTheme` (`core/ui-engine/theme/tenantTheme.ts`); shells `DomainHomeShell` + `ModuleOpsPageShell`; doc `docs/HAKIMO_FLOW.md`
+- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars; `systemSettings.printTemplate` drives paper / WhatsApp PNG (`ProductionReportShareCard`, print layouts). Preview: `/settings/reports` + `/dev/image-export`.
 
 ## Modules (MOD)
 
@@ -110,6 +111,10 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Technician team performance | `/repair/technician-kpis` |
 | Inventory analysis home | `/inventory` |
 | Accounting home (DomainHomeShell) | `/accounting` |
+| Monthly production cost (under Accounting) | `/accounting/monthly-costs` |
+| Cost centers + allocation | `/accounting/cost-centers` |
+| Assets / depreciation | `/accounting/assets`, `/accounting/depreciation-report` |
+| Legacy cost URLs | `/monthly-costs`, `/cost-centers`, `/costs/*` → redirect to `/accounting/*` |
 | HR home (DomainHomeShell) | `/hr/dashboard` |
 | Customers KPI board (ModuleOpsPageShell) | `/customers/kpi` |
 | Quality reports board (ModuleOpsPageShell) | `/quality/reports` |

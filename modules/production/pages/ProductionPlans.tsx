@@ -33,7 +33,7 @@ import { exportProductionPlans } from '../../../utils/exportExcel';
 import type { ProductionPlan, ProductionReport, PlanPriority, PlanStatus, SmartStatus } from '../../../types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
-import { PageHeader } from '../../../components/PageHeader';
+import { ManagedModalPortal } from '../../../components/modal-manager/ManagedModalPortal';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -378,8 +378,10 @@ export const ProductionPlans: React.FC = () => {
   // â”€â”€ Enriched plans with computed metrics â”€â”€
   const enrichedPlans = useMemo<EnrichedPlan[]>(() => {
     return productionPlans.map((plan) => {
-      const key = `${plan.lineId}_${plan.productId}`;
-      const reportCount = planReports[key]?.length ?? 0;
+      const reportCount =
+        (plan.id ? planReports[plan.id]?.length : undefined)
+        ?? planReports[`${plan.lineId}_${plan.productId}`]?.length
+        ?? 0;
       const produced = plan.producedQuantity ?? 0;
       const hasExecutionSignal = produced > 0 || reportCount > 0;
       const effectiveStatus: PlanStatus =
@@ -852,45 +854,38 @@ export const ProductionPlans: React.FC = () => {
               خطة جديدة
             </Button>
           ) : null}
-          <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-base)] p-0.5 overflow-x-auto">
+          <div className="ops-toolbar-seg" role="group" aria-label="طريقة العرض">
             {([['table', 'view_list'], ['kanban', 'view_kanban'], ['timeline', 'timeline']] as [ViewMode, string][]).map(([mode, icon]) => (
               <button
                 key={mode}
+                type="button"
                 onClick={() => setViewMode(mode)}
-                className={`p-2 rounded-[var(--border-radius-sm)] transition-all ${viewMode === mode ? 'bg-white text-primary' : 'text-slate-400 hover:text-slate-600'}`}
+                className={viewMode === mode ? 'is-active' : undefined}
+                aria-pressed={viewMode === mode}
                 title={mode === 'table' ? 'جدول' : mode === 'kanban' ? 'كانبان' : 'جدول زمني'}
               >
-                <span className="material-icons-round text-lg">{icon}</span>
+                <span className="material-icons-round">{icon}</span>
               </button>
             ))}
           </div>
-          <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: 'طلب صرف إنتاج',
-                  icon: 'fact_check',
-                  group: 'مخزون',
-                  hidden: !can('productionIssue.request'),
-                  onClick: () => navigate('/production/issue-requests'),
-                },
-                {
-                  label: 'تصدير الخطط',
-                  icon: 'download',
-                  group: 'تصدير',
-                  hidden: !canExport || filteredPlans.length === 0,
-                  onClick: handleExportPlans,
-                },
-                {
-                  label: 'استيراد الخطط',
-                  icon: 'upload',
-                  group: 'استيراد',
-                  hidden: !canImport || !canCreatePermission || !planImportEnabled,
-                  onClick: () => openModal(MODAL_KEYS.PRODUCTION_PLANS_IMPORT),
-                },
-              ]}
-            />
+          {can('productionIssue.request') ? (
+            <Button type="button" variant="outline" onClick={() => navigate('/production/issue-requests')}>
+              <span className="material-icons-round text-sm">fact_check</span>
+              طلب صرف إنتاج
+            </Button>
+          ) : null}
+          {canExport && filteredPlans.length > 0 ? (
+            <Button type="button" variant="outline" onClick={handleExportPlans}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير الخطط
+            </Button>
+          ) : null}
+          {canImport && canCreatePermission && planImportEnabled ? (
+            <Button type="button" variant="outline" onClick={() => openModal(MODAL_KEYS.PRODUCTION_PLANS_IMPORT)}>
+              <span className="material-icons-round text-sm">upload</span>
+              استيراد الخطط
+            </Button>
+          ) : null}
         </div>
       )}
     >
@@ -1087,6 +1082,7 @@ export const ProductionPlans: React.FC = () => {
 
       {/* Capacity Warning Modal */}
       {capacityWarning.show && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setCapacityWarning({ show: false, load: 0, capacity: 0 })}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 text-center space-y-4">
@@ -1105,6 +1101,7 @@ export const ProductionPlans: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       <OpsDashPanel title="الخطط" accent="plans" bodyClassName="p-0">
@@ -1231,6 +1228,7 @@ export const ProductionPlans: React.FC = () => {
       </OpsDashPanel>
 
       {/* Plan Drawer */}
+      <ManagedModalPortal>
       <div className={`fixed inset-0 z-50 transition-opacity ${activeDrawerPlan ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div className="absolute inset-0 bg-black/35" onClick={() => setActiveDrawerPlanId(null)} />
         <aside className={`absolute top-0 right-0 h-full w-full max-w-xl bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl transition-transform duration-300 ${activeDrawerPlan ? 'translate-x-0' : 'translate-x-full'}`}>
@@ -1431,9 +1429,11 @@ export const ProductionPlans: React.FC = () => {
           )}
         </aside>
       </div>
+      </ManagedModalPortal>
 
       {/* Edit Modal */}
       {editPlan && canEdit && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditPlan(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -1509,10 +1509,12 @@ export const ProductionPlans: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Status Change Modal */}
       {statusPlan && canEdit && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setStatusPlan(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -1539,10 +1541,12 @@ export const ProductionPlans: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Delete Confirm Modal */}
       {deletePlanId && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeletePlanId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 text-center space-y-4">
@@ -1560,6 +1564,7 @@ export const ProductionPlans: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

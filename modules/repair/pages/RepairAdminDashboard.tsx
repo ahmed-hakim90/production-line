@@ -17,7 +17,7 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { repairBranchService } from '../services/repairBranchService';
-import { repairJobService } from '../services/repairJobService';
+import { repairJobService, REPAIR_JOB_DASHBOARD_LIMIT } from '../services/repairJobService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
@@ -46,6 +46,7 @@ import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { downloadUtf8Csv } from '../utils/csvExport';
+import { isDeliveredStatus, isUnrepairableStatus } from '../utils/repairWorkflowNormalize';
 import {
   countOpenComplaints,
   countOpenSparePartsReplenishments,
@@ -83,6 +84,7 @@ type BranchKpi = {
   netAmount: number;
   paidAmount: number;
   balanceDue: number;
+  openAr: number;
   readyForPayment: number;
   lowStockCount: number;
 };
@@ -207,14 +209,18 @@ export const RepairAdminDashboard: React.FC = () => {
       setJobsReady(true);
     };
     if (repairCtx.adminSeesAllBranches) {
-      unsubJobs = repairJobService.subscribeAll(markJobs);
+      unsubJobs = repairJobService.subscribeAll(markJobs, { limit: REPAIR_JOB_DASHBOARD_LIMIT });
       unsubInvoices = repairSalesInvoiceService.subscribeAll(setSalesInvoices);
     } else if (allowedBranchIds.length > 1) {
-      unsubJobs = repairJobService.subscribeByBranches(allowedBranchIds, markJobs);
+      unsubJobs = repairJobService.subscribeByBranches(allowedBranchIds, markJobs, {
+        limit: REPAIR_JOB_DASHBOARD_LIMIT,
+      });
       unsubInvoices = repairSalesInvoiceService.subscribeByBranches(allowedBranchIds, setSalesInvoices);
     } else {
       const branchId = allowedBranchIds[0] || '';
-      unsubJobs = repairJobService.subscribeByBranch(branchId, markJobs);
+      unsubJobs = repairJobService.subscribeByBranch(branchId, markJobs, {
+        limit: REPAIR_JOB_DASHBOARD_LIMIT,
+      });
       unsubInvoices = repairSalesInvoiceService.subscribeByBranch(branchId, setSalesInvoices);
     }
     return () => {
@@ -358,8 +364,8 @@ export const RepairAdminDashboard: React.FC = () => {
       const branchJobsPeriod = branchJobsLive.filter((j) => inPeriod(j.createdAt));
       const queues = countRepairJobQueues(branchJobsLive, repairSettings.workflow.openStatusIds);
       const totalJobs = branchJobsPeriod.length;
-      const deliveredJobs = branchJobsPeriod.filter((j) => j.status === 'delivered').length;
-      const unrepairableJobs = branchJobsPeriod.filter((j) => j.status === 'unrepairable').length;
+      const deliveredJobs = branchJobsPeriod.filter((j) => isDeliveredStatus(j.status)).length;
+      const unrepairableJobs = branchJobsPeriod.filter((j) => isUnrepairableStatus(j.status)).length;
       const terminal = deliveredJobs + unrepairableJobs;
       const successRate = terminal > 0 ? (deliveredJobs / terminal) * 100 : 0;
       const branchFinancials = financials.filter((row) => row.branchId === branchId && inPeriod(row.updatedAt || row.createdAt));
@@ -370,6 +376,24 @@ export const RepairAdminDashboard: React.FC = () => {
       const balanceDue = financials
         .filter((row) => row.branchId === branchId)
         .reduce((sum, row) => sum + Number(row.balanceDue || 0), 0);
+      const openJobAr = branchJobsLive
+        .filter((j) => {
+          const fin = financials.find((row) => row.id === j.id || (row as { jobId?: string }).jobId === j.id);
+          const due = Number(fin?.balanceDue ?? j.balanceDue ?? 0);
+          return due > 0.001;
+        })
+        .reduce((sum, j) => {
+          const fin = financials.find((row) => row.id === j.id || (row as { jobId?: string }).jobId === j.id);
+          return sum + Number(fin?.balanceDue ?? j.balanceDue ?? 0);
+        }, 0);
+      const openSalesAr = salesInvoices
+        .filter((invoice) =>
+          invoice.branchId === branchId
+          && String(invoice.status || '') === 'posted'
+          && (invoice.isCreditSale === true || invoice.paymentMethod === 'credit')
+          && Number(invoice.balanceDue ?? invoice.total ?? 0) > 0.001,
+        )
+        .reduce((sum, invoice) => sum + Number(invoice.balanceDue ?? invoice.total ?? 0), 0);
       const readyForPayment = paymentAuthorizations.filter((row) =>
         row.branchId === branchId && (row.status === 'approved' || row.status === 'partial'),
       ).length;
@@ -377,7 +401,7 @@ export const RepairAdminDashboard: React.FC = () => {
       const partsRevenue = salesInvoices
         .filter((invoice) =>
           invoice.branchId === branchId
-          && ['posted', 'active'].includes(String(invoice.status || 'active'))
+          && String(invoice.status || '') === 'posted'
           && inPeriod(invoice.postedAt || invoice.createdAt || invoice.updatedAt),
         )
         .reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
@@ -408,6 +432,7 @@ export const RepairAdminDashboard: React.FC = () => {
         netAmount,
         paidAmount,
         balanceDue,
+        openAr: openJobAr + openSalesAr,
         readyForPayment,
         lowStockCount,
       };
@@ -433,6 +458,7 @@ export const RepairAdminDashboard: React.FC = () => {
     const netAmount = cards.reduce((sum, card) => sum + card.netAmount, 0);
     const paidAmount = cards.reduce((sum, card) => sum + card.paidAmount, 0);
     const balanceDue = cards.reduce((sum, card) => sum + card.balanceDue, 0);
+    const openAr = cards.reduce((sum, card) => sum + card.openAr, 0);
     const readyForPayment = cards.reduce((sum, card) => sum + card.readyForPayment, 0);
     const terminal = deliveredJobs + unrepairableJobs;
     const successRate = terminal > 0 ? (deliveredJobs / terminal) * 100 : 0;
@@ -456,6 +482,7 @@ export const RepairAdminDashboard: React.FC = () => {
       netAmount,
       paidAmount,
       balanceDue,
+      openAr,
       readyForPayment,
     };
   }, [cards]);
@@ -688,6 +715,19 @@ export const RepairAdminDashboard: React.FC = () => {
       value: loading ? '…' : fmt(warrantyPartsCost),
       meta: 'تكلفة صرف فعلية',
     },
+    {
+      key: 'ar',
+      label: 'ذمم مفتوحة',
+      value: loading ? '…' : fmt(overview.openAr),
+      meta: 'رصيد حي (طلبات + فواتير آجلة)',
+      accent: overview.openAr > 0.001,
+    },
+    {
+      key: 'earn',
+      label: 'صافي تقريبي',
+      value: loading ? '…' : fmt(Math.max(0, overview.totalRevenue - warrantyPartsCost)),
+      meta: 'إيراد − تكلفة ضمان (انظر ربحية الصيانة للتفاصيل)',
+    },
   ];
 
   const quickActionLinks = (
@@ -778,6 +818,11 @@ export const RepairAdminDashboard: React.FC = () => {
       secondarySummary="تنبيهات وتشغيل"
       secondary={(
         <div className="space-y-3">
+          {jobs.length >= REPAIR_JOB_DASHBOARD_LIMIT ? (
+            <p className="text-xs text-amber-700">
+              المؤشرات من أحدث {fmt(REPAIR_JOB_DASHBOARD_LIMIT)} طلباً — قد تكون الأرقام ناقصة للمستأجرين الكبار.
+            </p>
+          ) : null}
           {alertItems.length > 0 ? (
             <ul className="space-y-1.5">
               {alertItems.map((item) => (
@@ -817,17 +862,20 @@ export const RepairAdminDashboard: React.FC = () => {
 
       {!loading && !emptyBranches && (
         <>
-          <div
-            className="ops-module-charts__qty-row"
-            style={{ gridTemplateColumns: `repeat(${Math.min(5, Math.max(2, visibleQueues.length))}, minmax(0, 1fr))` }}
-          >
-            {visibleQueues.map((card) => (
-              <Link key={card.key} to={card.to} className="ops-module-charts__qty block no-underline">
-                <p className="ops-module-charts__qty-label">{card.label}</p>
-                <p className={`ops-module-charts__qty-value ${card.tone}`}>{fmt(card.count)}</p>
-              </Link>
-            ))}
-          </div>
+          <OpsDashPanel title="الطوابير التشغيلية" accent="repair">
+            <div
+              className="ops-module-charts__qty-row"
+              style={{ gridTemplateColumns: `repeat(${Math.min(5, Math.max(2, visibleQueues.length))}, minmax(0, 1fr))` }}
+            >
+              {visibleQueues.map((card) => (
+                <Link key={card.key} to={card.to} className="ops-module-charts__qty block no-underline">
+                  <p className="ops-module-charts__qty-label">{card.label}</p>
+                  <p className={`ops-module-charts__qty-value ${card.tone}`}>{fmt(card.count)}</p>
+                  <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground">{card.hint}</p>
+                </Link>
+              ))}
+            </div>
+          </OpsDashPanel>
 
           <OpsDashPanel title="مقارنة الفروع" accent="repair">
             {branchCompareBars.length === 0 ? (
@@ -847,72 +895,62 @@ export const RepairAdminDashboard: React.FC = () => {
             )}
           </OpsDashPanel>
 
-          <OpsDashPanel title="تفاصيل الطوابير" accent="repair">
-            <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-3 2xl:grid-cols-5">
-              {visibleQueues.map((card) => (
-                <Link
-                  key={card.key}
-                  to={card.to}
-                  className="block rounded-lg border bg-background p-2.5 transition-colors hover:bg-muted/40 md:p-3"
-                >
-                  <p className="mb-1 text-[11px] leading-snug text-muted-foreground md:text-xs">{card.label}</p>
-                  <p className={`text-xl font-bold tabular-nums md:text-2xl ${card.tone}`}>{fmt(card.count)}</p>
-                  <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground md:text-xs">{card.hint}</p>
-                </Link>
-              ))}
-            </div>
-          </OpsDashPanel>
-
           <OpsDashPanel title="مؤشرات التشغيل" accent="repair">
-            <div className="grid grid-cols-2 gap-2 text-sm md:gap-3 xl:grid-cols-3">
-              <div className="col-span-2 rounded-lg border bg-background p-2.5 xl:col-span-1 md:p-3">
-                <p className="mb-1 text-[11px] text-muted-foreground md:text-xs">نسبة النجاح العامة</p>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-semibold tabular-nums">{overview.successRate.toFixed(1)}%</span>
-                  <span className="text-[10px] text-muted-foreground text-start md:text-xs">
-                    {fmt(overview.deliveredJobs)} تسليم، {fmt(overview.unrepairableJobs)} غير قابلة للإصلاح
-                    {' '}
-                    (منتهية: {fmt(overview.deliveredJobs + overview.unrepairableJobs)})
-                  </span>
+            <div className="space-y-3">
+              <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
+                <div className="ops-module-charts__qty">
+                  <p className="ops-module-charts__qty-label">نسبة النجاح العامة</p>
+                  <p className="ops-module-charts__qty-value">{overview.successRate.toFixed(1)}%</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground">
+                    {fmt(overview.deliveredJobs)} تسليم · {fmt(overview.unrepairableJobs)} غير قابلة
+                  </p>
                 </div>
-                <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-emerald-500"
-                    style={{ width: `${Math.min(100, Math.max(0, overview.successRate))}%` }}
-                  />
+                <div className="ops-module-charts__qty">
+                  <p className="ops-module-charts__qty-label">جاهز للصرف</p>
+                  <p className="ops-module-charts__qty-value text-sky-700">{fmt(overview.readyToIssueParts)}</p>
+                </div>
+                <Link
+                  to={path(canViewParts ? '/repair/parts' : '/repair/admin-orders')}
+                  className="ops-module-charts__qty block no-underline"
+                >
+                  <p className="ops-module-charts__qty-label">تنبيه المخزون</p>
+                  <p className={`ops-module-charts__qty-value ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {fmt(overview.lowStockCount)}
+                  </p>
+                </Link>
+                <div className="ops-module-charts__qty">
+                  <p className="ops-module-charts__qty-label">طلبات منتهية</p>
+                  <p className="ops-module-charts__qty-value">
+                    {fmt(overview.deliveredJobs + overview.unrepairableJobs)}
+                  </p>
                 </div>
               </div>
-              <div className="rounded-lg border bg-background p-2.5 md:p-3">
-                <p className="mb-1 text-[11px] text-muted-foreground md:text-xs">جاهز للصرف من المخزن</p>
-                <p className="text-lg font-bold tabular-nums text-sky-700 md:text-xl">{fmt(overview.readyToIssueParts)}</p>
-                <p className="mt-1 text-[10px] text-muted-foreground md:text-xs">قطع وصلت للتوريد وبانتظار الصرف على الطلب.</p>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-emerald-500"
+                  style={{ width: `${Math.min(100, Math.max(0, overview.successRate))}%` }}
+                />
               </div>
-              <Link
-                to={path(canViewParts ? '/repair/parts' : '/repair/admin-orders')}
-                className="block rounded-lg border bg-background p-2.5 transition-colors hover:bg-muted/40 md:p-3"
-              >
-                <p className="mb-1 text-[11px] text-muted-foreground md:text-xs">تنبيه المخزون</p>
-                <p className={`text-lg font-bold tabular-nums md:text-xl ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                  {fmt(overview.lowStockCount)}
-                </p>
-                <p className="mt-1 text-[10px] text-muted-foreground md:text-xs">أصناف تحت الحد الأدنى عبر الفروع المسموحة.</p>
-              </Link>
             </div>
           </OpsDashPanel>
 
           {can('repair.finance.view') ? (
             <OpsDashPanel title="الملخص المالي المحمي" accent="repair">
-              <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-5">
+              <div
+                className="ops-module-charts__qty-row"
+                style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}
+              >
                 {[
-                  ['الإجمالي', overview.grossAmount, 'text-slate-700'],
+                  ['الإجمالي', overview.grossAmount, ''],
                   ['الخصومات', overview.discountAmount, 'text-rose-600'],
                   ['الصافي', overview.netAmount, 'text-indigo-600'],
                   ['المحصل', overview.paidAmount, 'text-emerald-600'],
                   ['المتبقي', overview.balanceDue, 'text-amber-700'],
                 ].map(([label, value, tone]) => (
-                  <div key={String(label)} className="rounded-lg border p-2.5 md:p-3">
-                    <p className="text-[11px] text-muted-foreground md:text-xs">{label}</p>
-                    <p className={`mt-1 text-lg font-bold tabular-nums md:text-xl ${tone}`}>{fmt(Number(value))} ج.م</p>
+                  <div key={String(label)} className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">{label}</p>
+                    <p className={`ops-module-charts__qty-value ${tone}`}>{fmt(Number(value))}</p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">ج.م</p>
                   </div>
                 ))}
               </div>
@@ -921,31 +959,31 @@ export const RepairAdminDashboard: React.FC = () => {
 
           <OpsDashPanel title="تحليل أسباب عدم قابلية الإصلاح وإعادة الفتح" accent="repair">
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">طلبات متأثرة</p>
-                  <p className="mt-1 text-xl font-bold tabular-nums">{fmt(unrepairableAnalytics.affectedJobs)}</p>
+              <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
+                <div className="ops-module-charts__qty">
+                  <p className="ops-module-charts__qty-label">طلبات متأثرة</p>
+                  <p className="ops-module-charts__qty-value">{fmt(unrepairableAnalytics.affectedJobs)}</p>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">إجمالي قرارات الوحدات</p>
-                  <p className="mt-1 text-xl font-bold tabular-nums text-rose-600">{fmt(unrepairableAnalytics.decisionQuantity)}</p>
+                <div className="ops-module-charts__qty">
+                  <p className="ops-module-charts__qty-label">إجمالي قرارات الوحدات</p>
+                  <p className="ops-module-charts__qty-value text-rose-600">{fmt(unrepairableAnalytics.decisionQuantity)}</p>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">الرصيد الحالي غير القابل</p>
-                  <p className="mt-1 text-xl font-bold tabular-nums text-amber-700">{fmt(unrepairableAnalytics.currentStockQuantity)}</p>
+                <div className="ops-module-charts__qty">
+                  <p className="ops-module-charts__qty-label">الرصيد الحالي غير القابل</p>
+                  <p className="ops-module-charts__qty-value text-amber-700">{fmt(unrepairableAnalytics.currentStockQuantity)}</p>
                 </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-xs text-muted-foreground">أُعيد فتحها للصيانة</p>
-                  <p className="mt-1 text-xl font-bold tabular-nums text-emerald-700">{fmt(unrepairableAnalytics.reopenedQuantity)}</p>
+                <div className="ops-module-charts__qty">
+                  <p className="ops-module-charts__qty-label">أُعيد فتحها للصيانة</p>
+                  <p className="ops-module-charts__qty-value text-emerald-700">{fmt(unrepairableAnalytics.reopenedQuantity)}</p>
                 </div>
               </div>
               {unrepairableAnalytics.reasons.length === 0 ? (
-                <p className="rounded-lg border px-3 py-6 text-center text-sm text-muted-foreground">
+                <p className="py-6 text-center text-sm text-muted-foreground">
                   لا توجد قرارات غير قابلة للإصلاح مصنفة بعد.
                 </p>
               ) : (
                 <>
-                  <div className="erp-mobile-card-list p-2">
+                  <div className="erp-mobile-card-list p-2 md:hidden">
                     {unrepairableAnalytics.reasons.map((row) => (
                       <div
                         key={`m-${row.code}`}
@@ -973,25 +1011,25 @@ export const RepairAdminDashboard: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                  <div className="erp-desktop-table overflow-x-auto rounded-lg border">
-                    <table className="w-full text-sm">
-                      <thead className="border-b bg-muted/30 text-muted-foreground">
+                  <div className="erp-desktop-table hidden overflow-x-auto md:block">
+                    <table className="table erp-table w-full text-sm">
+                      <thead className="erp-thead">
                         <tr>
-                          <th className="px-3 py-2 text-right font-medium">السبب</th>
-                          <th className="px-3 py-2 text-right font-medium">الطلبات</th>
-                          <th className="px-3 py-2 text-right font-medium">الوحدات المسجلة</th>
-                          <th className="px-3 py-2 text-right font-medium">الموجود حاليًا</th>
-                          <th className="px-3 py-2 text-right font-medium">أُعيد للصيانة</th>
+                          <th className="erp-th text-right">السبب</th>
+                          <th className="erp-th text-right">الطلبات</th>
+                          <th className="erp-th text-right">الوحدات المسجلة</th>
+                          <th className="erp-th text-right">الموجود حاليًا</th>
+                          <th className="erp-th text-right">أُعيد للصيانة</th>
                         </tr>
                       </thead>
                       <tbody>
                         {unrepairableAnalytics.reasons.map((row) => (
-                          <tr key={row.code} className="border-b last:border-b-0">
-                            <td className="px-3 py-2 font-medium">{row.label}</td>
-                            <td className="px-3 py-2 tabular-nums">{fmt(row.jobs)}</td>
-                            <td className="px-3 py-2 tabular-nums">{fmt(row.decisionQuantity)}</td>
-                            <td className="px-3 py-2 tabular-nums text-amber-700">{fmt(row.currentStockQuantity)}</td>
-                            <td className="px-3 py-2 tabular-nums text-emerald-700">{fmt(row.reopenedQuantity)}</td>
+                          <tr key={row.code}>
+                            <td className="font-medium">{row.label}</td>
+                            <td className="tabular-nums">{fmt(row.jobs)}</td>
+                            <td className="tabular-nums">{fmt(row.decisionQuantity)}</td>
+                            <td className="tabular-nums text-amber-700">{fmt(row.currentStockQuantity)}</td>
+                            <td className="tabular-nums text-emerald-700">{fmt(row.reopenedQuantity)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1005,24 +1043,24 @@ export const RepairAdminDashboard: React.FC = () => {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <OpsDashPanel title="التوريد والمخزون" accent="repair">
               <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">طلبات توريد مفتوحة</div>
-                    <div className="font-bold text-lg tabular-nums">{fmt(sprCounts.open)}</div>
+                <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">توريد مفتوح</p>
+                    <p className="ops-module-charts__qty-value">{fmt(sprCounts.open)}</p>
                   </div>
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">سلال مفتوحة</div>
-                    <div className="font-bold text-lg tabular-nums">{fmt(sprCounts.openBasket)}</div>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">سلال مفتوحة</p>
+                    <p className="ops-module-charts__qty-value">{fmt(sprCounts.openBasket)}</p>
                   </div>
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">سندات بانتظار الاعتماد</div>
-                    <div className="font-bold text-lg tabular-nums text-amber-700">{fmt(rsiPendingCount)}</div>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">سندات معلقة</p>
+                    <p className="ops-module-charts__qty-value text-amber-700">{fmt(rsiPendingCount)}</p>
                   </div>
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">منخفض المخزون</div>
-                    <div className={`font-bold text-lg tabular-nums ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">منخفض المخزون</p>
+                    <p className={`ops-module-charts__qty-value ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                       {fmt(overview.lowStockCount)}
-                    </div>
+                    </p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1082,18 +1120,19 @@ export const RepairAdminDashboard: React.FC = () => {
 
             <OpsDashPanel title="الخزينة والإقفال الشهري" accent="repair">
               <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">جلسات مفتوحة</div>
-                    <div className={`font-bold text-lg tabular-nums ${openSessionsCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                <div className="ops-module-charts__qty-row" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">جلسات مفتوحة</p>
+                    <p className={`ops-module-charts__qty-value ${openSessionsCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                       {fmt(openSessionsCount)}
-                    </div>
+                    </p>
                   </div>
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">شهر {currentMonth}</div>
-                    <div className="font-bold text-sm mt-1">
-                      {fmt(monthCloseSummary.closedBranches)} مقفول / {fmt(monthCloseSummary.openBranches)} مفتوح
-                    </div>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">شهر {currentMonth}</p>
+                    <p className="ops-module-charts__qty-value text-sm">
+                      {fmt(monthCloseSummary.closedBranches)} / {fmt(monthCloseSummary.openBranches)}
+                    </p>
+                    <p className="mt-1 text-[10px] text-muted-foreground">مقفول / مفتوح</p>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -1116,16 +1155,16 @@ export const RepairAdminDashboard: React.FC = () => {
 
             <OpsDashPanel title="الجودة والأداء" accent="repair">
               <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">شكاوى مفتوحة</div>
-                    <div className={`font-bold text-lg tabular-nums ${openComplaintsCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                <div className="ops-module-charts__qty-row" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">شكاوى مفتوحة</p>
+                    <p className={`ops-module-charts__qty-value ${openComplaintsCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                       {fmt(openComplaintsCount)}
-                    </div>
+                    </p>
                   </div>
-                  <div className="rounded-lg border p-2.5">
-                    <div className="text-muted-foreground text-xs">نسبة النجاح</div>
-                    <div className="font-bold text-lg tabular-nums">{overview.successRate.toFixed(1)}%</div>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">نسبة النجاح</p>
+                    <p className="ops-module-charts__qty-value">{overview.successRate.toFixed(1)}%</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -1165,77 +1204,102 @@ export const RepairAdminDashboard: React.FC = () => {
                 )}
               >
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                    <div className="rounded-lg border bg-slate-50/70 p-2.5">
-                      <div className="text-muted-foreground">إجمالي الطلبات</div>
-                      <div className="font-bold tabular-nums">{fmt(card.totalJobs)}</div>
+                  <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">إجمالي الطلبات</p>
+                      <p className="ops-module-charts__qty-value">{fmt(card.totalJobs)}</p>
                     </div>
-                    <div className="rounded-lg border bg-amber-50/60 p-2.5">
-                      <div className="text-muted-foreground">طلبات مفتوحة</div>
-                      <div className="font-bold tabular-nums">{fmt(card.openJobs)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">طلبات مفتوحة</p>
+                      <p className="ops-module-charts__qty-value text-amber-700">{fmt(card.openJobs)}</p>
                     </div>
-                    <div className="rounded-lg border bg-indigo-50/60 p-2.5">
-                      <div className="text-muted-foreground">جاهز للتسليم</div>
-                      <div className="font-bold tabular-nums">{fmt(card.readyJobs)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">جاهز للتسليم</p>
+                      <p className="ops-module-charts__qty-value text-indigo-700">{fmt(card.readyJobs)}</p>
                     </div>
-                    <div className="rounded-lg border bg-emerald-50/60 p-2.5">
-                      <div className="text-muted-foreground">طلبات منجزة</div>
-                      <div className="font-bold tabular-nums">{fmt(card.deliveredJobs)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">طلبات منجزة</p>
+                      <p className="ops-module-charts__qty-value text-emerald-700">{fmt(card.deliveredJobs)}</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">موافقة عميل</div>
-                      <div className="font-bold tabular-nums text-violet-700">{fmt(card.waitingApproval)}</div>
+
+                  <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">موافقة عميل</p>
+                      <p className="ops-module-charts__qty-value text-violet-700">{fmt(card.waitingApproval)}</p>
                     </div>
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">بانتظار قطع</div>
-                      <div className="font-bold tabular-nums text-amber-700">{fmt(card.waitingParts)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">بانتظار قطع</p>
+                      <p className="ops-module-charts__qty-value text-amber-700">{fmt(card.waitingParts)}</p>
                     </div>
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">جاهز للصرف</div>
-                      <div className="font-bold tabular-nums text-sky-700">{fmt(card.readyToIssueParts)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">جاهز للصرف</p>
+                      <p className="ops-module-charts__qty-value text-sky-700">{fmt(card.readyToIssueParts)}</p>
                     </div>
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">متأخر</div>
-                      <div className={`font-bold tabular-nums ${card.overdueJobs > 0 ? 'text-rose-600' : ''}`}>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">متأخر</p>
+                      <p className={`ops-module-charts__qty-value ${card.overdueJobs > 0 ? 'text-rose-600' : ''}`}>
                         {fmt(card.overdueJobs)}
-                      </div>
+                      </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-3">
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">نسبة النجاح</div>
-                      <div className="font-bold tabular-nums">{card.successRate.toFixed(1)}%</div>
+
+                  <div
+                    className="ops-module-charts__qty-row"
+                    style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}
+                  >
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">نسبة النجاح</p>
+                      <p className="ops-module-charts__qty-value">{card.successRate.toFixed(1)}%</p>
                     </div>
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">إيراد الصيانة</div>
-                      <div className="font-bold text-emerald-600 tabular-nums">{fmt(card.revenue)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">إيراد الصيانة</p>
+                      <p className="ops-module-charts__qty-value text-emerald-600">{fmt(card.revenue)}</p>
                     </div>
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">مبيعات قطع الغيار</div>
-                      <div className="font-bold text-sky-600 tabular-nums">{fmt(card.partsRevenue)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">مبيعات قطع الغيار</p>
+                      <p className="ops-module-charts__qty-value text-sky-600">{fmt(card.partsRevenue)}</p>
                     </div>
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">الإجمالي التشغيلي</div>
-                      <div className="font-bold text-emerald-700 tabular-nums">{fmt(card.totalRevenue)}</div>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">الإجمالي التشغيلي</p>
+                      <p className="ops-module-charts__qty-value text-emerald-700">{fmt(card.totalRevenue)}</p>
                     </div>
-                    <div className="rounded-lg border p-2.5">
-                      <div className="text-muted-foreground">منخفض المخزون</div>
-                      <div className={`font-bold tabular-nums ${card.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    <div className="ops-module-charts__qty">
+                      <p className="ops-module-charts__qty-label">منخفض المخزون</p>
+                      <p className={`ops-module-charts__qty-value ${card.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                         {fmt(card.lowStockCount)}
-                      </div>
+                      </p>
                     </div>
                   </div>
+
                   {can('repair.finance.view') ? (
-                    <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-5">
-                      <div className="rounded-lg border p-2.5"><div className="text-muted-foreground">الإجمالي</div><div className="font-bold tabular-nums">{fmt(card.grossAmount)}</div></div>
-                      <div className="rounded-lg border p-2.5"><div className="text-muted-foreground">الخصم</div><div className="font-bold text-rose-600 tabular-nums">{fmt(card.discountAmount)}</div></div>
-                      <div className="rounded-lg border p-2.5"><div className="text-muted-foreground">الصافي</div><div className="font-bold text-indigo-600 tabular-nums">{fmt(card.netAmount)}</div></div>
-                      <div className="rounded-lg border p-2.5"><div className="text-muted-foreground">المحصل</div><div className="font-bold text-emerald-600 tabular-nums">{fmt(card.paidAmount)}</div></div>
-                      <div className="rounded-lg border p-2.5"><div className="text-muted-foreground">الرصيد</div><div className="font-bold text-amber-700 tabular-nums">{fmt(card.balanceDue)}</div></div>
+                    <div
+                      className="ops-module-charts__qty-row"
+                      style={{ gridTemplateColumns: 'repeat(5, minmax(0, 1fr))' }}
+                    >
+                      <div className="ops-module-charts__qty">
+                        <p className="ops-module-charts__qty-label">الإجمالي</p>
+                        <p className="ops-module-charts__qty-value">{fmt(card.grossAmount)}</p>
+                      </div>
+                      <div className="ops-module-charts__qty">
+                        <p className="ops-module-charts__qty-label">الخصم</p>
+                        <p className="ops-module-charts__qty-value text-rose-600">{fmt(card.discountAmount)}</p>
+                      </div>
+                      <div className="ops-module-charts__qty">
+                        <p className="ops-module-charts__qty-label">الصافي</p>
+                        <p className="ops-module-charts__qty-value text-indigo-600">{fmt(card.netAmount)}</p>
+                      </div>
+                      <div className="ops-module-charts__qty">
+                        <p className="ops-module-charts__qty-label">المحصل</p>
+                        <p className="ops-module-charts__qty-value text-emerald-600">{fmt(card.paidAmount)}</p>
+                      </div>
+                      <div className="ops-module-charts__qty">
+                        <p className="ops-module-charts__qty-label">الرصيد</p>
+                        <p className="ops-module-charts__qty-value text-amber-700">{fmt(card.balanceDue)}</p>
+                      </div>
                     </div>
                   ) : null}
+
                   <div>
                     <div className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
                       <span>نسبة النجاح (من الطلبات المنتهية)</span>

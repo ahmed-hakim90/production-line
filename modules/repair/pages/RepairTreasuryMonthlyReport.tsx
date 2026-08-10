@@ -36,6 +36,9 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { isRepairTreasuryMonthClosedStatus } from '../lib/repairTreasuryMonthlyClose';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { RepairTreasuryMonthlyPrint } from '../components/RepairTreasuryMonthlyPrint';
+import { useManagedPrint } from '../../../utils/printManager';
+import { exportToPDF } from '../../../utils/reportExport';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(Number(n || 0));
 const THIS_MONTH = new Date().toISOString().slice(0, 7);
@@ -50,6 +53,14 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
   const canManage = can('repair.treasury.manage');
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
+  const printRef = React.useRef<HTMLDivElement>(null);
+  const handlePrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: 'تقرير-خزائن-شهري',
+  });
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [month, setMonth] = useState(THIS_MONTH);
   const [branchFilter, setBranchFilter] = useState('');
@@ -391,8 +402,24 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
               <Button type="button" variant="outline" size="sm" onClick={handleExport}>
                 تصدير Excel
               </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
-                طباعة / PDF
+              <Button type="button" variant="outline" size="sm" onClick={() => handlePrint()}>
+                طباعة
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={exportingPdf}
+                onClick={() => {
+                  if (!printRef.current) return;
+                  setExportingPdf(true);
+                  void exportToPDF(printRef.current, `treasury-${month}`)
+                    .then(() => toast.success('تم تصدير PDF بنجاح.'))
+                    .catch(() => toast.error('تعذر تصدير PDF.'))
+                    .finally(() => setExportingPdf(false));
+                }}
+              >
+                {exportingPdf ? 'جارٍ التصدير...' : 'PDF'}
               </Button>
             </>
           ) : null}
@@ -810,6 +837,19 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <div className="fixed left-[-10000px] top-0" aria-hidden>
+        <RepairTreasuryMonthlyPrint
+          ref={printRef}
+          report={report}
+          branchLabel={
+            branchFilter === ALL_BRANCHES_VALUE
+              ? 'كل الفروع المصرح بها'
+              : branchNameMap[branchFilter] || undefined
+          }
+          printSettings={printTemplate}
+        />
+      </div>
     </RepairOpsPageShell>
   );
 };

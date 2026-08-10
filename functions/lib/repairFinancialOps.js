@@ -437,11 +437,13 @@ const invoiceDiscount = (gross, type, rawValue) => {
         throw new HttpsError('invalid-argument', 'الخصم أكبر من إجمالي الفاتورة.');
     return { type: ['amount', 'percent'].includes(type) ? type : 'none', value, amount: Math.round(amount * 100) / 100 };
 };
-const requireInvoiceAccounting = async (actor, branch) => {
+const requireInvoiceAccounting = async (actor, branch, opts) => {
     const costCenterId = String(branch.costCenterId || '').trim();
     const accounts = branch.accountingAccounts && typeof branch.accountingAccounts === 'object'
         ? branch.accountingAccounts : {};
-    const required = ['cash', 'card', 'bankTransfer', 'partsRevenue', 'discounts', 'partsInventory', 'partsCogs'];
+    const required = opts?.credit
+        ? ['receivables', 'partsRevenue', 'discounts', 'partsInventory', 'partsCogs']
+        : ['cash', 'card', 'bankTransfer', 'partsRevenue', 'discounts', 'partsInventory', 'partsCogs'];
     const missing = required.filter((key) => !String(accounts[key] || '').trim());
     if (!costCenterId)
         throw new HttpsError('failed-precondition', 'اربط الفرع بمركز تكلفة قبل ترحيل الفاتورة.');
@@ -452,6 +454,11 @@ const requireInvoiceAccounting = async (actor, branch) => {
         throw new HttpsError('failed-precondition', 'مركز تكلفة الفرع غير صالح أو غير نشط.');
     }
     return { costCenterId, accounts };
+};
+const assertBranchAllowsCreditSalesInvoice = (branch) => {
+    if (branch.allowCreditSalesInvoices === true)
+        return;
+    throw new HttpsError('failed-precondition', 'فواتير البيع الآجلة غير مفعّلة لهذا المركز من إعدادات الفرع.');
 };
 /** Draft/approval/post/reversal workflow for spare-parts sales invoices. */
 export const mutateRepairSalesInvoiceHandler = async (request) => {
@@ -495,6 +502,20 @@ export const mutateRepairSalesInvoiceHandler = async (request) => {
         && actor.permissions[requiredPermission] !== true
         && !(await isActorBranchManager(actor, branch))) {
         throw new HttpsError('permission-denied', 'هذه العملية متاحة لمسؤول الفرع أو صاحب الصلاحية فقط.');
+    }
+    if ((operation === 'prepare' || operation === 'post')
+        && branch.salesInvoicesLocked === true) {
+        throw new HttpsError('failed-precondition', 'فواتير مبيعات القطع مقفلة لهذا المركز من إعدادات الفرع.');
+    }
+    const requestedPaymentMethod = String(payload.paymentMethod
+        || (existing ? existing.paymentMethod : '')
+        || 'cash').trim();
+    if ((operation === 'prepare' || operation === 'post')
+        && requestedPaymentMethod === 'credit') {
+        assertBranchAllowsCreditSalesInvoice(branch);
+    }
+    if (requestedPaymentMethod && !['cash', 'card', 'bank_transfer', 'credit'].includes(requestedPaymentMethod)) {
+        throw new HttpsError('invalid-argument', 'وسيلة الدفع غير صالحة.');
     }
     const warehouseId = String(branch.warehouseId || '').trim();
     if (!warehouseId)
@@ -579,7 +600,9 @@ export const mutateRepairSalesInvoiceHandler = async (request) => {
                 customerCode: String(invoiceCustomer?.code || '').trim(),
                 notes: String(payload.notes || '').trim(),
                 grossAmount, discountType: discount.type, discountValue: discount.value, discountAmount: discount.amount,
-                total: nextTotal, taxRate: 0, taxAmount: 0, paymentMethod: String(payload.paymentMethod || current?.paymentMethod || 'cash'),
+                total: nextTotal, taxRate: 0, taxAmount: 0,
+                paymentMethod: String(payload.paymentMethod || current?.paymentMethod || 'cash'),
+                isCreditSale: String(payload.paymentMethod || current?.paymentMethod || 'cash') === 'credit',
                 lines: nextLines, revision, discountApprovalStatus: discount.amount > 0 ? 'pending' : 'not_required',
                 discountRequestedBy: discount.amount > 0 ? actor.uid : '', discountRequestedByName: discount.amount > 0 ? actor.displayName : '',
                 discountRequestedAt: discount.amount > 0 ? at : '', updatedAt: at, updatedBy: actor.uid, updatedByName: actor.displayName,
@@ -603,8 +626,18 @@ export const mutateRepairSalesInvoiceHandler = async (request) => {
         });
         return { ok: true, operation, id: invoiceRef.id, ...result };
     }
-    const accounting = await requireInvoiceAccounting(actor, branch);
-    const previewTreasuryDelta = operation === 'post' ? nextTotal : -previousTotal;
+    const isCreditSale = String(operation === 'post'
+        ? (existing?.paymentMethod || payload.paymentMethod || 'cash')
+        : (existing?.paymentMethod || 'cash')) === 'credit'
+        || existing?.isCreditSale === true;
+    if (isCreditSale && operation === 'post') {
+        assertBranchAllowsCreditSalesInvoice(branch);
+    }
+    const accounting = await requireInvoiceAccounting(actor, branch, { credit: isCreditSale });
+    // Credit sales post to AR — no cash till movement on post/cancel of the receivable leg.
+    const previewTreasuryDelta = isCreditSale
+        ? 0
+        : (operation === 'post' ? nextTotal : -previousTotal);
     const sessionRef = await getOpenTreasurySession(actor, branchId, Math.abs(previewTreasuryDelta) > 0.00001);
     const result = await db.runTransaction(async (tx) => {
         const currentInvoiceSnap = await tx.get(invoiceRef);
@@ -626,7 +659,12 @@ export const mutateRepairSalesInvoiceHandler = async (request) => {
             throw new HttpsError('failed-precondition', 'يمكن عكس الفاتورة بعد ترحيلها فقط.');
         }
         const currentPreviousTotal = money(current?.total);
-        const treasuryDelta = operation === 'post' ? nextTotal : -currentPreviousTotal;
+        const creditInvoice = isCreditSale
+            || String(current?.paymentMethod || '') === 'credit'
+            || current?.isCreditSale === true;
+        const treasuryDelta = creditInvoice
+            ? 0
+            : (operation === 'post' ? nextTotal : -currentPreviousTotal);
         if (Math.abs(treasuryDelta) > 0.00001 && !sessionRef) {
             throw new HttpsError('failed-precondition', 'لا توجد خزينة مفتوحة لتسجيل تسوية الفاتورة الحالية.');
         }
@@ -838,6 +876,9 @@ export const mutateRepairSalesInvoiceHandler = async (request) => {
                 lines: enrichedLines,
                 total: nextTotal,
                 status: 'posted',
+                isCreditSale: creditInvoice,
+                paymentStatus: creditInvoice ? 'unpaid' : 'paid',
+                balanceDue: creditInvoice ? nextTotal : 0,
                 postedAt: at,
                 postedBy: actor.uid,
                 postedByName: actor.displayName,
@@ -908,12 +949,19 @@ export const mutateRepairSalesInvoiceHandler = async (request) => {
         }, 0) * 100) / 100;
         const accountMap = accounting.accounts;
         const paymentMethod = String(current.paymentMethod || 'cash');
-        const cashAccount = paymentMethod === 'card'
-            ? String(accountMap.card || '')
-            : paymentMethod === 'bank_transfer' ? String(accountMap.bankTransfer || '') : String(accountMap.cash || '');
+        const debitAccount = creditInvoice
+            ? String(accountMap.receivables || '')
+            : paymentMethod === 'card'
+                ? String(accountMap.card || '')
+                : paymentMethod === 'bank_transfer'
+                    ? String(accountMap.bankTransfer || '')
+                    : String(accountMap.cash || '');
+        const debitAccountName = creditInvoice
+            ? 'ذمم عملاء — فاتورة قطع آجلة'
+            : 'وسيلة تحصيل فاتورة قطع الغيار';
         const costCenterId = accounting.costCenterId;
         const postLines = [
-            ...(net > 0 ? [{ accountCode: cashAccount, accountName: 'وسيلة تحصيل فاتورة قطع الغيار', debit: net, credit: 0, costCenterId }] : []),
+            ...(net > 0 ? [{ accountCode: debitAccount, accountName: debitAccountName, debit: net, credit: 0, costCenterId }] : []),
             ...(invoiceDiscountAmount > 0 ? [{ accountCode: String(accountMap.discounts || ''), accountName: 'خصومات قطع الغيار', debit: invoiceDiscountAmount, credit: 0, costCenterId }] : []),
             ...(gross > 0 ? [{ accountCode: String(accountMap.partsRevenue || ''), accountName: 'إيراد قطع الغيار', debit: 0, credit: gross, costCenterId }] : []),
             ...(cogs > 0 ? [

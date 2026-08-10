@@ -42,7 +42,6 @@ import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
 import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
 import { calculateWasteRatio } from "@/utils/calculations";
 import { usePermission } from "../../../utils/permissions";
-import { PageHeader } from "@/components/PageHeader";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
@@ -652,33 +651,44 @@ export const ProductDetails: React.FC = () => {
       </Badge>
     ) : null;
 
+  const productShellActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {shellBackAction}
+      {data && !isLoading && sectionReady.header ? (
+        <>
+          {can("products.edit") ? (
+            <Button type="button" onClick={onEditProduct}>
+              تعديل المنتج
+            </Button>
+          ) : null}
+          <Button type="button" variant="outline" onClick={onExport}>
+            تصدير
+          </Button>
+          <Button type="button" variant="outline" onClick={onExcel}>
+            تقارير Excel
+          </Button>
+        </>
+      ) : null}
+    </div>
+  );
+
   return (
-    <ModuleOpsPageShell eyebrow="تفاصيل المنتج" actions={shellBackAction}>
+    <ModuleOpsPageShell eyebrow="تفاصيل المنتج" actions={productShellActions}>
       <DetailPageStickyHeader>
         {isLoading || !sectionReady.header || !data ? (
-          <>
-            <PageHeader title="تفاصيل المنتج" loading={isLoading} backAction={false} />
-            <OpsDashPanel title="جاري التحميل" accent="production">
-              <SectionSkeleton rows={2} height={20} />
-            </OpsDashPanel>
-          </>
+          <OpsDashPanel title="جاري التحميل" accent="production">
+            <SectionSkeleton rows={2} height={20} />
+          </OpsDashPanel>
         ) : (
-          <PageHeader
-            title={data.header.name}
-            subtitle={`${data.header.breadcrumb} · الكود: ${data.header.code} · الفئة: ${data.header.category}`}
-            icon="package"
-            backAction={false}
-            primaryAction={
-              can("products.edit")
-                ? { label: "تعديل المنتج", icon: "edit", onClick: onEditProduct }
-                : undefined
-            }
-            moreActions={[
-              { label: "تصدير", icon: "print", onClick: onExport, group: "تصدير" },
-              { label: "تقارير Excel", icon: "file_download", onClick: onExcel, group: "تصدير" },
-            ]}
-            extra={pageHeaderExtra}
-          />
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-foreground">{data.header.name}</h2>
+              {pageHeaderExtra}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {`${data.header.breadcrumb} · الكود: ${data.header.code} · الفئة: ${data.header.category}`}
+            </p>
+          </div>
         )}
 
         {data && !isLoading && sectionReady.header && (

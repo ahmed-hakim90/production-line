@@ -3,6 +3,10 @@ import { db, isConfigured } from '@/services/firebase';
 import type { ThemeSettings } from '@/types';
 import { DEFAULT_THEME } from '@/utils/dashboardConfig';
 import { applyUiDensity, writeUiDensity } from '@/core/ui-engine/density/uiDensity';
+import { buildThemeSettingsCssVars, toRgbChannels } from '@/core/ui-engine/theme/themeCssVars';
+
+export type { ThemePresetForCss } from '@/core/ui-engine/theme/themeCssVars';
+export { buildThemeSettingsCssVars, toRgbChannels } from '@/core/ui-engine/theme/themeCssVars';
 
 export type TenantThemePreset = 'indigo-pro' | 'light' | 'dark' | 'factory' | 'custom';
 
@@ -21,35 +25,6 @@ export interface TenantTheme {
 }
 
 const THEME_STORAGE_KEY = 'tenant_theme_cache_v1';
-
-function toRgbChannels(color: string, fallback = '79 70 229'): string {
-  const value = color.trim();
-  if (!value) return fallback;
-
-  // Already in CSS channel format (e.g. "168 0 8")
-  if (/^\d+\s+\d+\s+\d+$/.test(value)) return value;
-
-  // Hex format (#rrggbb or #rgb)
-  const hex = value.startsWith('#') ? value.slice(1) : value;
-  if (/^[\da-fA-F]{6}$/.test(hex)) {
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return `${r} ${g} ${b}`;
-  }
-  if (/^[\da-fA-F]{3}$/.test(hex)) {
-    const r = parseInt(hex[0] + hex[0], 16);
-    const g = parseInt(hex[1] + hex[1], 16);
-    const b = parseInt(hex[2] + hex[2], 16);
-    return `${r} ${g} ${b}`;
-  }
-
-  // rgb(r, g, b) format
-  const rgbMatch = value.match(/^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
-  if (rgbMatch) return `${rgbMatch[1]} ${rgbMatch[2]} ${rgbMatch[3]}`;
-
-  return fallback;
-}
 
 /** Normalize theme primary/surface colors to #rrggbb for HSL conversion. */
 function colorToHex(color: string, fallback = '#4F46E5'): string {
@@ -382,51 +357,16 @@ function applyThemeSettingsCss(settings: ThemeSettings, tenantPreset: TenantThem
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
   const t = { ...DEFAULT_THEME, ...settings };
-  root.style.setProperty('--color-secondary', toRgbChannels(t.secondaryColor));
-  root.style.setProperty('--color-success', toRgbChannels(t.successColor));
-  root.style.setProperty('--color-warning', toRgbChannels(t.warningColor));
-  root.style.setProperty('--color-danger', toRgbChannels(t.dangerColor));
-  root.style.setProperty('--color-secondary-hex', t.secondaryColor);
-  root.style.setProperty('--color-success-hex', t.successColor);
-  root.style.setProperty('--color-warning-hex', t.warningColor);
-  root.style.setProperty('--color-danger-hex', t.dangerColor);
-  root.style.setProperty('--color-text-muted', t.mutedTextColor || (tenantPreset === 'dark' ? '#94a3b8' : '#64748b'));
-
-  const fontStack = `'${t.baseFontFamily}', 'Noto Sans Arabic', sans-serif`;
-  root.style.setProperty('--font-family-base', fontStack);
-
-  const densityFactor = t.density === 'compact' ? 0.92 : 1;
-  const fs = Math.max(10, Math.round(t.baseFontSize * densityFactor));
-  root.style.setProperty('--font-size-base', `${fs}px`);
-  root.style.setProperty('--font-size-sm', `${Math.max(10, fs - 1)}px`);
-  root.style.setProperty('--font-size-xs', `${Math.max(10, fs - 2)}px`);
-  root.style.setProperty('--font-size-2xs', `${Math.max(9, fs - 3)}px`);
-
-  const br = Number(t.borderRadius ?? 6);
-  root.style.setProperty('--border-radius-sm', `${Math.max(2, Math.round(br * 0.6))}px`);
-  root.style.setProperty('--border-radius-base', `${br}px`);
-  root.style.setProperty('--border-radius-lg', `${Math.round(br * 1.4)}px`);
-  root.style.setProperty('--border-radius-xl', `${Math.round(br * 2)}px`);
-  root.style.setProperty('--density-scale', t.density === 'compact' ? '0.92' : '1');
+  const vars = buildThemeSettingsCssVars(settings, tenantPreset);
+  Object.entries(vars).forEach(([key, value]) => {
+    root.style.setProperty(key, value);
+  });
 
   writeUiDensity(t.density);
   applyUiDensity(t.density);
-  root.style.setProperty('--font-size-base', `${fs}px`);
-  root.style.setProperty('--font-size-sm', `${Math.max(10, fs - 1)}px`);
-  root.style.setProperty('--font-size-xs', `${Math.max(10, fs - 2)}px`);
-  root.style.setProperty('--font-size-2xs', `${Math.max(9, fs - 3)}px`);
-
-  if (t.cssVars) {
-    Object.entries(t.cssVars).forEach(([key, value]) => {
-      root.style.setProperty(key, value);
-    });
-  }
 
   const isDark = tenantPreset === 'dark';
   document.body.style.backgroundColor = isDark ? '#020617' : t.backgroundColor;
-
-  const cw = (t.contentMaxWidth ?? DEFAULT_THEME.contentMaxWidth ?? '1536px').trim();
-  root.style.setProperty('--content-max-width', cw);
 }
 
 /** Applies merged tenant colors + full `ThemeSettings` (typography, density, layout tokens). */
@@ -437,31 +377,46 @@ export function applyAppTheme(tenant: TenantTheme, settings: ThemeSettings) {
 
 export function applyTenantTheme(theme: TenantTheme, themeSettings?: ThemeSettings | null) {
   const root = document.documentElement;
+  const settings = themeSettings ? { ...DEFAULT_THEME, ...themeSettings } : null;
+
   root.style.setProperty('--color-bg', theme.colorBg);
   root.style.setProperty('--color-card', theme.colorCard);
   root.style.setProperty('--color-border', theme.colorBorder);
   root.style.setProperty('--color-text', theme.colorText);
   root.style.setProperty('--color-primary', toRgbChannels(theme.primaryColor));
-  root.style.setProperty('--color-secondary', '99 102 241');
-  root.style.setProperty('--color-success', '5 150 105');
-  root.style.setProperty('--color-warning', '217 119 6');
-  root.style.setProperty('--color-danger', '220 38 38');
   root.style.setProperty('--color-primary-hex', theme.primaryColor);
-  root.style.setProperty('--color-secondary-hex', '#6366F1');
-  root.style.setProperty('--color-success-hex', '#059669');
-  root.style.setProperty('--color-warning-hex', '#D97706');
-  root.style.setProperty('--color-danger-hex', '#DC2626');
   root.style.setProperty('--color-background', theme.colorBg);
   root.style.setProperty('--color-sidebar-bg', theme.colorSidebarBg);
   root.style.setProperty('--color-sidebar-text', theme.colorSidebarText);
+  root.style.setProperty('--color-sidebar-border', theme.colorBorder);
   root.style.setProperty('--tenant-logo', theme.logo ?? '');
   root.style.setProperty('--tenant-background-style', theme.backgroundStyle ?? '');
   root.style.setProperty('--tenant-sidebar-style', theme.sidebarStyle ?? '');
-
   root.style.setProperty(
     '--color-surface-hover',
     theme.preset === 'dark' ? '#334155' : '#f0f2f5',
   );
+
+  // Semantic colors: prefer ThemeSettings; otherwise keep safe defaults.
+  if (settings) {
+    root.style.setProperty('--color-secondary', toRgbChannels(settings.secondaryColor));
+    root.style.setProperty('--color-success', toRgbChannels(settings.successColor));
+    root.style.setProperty('--color-warning', toRgbChannels(settings.warningColor));
+    root.style.setProperty('--color-danger', toRgbChannels(settings.dangerColor));
+    root.style.setProperty('--color-secondary-hex', settings.secondaryColor);
+    root.style.setProperty('--color-success-hex', settings.successColor);
+    root.style.setProperty('--color-warning-hex', settings.warningColor);
+    root.style.setProperty('--color-danger-hex', settings.dangerColor);
+  } else {
+    root.style.setProperty('--color-secondary', '99 102 241');
+    root.style.setProperty('--color-success', '5 150 105');
+    root.style.setProperty('--color-warning', '217 119 6');
+    root.style.setProperty('--color-danger', '220 38 38');
+    root.style.setProperty('--color-secondary-hex', '#6366F1');
+    root.style.setProperty('--color-success-hex', '#059669');
+    root.style.setProperty('--color-warning-hex', '#D97706');
+    root.style.setProperty('--color-danger-hex', '#DC2626');
+  }
 
   root.classList.toggle('dark', theme.preset === 'dark');
   applyShadcnTokensFromTheme(theme, root);

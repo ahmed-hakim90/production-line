@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Badge, Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton, TableSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
@@ -338,6 +339,7 @@ const ConfirmDialog: React.FC<{
 }> = ({ open, title, message, confirmLabel = 'تأكيد', cancelLabel = 'إلغاء', variant = 'primary', onConfirm, onCancel }) => {
   if (!open) return null;
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-bold mb-2">{title}</h3>
@@ -358,6 +360,7 @@ const ConfirmDialog: React.FC<{
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
 

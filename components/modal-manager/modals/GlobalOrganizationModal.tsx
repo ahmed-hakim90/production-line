@@ -3,6 +3,7 @@ import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
 import { Button, Badge, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type {
   FirestoreDepartment,
   FirestoreJobPosition,
@@ -255,6 +256,7 @@ export const GlobalOrganizationModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!saving) close(); }}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -398,6 +400,6 @@ export const GlobalOrganizationModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

@@ -68,7 +68,7 @@ const TONE_CLASS: Record<TableIconActionTone, string> = {
   undo:
     'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-300 dark:hover:bg-orange-950/70',
   neutral:
-    'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] dark:hover:bg-slate-900/50',
+    'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] dark:hover:bg-slate-900/50',
 };
 
 /** Solid (filled) variants for primary CTAs — same hue family as soft tones. */

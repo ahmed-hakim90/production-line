@@ -195,6 +195,60 @@ export const stockService = {
     return { items, nextCursor, hasMore: snap.docs.length === pageSize };
   },
 
+  /**
+   * Period movement-type counts for inventory dashboard charts.
+   * Pages through transactions (bounded) so KPIs are not a 40-row sample.
+   */
+  async summarizeMovementCounts(params?: {
+    warehouseId?: string;
+    movementType?: StockTransaction['movementType'];
+    sourceModule?: StockTransaction['sourceModule'];
+    startDate?: string;
+    endDate?: string;
+    maxPages?: number;
+  }): Promise<{
+    counts: Record<'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT', number>;
+    scanned: number;
+    truncated: boolean;
+  }> {
+    const empty = {
+      counts: { IN: 0, OUT: 0, TRANSFER: 0, ADJUSTMENT: 0 } as Record<
+        'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT',
+        number
+      >,
+      scanned: 0,
+      truncated: false,
+    };
+    if (!isConfigured) return empty;
+    const maxPages = Math.max(1, Math.min(Number(params?.maxPages || 20), 50));
+    let cursor: FirestoreCursor = null;
+    let scanned = 0;
+    let truncated = false;
+    const counts = { ...empty.counts };
+
+    for (let page = 0; page < maxPages; page += 1) {
+      const res = await this.getTransactionsPaged({
+        warehouseId: params?.warehouseId,
+        movementType: params?.movementType,
+        sourceModule: params?.sourceModule,
+        startDate: params?.startDate,
+        endDate: params?.endDate,
+        limit: MAX_PAGE_SIZE,
+        cursor,
+      });
+      for (const tx of res.items) {
+        scanned += 1;
+        const key = tx.movementType;
+        if (key in counts) counts[key as keyof typeof counts] += 1;
+      }
+      if (!res.hasMore || !res.nextCursor) break;
+      cursor = res.nextCursor;
+      if (page === maxPages - 1 && res.hasMore) truncated = true;
+    }
+
+    return { counts, scanned, truncated };
+  },
+
   /** Display-only hint; actual allocation happens atomically in `createMovement`. */
   async getNextInvReferenceNo(): Promise<string> {
     if (!isConfigured) return formatInvReference(1);
@@ -227,7 +281,7 @@ export const stockService = {
         const qty = Number(row.quantity || 0);
         totalQty += qty;
         const min = Number(row.minStock || 0);
-        if (min > 0 && qty < min) lowStockCount += 1;
+        if (min > 0 && qty <= min) lowStockCount += 1;
       }
       if (!res.hasMore || !res.nextCursor) break;
       cursor = res.nextCursor;

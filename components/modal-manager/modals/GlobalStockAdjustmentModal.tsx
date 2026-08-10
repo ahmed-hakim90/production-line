@@ -5,6 +5,7 @@ import { stockService } from '../../../modules/inventory/services/stockService';
 import { useStockAvailabilityPreview } from '../../../modules/inventory/hooks/useStockAvailabilityPreview';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import type { InventoryItemType, StockAdjustmentReason } from '../../../modules/inventory/types';
 import { usePermission } from '../../../utils/permissions';
@@ -91,6 +92,7 @@ export const GlobalStockAdjustmentModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => close()}>
       <div className="bg-white rounded-xl shadow-xl w-full max-w-md border p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center">
@@ -123,5 +125,6 @@ export const GlobalStockAdjustmentModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

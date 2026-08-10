@@ -146,6 +146,16 @@ export function useInventoryControlData() {
   const [balances, setBalances] = useState<StockItemBalance[]>(() => initialCore?.balances ?? []);
   const [balancesTruncated, setBalancesTruncated] = useState(() => initialCore?.balancesTruncated ?? false);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
+  const [movementSummary, setMovementSummary] = useState<{
+    counts: Record<'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT', number>;
+    scanned: number;
+    truncated: boolean;
+  }>({
+    counts: { IN: 0, OUT: 0, TRANSFER: 0, ADJUSTMENT: 0 },
+    scanned: 0,
+    truncated: false,
+  });
+  const [movementSummaryLoading, setMovementSummaryLoading] = useState(false);
   const [transfers, setTransfers] = useState<InventoryTransferRequest[]>(() => initialCore?.transfers ?? []);
   const [issues, setIssues] = useState<ProductionIssueOrder[]>(() => initialCore?.issues ?? []);
   const [receipts, setReceipts] = useState<SuppliesReceiptOrder[]>(() => initialCore?.receipts ?? []);
@@ -331,6 +341,47 @@ export function useInventoryControlData() {
     }
   }, [warehouseId, period, movementFilter, sourceFilter]);
 
+  const loadMovementSummary = useCallback(async (force = false) => {
+    const range = periodToDateRange(period);
+    const key = [
+      'inventory:control-movement-summary',
+      warehouseId || 'all',
+      period,
+      movementFilter,
+      sourceFilter,
+    ].join(':');
+    type Summary = {
+      counts: Record<'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT', number>;
+      scanned: number;
+      truncated: boolean;
+    };
+    const cached = peekPageDataCache<Summary>(key);
+    if (cached) {
+      setMovementSummary(cached);
+      setMovementSummaryLoading(false);
+    } else {
+      setMovementSummaryLoading(true);
+    }
+    try {
+      const { data } = await fetchCachedPageData(
+        key,
+        () =>
+          stockService.summarizeMovementCounts({
+            warehouseId: warehouseId || undefined,
+            movementType: movementFilter === 'all' ? undefined : movementFilter,
+            sourceModule: sourceFilter === 'all' ? undefined : sourceFilter,
+            startDate: range.startDate,
+            endDate: range.endDate,
+            maxPages: 20,
+          }),
+        { force, maxAgeMs: 45_000 },
+      );
+      setMovementSummary(data);
+    } finally {
+      setMovementSummaryLoading(false);
+    }
+  }, [warehouseId, period, movementFilter, sourceFilter]);
+
   useEffect(() => {
     void loadCore();
   }, [loadCore]);
@@ -339,11 +390,16 @@ export function useInventoryControlData() {
     void loadTransactions();
   }, [loadTransactions]);
 
+  useEffect(() => {
+    void loadMovementSummary();
+  }, [loadMovementSummary]);
+
   const refresh = useCallback(async () => {
     invalidatePageDataCache(CONTROL_CORE_CACHE_PREFIX);
     invalidatePageDataCache(CONTROL_TX_CACHE_PREFIX);
-    await Promise.all([loadCore(true), loadTransactions(true)]);
-  }, [loadCore, loadTransactions]);
+    invalidatePageDataCache('inventory:control-movement-summary');
+    await Promise.all([loadCore(true), loadTransactions(true), loadMovementSummary(true)]);
+  }, [loadCore, loadTransactions, loadMovementSummary]);
 
   const filteredTransfers = useMemo(
     () =>
@@ -539,23 +595,14 @@ export function useInventoryControlData() {
   }, [filteredTransfers, transferStatusFilter]);
 
   const movementBars = useMemo(() => {
-    const counts: Record<'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT', number> = {
-      IN: 0,
-      OUT: 0,
-      TRANSFER: 0,
-      ADJUSTMENT: 0,
-    };
-    transactions.forEach((tx) => {
-      const key = tx.movementType;
-      if (key in counts) counts[key as keyof typeof counts] += 1;
-    });
+    const counts = movementSummary.counts;
     return [
       { name: 'وارد', value: counts.IN },
       { name: 'منصرف', value: counts.OUT },
       { name: 'تحويل', value: counts.TRANSFER },
       { name: 'تسوية', value: counts.ADJUSTMENT },
     ];
-  }, [transactions]);
+  }, [movementSummary]);
 
   const riskBars = useMemo(
     () => [
@@ -580,6 +627,9 @@ export function useInventoryControlData() {
     loading,
     loadError,
     txLoading,
+    movementSummaryLoading,
+    movementSummaryTruncated: movementSummary.truncated,
+    movementSummaryScanned: movementSummary.scanned,
     refresh,
     warehouses,
     warehouseId,

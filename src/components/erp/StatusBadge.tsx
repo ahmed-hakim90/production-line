@@ -4,20 +4,21 @@ import { useTranslation } from "react-i18next"
 
 type StatusType = "success" | "warning" | "danger" | "info" | "muted"
 
+/** Semantic badge surfaces — driven by theme CSS variables. */
 const styles: Record<StatusType, string> = {
-  success: "border-[#059669]/30 bg-[#059669]/10 text-[#059669]",
-  warning: "border-[#D97706]/30 bg-[#D97706]/10 text-[#D97706]",
-  danger: "border-[#DC2626]/30 bg-[#DC2626]/10 text-[#DC2626]",
-  info: "border-[#2563EB]/30 bg-[#2563EB]/10 text-[#2563EB]",
-  muted: "border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B]",
+  success: "border-[rgb(var(--color-success)/0.3)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]",
+  warning: "border-[rgb(var(--color-warning)/0.3)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]",
+  danger: "border-[rgb(var(--color-danger)/0.3)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]",
+  info: "border-[rgb(var(--color-primary)/0.3)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]",
+  muted: "border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)]",
 }
 
 const dotColors: Record<StatusType, string> = {
-  success: "bg-[#059669]",
-  warning: "bg-[#D97706]",
-  danger: "bg-[#DC2626]",
-  info: "bg-[#4F46E5]",
-  muted: "bg-[#94A3B8]",
+  success: "bg-[rgb(var(--color-success))]",
+  warning: "bg-[rgb(var(--color-warning))]",
+  danger: "bg-[rgb(var(--color-danger))]",
+  info: "bg-[rgb(var(--color-primary))]",
+  muted: "bg-[var(--color-text-muted)]",
 }
 
 interface StatusBadgeProps {

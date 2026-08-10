@@ -12,6 +12,7 @@ import { supervisorLineAssignmentService } from '../services/supervisorLineAssig
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { ManagedModalPortal } from '../../../components/modal-manager/ManagedModalPortal';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -442,6 +443,7 @@ export const Lines: React.FC = () => {
 
       {/* â”€â”€ Add / Edit Modal â”€â”€ */}
       {showModal && (linePerms.canCreate || linePerms.canEdit) && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -561,10 +563,12 @@ export const Lines: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && linePerms.canDelete && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -580,10 +584,12 @@ export const Lines: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* â”€â”€ Set Target Modal â”€â”€ */}
       {targetModal && lineStatusPerms.canEdit && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -661,6 +667,7 @@ export const Lines: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

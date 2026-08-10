@@ -17,6 +17,25 @@ export type PlanActualInput = {
   status?: ProductionPlan['status'];
 };
 
+/** Prefer plan id so concurrent plans on the same line+product do not share one bucket. */
+export function planReportsLookupKey(
+  plan: Pick<ProductionPlan, 'id' | 'lineId' | 'productId'>,
+): string {
+  const id = String(plan.id || '').trim();
+  if (id) return id;
+  return `${plan.lineId}_${plan.productId}`;
+}
+
+export function resolvePlanReports(
+  plan: Pick<ProductionPlan, 'id' | 'lineId' | 'productId'>,
+  planReports: Record<string, { quantityProduced?: number }[]>,
+): { quantityProduced?: number }[] {
+  const byId = String(plan.id || '').trim();
+  if (byId && planReports[byId]) return planReports[byId];
+  const legacy = `${plan.lineId}_${plan.productId}`;
+  return planReports[legacy] || [];
+}
+
 /** Volume-weighted plan fulfilment: Σ min(actual, planned) / Σ planned × 100 */
 export function volumeWeightedPlanAchievement(
   plans: Array<Pick<PlanActualInput, 'plannedQuantity' | 'actualQuantity'>>,
@@ -396,9 +415,16 @@ export function countNegativeAndLow(
     const qty = Number(row.quantity || 0);
     const min = Number(row.minStock || 0);
     if (qty < 0) negativeCount += 1;
-    else if (min > 0 && qty <= min) lowCount += 1;
+    else if (isAtOrBelowMinStock(qty, min)) lowCount += 1;
   }
   return { negativeCount, lowCount };
+}
+
+/** Low-stock rule shared by KPI summary, exceptions, and decision boards: qty <= min. */
+export function isAtOrBelowMinStock(quantity: number, minStock: number): boolean {
+  const qty = Number(quantity || 0);
+  const min = Number(minStock || 0);
+  return min > 0 && qty <= min;
 }
 
 export type StockCountAccuracy = {

@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -14,31 +14,14 @@ import {
   SingleReportPrint,
   ProductionReportPrint,
   computePrintTotals,
-  type ReportPrintRow,
 } from '../../production/components/ProductionReportPrint';
+import { ProductionReportShareCard } from '../../production/components/ProductionReportShareCard';
+import {
+  PRINT_PREVIEW_SAMPLE_ROW,
+  PRINT_PREVIEW_SAMPLE_ROWS,
+} from '../../production/lib/printPreviewSample';
 import { StockTransferShareCard, type StockTransferPrintData } from '../../inventory/components/StockTransferPrint';
-
-const DEMO_PRINT_TEMPLATE = DEFAULT_PRINT_TEMPLATE;
-
-const DEMO_SINGLE_ROW: ReportPrintRow = {
-  reportId: 'showcase-1',
-  reportCode: 'RPT-NA',
-  date: '2026-03-28',
-  lineName: 'خط إنتاج 11',
-  productName: 'راديو RX-606-607-608',
-  employeeName: 'يوسف شريف عبد الرحمن أحمد',
-  quantityProduced: 1,
-  wasteQuantity: 0,
-  workersCount: 1,
-  workersProductionCount: 1,
-  workersPackagingCount: 0,
-  workersQualityCount: 0,
-  workersMaintenanceCount: 0,
-  workersExternalCount: 0,
-  workHours: 1,
-  workOrderNumber: undefined,
-  costPerUnit: undefined,
-};
+import { useAppStore } from '@/store/useAppStore';
 
 const DEMO_TRANSFER: StockTransferPrintData = {
   transferNo: 'TRF-DEMO-001',
@@ -66,13 +49,20 @@ const DEMO_TRANSFER: StockTransferPrintData = {
   ],
 };
 
-const DEMO_BULK_ROWS: ReportPrintRow[] = [DEMO_SINGLE_ROW];
+const WHATSAPP_CARD_WIDTH = 1080;
+const WHATSAPP_PREVIEW_SCALE = 0.42;
 
 export const ImageExportShowcase: React.FC = () => {
+  const whatsappRef = useRef<HTMLDivElement>(null);
   const singleRef = useRef<HTMLDivElement>(null);
   const transferRef = useRef<HTMLDivElement>(null);
   const bulkRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const printTemplate = useAppStore((s) => s.systemSettings?.printTemplate) ?? DEFAULT_PRINT_TEMPLATE;
+  const printSettings = useMemo(
+    () => ({ ...DEFAULT_PRINT_TEMPLATE, ...printTemplate }),
+    [printTemplate],
+  );
 
   const showShareFeedback = useCallback((result: ShareResult) => {
     const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
@@ -112,16 +102,19 @@ export const ImageExportShowcase: React.FC = () => {
     }
   };
 
-  const bulkTotals = computePrintTotals(DEMO_BULK_ROWS, DEMO_PRINT_TEMPLATE.decimalPlaces ?? 0);
+  const bulkTotals = computePrintTotals(PRINT_PREVIEW_SAMPLE_ROWS, printSettings.decimalPlaces ?? 0);
 
   return (
     <ModuleOpsPageShell
       eyebrow="النظام"
-      rangeLabel="معمل تصدير الصور — نفس قالب التقرير لكل من PNG ومشاركة واتساب"
+      rangeLabel="معمل تصدير الصور — بطاقة واتساب (1080) + قوالب الطباعة"
       className="max-w-5xl mx-auto"
     >
       <OpsDashPanel title="إرشادات المنصة" accent="quality">
         <ul className="text-sm text-[var(--color-text-muted)] space-y-2 list-disc pr-5">
+          <li>
+            بطاقة واتساب أدناه هي نفس المكوّن المستخدم عند مشاركة صف تقرير من تقارير الإنتاج / الإجراء السريع.
+          </li>
           <li>
             على الهاتف: غالباً تُفتح نافذة المشاركة مع إرفاق الصورة مباشرة عند اختيار واتساب.
           </li>
@@ -132,13 +125,62 @@ export const ImageExportShowcase: React.FC = () => {
         </ul>
       </OpsDashPanel>
 
-      <OpsDashPanel title="1) تقرير إنتاج (صف واحد — PrintReportLayout)" accent="quality">
-        <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-white p-2 mb-4">
+      <OpsDashPanel title="1) بطاقة مشاركة واتساب (ProductionReportShareCard — 1080px)" accent="quality">
+        <p className="text-xs text-[var(--color-text-muted)] mb-3">
+          تستخدم إعدادات قالب الطباعة المحفوظة للمستأجر (اللون الأساسي والحقول).
+        </p>
+        <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-[var(--color-bg)] p-2 mb-4 flex justify-center">
+          <div style={{ zoom: WHATSAPP_PREVIEW_SCALE }}>
+            <div style={{ width: WHATSAPP_CARD_WIDTH, background: 'white' }}>
+              <ProductionReportShareCard
+                report={PRINT_PREVIEW_SAMPLE_ROW}
+                printSettings={printSettings}
+              />
+            </div>
+          </div>
+          <div
+            aria-hidden
+            style={{
+              position: 'fixed',
+              left: -99999,
+              top: 0,
+              width: WHATSAPP_CARD_WIDTH,
+              pointerEvents: 'none',
+              zIndex: -1,
+            }}
+          >
+            <div ref={whatsappRef} style={{ width: WHATSAPP_CARD_WIDTH, background: 'white' }}>
+              <ProductionReportShareCard
+                report={PRINT_PREVIEW_SAMPLE_ROW}
+                printSettings={printSettings}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            disabled={!!busy}
+            onClick={() => void runExport('whatsapp', whatsappRef.current, 'showcase-واتساب-تقرير')}
+          >
+            تصدير PNG
+          </Button>
+          <Button
+            disabled={!!busy}
+            onClick={() => void runShare('whatsapp', whatsappRef.current, 'تقرير-واتساب-معمل')}
+          >
+            مشاركة واتساب
+          </Button>
+        </div>
+      </OpsDashPanel>
+
+      <OpsDashPanel title="2) تقرير إنتاج مطبوع (صف واحد — PrintReportLayout)" accent="quality">
+        <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-[var(--color-card)] p-2 mb-4">
           <SingleReportPrint
             ref={singleRef}
             exportRootId="showcase-single-production"
-            report={DEMO_SINGLE_ROW}
-            printSettings={DEMO_PRINT_TEMPLATE}
+            report={PRINT_PREVIEW_SAMPLE_ROW}
+            printSettings={printSettings}
           />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -158,13 +200,13 @@ export const ImageExportShowcase: React.FC = () => {
         </div>
       </OpsDashPanel>
 
-      <OpsDashPanel title="2) إذن تحويل مخزن (نفس القالب)" accent="quality">
-        <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-white p-2 mb-4">
+      <OpsDashPanel title="3) إذن تحويل مخزن (قالب مشاركة المخزون)" accent="quality">
+        <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-[var(--color-card)] p-2 mb-4">
           <StockTransferShareCard
             ref={transferRef}
             exportRootId="showcase-stock-transfer"
             data={DEMO_TRANSFER}
-            companyName="مؤسسة المغربي للإستيراد"
+            companyName={printSettings.headerText || 'مؤسسة المغربي للإستيراد'}
           />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -184,15 +226,15 @@ export const ImageExportShowcase: React.FC = () => {
         </div>
       </OpsDashPanel>
 
-      <OpsDashPanel title="3) تقرير إنتاج مجمّع (جدول التقارير الكامل)" accent="quality">
-        <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-slate-50 p-2 mb-4">
+      <OpsDashPanel title="4) تقرير إنتاج مجمّع (مستند طباعة جدولي)" accent="quality">
+        <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-[var(--color-bg)] p-2 mb-4">
           <ProductionReportPrint
             ref={bulkRef}
             title="تقارير الإنتاج — معاينة"
             subtitle="سجل واحد للعرض"
-            rows={DEMO_BULK_ROWS}
+            rows={PRINT_PREVIEW_SAMPLE_ROWS}
             totals={bulkTotals}
-            printSettings={DEMO_PRINT_TEMPLATE}
+            printSettings={printSettings}
           />
         </div>
         <div className="flex flex-wrap gap-2">

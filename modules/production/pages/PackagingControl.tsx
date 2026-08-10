@@ -52,12 +52,15 @@ export const PackagingControl: React.FC = () => {
   const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
 
   const wipWarehouseId = String(routing.productionWipWarehouseId || '').trim();
-  const sourceWarehouseId =
-    String(routing.packagingSourceWarehouseId || routing.finishedStagingWarehouseId || '').trim();
-  const targetWarehouseId =
-    String(routing.packagingTargetWarehouseId || routing.finalProductWarehouseId || '').trim();
+  // FG awaiting packaging lives in finished staging; packagingSource may point at materials.
+  const sourceWarehouseId = String(
+    routing.finishedStagingWarehouseId || routing.packagingSourceWarehouseId || '',
+  ).trim();
+  const targetWarehouseId = String(
+    routing.finalProductWarehouseId || routing.packagingTargetWarehouseId || '',
+  ).trim();
 
-  const CACHE_KEY = `production:packaging-control:v2:${wipWarehouseId}:${sourceWarehouseId}:${targetWarehouseId}`;
+  const CACHE_KEY = `production:packaging-control:v3:${wipWarehouseId}:${sourceWarehouseId}:${targetWarehouseId}`;
 
   const [receiptQtyById, setReceiptQtyById] = useState<Record<string, string>>({});
   const [finalReceiptById, setFinalReceiptById] = useState<Record<string, boolean>>({});
@@ -67,11 +70,12 @@ export const PackagingControl: React.FC = () => {
   const {
     data,
     loading,
+    error: loadError,
     reload: reloadCached,
   } = useCachedPageLoad<PackagingControlPageData>(
     CACHE_KEY,
     async () => {
-      const [whs, stagingBals, wipBals, txs, pending] = await Promise.all([
+      const [whs, stagingBals, wipBals, txs, pendingHandovers, pendingTransfers] = await Promise.all([
         warehouseService.getAllWarehouses(),
         sourceWarehouseId ? stockService.getBalances(sourceWarehouseId) : Promise.resolve([]),
         wipWarehouseId ? stockService.getBalances(wipWarehouseId) : Promise.resolve([]),
@@ -80,6 +84,7 @@ export const PackagingControl: React.FC = () => {
           : wipWarehouseId
             ? stockService.getTransactions(wipWarehouseId)
             : Promise.resolve([]),
+        productionHandoverService.listPending(),
         transferApprovalService.getByStatus('pending'),
       ]);
       return {
@@ -91,12 +96,12 @@ export const PackagingControl: React.FC = () => {
           (row) => row.itemType === 'finished_good' && Number(row.quantity || 0) !== 0,
         ),
         transactions: txs.slice(0, 10),
-        pendingPackaging: pending.filter(
+        pendingPackaging: pendingTransfers.filter(
           (row) =>
             (row.requestType || '') === 'packaging_transfer' &&
             (row.fromWarehouseId === sourceWarehouseId || row.toWarehouseId === targetWarehouseId),
         ).length,
-        pendingHandovers: pending.filter((row) => (row.requestType || '') === 'production_handover'),
+        pendingHandovers,
       };
     },
     { maxAgeMs: 45_000 },
@@ -131,9 +136,26 @@ export const PackagingControl: React.FC = () => {
     [pendingHandovers],
   );
 
-  const configured = Boolean(sourceWarehouseId && targetWarehouseId && sourceWarehouseId !== targetWarehouseId);
+  const configured = Boolean(
+    wipWarehouseId
+    && sourceWarehouseId
+    && targetWarehouseId
+    && wipWarehouseId !== sourceWarehouseId
+    && sourceWarehouseId !== targetWarehouseId,
+  );
   const canConfirmHandover = can('productionHandover.approve') || can('inventory.transfers.approve');
   const actor = currentEmployee?.name || 'مستخدم';
+
+  const packagingHero = useMemo(
+    () => [
+      { key: 'wip', label: 'تحت التسليم (وحدات)', value: formatNumber(wipTotalQty) },
+      { key: 'pending', label: 'استلام معلّق', value: pendingHandovers.length },
+      { key: 'remaining', label: 'متبقي للاستلام', value: formatNumber(handoverRemainingQty) },
+      { key: 'staging', label: 'بانتظار التغليف', value: formatNumber(stagingTotalQty) },
+      { key: 'transfers', label: 'تحويلات تغليف معلّقة', value: pendingPackaging },
+    ],
+    [wipTotalQty, pendingHandovers.length, handoverRemainingQty, stagingTotalQty, pendingPackaging],
+  );
 
   const confirmHandover = async (row: InventoryTransferRequest) => {
     if (!row.id) return;
@@ -224,17 +246,6 @@ export const PackagingControl: React.FC = () => {
     return <PageContentSkeleton variant="dashboard" />;
   }
 
-  const packagingHero = useMemo(
-    () => [
-      { key: 'wip', label: 'تحت التسليم (وحدات)', value: formatNumber(wipTotalQty) },
-      { key: 'pending', label: 'استلام معلّق', value: pendingHandovers.length },
-      { key: 'remaining', label: 'متبقي للاستلام', value: formatNumber(handoverRemainingQty) },
-      { key: 'staging', label: 'بانتظار التغليف', value: formatNumber(stagingTotalQty) },
-      { key: 'transfers', label: 'تحويلات تغليف معلّقة', value: pendingPackaging },
-    ],
-    [wipTotalQty, pendingHandovers.length, handoverRemainingQty, stagingTotalQty, pendingPackaging],
-  );
-
   return (
     <ModuleOpsPageShell
       eyebrow="تحكم التغليف"
@@ -260,10 +271,16 @@ export const PackagingControl: React.FC = () => {
     >
       {!configured && (
         <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
-          التوجيه غير مكتمل: عيّن مخزن تحت التسليم وبانتظار التغليف والمنتج التام من الإعدادات.
+          التوجيه غير مكتمل: عيّن مخزن تحت التسليم وبانتظار التغليف والمنتج التام من الإعدادات، ويجب أن تكون مختلفة.
           <Link className="font-bold underline ms-2" to={withTenantPath(tenantSlug, '/settings/production')}>
             فتح الإعدادات
           </Link>
+        </p>
+      )}
+
+      {loadError && (
+        <p className="text-sm font-medium text-rose-800 bg-rose-50 border border-rose-100 rounded-lg px-4 py-3">
+          تعذر تحميل طابور التغليف. حدّث الصفحة أو تحقق من صلاحية عرض المخزون.
         </p>
       )}
 
@@ -335,6 +352,9 @@ export const PackagingControl: React.FC = () => {
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       لا توجد كميات بانتظار تأكيد مشرف التغليف.
+                      {wipTotalQty > 0
+                        ? ' يوجد رصيد تحت التسليم بدون طلب استلام معلّق — تأكد أن تقرير الإنتاج رُحّل للمخزون وأن مخزن تحت التسليم يختلف عن بانتظار التغليف.'
+                        : ' تظهر الطلبات هنا بعد ترحيل مخزون تقرير المنتج التام إلى تحت التسليم.'}
                     </td>
                   </tr>
                 ) : (

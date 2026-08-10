@@ -5,6 +5,7 @@ import { warehouseService } from '../../../modules/inventory/services/warehouseS
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import { useTranslation } from 'react-i18next';
 import type { WarehouseRole } from '../../../modules/inventory/types';
@@ -98,6 +99,7 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -148,5 +150,6 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

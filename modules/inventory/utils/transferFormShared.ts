@@ -9,6 +9,8 @@ export type TransferFormLine = {
   itemId: string;
   quantity: number;
   unit: TransferUnit;
+  /** Optional shelf/bin for IN/OUT vouchers (and future per-line picks). */
+  locationId?: string;
 };
 
 export type TransferItemOption = {
@@ -26,11 +28,12 @@ export const INV_REF_REGEX = /^INV-(\d+)$/i;
 export const formatInvReference = (seq: number) =>
   `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
 
-export const createTransferLine = (): TransferFormLine => ({
+export const createTransferLine = (defaults?: Partial<Pick<TransferFormLine, 'locationId' | 'unit'>>): TransferFormLine => ({
   id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   itemId: '',
   quantity: 0,
-  unit: 'piece',
+  unit: defaults?.unit || 'piece',
+  locationId: defaults?.locationId || '',
 });
 
 export function lineQuantityInPieces(
@@ -50,6 +53,11 @@ export function validateTransferLines(
   transferItems: TransferFormLine[],
   itemType: 'finished_good' | 'raw_material',
   getItemById: (id: string) => TransferItemOption | undefined,
+  options?: {
+    requireLocation?: boolean;
+    /** When true, same item may appear twice if location differs (IN/OUT vouchers). */
+    allowSameItemDifferentLocation?: boolean;
+  },
 ): string | null {
   if (transferItems.length === 0) {
     return 'أضف صنفًا واحدًا على الأقل في التحويلة.';
@@ -63,9 +71,16 @@ export function validateTransferLines(
     if (Number(line.quantity || 0) <= 0) {
       return `كمية الصنف "${item.name}" يجب أن تكون أكبر من صفر.`;
     }
-    const key = `${line.itemId}__${line.unit}`;
+    if (options?.requireLocation && !String(line.locationId || '').trim()) {
+      return `حدد الرف/اللوكيشن للصنف "${item.name}".`;
+    }
+    const key = options?.allowSameItemDifferentLocation
+      ? `${line.itemId}__${line.unit}__${String(line.locationId || '').trim()}`
+      : `${line.itemId}__${line.unit}`;
     if (duplicate.has(key)) {
-      return `لا يمكن تكرار نفس الصنف بنفس الوحدة أكثر من مرة: ${item.name}`;
+      return options?.allowSameItemDifferentLocation
+        ? `لا يمكن تكرار نفس الصنف على نفس الرف أكثر من مرة: ${item.name}`
+        : `لا يمكن تكرار نفس الصنف بنفس الوحدة أكثر من مرة: ${item.name}`;
     }
     duplicate.add(key);
 
@@ -74,6 +89,69 @@ export function validateTransferLines(
     }
   }
   return null;
+}
+
+/** Find catalog option by exact code only (safe for barcode scanners). */
+export function findItemOptionByCode(
+  options: TransferItemOption[],
+  rawCode: string,
+): TransferItemOption | undefined {
+  const code = String(rawCode || '').trim().toLowerCase();
+  if (!code) return undefined;
+  return options.find((opt) => String(opt.code || '').trim().toLowerCase() === code);
+}
+
+/**
+ * Apply a scanned/typed code to voucher lines:
+ * - if same item(+location) exists → increment qty by 1
+ * - else fill first empty row or append a new row
+ */
+export function applyScannedCodeToLines(params: {
+  lines: TransferFormLine[];
+  itemId: string;
+  locationId?: string;
+  unit?: TransferUnit;
+}): { lines: TransferFormLine[]; action: 'incremented' | 'filled' | 'appended' } {
+  const locationId = String(params.locationId || '').trim();
+  const unit = params.unit || 'piece';
+  const existingIdx = params.lines.findIndex(
+    (line) =>
+      line.itemId === params.itemId
+      && (line.unit || 'piece') === unit
+      && String(line.locationId || '').trim() === locationId,
+  );
+  if (existingIdx >= 0) {
+    return {
+      action: 'incremented',
+      lines: params.lines.map((line, idx) =>
+        idx === existingIdx
+          ? { ...line, quantity: Number(line.quantity || 0) + 1, locationId: locationId || line.locationId }
+          : line,
+      ),
+    };
+  }
+  const emptyIdx = params.lines.findIndex((line) => !line.itemId);
+  if (emptyIdx >= 0) {
+    return {
+      action: 'filled',
+      lines: params.lines.map((line, idx) =>
+        idx === emptyIdx
+          ? { ...line, itemId: params.itemId, quantity: 1, unit, locationId }
+          : line,
+      ),
+    };
+  }
+  return {
+    action: 'appended',
+    lines: [
+      ...params.lines,
+      {
+        ...createTransferLine({ locationId, unit }),
+        itemId: params.itemId,
+        quantity: 1,
+      },
+    ],
+  };
 }
 
 export type TransferRequestLineLocations = {

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Button, Badge, KPIBox } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { usePermission } from '@/utils/permissions';
@@ -128,6 +129,7 @@ const RecordModal: React.FC<{
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] w-[95vw] max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl"
@@ -264,6 +266,7 @@ const RecordModal: React.FC<{
         </div> {/* end scrollable body */}
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
 

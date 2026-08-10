@@ -20,6 +20,7 @@ import {
   getTodayDateString,
   countUniqueDays,
 } from '../../../utils/calculations';
+import { resolvePlanReports } from '../lib/decisionMetrics';
 import { usePermission } from '../../../utils/permissions';
 import type { ProductionPlan, ProductionReport, WorkOrder } from '../../../types';
 import type { InventoryTransferRequest } from '../../inventory/types';
@@ -352,19 +353,12 @@ export const EmployeeDashboard: React.FC = () => {
     let totalActualProduced = 0;
     activePlans.forEach((plan) => {
       totalPlannedQty += plan.plannedQuantity;
-      const key = `${plan.lineId}_${plan.productId}`;
-      const historical = planReports[key] || [];
-      const todayForPlan = todayReports.filter(
-        (r) => r.lineId === plan.lineId && r.productId === plan.productId
+      const historical = resolvePlanReports(plan, planReports);
+      const fromReports = historical.reduce(
+        (sum, r) => sum + Number(r.quantityProduced || 0),
+        0,
       );
-      const historicalIds = new Set(historical.map((r) => r.id));
-      const merged = [
-        ...historical,
-        ...todayForPlan.filter((r) => !historicalIds.has(r.id)),
-      ];
-      totalActualProduced += merged.reduce(
-        (sum, r) => sum + (r.quantityProduced || 0), 0
-      );
+      totalActualProduced += Math.max(Number(plan.producedQuantity || 0), fromReports);
     });
 
     const planAchievement = totalPlannedQty > 0
@@ -422,19 +416,12 @@ export const EmployeeDashboard: React.FC = () => {
     const product = _rawProducts.find((p) => p.id === plan.productId);
     const line = _rawLines.find((l) => l.id === plan.lineId);
 
-    const key = `${plan.lineId}_${plan.productId}`;
-    const historical = planReports[key] || [];
-    const todayForPlan = todayReports.filter(
-      (r) => r.lineId === plan.lineId && r.productId === plan.productId
+    const historical = resolvePlanReports(plan, planReports);
+    const fromReports = historical.reduce(
+      (sum, r) => sum + Number(r.quantityProduced || 0),
+      0,
     );
-    const historicalIds = new Set(historical.map((r) => r.id));
-    const mergedAll = [
-      ...historical,
-      ...todayForPlan.filter((r) => !historicalIds.has(r.id)),
-    ];
-    const globalProduced = mergedAll.reduce(
-      (sum, r) => sum + (r.quantityProduced || 0), 0
-    );
+    const globalProduced = Math.max(Number(plan.producedQuantity || 0), fromReports);
 
     const periodProduced = periodReports
       .filter((r) => r.productId === plan.productId && r.lineId === plan.lineId)

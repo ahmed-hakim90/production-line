@@ -2,6 +2,7 @@
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Badge, Button, SearchableSelect } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
@@ -714,6 +715,7 @@ export const HRTransactions: React.FC = () => {
 
       {/* Edit Modal */}
       {editModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
@@ -754,10 +756,12 @@ export const HRTransactions: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Delete Confirmation Modal */}
       {confirmDelete && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
@@ -787,6 +791,7 @@ export const HRTransactions: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

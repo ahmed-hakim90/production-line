@@ -618,11 +618,11 @@ export const ProductionInventoryApprovals: React.FC = () => {
       </OpsDashPanel>
 
       <div
+        aria-hidden
         style={{
           position: 'fixed',
+          left: '-9999px',
           top: 0,
-          right: 0,
-          zIndex: -1,
           pointerEvents: 'none',
           direction: 'rtl',
           width: '210mm',

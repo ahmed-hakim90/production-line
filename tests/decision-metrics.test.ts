@@ -6,6 +6,7 @@ import {
   countNegativeAndLow,
   daysOfCover,
   forecastGapDays,
+  isAtOrBelowMinStock,
   isPlanBehindSchedule,
   laborUtilizationPercent,
   outputVsIdealPercent,
@@ -200,8 +201,11 @@ assert.equal(receipts.avgCycleHours, 6);
 assert.deepEqual(countNegativeAndLow([
   { quantity: -2, minStock: 1 },
   { quantity: 1, minStock: 5 },
+  { quantity: 5, minStock: 5 },
   { quantity: 10, minStock: 5 },
-]), { negativeCount: 1, lowCount: 1 });
+]), { negativeCount: 1, lowCount: 2 });
+assert.equal(isAtOrBelowMinStock(5, 5), true);
+assert.equal(isAtOrBelowMinStock(6, 5), false);
 
 const countAccuracy = stockCountAccuracyFromLines([
   { expectedQty: 10, countedQty: 10 },

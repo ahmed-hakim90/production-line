@@ -11,6 +11,7 @@ import {
 } from '../../../utils/permissions';
 import { useResourcePermission } from '@/utils/useResourcePermission';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { ManagedModalPortal } from '../../../components/modal-manager/ManagedModalPortal';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { userService } from '../../../services/userService';
 import { withTenantPath } from '../../../lib/tenantPaths';
@@ -318,6 +319,7 @@ export const RolesManagement: React.FC = () => {
 
       {/* ── Delete Confirmation Modal ── */}
       {deleteConfirmId && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-sm border border-[var(--color-border)] p-6 text-center animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -352,6 +354,7 @@ export const RolesManagement: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

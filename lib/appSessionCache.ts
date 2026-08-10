@@ -61,3 +61,25 @@ export const clearCachedAppSession = (uid?: string | null) => {
     // ignore
   }
 };
+
+/** True when any non-expired active app session cache exists (warm resume hint). */
+export const hasValidCachedAppSession = (): boolean => Boolean(peekAnyActiveCachedAppSession());
+
+/** First valid active cached session, if any (F5 / warm boot). */
+export const peekAnyActiveCachedAppSession = (): CachedAppSession | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    for (const key of Object.keys(window.localStorage)) {
+      if (!key.startsWith(`${APP_SESSION_CACHE_PREFIX}.`)) continue;
+      const uid = key.slice(`${APP_SESSION_CACHE_PREFIX}.`.length);
+      const cached = readCachedAppSession(uid);
+      if (cached?.userProfile?.isActive) return cached;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+/** Prefix used by index.html warm-boot detection — keep in sync. */
+export const APP_SESSION_CACHE_KEY_PREFIX = APP_SESSION_CACHE_PREFIX;

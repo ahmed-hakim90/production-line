@@ -17,7 +17,6 @@ import {
   Wrench,
   type LucideIcon,
 } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
@@ -575,6 +574,23 @@ export const CustomerDetail: React.FC = () => {
             </Button>
           )}
           {canEdit ? (
+            <Button type="button" variant="outline" onClick={openFollowUp}>
+              تحديث المتابعة
+            </Button>
+          ) : null}
+          {canManagePortalPin && !portalPinSaving ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (portalPinConfigured === false) void generatePortalPin(false);
+                else setPortalPinConfirmOpen(true);
+              }}
+            >
+              {portalPinConfigured === false ? 'إنشاء PIN ثابت' : 'إعادة تعيين PIN الثابت'}
+            </Button>
+          ) : null}
+          {canEdit ? (
             <Button type="button" onClick={openEdit}>
               تعديل
             </Button>
@@ -582,46 +598,17 @@ export const CustomerDetail: React.FC = () => {
         </div>
       )}
     >
-      <PageHeader
-        title={customer.name}
-        subtitle="بطاقة ماستر وسجل حركات عبر الموديولات"
-        icon="user"
-        backAction={false}
-        moreActions={[
-          {
-            label: 'مؤشرات العملاء',
-            icon: 'bar_chart',
-            onClick: () => navigate(withTenantPath(tenantSlug, '/customers/kpi')),
-            hidden: !canCreateRepair,
-          },
-          {
-            label: 'تحديث المتابعة',
-            icon: 'notifications_active',
-            onClick: openFollowUp,
-            hidden: !canEdit,
-          },
-          {
-            label: portalPinSaving
-              ? 'جاري حفظ PIN…'
-              : portalPinConfigured === false
-                ? 'إنشاء PIN ثابت'
-                : 'إعادة تعيين PIN الثابت',
-            icon: 'key',
-            onClick: () => {
-              if (portalPinConfigured === false) void generatePortalPin(false);
-              else setPortalPinConfirmOpen(true);
-            },
-            hidden: !canManagePortalPin || portalPinSaving,
-          },
-        ]}
-        extra={
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-bold text-foreground">{customer.name}</h2>
           <StatusBadge
             type={customer.isActive !== false ? 'success' : 'muted'}
             label={customer.isActive !== false ? 'نشط' : 'غير نشط'}
             dot
           />
-        }
-      />
+        </div>
+        <p className="text-sm text-muted-foreground">بطاقة ماستر وسجل حركات عبر الموديولات</p>
+      </div>
 
       <Dialog open={portalPinOpen} onOpenChange={setPortalPinOpen}>
         <DialogContent dir="rtl">

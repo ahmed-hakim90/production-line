@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
@@ -744,6 +745,7 @@ export const WarehouseLocations: React.FC = () => {
       </OpsDashPanel>
 
       {modal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeModal}>
           <div className="w-full max-w-3xl rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
@@ -896,6 +898,7 @@ export const WarehouseLocations: React.FC = () => {
             )}
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

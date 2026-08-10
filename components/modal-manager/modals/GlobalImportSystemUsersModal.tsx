@@ -3,6 +3,7 @@ import { Download, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { FirestoreEmployee, FirestoreRole } from '../../../types';
 import { parseUsersImportFile, type ParsedUserImportRow } from '../../../utils/importUsers';
 import { downloadUsersTemplate } from '../../../utils/downloadTemplates';
@@ -148,6 +149,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
   const selectedPending = pendingEntries.filter((entry) => entry.selected);
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[96vw] max-w-5xl max-h-[90dvh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -301,6 +303,6 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

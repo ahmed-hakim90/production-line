@@ -1,3 +1,4 @@
+import { getTodayDateString } from '../../../utils/calculations';
 import type { RepairAccessContext } from './repairAccessContext';
 import type { RepairJob } from '../types';
 import {
@@ -128,7 +129,7 @@ export function resolveRepairJobActionState(input: {
 
 export function summarizeRepairJobs(jobs: RepairJob[], openStatusIds: string[]) {
   const openSet = new Set(openStatusIds.map((id) => mapLegacyRepairStatus(id)));
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayDateString();
   return jobs.reduce(
     (acc, job) => {
       const status = mapLegacyRepairStatus(job.status);

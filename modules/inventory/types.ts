@@ -23,6 +23,7 @@ export type StockSourceModule =
   | 'department_consumable_issue'
   | 'department_consumable_return'
   | 'spare_parts_replenishment'
+  | 'spare_parts_purchase'
   | 'repair_spare_issue'
   | 'repair_spare_return'
   | 'repair_customer_custody'
@@ -85,10 +86,46 @@ export interface StockItemBalance {
   quantity: number;
   reservedQty?: number;
   availableQty?: number;
+  /** Weighted moving average unit cost (base unit), updated by spare purchase invoices. */
+  avgUnitCost?: number;
+  unitCost?: number;
   unit?: string;
   minStock: number;
   updatedAt: string;
   lastMovementAt?: string;
+}
+
+export interface SparePartsPurchaseInvoiceLine {
+  materialId: string;
+  materialName?: string;
+  materialCode?: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  avgUnitCostAfter?: number;
+  stockQtyAfter?: number;
+}
+
+export interface SparePartsPurchaseInvoice {
+  id?: string;
+  tenantId: string;
+  invoiceNo: string;
+  status: 'posted';
+  warehouseId: string;
+  warehouseName?: string;
+  supplierName?: string | null;
+  supplierInvoiceNo?: string | null;
+  notes?: string | null;
+  lines: SparePartsPurchaseInvoiceLine[];
+  grossAmount: number;
+  total: number;
+  postedAt: string;
+  postedBy: string;
+  postedByName?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface WarehouseLocation {

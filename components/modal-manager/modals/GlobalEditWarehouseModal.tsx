@@ -6,6 +6,7 @@ import type { Warehouse, WarehouseRole } from '../../../modules/inventory/types'
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import { useAppStore } from '../../../store/useAppStore';
 
@@ -96,6 +97,7 @@ export const GlobalEditWarehouseModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-xl shadow-2xl w-full max-w-xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b flex items-center justify-between">
@@ -134,5 +136,6 @@ export const GlobalEditWarehouseModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

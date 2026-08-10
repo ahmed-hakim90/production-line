@@ -5,14 +5,25 @@
 توحيد تجربة التحميل على مستويين:
 
 1. تحميل الـ route chunk (lazy route fallback)
-2. تحميل بيانات الصفحة بعد mount
+2. تحميل بيانات الصفحة بعد mount / زر التحديث في التوب بار
+
+**لا** تُعرض شاشات الإقلاع (`جاري تحميل النظام` / `جاري استعادة الجلسة`) عند وجود جلسة متخزنة أو عند زر التحديث أو عند F5 مع كاش صالح.
+
+### F5 / ريفرش المتصفح (جلسة متخزنة)
+
+1. `index.html` يكتشف `erp.appSession.v1.*` → HTML splash يتحول لـ **shell skeleton** فورًا (مش الشاشة الحمراء)
+2. React يعمل `hydrateFromCachedSession` قبل أول رسم → Layout + محتوى skeleton
+3. التحقق من السيرفر يكمل في الخلفية
+
+Splash البراندنج يبقى لأول فتح بدون جلسة فقط.
 
 ## المكوّنات الأساسية
 
 - `PageContentSkeleton` من `src/shared/ui/skeletons/pageSkeletons.tsx`
-- `PageRouteFallback` يحدد `variant` تلقائياً حسب المسار
-- `TableSkeleton` للاستخدام داخل الجداول
-- `PageLoadingGate` لسيناريو `if (loading) return ...` بشكل موحّد
+- `PageRouteFallback` يحدد `variant` تلقائياً حسب المسار (`bare` داخل Layout)
+- `AppShellSkeleton` — هيكل السايدبار + التوب بار + المحتوى (عند عدم جاهزية Layout)
+- `Layout contentLoading` — السايدبار/التوب بار الحقيقيان؛ المحتوى فقط skeleton
+- زر التحديث في التوب بار → `refreshPageContent()` (بدون `location.reload`)
 
 ## Variants
 
@@ -52,6 +63,7 @@ if (loading) {
 
 ## checklist مراجعة سريعة
 
+- [ ] زر التحديث لا يفتح splash كامل
 - [ ] الانتقال بين الصفحات لا يعرض فراغ/وميض
 - [ ] نوع skeleton مناسب لنوع الصفحة
 - [ ] RTL سليم

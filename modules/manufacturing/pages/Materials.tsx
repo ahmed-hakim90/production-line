@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { MaterialCategoryTreeSelect } from '../components/MaterialCategoryTreeSelect';
-import { PageHeader } from '@/components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
@@ -770,41 +770,36 @@ export const Materials: React.FC = () => {
               إضافة مادة
             </Button>
           ) : null}
-          <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: 'تصدير بيانات المواد (للاستيراد)',
-                  icon: 'download',
-                  group: 'بيانات أساسية',
-                  hidden: !canExportFromPage || sorted.length === 0,
-                  onClick: handleExportExcel,
-                },
-                {
-                  label: 'تحميل قالب بيانات المواد',
-                  icon: 'file_download',
-                  group: 'بيانات أساسية',
-                  hidden: !canImportFromPage,
-                  onClick: () => downloadMaterialsTemplate(),
-                },
-                {
-                  label: 'رفع/تحديث بيانات المواد',
-                  icon: 'upload',
-                  group: 'بيانات أساسية',
-                  hidden: !canImportFromPage,
-                  onClick: () => importInputRef.current?.click(),
-                },
-                {
-                  label: migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم',
-                  icon: 'refresh',
-                  group: 'صيانة',
-                  hidden: !canManage,
-                  disabled: migrating,
-                  onClick: () => void handleMigrate(),
-                },
-              ]}
-            />
+          {canExportFromPage && sorted.length > 0 ? (
+            <Button type="button" size="sm" variant="outline" onClick={handleExportExcel}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير بيانات المواد (للاستيراد)
+            </Button>
+          ) : null}
+          {canImportFromPage ? (
+            <>
+              <Button type="button" size="sm" variant="outline" onClick={() => downloadMaterialsTemplate()}>
+                <span className="material-icons-round text-sm">file_download</span>
+                تحميل قالب بيانات المواد
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => importInputRef.current?.click()}>
+                <span className="material-icons-round text-sm">upload</span>
+                رفع/تحديث بيانات المواد
+              </Button>
+            </>
+          ) : null}
+          {canManage ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleMigrate()}
+              disabled={migrating}
+            >
+              <span className="material-icons-round text-sm">refresh</span>
+              {migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم'}
+            </Button>
+          ) : null}
         </div>
       )}
     >
@@ -1490,6 +1485,7 @@ export const Materials: React.FC = () => {
       </Dialog>
 
       {showImportModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-card shadow-lg">
             <div className="flex items-center justify-between border-b px-5 py-4">
@@ -1650,6 +1646,7 @@ export const Materials: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

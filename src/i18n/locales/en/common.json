@@ -342,6 +342,7 @@
     "appName": "Factory ERP",
     "tagline": "Integrated production, inventory, and HR management",
     "loading": "Loading the system...",
+    "resuming": "Restoring your session...",
     "footer": "Factory Production System",
     "features": {
       "production": "Manage production lines and plans",

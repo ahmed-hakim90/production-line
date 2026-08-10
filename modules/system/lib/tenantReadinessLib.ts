@@ -89,7 +89,7 @@ export function buildTenantReadinessChecks(input: TenantReadinessSnapshotInput):
       label: 'مراكز التكلفة',
       ok: input.costCenterCount > 0,
       detail: String(input.costCenterCount),
-      fixPath: '/cost-centers',
+      fixPath: '/accounting/cost-centers',
     },
   ];
 

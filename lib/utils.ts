@@ -7,5 +7,10 @@ export function cn(...inputs: ClassValue[]) {
 
 export function getRootPortalContainer() {
   if (typeof document === "undefined") return undefined
-  return document.getElementById("root") ?? undefined
+  // Prefer the dedicated overlay root (above topbar / page chrome).
+  return (
+    document.getElementById("erp-modal-root")
+    ?? document.getElementById("root")
+    ?? undefined
+  )
 }

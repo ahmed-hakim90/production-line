@@ -320,7 +320,7 @@ export function DataTable<T>({
                   ? 'bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100'
                   : action.variant === 'primary'
                     ? 'bg-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary))] text-white hover:opacity-90'
-                    : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[#f0f2f5]',
+                    : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]',
                 action.disabled ? 'opacity-50 cursor-not-allowed' : '',
               ].join(' ')}
             >
@@ -333,7 +333,7 @@ export function DataTable<T>({
             variant="ghost"
             size="icon"
             onClick={() => setSelectedIds(new Set())}
-            className="h-7 w-7 p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#f0f2f5] border border-transparent hover:border-[var(--color-border)]"
+            className="h-7 w-7 p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] border border-transparent hover:border-[var(--color-border)]"
             title="إلغاء التحديد"
           >
             <X className="h-4 w-4" />
@@ -534,7 +534,7 @@ export function DataTable<T>({
                       getRowClassName?.(row) ?? '',
                     ].join(' ')}
                     style={{
-                      borderBottom: '1px solid #f0f2f5',
+                      borderBottom: '1px solid var(--color-border)',
                       backgroundColor: highlightRowId === rowId
                         ? '#fffbeb'
                         : isSelected
@@ -596,7 +596,7 @@ export function DataTable<T>({
               size="sm"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="h-7 px-2.5 text-[12px] font-medium hover:bg-[#f0f2f5] disabled:opacity-30"
+              className="h-7 px-2.5 text-[12px] font-medium hover:bg-[var(--color-surface-hover)] disabled:opacity-30"
             >
               السابق
             </Button>
@@ -618,7 +618,7 @@ export function DataTable<T>({
                     onClick={() => setCurrentPage(page)}
                     className={page === currentPage
                       ? 'h-7 w-7 bg-primary text-white'
-                      : 'h-7 w-7 text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'}
+                      : 'h-7 w-7 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'}
                   >
                     {page}
                   </Button>
@@ -632,7 +632,7 @@ export function DataTable<T>({
               size="sm"
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="h-7 px-2.5 text-[12px] font-medium hover:bg-[#f0f2f5] disabled:opacity-30"
+              className="h-7 px-2.5 text-[12px] font-medium hover:bg-[var(--color-surface-hover)] disabled:opacity-30"
             >
               التالي
             </Button>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Loader2, Users } from 'lucide-react';
 import { Button, SearchableSelect } from '@/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { MODAL_KEYS } from '../modalKeys';
 import { shiftService } from '@/modules/hr/shiftService';
 import type { FirestoreShift } from '@/modules/hr/types';
@@ -144,6 +145,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
   const inputClass = 'w-full px-3 py-2.5 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[var(--color-card)] text-sm text-[var(--color-text)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none';
 
   return (
+    <ManagedModalPortal>
     <div className="erp-modal-overlay" onClick={() => { if (!savingRules && !assigning) close(); }}>
       <div
         className="erp-modal-panel w-[96vw] max-w-3xl max-h-[92dvh] overflow-hidden"
@@ -330,6 +332,7 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
 

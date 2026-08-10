@@ -5,7 +5,6 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '../../components/UI';
-import { PageHeader } from '../../../../components/PageHeader';
 import { toast } from '../../../../components/Toast';
 import { useGlobalModalManager } from '../../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../../components/modal-manager/modalKeys';
@@ -700,33 +699,24 @@ export const WorkOrders: React.FC = () => {
               أمر شغل جديد
             </Button>
           ) : null}
-          <PageHeader
-            title=""
-            backAction={false}
-            moreActions={[
-              {
-                label: 'طلب صرف إنتاج',
-                icon: 'fact_check',
-                group: 'مخزون',
-                hidden: !can('productionIssue.request'),
-                onClick: () => navigate('/production/issue-requests'),
-              },
-              {
-                label: 'تصدير أوامر الشغل Excel',
-                icon: 'download',
-                group: 'تصدير',
-                hidden: rowViews.length === 0,
-                onClick: handleExport,
-              },
-              {
-                label: 'استيراد أوامر الشغل',
-                icon: 'file_download',
-                group: 'استيراد',
-                hidden: !canCreateWorkOrder,
-                onClick: handleImport,
-              },
-            ]}
-          />
+          {can('productionIssue.request') ? (
+            <Button type="button" variant="outline" onClick={() => navigate('/production/issue-requests')}>
+              <span className="material-icons-round text-sm">fact_check</span>
+              طلب صرف إنتاج
+            </Button>
+          ) : null}
+          {rowViews.length > 0 ? (
+            <Button type="button" variant="outline" onClick={handleExport}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير أوامر الشغل Excel
+            </Button>
+          ) : null}
+          {canCreateWorkOrder ? (
+            <Button type="button" variant="outline" onClick={handleImport}>
+              <span className="material-icons-round text-sm">file_download</span>
+              استيراد أوامر الشغل
+            </Button>
+          ) : null}
         </div>
       )}
     >

@@ -20,6 +20,10 @@ const DepartmentConsumables = lazyNamed(() => import('../pages/DepartmentConsuma
 const SparePartsReplenishment = lazyNamed(() => import('../pages/SparePartsReplenishment'), 'SparePartsReplenishment');
 const SparePartsCenterStock = lazyNamed(() => import('../pages/SparePartsCenterStock'), 'SparePartsCenterStock');
 const SparePartsRecall = lazyNamed(() => import('../pages/SparePartsRecall'), 'SparePartsRecall');
+const SparePartsPurchaseInvoice = lazyNamed(
+  () => import('../pages/SparePartsPurchaseInvoice'),
+  'SparePartsPurchaseInvoicePage',
+);
 const WarehouseWorkspace = lazyNamed(() => import('../pages/WarehouseWorkspace'), 'WarehouseWorkspace');
 const ItemCard = lazyNamed(() => import('../pages/ItemCard'), 'ItemCard');
 const InventoryAnalytics = lazyNamed(() => import('../pages/InventoryAnalytics'), 'InventoryAnalytics');
@@ -73,6 +77,12 @@ export const INVENTORY_ROUTES: AppRouteDef[] = [
     permission: 'sparePartsReplenishment.view',
     component: SparePartsReplenishment,
     skeleton: 'dashboard',
+  },
+  {
+    path: '/inventory/spare-parts-purchase',
+    permission: 'inventory.transactions.create',
+    component: SparePartsPurchaseInvoice,
+    skeleton: 'form',
   },
   {
     path: '/inventory/spare-parts-center-stock',

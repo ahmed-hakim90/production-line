@@ -660,6 +660,12 @@ export const ProductionDashboard: React.FC = () => {
                     من هالك تقارير الإنتاج (لا ملخص جودة على أوامر العمل)
                   </p>
                 ) : null}
+                {data.qualitySource === 'work_orders' && data.qualityRates ? (
+                  <p className="ops-module-charts__hint">
+                    فشل {data.qualityRates.failRate}% · إعادة {data.qualityRates.reworkRate}% · FPY{' '}
+                    {data.qualityRates.avgFpy}%
+                  </p>
+                ) : null}
                 <StatusBarChart
                   data={data.qualityBars}
                   fill="#0d9488"

@@ -1157,14 +1157,12 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
     );
     if (!plan) return null;
 
-    const key = `${plan.lineId}_${plan.productId}`;
-    const historical = planReports[key] || [];
-    const todayForPlan = todayReports.filter(
-      (r) => r.lineId === plan.lineId && r.productId === plan.productId
-    );
-    const historicalIds = new Set(historical.map((r) => r.id));
-    const merged = [...historical, ...todayForPlan.filter((r) => !historicalIds.has(r.id))];
-    const actualProduced = merged.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+    const historical =
+      (plan.id && planReports[plan.id])
+      || planReports[`${plan.lineId}_${plan.productId}`]
+      || [];
+    const fromReports = historical.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
+    const actualProduced = Math.max(Number(plan.producedQuantity || 0), fromReports);
     const progress = calculatePlanProgress(actualProduced, plan.plannedQuantity);
     const remaining = Math.max(plan.plannedQuantity - actualProduced, 0);
 

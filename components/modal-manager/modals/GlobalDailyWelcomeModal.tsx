@@ -4,6 +4,7 @@ import { Button } from '../../UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { useTranslation } from 'react-i18next';
 import type { AppNotification } from '@/types';
 
@@ -24,6 +25,7 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
   if (!isOpen) return null;
 
   return (
+    <ManagedModalPortal>
     <div
       className="fixed inset-0 bg-black/45 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={close}
@@ -80,6 +82,6 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

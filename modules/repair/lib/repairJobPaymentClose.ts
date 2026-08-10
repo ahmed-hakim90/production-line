@@ -19,6 +19,8 @@ export type RepairJobPaymentCloseState = {
   canCollectAction: boolean;
   canCollectAndDeliverAction: boolean;
   canDeliverOnlyAction: boolean;
+  /** Post-delivery open AR clear (Cr receivables). */
+  canCollectReceivableAction: boolean;
   canPrintAction: boolean;
   isWarrantySettlement: boolean;
   grossAmount: number;
@@ -90,14 +92,20 @@ export function resolveRepairJobPaymentCloseState(input: {
   };
 
   if (isDeliveredStatus(status)) {
+    const openReceivable = !settlementAuth && balanceDue > 0.001;
     return {
       showPanel: true,
       step: 'print',
-      stepLabel: settlementAuth ? 'ضمان — جاهز للطباعة' : 'جاهز للطباعة',
+      stepLabel: settlementAuth
+        ? 'ضمان — جاهز للطباعة'
+        : openReceivable
+          ? 'مُسلَّم برصيد — تحصيل ذمة'
+          : 'جاهز للطباعة',
       canPrepareAction: false,
       canCollectAction: false,
       canCollectAndDeliverAction: false,
       canDeliverOnlyAction: false,
+      canCollectReceivableAction: openReceivable && input.canCollect,
       canPrintAction: true,
       ...baseAmounts,
     };
@@ -112,6 +120,7 @@ export function resolveRepairJobPaymentCloseState(input: {
       canCollectAction: false,
       canCollectAndDeliverAction: false,
       canDeliverOnlyAction: false,
+      canCollectReceivableAction: false,
       canPrintAction: false,
       ...baseAmounts,
     };
@@ -128,6 +137,7 @@ export function resolveRepairJobPaymentCloseState(input: {
       canCollectAction: false,
       canCollectAndDeliverAction: false,
       canDeliverOnlyAction: false,
+      canCollectReceivableAction: false,
       canPrintAction: false,
       ...baseAmounts,
     };
@@ -142,6 +152,7 @@ export function resolveRepairJobPaymentCloseState(input: {
       canCollectAction: false,
       canCollectAndDeliverAction: false,
       canDeliverOnlyAction: false,
+      canCollectReceivableAction: false,
       canPrintAction: false,
       ...baseAmounts,
     };
@@ -156,6 +167,7 @@ export function resolveRepairJobPaymentCloseState(input: {
       canCollectAction: input.canCollect && allowPartial,
       canCollectAndDeliverAction: input.canCollect && input.canDeliver,
       canDeliverOnlyAction: false,
+      canCollectReceivableAction: false,
       canPrintAction: false,
       ...baseAmounts,
     };
@@ -170,6 +182,7 @@ export function resolveRepairJobPaymentCloseState(input: {
       canCollectAction: false,
       canCollectAndDeliverAction: false,
       canDeliverOnlyAction: input.canDeliver,
+      canCollectReceivableAction: false,
       canPrintAction: false,
       ...baseAmounts,
     };
@@ -183,6 +196,7 @@ export function resolveRepairJobPaymentCloseState(input: {
     canCollectAction: false,
     canCollectAndDeliverAction: false,
     canDeliverOnlyAction: false,
+    canCollectReceivableAction: false,
     canPrintAction: false,
     ...baseAmounts,
   };

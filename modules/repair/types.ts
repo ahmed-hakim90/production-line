@@ -54,7 +54,52 @@ export type RepairJobPriority = 'normal' | 'urgent';
 export type RepairWarrantyScope = 'none' | 'partial' | 'manufacturer' | 'in_store';
 export type RepairApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
 export type RepairPartTransactionType = 'IN' | 'OUT';
-export type RepairTreasuryEntryType = 'OPENING' | 'INCOME' | 'EXPENSE' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'CLOSING';
+export type RepairTreasuryEntryType =
+  | 'OPENING'
+  | 'INCOME'
+  | 'EXPENSE'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN'
+  /** Branch → HQ cash settlement (approved). */
+  | 'SETTLEMENT_OUT'
+  | 'SETTLEMENT_IN'
+  | 'CLOSING';
+
+export type RepairTreasurySettlementStatus = 'submitted' | 'approved' | 'rejected';
+
+export interface RepairTreasurySettlement {
+  id?: string;
+  tenantId: string;
+  fromBranchId: string;
+  toBranchId: string;
+  toBranchName?: string;
+  expectedAmount: number;
+  countedAmount: number;
+  amount: number;
+  variance: number;
+  varianceReason?: string | null;
+  note?: string | null;
+  status: RepairTreasurySettlementStatus;
+  submittedBy?: string;
+  submittedByName?: string;
+  submittedAt?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedByName?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  fromEntryId?: string;
+  toEntryId?: string;
+  journalEntryId?: string;
+  fromSessionId?: string;
+  toSessionId?: string;
+  createdBy: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
 
 export interface RepairBranch {
   id?: string;
@@ -75,6 +120,15 @@ export interface RepairBranch {
   unrepairableWarehouseCode?: string;
   costCenterId?: string;
   accountingAccounts?: RepairBranchAccountingAccounts;
+  /**
+   * Allow credit delivery (deliver with open AR). Missing/undefined = enabled (legacy centers).
+   * Explicit `false` blocks request_credit and deliver-with-balance.
+   */
+  allowCreditDelivery?: boolean;
+  /** Allow posting sales invoices on account (credit). Missing = disabled until A3 enables UX. */
+  allowCreditSalesInvoices?: boolean;
+  /** When true, block prepare/post of spare-parts sales invoices for this center. */
+  salesInvoicesLocked?: boolean;
   technicianIds?: string[];
   createdAt: string;
   updatedAt?: string;
@@ -204,6 +258,8 @@ export interface RepairPaymentAuthorization {
   updatedAt: string;
 }
 
+export type RepairPaymentCollectionKind = 'deposit' | 'receivable';
+
 export interface RepairPayment {
   id?: string;
   tenantId: string;
@@ -213,6 +269,8 @@ export interface RepairPayment {
   paymentNo: string;
   amount: number;
   method: RepairPaymentMethod;
+  /** deposit = pre-delivery; receivable = post-delivery AR clear. Missing = deposit (legacy). */
+  collectionKind?: RepairPaymentCollectionKind;
   status: 'posted' | 'reversed';
   treasuryEntryId: string;
   journalEntryId: string;
@@ -432,6 +490,11 @@ export interface RepairJob {
   problemDescription: string;
   accessories?: string;
   status: RepairJobStatus;
+  /**
+   * Payment lifecycle snapshot written by Cloud Functions
+   * (e.g. ready_for_payment | delivered_on_credit | settled).
+   */
+  financialState?: string;
   jobProducts?: RepairJobProduct[];
   isServiceOnly?: boolean;
   serviceOnlyCost?: number;
@@ -800,6 +863,8 @@ export interface RepairTreasuryEntry {
   referenceId?: string;
   source?: string;
   sourceId?: string;
+  settlementId?: string;
+  counterpartBranchId?: string;
   paymentMethod?: RepairPaymentMethod;
   costCenterId?: string;
   journalEntryId?: string;
@@ -941,7 +1006,10 @@ export interface RepairSalesInvoice {
   total: number;
   taxRate?: 0;
   taxAmount?: 0;
-  paymentMethod?: RepairPaymentMethod;
+  paymentMethod?: RepairPaymentMethod | 'credit';
+  isCreditSale?: boolean;
+  paymentStatus?: 'unpaid' | 'partial' | 'paid';
+  balanceDue?: number;
   costCenterId?: string;
   lines: RepairSalesInvoiceLine[];
   status?: 'draft' | 'pending_discount_approval' | 'ready_to_post' | 'posted' | 'cancelled';

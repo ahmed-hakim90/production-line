@@ -11,6 +11,7 @@ import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '../../../utils/printManager';
+import { useAppStore } from '../../../store/useAppStore';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
 import { CreateRepairSpareIssueModal } from '../components/CreateRepairSpareIssueModal';
@@ -91,8 +92,10 @@ export const RepairSpareIssues: React.FC = () => {
   const [printIssue, setPrintIssue] = useState<RepairSpareIssue | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const detailPanelRef = useRef<HTMLDivElement>(null);
+  const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
   const handlePrint = useManagedPrint({
     contentRef: printRef,
+    printSettings: printTemplate,
     documentTitle: 'سند صرف قطع غيار',
   });
 
@@ -535,7 +538,7 @@ export const RepairSpareIssues: React.FC = () => {
       </div>
 
       <div className="hidden">
-        <RepairSpareIssuePrint ref={printRef} issue={printIssue} />
+        <RepairSpareIssuePrint ref={printRef} issue={printIssue} printSettings={printTemplate} />
       </div>
 
       <CreateRepairSpareIssueModal

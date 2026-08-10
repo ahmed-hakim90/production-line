@@ -29,7 +29,7 @@ import type {
   QuickActionItem, QuickActionColor, CustomWidgetConfig, FirestoreEmployee, FirestoreUser,
 } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
-import type { ReportPrintRow } from '../../production/components/ProductionReportPrint';
+import { PRINT_PREVIEW_SAMPLE_ROWS } from '../../production/lib/printPreviewSample';
 import { GeneralSettingsHeader } from '../components/settings/GeneralSettingsHeader';
 import { GeneralBrandingSection } from '../components/settings/GeneralBrandingSection';
 import { GeneralThemeSection } from '../components/settings/GeneralThemeSection';
@@ -252,12 +252,6 @@ const THEME_PRESETS: ThemePreset[] = [
     colors: { primary: '#34d399', bg: '#020617', card: '#0f172a' },
     partialTheme: { primaryColor: '#34d399', darkMode: 'dark', backgroundColor: '#020617', sidebarIconStyle: 'muted' },
   },
-];
-
-const SAMPLE_ROWS: ReportPrintRow[] = [
-  { date: '2026-02-21', lineName: 'خط 1', productName: 'منتج A', employeeName: 'أحمد محمد', quantityProduced: 1200, wasteQuantity: 35, workersCount: 12, workHours: 8 },
-  { date: '2026-02-21', lineName: 'خط 2', productName: 'منتج B', employeeName: 'سعيد علي', quantityProduced: 950, wasteQuantity: 20, workersCount: 10, workHours: 8 },
-  { date: '2026-02-21', lineName: 'خط 3', productName: 'منتج C', employeeName: 'خالد حسن', quantityProduced: 800, wasteQuantity: 15, workersCount: 8, workHours: 7.5 },
 ];
 
 const resolveProductionWorkerSettings = (
@@ -1038,7 +1032,7 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
           handleLogoUpload={handleLogoUpload}
           onSave={() => handleSave('reports')}
           onReset={() => setLocalPrint({ ...DEFAULT_PRINT_TEMPLATE })}
-          sampleRows={SAMPLE_ROWS}
+          sampleRows={PRINT_PREVIEW_SAMPLE_ROWS}
         />
       )}
 

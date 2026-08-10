@@ -28,6 +28,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { Button, Badge } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../../shared/components/SelectableTable';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import type { FirestoreEmployee, FirestoreUser, EmploymentType } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -51,7 +52,6 @@ import { exportAllEmployees } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
-import { PageHeader } from '../../../components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -962,37 +962,33 @@ export const Employees: React.FC = () => {
               إضافة موظف
             </Button>
           ) : null}
-          <PageHeader
-            title=""
-            backAction={false}
-            moreActions={[
-              {
-                label: 'تصدير Excel',
-                icon: 'download',
-                group: 'تصدير',
-                hidden: !canExportFromPage || (tenantEmployeeCount ?? 0) === 0,
-                onClick: () => {
-                  void (async () => {
-                    const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
-                    const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
-                    const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
-                    const all = await employeeService.getAll();
-                    exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
-                      getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
-                      getManagerName: getEffectiveManagerName,
-                    });
-                  })();
-                },
-              },
-              {
-                label: 'استيراد Excel',
-                icon: 'upload_file',
-                group: 'استيراد',
-                hidden: !canImportFromPage,
-                onClick: () => navigate('/hr/employees/import'),
-              },
-            ]}
-          />
+          {canExportFromPage && (tenantEmployeeCount ?? 0) > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                void (async () => {
+                  const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
+                  const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
+                  const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
+                  const all = await employeeService.getAll();
+                  exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
+                    getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
+                    getManagerName: getEffectiveManagerName,
+                  });
+                })();
+              }}
+            >
+              <span className="material-icons-round text-sm">download</span>
+              تصدير Excel
+            </Button>
+          ) : null}
+          {canImportFromPage ? (
+            <Button type="button" variant="outline" onClick={() => navigate('/hr/employees/import')}>
+              <span className="material-icons-round text-sm">upload_file</span>
+              استيراد Excel
+            </Button>
+          ) : null}
         </div>
       )}
     >
@@ -1093,6 +1089,7 @@ export const Employees: React.FC = () => {
 
       {/* 6. Create/Edit Modal — Professional HR Panel */}
       {showModal && (can('employees.create') || can('employees.edit')) && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
@@ -1468,10 +1465,12 @@ export const Employees: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Deactivate confirmation (soft delete) */}
       {deleteConfirmId && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1490,10 +1489,12 @@ export const Employees: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Permanent delete confirmation (hard delete - only for inactive employees) */}
       {permanentDeleteId && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPermanentDeleteId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1520,10 +1521,12 @@ export const Employees: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Reactivate confirmation */}
       {toggleConfirmId && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setToggleConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1541,11 +1544,13 @@ export const Employees: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
 
       {/* Quick-Add Modal (Department / Position / Shift) */}
       {quickAddType && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setQuickAddType(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -1603,6 +1608,7 @@ export const Employees: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

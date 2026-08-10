@@ -8,7 +8,6 @@ import { usePermission } from '@/utils/permissions';
 import { LoadingSkeleton } from '@/modules/production/components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -326,8 +325,7 @@ export const ExecutionPage: React.FC = () => {
 
   if (!isNew && !execution) {
     return (
-      <ModuleOpsPageShell className="mx-auto w-full min-w-0 max-w-lg" eyebrow="تنفيذ المسار" rangeLabel="تنفيذ غير موجود">
-        <PageHeader title="تنفيذ غير موجود" subtitle="قد يكون الرابط قديماً أو تم حذف السجل" icon="factory" />
+      <ModuleOpsPageShell className="mx-auto w-full min-w-0 max-w-lg" eyebrow="تنفيذ المسار" rangeLabel="تنفيذ غير موجود — قد يكون الرابط قديماً أو تم حذف السجل">
         <OpsDashPanel title="تنفيذ غير موجود" accent="production">
           <div className="space-y-4">
             <p className="text-center text-sm text-muted-foreground">لم يتم العثور على التنفيذ.</p>
@@ -346,15 +344,12 @@ export const ExecutionPage: React.FC = () => {
         className="mx-auto w-full min-w-0 max-w-lg"
         eyebrow="تنفيذ المسار"
         rangeLabel="اكتمل التنفيذ — تم حفظ الأداء والتكلفة"
+        actions={(
+          <Button type="button" variant="outline" onClick={() => navigate('/production/routing')}>
+            مسارات الإنتاج
+          </Button>
+        )}
       >
-        <PageHeader
-          title="اكتمل التنفيذ"
-          subtitle="تم حفظ الأداء والتكلفة — يمكنك التصدير أو المشاركة كما في الإدخال السريع"
-          icon="check"
-          iconBg="bg-emerald-500/15"
-          iconColor="text-emerald-600 dark:text-emerald-400"
-          backAction={{ onClick: () => navigate('/production/routing'), label: 'مسارات الإنتاج' }}
-        />
 
         {shareToast && (
           <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
@@ -459,15 +454,12 @@ export const ExecutionPage: React.FC = () => {
         className="mx-auto w-full min-w-0 max-w-lg"
         eyebrow="تنفيذ المسار"
         rangeLabel="الخطوة 1 — المنتج والكمية"
+        actions={(
+          <Button type="button" variant="outline" onClick={() => navigate('/production/routing')}>
+            مسارات الإنتاج
+          </Button>
+        )}
       >
-        <PageHeader
-          title="تنفيذ مسار"
-          subtitle="الخطوة 1 — المنتج والكمية"
-          icon="factory"
-          iconBg="bg-sky-500/15"
-          iconColor="text-sky-600 dark:text-sky-400"
-          backAction={{ onClick: () => navigate('/production/routing'), label: 'مسارات الإنتاج' }}
-        />
         <OpsDashPanel accent="production">
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -504,15 +496,12 @@ export const ExecutionPage: React.FC = () => {
         className="mx-auto w-full min-w-0 max-w-lg"
         eyebrow="تنفيذ المسار"
         rangeLabel="الخطوة 2 — مراجعة سريعة"
+        actions={(
+          <Button type="button" variant="outline" onClick={() => setPhase('pick')}>
+            الخطوة السابقة
+          </Button>
+        )}
       >
-        <PageHeader
-          title="خطة المسار النشطة"
-          subtitle="الخطوة 2 — مراجعة سريعة"
-          icon="factory"
-          iconBg="bg-amber-500/12"
-          iconColor="text-amber-800 dark:text-amber-300"
-          backAction={{ onClick: () => setPhase('pick'), label: 'الخطوة السابقة' }}
-        />
         <OpsDashPanel accent="production">
           <div className="space-y-6">
             <p className="text-sm font-semibold text-foreground">
@@ -563,16 +552,13 @@ export const ExecutionPage: React.FC = () => {
       <ModuleOpsPageShell
         className="mx-auto w-full min-w-0 max-w-lg pb-24 md:pb-10"
         eyebrow="تنفيذ المسار"
-        rangeLabel={currentStepRow.name}
+        rangeLabel={`${currentStepRow.name} — خطوة ${stepIndex + 1} من ${execSteps.length}`}
+        actions={(
+          <Button type="button" variant="outline" onClick={() => navigate('/production/routing')}>
+            مسارات الإنتاج
+          </Button>
+        )}
       >
-        <PageHeader
-          title={currentStepRow.name}
-          subtitle={`خطوة ${stepIndex + 1} من ${execSteps.length}`}
-          icon="factory"
-          iconBg="bg-violet-500/12"
-          iconColor="text-violet-700 dark:text-violet-300"
-          backAction={{ onClick: () => navigate('/production/routing'), label: 'مسارات الإنتاج' }}
-        />
         <OpsDashPanel accent="production">
           <div className="space-y-6">
             <div className="rounded-lg border bg-muted/30 p-3">

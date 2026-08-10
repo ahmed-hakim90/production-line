@@ -9,6 +9,7 @@ import { parseProductionPlansExcel, type ProductionPlanImportResult } from '../.
 import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { useTranslation } from 'react-i18next';
 import {
   PRODUCTION_PLAN_CREATE_PATHS,
@@ -143,6 +144,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={handleClose}
@@ -262,6 +264,6 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

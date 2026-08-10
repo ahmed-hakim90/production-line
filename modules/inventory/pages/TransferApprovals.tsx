@@ -114,8 +114,8 @@ export const TransferApprovals: React.FC = () => {
   const [slaOnly, setSlaOnly] = useState(false);
   const transferSlaDays = useAppStore((s) => Number(s.systemSettings.planSettings?.transferSlaWarningDays || 2));
   const [typeTab, setTypeTab] = useState<
-    'all' | 'manual' | 'production_entry' | 'production_auto' | 'finished_final' | 'packaging'
-  >('production_entry');
+    'all' | 'manual' | 'production_entry' | 'production_handover' | 'production_auto' | 'finished_final' | 'packaging'
+  >('production_handover');
   const [loading, setLoading] = useState(
     () => peekPageDataCache<TransferApprovalsPageData>(TRANSFER_APPROVALS_CACHE_KEY) == null,
   );
@@ -251,6 +251,7 @@ export const TransferApprovals: React.FC = () => {
     if (typeTab === 'all') return true;
     if (typeTab === 'manual') return t === 'transfer' || t === 'manual_transfer';
     if (typeTab === 'production_entry') return t === 'production_entry';
+    if (typeTab === 'production_handover') return t === 'production_handover';
     if (typeTab === 'production_auto') return t === 'production_auto_transfer';
     if (typeTab === 'finished_final') return t === 'finished_to_final';
     if (typeTab === 'packaging') return t === 'packaging_transfer';
@@ -613,12 +614,13 @@ export const TransferApprovals: React.FC = () => {
 
           <div className="flex flex-wrap gap-2">
         {([
+          ['production_handover', 'استلام تغليف'],
           ['production_entry', 'إدخال إنتاج'],
           ['all', 'الكل'],
           ['manual', 'يدوي'],
           ['production_auto', 'ترحيل تم الإنتاج'],
           ['finished_final', 'إلى منتج تام'],
-          ['packaging', 'تغليف'],
+          ['packaging', 'تحويل تغليف'],
         ] as const).map(([key, label]) => (
           <button
             key={key}
@@ -632,6 +634,19 @@ export const TransferApprovals: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {typeTab === 'production_handover' && (
+        <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          استلام التغليف يُؤكَّد بالكمية الفعلية من{' '}
+          <Link
+            className="font-bold underline"
+            to={withTenantPath(tenantSlug, '/production/packaging/control')}
+          >
+            تحكم التغليف
+          </Link>
+          — ليس اعتماداً دفعة واحدة من هذه الشاشة.
+        </div>
+      )}
 
       {!canApprove && (
         <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">

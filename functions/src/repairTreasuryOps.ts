@@ -215,11 +215,11 @@ async function postManualTreasuryEntry(actor: Actor, data: Record<string, unknow
     debit = methodAccount;
     credit = contraAccount;
   } else if (entryType === 'TRANSFER_OUT') {
-    // خروج نقدية الفرع إلى الخزينة الرئيسية / تحويل بنكي
+    // Intra-branch cash → bank reclass (not HQ settlement).
     debit = bankAccount;
     credit = live.accounts.cash;
   } else {
-    // TRANSFER_IN
+    // TRANSFER_IN: intra-branch bank → cash reclass.
     debit = live.accounts.cash;
     credit = bankAccount;
   }
@@ -339,12 +339,359 @@ async function postManualTreasuryEntry(actor: Actor, data: Record<string, unknow
   };
 }
 
+
+const requireAdminTreasury = (actor: Actor) => {
+  if (
+    actor.isSuperAdmin
+    || actor.permissions['repair.branches.manage'] === true
+    || actor.permissions['repair.callCenter.viewAll'] === true
+  ) {
+    return;
+  }
+  throw new HttpsError('permission-denied', 'اعتماد التسوية متاح لإدارة المراكز فقط.');
+};
+
+const resolveMainBranchId = async (tenantId: string): Promise<{ id: string; name: string }> => {
+  const snap = await db.collection('repair_branches')
+    .where('tenantId', '==', tenantId)
+    .where('isMain', '==', true)
+    .limit(5)
+    .get();
+  const rows = snap.docs.filter((doc) => doc.data()?.isMain === true);
+  if (rows.length !== 1) {
+    throw new HttpsError(
+      'failed-precondition',
+      rows.length === 0
+        ? 'عيّن فرعًا رئيسيًا واحدًا (خزينة الإدارة) من إعدادات الفروع.'
+        : 'يوجد أكثر من فرع رئيسي. أبقِ فرعًا رئيسيًا واحدًا فقط.',
+    );
+  }
+  return { id: rows[0].id, name: String(rows[0].data()?.name || rows[0].id) };
+};
+
+const loadOpenSessionForBranch = async (actor: Actor, branchId: string) => {
+  const openSessions = await db.collection('repair_treasury_sessions')
+    .where('branchId', '==', branchId)
+    .where('status', '==', 'open')
+    .limit(5)
+    .get();
+  const sessionDoc = openSessions.docs
+    .filter((snap) => String(snap.data().tenantId || '') === actor.tenantId)
+    .sort((a, b) => String(b.data().openedAt || '').localeCompare(String(a.data().openedAt || '')))[0];
+  if (!sessionDoc) {
+    throw new HttpsError('failed-precondition', `لا توجد خزينة مفتوحة للفرع ${branchId}.`);
+  }
+  if (sessionDoc.data()?.needsManualClose === true) {
+    throw new HttpsError('failed-precondition', 'الخزينة غير متاحة — أقفل يوم أمس أولًا.');
+  }
+  return sessionDoc;
+};
+
+async function submitTreasurySettlement(actor: Actor, data: Record<string, unknown>) {
+  requirePermission(actor, ['repair.treasury.manage'], 'ليس لديك صلاحية إدارة خزينة الصيانة.');
+  const fromBranchId = String(data.branchId || data.fromBranchId || '').trim();
+  const requestId = String(data.requestId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  const countedAmount = roundMoney(data.countedAmount ?? data.amount);
+  const expectedAmount = roundMoney(data.expectedAmount ?? countedAmount);
+  const note = String(data.note || '').trim();
+  const varianceReason = String(data.varianceReason || '').trim();
+  if (!fromBranchId || !requestId || countedAmount <= 0) {
+    throw new HttpsError('invalid-argument', 'بيانات التسوية غير مكتملة.');
+  }
+  assertBranchScope(actor, fromBranchId);
+  const main = await resolveMainBranchId(actor.tenantId);
+  if (fromBranchId === main.id) {
+    throw new HttpsError('failed-precondition', 'الفرع الرئيسي لا يُرسل تسوية لنفسه.');
+  }
+  const variance = roundMoney(countedAmount - expectedAmount);
+  if (Math.abs(variance) > 0.001 && varianceReason.length < 3) {
+    throw new HttpsError('invalid-argument', 'اكتب سبب فرق العدّ قبل إرسال التسوية.');
+  }
+  // Ensure source session exists before submit (soft check).
+  await loadOpenSessionForBranch(actor, fromBranchId);
+  const settlementRef = db.collection('repair_treasury_settlements').doc(`${actor.tenantId}__${requestId}`);
+  const at = new Date().toISOString();
+  const result = await db.runTransaction(async (tx) => {
+    const current = await tx.get(settlementRef);
+    if (current.exists) {
+      const row = current.data() as Record<string, unknown>;
+      if (String(row.status || '') === 'rejected') {
+        throw new HttpsError('failed-precondition', 'هذه التسوية مرفوضة. أنشئ طلبًا جديدًا.');
+      }
+      return { settlementId: settlementRef.id, status: String(row.status || 'submitted'), duplicated: true };
+    }
+    tx.create(settlementRef, {
+      tenantId: actor.tenantId,
+      fromBranchId,
+      toBranchId: main.id,
+      toBranchName: main.name,
+      expectedAmount,
+      countedAmount,
+      amount: countedAmount,
+      variance,
+      varianceReason: varianceReason || null,
+      note: note || null,
+      status: 'submitted',
+      submittedBy: actor.uid,
+      submittedByName: actor.displayName,
+      submittedAt: at,
+      createdBy: actor.uid,
+      createdByName: actor.displayName,
+      createdAt: at,
+      updatedAt: at,
+    });
+    return { settlementId: settlementRef.id, status: 'submitted', duplicated: false };
+  });
+  return { ok: true as const, ...result, countedAmount, toBranchId: main.id };
+}
+
+async function rejectTreasurySettlement(actor: Actor, data: Record<string, unknown>) {
+  requirePermission(actor, ['repair.treasury.manage'], 'ليس لديك صلاحية إدارة خزينة الصيانة.');
+  requireAdminTreasury(actor);
+  const settlementId = String(data.settlementId || '').trim();
+  const reason = String(data.reason || data.rejectionReason || '').trim();
+  if (!settlementId || reason.length < 3) {
+    throw new HttpsError('invalid-argument', 'سبب الرفض مطلوب.');
+  }
+  const settlementRef = db.collection('repair_treasury_settlements').doc(settlementId);
+  const at = new Date().toISOString();
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(settlementRef);
+    if (!snap.exists || String(snap.data()?.tenantId || '') !== actor.tenantId) {
+      throw new HttpsError('not-found', 'طلب التسوية غير موجود.');
+    }
+    const status = String(snap.data()?.status || '');
+    if (status === 'rejected') return;
+    if (status === 'approved') {
+      throw new HttpsError('failed-precondition', 'لا يمكن رفض تسوية معتمدة.');
+    }
+    if (status !== 'submitted') {
+      throw new HttpsError('failed-precondition', 'حالة التسوية لا تسمح بالرفض.');
+    }
+    tx.update(settlementRef, {
+      status: 'rejected',
+      rejectedBy: actor.uid,
+      rejectedByName: actor.displayName,
+      rejectedAt: at,
+      rejectionReason: reason,
+      updatedAt: at,
+    });
+  });
+  return { ok: true as const, settlementId, status: 'rejected' as const };
+}
+
+async function approveTreasurySettlement(actor: Actor, data: Record<string, unknown>) {
+  requirePermission(actor, ['repair.treasury.manage'], 'ليس لديك صلاحية إدارة خزينة الصيانة.');
+  requireAdminTreasury(actor);
+  const settlementId = String(data.settlementId || '').trim();
+  if (!settlementId) throw new HttpsError('invalid-argument', 'معرّف التسوية مطلوب.');
+
+  const settlementRef = db.collection('repair_treasury_settlements').doc(settlementId);
+  const initial = await settlementRef.get();
+  if (!initial.exists || String(initial.data()?.tenantId || '') !== actor.tenantId) {
+    throw new HttpsError('not-found', 'طلب التسوية غير موجود.');
+  }
+  const settlement = initial.data() as Record<string, unknown>;
+  if (String(settlement.status || '') === 'approved') {
+    return {
+      ok: true as const,
+      settlementId,
+      status: 'approved' as const,
+      duplicated: true,
+      fromEntryId: String(settlement.fromEntryId || ''),
+      toEntryId: String(settlement.toEntryId || ''),
+      journalEntryId: String(settlement.journalEntryId || ''),
+    };
+  }
+  if (String(settlement.status || '') !== 'submitted') {
+    throw new HttpsError('failed-precondition', 'التسوية ليست بانتظار الاعتماد.');
+  }
+
+  const fromBranchId = String(settlement.fromBranchId || '').trim();
+  const toBranchId = String(settlement.toBranchId || '').trim();
+  const amount = roundMoney(settlement.countedAmount ?? settlement.amount);
+  if (!fromBranchId || !toBranchId || amount <= 0) {
+    throw new HttpsError('failed-precondition', 'بيانات التسوية غير صالحة.');
+  }
+  const main = await resolveMainBranchId(actor.tenantId);
+  if (toBranchId !== main.id) {
+    throw new HttpsError('failed-precondition', 'وجهة التسوية ليست الفرع الرئيسي الحالي.');
+  }
+
+  await ensureDefaultAccounts(actor);
+  const [fromLive, toLive, fromSession, toSession] = await Promise.all([
+    loadBranchPaymentAccounts(actor, fromBranchId),
+    loadBranchPaymentAccounts(actor, toBranchId),
+    loadOpenSessionForBranch(actor, fromBranchId),
+    loadOpenSessionForBranch(actor, toBranchId),
+  ]);
+
+  const fromMonth = String(fromSession.data().openedAt || new Date().toISOString()).slice(0, 7);
+  const toMonth = String(toSession.data().openedAt || new Date().toISOString()).slice(0, 7);
+  const fromMonthCloseRef = db.collection('repair_treasury_month_closes').doc(`${actor.tenantId}_${fromBranchId}_${fromMonth}`);
+  const toMonthCloseRef = db.collection('repair_treasury_month_closes').doc(`${actor.tenantId}_${toBranchId}_${toMonth}`);
+  const fromEntryRef = db.collection('repair_treasury_entries').doc(`${actor.tenantId}__repair_hq_settlement_out__${settlementId}`);
+  const toEntryRef = db.collection('repair_treasury_entries').doc(`${actor.tenantId}__repair_hq_settlement_in__${settlementId}`);
+  const journalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_hq_settlement__${settlementId}`);
+  const at = new Date().toISOString();
+  const note = String(settlement.note || `تسوية خزينة إلى ${main.name}`).trim();
+
+  const result = await db.runTransaction(async (tx) => {
+    const [
+      settlementSnap,
+      fromEntrySnap,
+      toEntrySnap,
+      journalSnap,
+      fromSessionSnap,
+      toSessionSnap,
+      fromMonthCloseSnap,
+      toMonthCloseSnap,
+    ] = await Promise.all([
+      tx.get(settlementRef),
+      tx.get(fromEntryRef),
+      tx.get(toEntryRef),
+      tx.get(journalRef),
+      tx.get(fromSession.ref),
+      tx.get(toSession.ref),
+      tx.get(fromMonthCloseRef),
+      tx.get(toMonthCloseRef),
+    ]);
+    if (!settlementSnap.exists || String(settlementSnap.data()?.tenantId || '') !== actor.tenantId) {
+      throw new HttpsError('not-found', 'طلب التسوية غير موجود.');
+    }
+    if (String(settlementSnap.data()?.status || '') === 'approved' || fromEntrySnap.exists || toEntrySnap.exists || journalSnap.exists) {
+      return {
+        fromEntryId: fromEntryRef.id,
+        toEntryId: toEntryRef.id,
+        journalEntryId: journalRef.id,
+        duplicated: true,
+      };
+    }
+    if (String(settlementSnap.data()?.status || '') !== 'submitted') {
+      throw new HttpsError('failed-precondition', 'التسوية ليست بانتظار الاعتماد.');
+    }
+    if (!fromSessionSnap.exists || String(fromSessionSnap.data()?.status || '') !== 'open') {
+      throw new HttpsError('failed-precondition', 'خزينة الفرع المُرسِل غير مفتوحة.');
+    }
+    if (!toSessionSnap.exists || String(toSessionSnap.data()?.status || '') !== 'open') {
+      throw new HttpsError('failed-precondition', 'خزينة الفرع الرئيسي غير مفتوحة.');
+    }
+    if (fromMonthCloseSnap.exists && String(fromMonthCloseSnap.data()?.status || '') === 'closed') {
+      throw new HttpsError('failed-precondition', 'شهر خزينة الفرع المُرسِل مقفول.');
+    }
+    if (toMonthCloseSnap.exists && String(toMonthCloseSnap.data()?.status || '') === 'closed') {
+      throw new HttpsError('failed-precondition', 'شهر خزينة الفرع الرئيسي مقفول.');
+    }
+
+    tx.create(fromEntryRef, {
+      tenantId: actor.tenantId,
+      branchId: fromBranchId,
+      sessionId: fromSession.id,
+      entryType: 'SETTLEMENT_OUT',
+      amount,
+      note,
+      paymentMethod: 'cash',
+      costCenterId: fromLive.costCenterId,
+      source: 'hq_settlement',
+      sourceId: settlementId,
+      settlementId,
+      counterpartBranchId: toBranchId,
+      journalEntryId: journalRef.id,
+      createdBy: actor.uid,
+      createdByName: actor.displayName,
+      createdAt: at,
+    });
+    tx.create(toEntryRef, {
+      tenantId: actor.tenantId,
+      branchId: toBranchId,
+      sessionId: toSession.id,
+      entryType: 'SETTLEMENT_IN',
+      amount,
+      note,
+      paymentMethod: 'cash',
+      costCenterId: toLive.costCenterId,
+      source: 'hq_settlement',
+      sourceId: settlementId,
+      settlementId,
+      counterpartBranchId: fromBranchId,
+      journalEntryId: journalRef.id,
+      createdBy: actor.uid,
+      createdByName: actor.displayName,
+      createdAt: at,
+    });
+    tx.create(journalRef, {
+      tenantId: actor.tenantId,
+      branchId: toBranchId,
+      costCenterId: toLive.costCenterId,
+      source: 'repair_hq_settlement',
+      sourceId: settlementId,
+      referenceNo: `HQ-${settlementId.slice(-8).toUpperCase()}`,
+      description: note,
+      status: 'posted',
+      postedAt: at,
+      date: at.slice(0, 10),
+      createdBy: actor.uid,
+      createdByName: actor.displayName,
+      createdAt: at,
+      totalDebit: amount,
+      totalCredit: amount,
+      lines: [
+        {
+          accountCode: toLive.accounts.cash.code,
+          accountName: toLive.accounts.cash.name,
+          debit: amount,
+          credit: 0,
+          costCenterId: toLive.costCenterId,
+          description: note,
+        },
+        {
+          accountCode: fromLive.accounts.cash.code,
+          accountName: fromLive.accounts.cash.name,
+          debit: 0,
+          credit: amount,
+          costCenterId: fromLive.costCenterId,
+          description: note,
+        },
+      ],
+    });
+    tx.update(settlementRef, {
+      status: 'approved',
+      approvedBy: actor.uid,
+      approvedByName: actor.displayName,
+      approvedAt: at,
+      fromEntryId: fromEntryRef.id,
+      toEntryId: toEntryRef.id,
+      journalEntryId: journalRef.id,
+      fromSessionId: fromSession.id,
+      toSessionId: toSession.id,
+      updatedAt: at,
+    });
+    return {
+      fromEntryId: fromEntryRef.id,
+      toEntryId: toEntryRef.id,
+      journalEntryId: journalRef.id,
+      duplicated: false,
+    };
+  });
+
+  return { ok: true as const, settlementId, status: 'approved' as const, amount, ...result };
+}
+
 export const mutateRepairTreasuryHandler = async (request: CallableRequest) => {
   const actor = await loadActor(requireAuth(request));
   const data = (request.data || {}) as Record<string, unknown>;
   const operation = String(data.operation || '').trim();
   if (operation === 'post_manual_entry') {
     return postManualTreasuryEntry(actor, data);
+  }
+  if (operation === 'submit_settlement') {
+    return submitTreasurySettlement(actor, data);
+  }
+  if (operation === 'approve_settlement') {
+    return approveTreasurySettlement(actor, data);
+  }
+  if (operation === 'reject_settlement') {
+    return rejectTreasurySettlement(actor, data);
   }
   throw new HttpsError(
     'invalid-argument',

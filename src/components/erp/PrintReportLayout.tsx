@@ -136,7 +136,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
         dir="rtl"
         lang="ar"
         className={cn(
-          "print-root print-report bg-white mx-auto p-9 print:p-0 print:w-full [font-feature-settings:normal] arabic-export-root",
+          "print-root print-report bg-white mx-auto p-9 print:p-0 print:w-full print:max-w-none print:min-w-0 print:mx-0 [font-feature-settings:normal] arabic-export-root",
           !nestedInShareWrapper && "w-[640px]",
         )}
         style={{
@@ -144,9 +144,9 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
           fontSize: "13px",
           letterSpacing: "normal",
           wordSpacing: "normal",
-          width: cardWidth,
+          width: nestedInShareWrapper ? "100%" : cardWidth,
           minWidth: nestedInShareWrapper ? undefined : 640,
-          maxWidth: cardWidth,
+          maxWidth: nestedInShareWrapper ? "100%" : cardWidth,
           boxSizing: "border-box",
           flexShrink: 0,
         }}

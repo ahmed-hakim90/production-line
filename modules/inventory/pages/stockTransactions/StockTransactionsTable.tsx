@@ -5,9 +5,10 @@ import { getTransferDisplay, type TransferDisplayUnitMode } from '../../utils/tr
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableIconAction } from '@/src/components/erp';
 import type { InventoryTransferRequest, StockTransaction } from '../../types';
-import type { ApprovedTransferGroup, CombinedRow } from './types';
+import type { ApprovedTransferGroup, CombinedRow, StockVoucherGroup } from './types';
 import { movementLabel } from './types';
 import { sourceModuleLabel } from '../../lib/stockLabels';
+import { voucherMovementTitle } from '../../lib/groupStockVouchers';
 
 export interface StockTransactionsTableProps {
   loading: boolean;
@@ -21,6 +22,7 @@ export interface StockTransactionsTableProps {
   withResolvedUnitsPerCarton: <T extends { itemType: import('../../types').InventoryItemType; itemId: string; unitsPerCarton?: number }>(
     line: T,
   ) => T;
+  spareContext?: boolean;
   perm: {
     export: boolean;
     print: boolean;
@@ -34,6 +36,8 @@ export interface StockTransactionsTableProps {
   onEditRow: (tx: StockTransaction) => void | Promise<void>;
   onDeleteRows: (rows: StockTransaction[]) => void | Promise<void>;
   onOpenApproved: (group: ApprovedTransferGroup) => void;
+  onOpenVoucher: (group: StockVoucherGroup) => void;
+  onPrintVoucher: (group: StockVoucherGroup) => void | Promise<void>;
   onOpenPending: (row: InventoryTransferRequest) => void;
   onPrintPending: (row: InventoryTransferRequest) => void | Promise<void>;
   onSharePending: (row: InventoryTransferRequest) => void | Promise<void>;
@@ -50,6 +54,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
   warehouseMap,
   transferDisplayUnit,
   withResolvedUnitsPerCarton,
+  spareContext = false,
   perm,
   processing,
   onExportExcel,
@@ -58,6 +63,8 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
   onEditRow,
   onDeleteRows,
   onOpenApproved,
+  onOpenVoucher,
+  onPrintVoucher,
   onOpenPending,
   onPrintPending,
   onSharePending,
@@ -101,6 +108,9 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <div className="min-w-0">
                     <p className="text-sm font-bold truncate">{tx.itemName}</p>
                     <p className="font-mono text-xs text-[var(--color-text-muted)]">{tx.itemCode}</p>
+                    {tx.referenceNo ? (
+                      <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{tx.referenceNo}</p>
+                    ) : null}
                   </div>
                   <Badge variant="info">{movementLabel[tx.movementType] ?? tx.movementType}</Badge>
                 </div>
@@ -133,6 +143,44 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   )}
                   {perm.delete && (
                     <TableIconAction action="delete" onClick={() => void onDeleteRows([tx])} disabled={processing} aria-label={`حذف حركة ${tx.itemName}`} />
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          if (entry.kind === 'voucher') {
+            const group = entry.group;
+            const title = voucherMovementTitle(group.movementType, spareContext);
+            const qtySum = group.lines.reduce((s, l) => s + Number(l.quantity || 0), 0);
+            const names = group.lines.slice(0, 2).map((l) => l.itemName).join('، ');
+            return (
+              <div
+                key={`m-voucher-${group.movementType}-${group.referenceNo}`}
+                className="rounded-xl border border-sky-200 bg-sky-50/40 p-3 shadow-sm dark:bg-sky-900/10"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold">{title} #{group.referenceNo}</p>
+                    <p className="text-xs text-slate-500">{group.lines.length} أصناف · {names}{group.lines.length > 2 ? '…' : ''}</p>
+                  </div>
+                  <Badge variant="info">{movementLabel[group.movementType]}</Badge>
+                </div>
+                <p className="mt-2 text-sm font-bold tabular-nums text-sky-700">
+                  {group.movementType === 'IN' ? '+' : '−'}
+                  {formatNumber(Math.abs(qtySum))}
+                </p>
+                <p className="text-xs text-slate-500">{warehouseMap.get(group.warehouseId) ?? group.warehouseId}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <TableIconAction action="view" onClick={() => onOpenVoucher(group)} disabled={processing} title="عرض الأصناف" aria-label={`عرض ${title} ${group.referenceNo}`} />
+                  {perm.print && (
+                    <TableIconAction action="print" onClick={() => void onPrintVoucher(group)} disabled={processing} aria-label={`طباعة ${title} ${group.referenceNo}`} />
+                  )}
+                  {perm.export && (
+                    <TableIconAction action="export" onClick={() => onExportExcel(group.lines)} title="تصدير Excel" aria-label={`تصدير ${group.referenceNo}`} />
+                  )}
+                  {perm.delete && (
+                    <TableIconAction action="delete" onClick={() => void onDeleteRows(group.lines)} disabled={processing} aria-label={`حذف ${group.referenceNo}`} />
                   )}
                 </div>
               </div>
@@ -349,6 +397,75 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                           onClick={() => void onDeleteRows([tx])}
                           disabled={processing}
                           aria-label={`حذف حركة ${tx.itemName}`}
+                        />
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            }
+
+            if (entry.kind === 'voucher') {
+              const group = entry.group;
+              const title = voucherMovementTitle(group.movementType, spareContext);
+              const qtySum = group.lines.reduce((s, l) => s + Number(l.quantity || 0), 0);
+              return (
+                <tr key={`voucher-${group.movementType}-${group.referenceNo}`} className="bg-sky-50/40 dark:bg-sky-900/10">
+                  <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">—</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">{new Date(group.createdAt).toLocaleString('ar-EG')}</td>
+                  <td className="px-4 py-3">
+                    <p className="text-sm font-bold text-[var(--color-text)]">{title} #{group.referenceNo}</p>
+                    <p className="text-xs text-slate-500">
+                      {group.lines.length} أصناف
+                      {group.note ? ` · ${group.note}` : ''}
+                    </p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Badge variant="info">{movementLabel[group.movementType]}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-xs">{sourceModuleLabel(group.sourceModule)}</td>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`font-black tabular-nums ${group.movementType === 'IN' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      {group.movementType === 'IN' ? '+' : '−'}
+                      {formatNumber(Math.abs(qtySum))}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm">{warehouseMap.get(group.warehouseId) ?? group.warehouseId}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">
+                    {group.lines.map((l) => l.locationCode).filter(Boolean).slice(0, 2).join('، ') || '—'}
+                  </td>
+                  <td className="px-4 py-3 text-sm">{group.createdBy}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1.5">
+                      <TableIconAction
+                        action="view"
+                        onClick={() => onOpenVoucher(group)}
+                        disabled={processing}
+                        title="عرض الأصناف"
+                        aria-label={`عرض ${title} ${group.referenceNo}`}
+                      />
+                      {perm.print && (
+                        <TableIconAction
+                          action="print"
+                          onClick={() => void onPrintVoucher(group)}
+                          disabled={processing}
+                          aria-label={`طباعة ${title} ${group.referenceNo}`}
+                        />
+                      )}
+                      {perm.export && (
+                        <TableIconAction
+                          action="export"
+                          onClick={() => onExportExcel(group.lines)}
+                          title="تصدير Excel"
+                          aria-label={`تصدير ${group.referenceNo}`}
+                        />
+                      )}
+                      {perm.delete && (
+                        <TableIconAction
+                          action="delete"
+                          onClick={() => void onDeleteRows(group.lines)}
+                          disabled={processing}
+                          aria-label={`حذف ${group.referenceNo}`}
                         />
                       )}
                     </div>

@@ -24,6 +24,7 @@ import {
 } from '../../../utils/downloadTemplates';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { useTranslation } from 'react-i18next';
 import {
   INVENTORY_OPERATION_KEYS,
@@ -278,6 +279,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={handleClose}
@@ -438,5 +440,6 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

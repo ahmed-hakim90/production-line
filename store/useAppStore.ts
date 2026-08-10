@@ -1404,6 +1404,8 @@ interface AppState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
+  /** Sync hydrate from local session cache (warm resume). Returns true when applied. */
+  hydrateFromCachedSession: (uid: string) => boolean;
   initializeApp: () => Promise<void>;
   checkApprovalStatus: () => Promise<boolean>;
 
@@ -2031,6 +2033,28 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  // ── Warm resume: apply local session before server validate ─────────────
+
+  hydrateFromCachedSession: (uid: string) => {
+    const cachedSession = readCachedAppSession(uid);
+    if (!cachedSession?.userProfile?.isActive) return false;
+    setCurrentTenant(cachedSession.userProfile.tenantId);
+    set({
+      isAuthenticated: true,
+      isPendingApproval: false,
+      uid,
+      userEmail: cachedSession.userEmail,
+      userDisplayName: cachedSession.userDisplayName,
+      userProfile: cachedSession.userProfile,
+      tenantCompanyName: cachedSession.tenantCompanyName ?? '',
+      tenantActivityPacks: resolveActivityPacks(cachedSession.tenantActivityPacks),
+      error: null,
+      authError: null,
+    });
+    get()._applyRole(cachedSession.role);
+    return true;
+  },
+
   // ── App Bootstrap (called after login) ─────────────────────────────────
 
   initializeApp: async () => {
@@ -2047,21 +2071,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, error: null, authError: null });
     try {
       const uid = currentUser.uid;
-      const cachedSession = readCachedAppSession(uid);
-      if (cachedSession?.userProfile?.isActive) {
-        setCurrentTenant(cachedSession.userProfile.tenantId);
-        set({
-          isAuthenticated: true,
-          isPendingApproval: false,
-          uid,
-          userEmail: cachedSession.userEmail,
-          userDisplayName: cachedSession.userDisplayName,
-          userProfile: cachedSession.userProfile,
-          tenantCompanyName: cachedSession.tenantCompanyName ?? '',
-          tenantActivityPacks: resolveActivityPacks(cachedSession.tenantActivityPacks),
-        });
-        get()._applyRole(cachedSession.role);
-      }
+      get().hydrateFromCachedSession(uid);
 
       const userDoc = await userService.get(uid);
       if (!userDoc) {
@@ -2372,7 +2382,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
             const planReportResults = await Promise.allSettled(
               activePlans.map(async (plan) => {
-                const key = `${plan.lineId}_${plan.productId}`;
+                const key = plan.id || `${plan.lineId}_${plan.productId}`;
                 const reports = await reportService.getByLineAndProduct(
                   plan.lineId,
                   plan.productId,
@@ -3091,7 +3101,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
         await Promise.all(
           reconcilablePlans.map(async (plan) => {
-            const key = `${plan.lineId}_${plan.productId}`;
+            const key = plan.id || `${plan.lineId}_${plan.productId}`;
             const reports = await reportService.getByLineAndProduct(
               plan.lineId, plan.productId, plan.startDate
             );

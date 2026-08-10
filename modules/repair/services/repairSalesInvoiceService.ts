@@ -127,7 +127,7 @@ export const repairSalesInvoiceService = {
     notes?: string;
     discountType?: 'none' | 'amount' | 'percent';
     discountValue?: number;
-    paymentMethod?: 'cash' | 'card' | 'bank_transfer';
+    paymentMethod?: 'cash' | 'card' | 'bank_transfer' | 'credit';
     createdBy: string;
     createdByName?: string;
   }): Promise<string | null> {
@@ -163,7 +163,7 @@ export const repairSalesInvoiceService = {
     notes?: string;
     discountType?: 'none' | 'amount' | 'percent';
     discountValue?: number;
-    paymentMethod?: 'cash' | 'card' | 'bank_transfer';
+    paymentMethod?: 'cash' | 'card' | 'bank_transfer' | 'credit';
     updatedBy: string;
     updatedByName?: string;
   }): Promise<void> {

@@ -4,7 +4,6 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { BOMS_COLLECTION, BOM_ITEMS_COLLECTION } from '../../manufacturing/collections';
 import type { Bom, BomItem } from '../../manufacturing/types';
 import { materialService } from '../../manufacturing/services/materialService';
-import { bomService } from '../../manufacturing/services/bomService';
 import { productService } from '../../production/services/productService';
 import { stockService } from './stockService';
 import {
@@ -53,12 +52,22 @@ function pickPreferredBom(boms: Bom[]): Bom | null {
   return [...boms].sort((a, b) => Number(b.version || 0) - Number(a.version || 0))[0] ?? null;
 }
 
+export type AssemblableCapacityOptions = {
+  /** Reuse balances already loaded by the caller (avoids a second full warehouse scan). */
+  balances?: Awaited<ReturnType<typeof stockService.getBalances>>;
+};
+
 export const assemblableCapacityService = {
-  async getForWarehouse(warehouseId: string): Promise<AssemblableCapacityRow[]> {
+  async getForWarehouse(
+    warehouseId: string,
+    options?: AssemblableCapacityOptions,
+  ): Promise<AssemblableCapacityRow[]> {
     if (!warehouseId) return [];
 
     const [balances, products, materials, { boms, itemsByBomId }] = await Promise.all([
-      stockService.getBalances(warehouseId),
+      options?.balances
+        ? Promise.resolve(options.balances)
+        : stockService.getBalances(warehouseId),
       productService.getAll(),
       materialService.getAll(),
       loadActiveProductBoms(),
@@ -119,20 +128,13 @@ export const assemblableCapacityService = {
       bomsByProduct.set(ownerId, list);
     }
 
+    // Bulk path only — never N+1 per-product BOM fallbacks (that hung the control board).
+    // Products without an active BOM in the tenant batch are skipped.
     const productInputs: AssemblableProductInput[] = [];
     for (const product of products) {
       if (!product.id) continue;
       const preferred = pickPreferredBom(bomsByProduct.get(product.id) || []);
-      let items = preferred?.id ? itemsByBomId.get(preferred.id) || [] : [];
-
-      // Shared master-data fallback (canonical BOM or legacy via bomService)
-      if (!items.length) {
-        const { items: fallbackItems } = await bomService.getActiveBomWithLegacyFallback(
-          'product',
-          product.id,
-        );
-        items = fallbackItems.filter((item) => item.itemType === 'material');
-      }
+      const items = preferred?.id ? itemsByBomId.get(preferred.id) || [] : [];
       if (!items.length) continue;
 
       productInputs.push({

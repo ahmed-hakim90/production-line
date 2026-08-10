@@ -100,8 +100,9 @@ import { warehouseLocationService } from '../../inventory/services/warehouseLoca
 import { defaultItemLocationService } from '../../inventory/services/defaultItemLocationService';
 import type { StockItemBalance } from '../../inventory/types';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { ManagedModalPortal } from '../../../components/modal-manager/ManagedModalPortal';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
-import { PageHeader } from '../../../components/PageHeader';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
@@ -2248,10 +2249,8 @@ export const Products: React.FC = () => {
               منتج جديد
             </Button>
           ) : null}
-          <PageHeader
-            title=""
-            backAction={false}
-            moreActions={[
+          <OpsMoreActionsMenu
+            items={[
               {
                 label: 'تصدير بيانات المنتجات (للاستيراد)',
                 icon: 'table_chart',
@@ -3098,6 +3097,7 @@ export const Products: React.FC = () => {
         const activeThisMonth = (c?.quantityProduced ?? 0) > 0;
         const selling = raw?.sellingPrice ?? 0;
         return (
+          <ManagedModalPortal>
           <>
             <div
               className="fixed inset-0 bg-black/35 z-[60] mt-0"
@@ -3299,12 +3299,14 @@ export const Products: React.FC = () => {
               </div>
             </aside>
           </>
+          </ManagedModalPortal>
         );
       })()}
 
 
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && canDeleteProduct && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -3324,10 +3326,12 @@ export const Products: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Import Excel Modal */}
       {showImportModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -3496,10 +3500,12 @@ export const Products: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Product Components Import Modal */}
       {showComponentsImportModal && (
+        <ManagedModalPortal>
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => {
@@ -3796,9 +3802,11 @@ export const Products: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {showBulkCategoryModal && (
+        <ManagedModalPortal>
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => !bulkToggleSaving && setShowBulkCategoryModal(false)}
@@ -3860,9 +3868,11 @@ export const Products: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {showBomExportModal && (
+        <ManagedModalPortal>
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => !exportingBom && setShowBomExportModal(false)}
@@ -3928,10 +3938,12 @@ export const Products: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Export Warehouse Selector Modal */}
       {showWarehouseExportModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -4080,10 +4092,12 @@ export const Products: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* â”€â”€ Column Control Modal â”€â”€ */}
       {showColumnsModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -4154,6 +4168,7 @@ export const Products: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       <ProductBomCountCardPreviewModal

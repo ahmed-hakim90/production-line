@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { withTenantPath } from '@/lib/tenantPaths';
 import { Badge, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
@@ -18,13 +19,16 @@ import {
 import { exportHRData } from '../../../utils/exportExcel';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { PageHeader } from '../../../components/PageHeader';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
-import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
+import {
+  resolveInventoryRoutingV1,
+  resolveWarehouseRoleFromRouting,
+} from '../lib/inventoryRoutingResolver';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
@@ -39,6 +43,7 @@ type StockBalancesPageData = {
 
 export const StockBalances: React.FC = () => {
   const navigate = useTenantNavigate();
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
@@ -58,6 +63,7 @@ export const StockBalances: React.FC = () => {
   const systemSettings = useAppStore((s) => s.systemSettings);
   const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
   const stagingWarehouseId = String(routing.finishedStagingWarehouseId || '').trim();
+  const wipWarehouseId = String(routing.productionWipWarehouseId || '').trim();
   const finalWarehouseId = String(routing.finalProductWarehouseId || '').trim();
   const [warehouseFilter, setWarehouseFilter] = useState(
     () => searchParams.get('warehouseId') || scopedWarehouseId || '',
@@ -72,6 +78,7 @@ export const StockBalances: React.FC = () => {
   const {
     data,
     loading,
+    error: loadError,
     reload: reloadCached,
   } = useCachedPageLoad<StockBalancesPageData>(
     BALANCES_CACHE_KEY,
@@ -121,18 +128,46 @@ export const StockBalances: React.FC = () => {
     }
   }, [searchParams]);
 
-  const warehouseNameById = useMemo(
-    () => new Map(warehouses.map((w) => [w.id, w.name])),
-    [warehouses],
-  );
-  const warehouseRoleById = useMemo(
-    () => new Map(warehouses.map((w) => [w.id || '', w.warehouseRole || 'general'])),
-    [warehouses],
-  );
+  const warehouseNameById = useMemo(() => {
+    const map = new Map(warehouses.map((w) => [w.id || '', w.name]));
+    if (stagingWarehouseId && !map.has(stagingWarehouseId)) {
+      map.set(stagingWarehouseId, 'بانتظار التغليف');
+    }
+    if (wipWarehouseId && !map.has(wipWarehouseId)) {
+      map.set(wipWarehouseId, 'تحت التسليم');
+    }
+    if (finalWarehouseId && !map.has(finalWarehouseId)) {
+      map.set(finalWarehouseId, 'منتج تام');
+    }
+    return map;
+  }, [warehouses, stagingWarehouseId, wipWarehouseId, finalWarehouseId]);
+  const warehouseFilterOptions = useMemo(() => {
+    const options = warehouses
+      .filter((warehouse) => warehouse.id)
+      .map((warehouse) => ({ value: warehouse.id || '', label: warehouse.name }));
+    const ensure = (id: string, label: string) => {
+      if (!id || options.some((option) => option.value === id)) return;
+      options.unshift({ value: id, label: warehouseNameById.get(id) || label });
+    };
+    ensure(stagingWarehouseId, 'بانتظار التغليف');
+    ensure(wipWarehouseId, 'تحت التسليم');
+    ensure(finalWarehouseId, 'منتج تام');
+    return options;
+  }, [warehouses, warehouseNameById, stagingWarehouseId, wipWarehouseId, finalWarehouseId]);
+  const resolveRowRole = (warehouseId: string): WarehouseRole =>
+    resolveWarehouseRoleFromRouting(
+      warehouseId,
+      routing,
+      warehouses.find((w) => w.id === warehouseId)?.warehouseRole,
+    );
   const unitsPerCartonByProductId = useMemo(
     () => new Map(rawProducts.map((p) => [p.id || '', Number(p.unitsPerCarton || 0)])),
     [rawProducts],
   );
+  const isStagingQuickFilter =
+    Boolean(stagingWarehouseId)
+    && warehouseFilter === stagingWarehouseId
+    && itemTypeFilter === 'finished_good';
 
   const rows = useMemo(() => {
     const filtered = balances.filter((row) => {
@@ -142,7 +177,7 @@ export const StockBalances: React.FC = () => {
             ? row.warehouseId === warehouseFilter
             : warehouseIds.includes(row.warehouseId))
         : !warehouseFilter || row.warehouseId === warehouseFilter;
-      const rowRole = warehouseRoleById.get(row.warehouseId) || 'general';
+      const rowRole = resolveRowRole(row.warehouseId);
       const matchesRole = !roleFilter || rowRole === roleFilter;
       const matchesType = !itemTypeFilter
         || row.itemType === itemTypeFilter
@@ -174,7 +209,7 @@ export const StockBalances: React.FC = () => {
         sensitivity: 'base',
       });
     });
-  }, [balances, warehouseFilter, roleFilter, itemTypeFilter, statusFilter, negativeOnly, search, warehouseRoleById, scoped, warehouseIds]);
+  }, [balances, warehouseFilter, roleFilter, itemTypeFilter, statusFilter, negativeOnly, search, scoped, warehouseIds, routing, warehouses]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const page = Math.min(currentPage, totalPages);
@@ -199,7 +234,7 @@ export const StockBalances: React.FC = () => {
       const cartons = unitsPerCarton > 0
         ? Number((Number(row.quantity || 0) / unitsPerCarton).toFixed(2))
         : null;
-      const role = warehouseRoleById.get(row.warehouseId) || 'general';
+      const role = resolveRowRole(row.warehouseId);
       return {
         'الصنف': row.itemName,
         'الكود': row.itemCode,
@@ -223,54 +258,52 @@ export const StockBalances: React.FC = () => {
       rangeLabel="عرض الرصيد الحالي لكل صنف داخل كل مخزن"
       actions={(
         <div className="flex flex-wrap items-center gap-2">
-          <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: 'المتاح للتجميع',
-                  icon: 'precision_manufacturing',
-                  group: 'عرض',
-                  hidden: !can('inventory.view'),
-                  onClick: () => navigate('/inventory/raw-materials/control#assemblable'),
-                },
-                {
-                  label: 'تصدير الأرصدة Excel',
-                  icon: 'table_view',
-                  group: 'تصدير',
-                  hidden: !can('inventory.transactions.export') || rows.length === 0,
-                  onClick: exportBalancesExcel,
-                },
-                {
-                  label: 'تحميل قالب المنتجات النهائية',
-                  icon: 'file_download',
-                  group: 'استيراد',
-                  hidden: !can('inventory.transactions.create'),
-                  onClick: downloadInventoryInByCodeTemplate,
-                },
-                {
-                  label: 'تحميل قالب المواد الخام',
-                  icon: 'file_download',
-                  group: 'استيراد',
-                  hidden: !can('inventory.transactions.create'),
-                  onClick: downloadInventoryRawInByCodeTemplate,
-                },
-                {
-                  label: 'استيراد منتجات نهائية',
-                  icon: 'upload_file',
-                  group: 'استيراد',
-                  hidden: !can('inventory.transactions.create'),
-                  onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=finished_good'),
-                },
-                {
-                  label: 'استيراد مواد خام',
-                  icon: 'upload_file',
-                  group: 'استيراد',
-                  hidden: !can('inventory.transactions.create'),
-                  onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=raw_material'),
-                },
-              ]}
-            />
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'المتاح للتجميع',
+                icon: 'precision_manufacturing',
+                group: 'عرض',
+                hidden: !can('inventory.view'),
+                onClick: () => navigate('/inventory/raw-materials/control#assemblable'),
+              },
+              {
+                label: 'تصدير الأرصدة Excel',
+                icon: 'table_view',
+                group: 'تصدير',
+                hidden: !can('inventory.transactions.export') || rows.length === 0,
+                onClick: exportBalancesExcel,
+              },
+              {
+                label: 'تحميل قالب المنتجات النهائية',
+                icon: 'file_download',
+                group: 'استيراد',
+                hidden: !can('inventory.transactions.create'),
+                onClick: downloadInventoryInByCodeTemplate,
+              },
+              {
+                label: 'تحميل قالب المواد الخام',
+                icon: 'file_download',
+                group: 'استيراد',
+                hidden: !can('inventory.transactions.create'),
+                onClick: downloadInventoryRawInByCodeTemplate,
+              },
+              {
+                label: 'استيراد منتجات نهائية',
+                icon: 'upload_file',
+                group: 'استيراد',
+                hidden: !can('inventory.transactions.create'),
+                onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=finished_good'),
+              },
+              {
+                label: 'استيراد مواد خام',
+                icon: 'upload_file',
+                group: 'استيراد',
+                hidden: !can('inventory.transactions.create'),
+                onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=raw_material'),
+              },
+            ]}
+          />
         </div>
       )}
     >
@@ -287,7 +320,8 @@ export const StockBalances: React.FC = () => {
               variant={warehouseFilter === stagingWarehouseId ? 'primary' : 'outline'}
               onClick={() => {
                 setWarehouseFilter(stagingWarehouseId);
-                setRoleFilter('finished_staging');
+                // Warehouse ID is enough; role comes from routing when the doc role is stale.
+                setRoleFilter('');
                 setItemTypeFilter('finished_good');
               }}
             >
@@ -299,7 +333,7 @@ export const StockBalances: React.FC = () => {
               variant={warehouseFilter === finalWarehouseId ? 'primary' : 'outline'}
               onClick={() => {
                 setWarehouseFilter(finalWarehouseId);
-                setRoleFilter('final_product');
+                setRoleFilter('');
                 setItemTypeFilter('finished_good');
               }}
             >
@@ -312,12 +346,48 @@ export const StockBalances: React.FC = () => {
               onClick={() => {
                 setWarehouseFilter('');
                 setRoleFilter('');
+                setItemTypeFilter('');
               }}
             >
               إلغاء الفلتر السريع
             </Button>
           )}
         </div>
+      )}
+
+      {loadError && (
+        <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+          تعذر تحميل الأرصدة. حدّث الصفحة أو أعد المحاولة.
+        </p>
+      )}
+
+      {isStagingQuickFilter && !loading && rows.length === 0 && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          أرصدة «بانتظار التغليف» تظهر هنا بعد تأكيد مشرف التغليف للكمية الفعلية.
+          تقارير الإنتاج المعلّقة تُدار من{' '}
+          <Link
+            className="font-bold underline"
+            to={withTenantPath(tenantSlug, '/production/packaging/control')}
+          >
+            تحكم التغليف
+          </Link>
+          {wipWarehouseId ? (
+            <>
+              {' '}
+              أو من{' '}
+              <Link
+                className="font-bold underline"
+                to={withTenantPath(
+                  tenantSlug,
+                  `/inventory/balances?warehouseId=${encodeURIComponent(wipWarehouseId)}`,
+                )}
+              >
+                أرصدة تحت التسليم
+              </Link>
+            </>
+          ) : null}
+          .
+        </p>
       )}
 
       <OpsDashPanel title="قائمة الأرصدة" accent="inventory" bodyClassName="p-0">
@@ -330,7 +400,7 @@ export const StockBalances: React.FC = () => {
             {
               key: 'warehouse',
               placeholder: 'كل المخازن',
-              options: warehouses.map((warehouse) => ({ value: warehouse.id || '', label: warehouse.name })),
+              options: warehouseFilterOptions,
             },
             {
               key: 'status',
@@ -516,7 +586,7 @@ export const StockBalances: React.FC = () => {
                 const isNegative = Number(row.quantity || 0) < 0;
                 const reserved = Number(row.reservedQty ?? 0);
                 const available = Number(row.availableQty ?? row.quantity ?? 0);
-                const role = warehouseRoleById.get(row.warehouseId) || 'general';
+                const role = resolveRowRole(row.warehouseId);
                 const lastAt = lastMovementByKey[balanceKey(row.warehouseId, row.itemType, row.itemId)];
                 const unitsPerCarton = row.itemType === 'finished_good'
                   ? Number(unitsPerCartonByProductId.get(row.itemId) || 0)

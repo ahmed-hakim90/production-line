@@ -64,8 +64,11 @@ export function jobHasReadyToIssueParts(
 }
 
 export function isWaitingCustomerApproval(job: Pick<RepairJob, 'status' | 'approvalStatus'>): boolean {
-  if (String(job.status || '') === 'waiting_approval') return true;
-  return String(job.approvalStatus || '') === 'pending';
+  const status = String(job.status || '');
+  if (status === 'waiting_approval') return true;
+  // Stale approvalStatus=pending after work advanced must not inflate the approval queue.
+  if (String(job.approvalStatus || '') !== 'pending') return false;
+  return status === 'estimated' || status === 'diagnosed' || status === 'diagnosing' || status === 'received';
 }
 
 export function isWaitingPartsJob(

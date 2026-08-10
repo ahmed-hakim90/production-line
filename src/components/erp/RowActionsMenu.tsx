@@ -47,13 +47,13 @@ export function RowActionsMenu({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-lg border border-slate-200 text-[#64748B] hover:bg-slate-50 hover:text-[#4F46E5]"
+          className="h-8 w-8 rounded-lg border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[rgb(var(--color-primary))]"
           aria-label={t("erpComponents.rowActionsMenu.ariaLabel")}
         >
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-44 rounded-lg border border-slate-200 bg-white p-1">
+      <DropdownMenuContent align="end" className="w-44 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] p-1">
         {safeItems.map((item, index) => {
           if (item.separator === true) {
             return <DropdownMenuSeparator key={`sep-${index}`} />
@@ -64,8 +64,8 @@ export function RowActionsMenu({
               key={item.label}
               onClick={item.onClick}
               className={cn(
-                "cursor-pointer rounded-md text-sm font-normal text-[#0F172A]",
-                item.variant === "danger" && "text-[#DC2626] focus:text-[#DC2626]"
+                "cursor-pointer rounded-md text-sm font-normal text-[var(--color-text)]",
+                item.variant === "danger" && "text-[rgb(var(--color-danger))] focus:text-[rgb(var(--color-danger))]"
               )}
             >
               {item.icon}

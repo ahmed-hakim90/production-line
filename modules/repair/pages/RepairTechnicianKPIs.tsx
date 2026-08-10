@@ -729,7 +729,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
       )}
 
       {(attentionQueue.length > 0 || delayedInScope.length > 0) && (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid items-start gap-4 lg:grid-cols-2">
           {attentionQueue.length > 0 && (
             <OpsDashPanel
               title="يحتاجون متابعة"
@@ -865,7 +865,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
         </div>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <OpsDashPanel title="ملخص الفنيين" accent="repair" bodyClassName="p-0">
           <div className="erp-mobile-card-list p-2 xl:hidden">
             {!jobsReady ? (

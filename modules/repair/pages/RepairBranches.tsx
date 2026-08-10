@@ -56,6 +56,10 @@ type BranchFormState = {
   managerEmployeeName: string;
   /** Required: link an existing maintenance-center warehouse. */
   warehouseId: string;
+  /** Default on for new centers; explicit false disables credit delivery. */
+  allowCreditDelivery: boolean;
+  allowCreditSalesInvoices: boolean;
+  salesInvoicesLocked: boolean;
 };
 
 const emptyForm = (): BranchFormState => ({
@@ -66,6 +70,9 @@ const emptyForm = (): BranchFormState => ({
   managerEmployeeId: '',
   managerEmployeeName: '',
   warehouseId: '',
+  allowCreditDelivery: true,
+  allowCreditSalesInvoices: false,
+  salesInvoicesLocked: false,
 });
 
 const toUserSafeError = (error: unknown, fallback: string): string => {
@@ -351,6 +358,9 @@ export const RepairBranches: React.FC = () => {
       managerEmployeeId: String(branch.managerEmployeeId || ''),
       managerEmployeeName: String(branch.managerEmployeeName || ''),
       warehouseId: String(branch.warehouseId || '').trim(),
+      allowCreditDelivery: branch.allowCreditDelivery !== false,
+      allowCreditSalesInvoices: branch.allowCreditSalesInvoices === true,
+      salesInvoicesLocked: branch.salesInvoicesLocked === true,
     });
     setManagerFilter('');
     setLinkedWarehouse(null);
@@ -411,6 +421,9 @@ export const RepairBranches: React.FC = () => {
           isMain: form.isMain,
           managerEmployeeId: form.managerEmployeeId,
           managerEmployeeName: form.managerEmployeeName,
+          allowCreditDelivery: form.allowCreditDelivery,
+          allowCreditSalesInvoices: form.allowCreditSalesInvoices,
+          salesInvoicesLocked: form.salesInvoicesLocked,
         });
         const nextWarehouseId = form.warehouseId.trim();
         const prevWarehouseId = String(editingBranch.warehouseId || '').trim();
@@ -428,6 +441,9 @@ export const RepairBranches: React.FC = () => {
           managerEmployeeName: form.managerEmployeeName,
           technicianIds: [],
           warehouseId: form.warehouseId.trim(),
+          allowCreditDelivery: form.allowCreditDelivery,
+          allowCreditSalesInvoices: form.allowCreditSalesInvoices,
+          salesInvoicesLocked: form.salesInvoicesLocked,
         });
         toast.success('تمت إضافة الفرع وربطه بمخزن المركز المختار.');
       }
@@ -878,6 +894,54 @@ export const RepairBranches: React.FC = () => {
               />
               فرع رئيسي
             </label>
+            <div className="md:col-span-2 space-y-2 rounded-md border bg-muted/20 p-3">
+              <div className="text-sm font-semibold">سياسات التحصيل والفواتير</div>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.allowCreditDelivery}
+                  onChange={(e) => setForm((prev) => ({ ...prev, allowCreditDelivery: e.target.checked }))}
+                  disabled={branchSaving}
+                />
+                <span>
+                  السماح بالتسليم برصيد (ذمم)
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    عند الإيقاف: لا طلب تسليم برصيد ولا تسليم برصيد متبقٍ لهذا المركز.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.allowCreditSalesInvoices}
+                  onChange={(e) => setForm((prev) => ({ ...prev, allowCreditSalesInvoices: e.target.checked }))}
+                  disabled={branchSaving}
+                />
+                <span>
+                  السماح بفواتير مبيعات آجلة
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    يُفعَّل لاحقًا عند ترحيل فواتير القطع على الحساب.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.salesInvoicesLocked}
+                  onChange={(e) => setForm((prev) => ({ ...prev, salesInvoicesLocked: e.target.checked }))}
+                  disabled={branchSaving}
+                />
+                <span>
+                  قفل فواتير مبيعات القطع
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    يمنع إنشاء أو ترحيل فواتير مبيعات القطع من الخادم مباشرة.
+                  </span>
+                </span>
+              </label>
+            </div>
             <div className="md:col-span-2 space-y-3 rounded-md border bg-muted/20 p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-semibold">المخزن المرتبط</div>

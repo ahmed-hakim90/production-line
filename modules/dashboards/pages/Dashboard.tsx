@@ -22,6 +22,7 @@ import { Button } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
 import { DomainHomeShell } from '../components/DomainHomeShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import {
@@ -30,6 +31,7 @@ import {
   calculateAvgAssemblyTime,
   calculateDailyCapacity,
   calculateEstimatedDays,
+  getTodayDateString,
 } from '../../../utils/calculations';
 import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
 import {
@@ -204,7 +206,7 @@ export const Dashboard: React.FC = () => {
     const month = getCurrentMonth();
     const monthStart = `${month}-01`;
     const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getTodayDateString();
     const maxAgeMs = 5 * 60 * 1000;
     const kToday = getProductionReportsRangeCacheKey(today, today);
     const kMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
@@ -651,6 +653,7 @@ export const Dashboard: React.FC = () => {
       {/* â”€â”€ Set Target Modal â”€â”€ */}
 
       {targetModal && can("lineStatus.edit") && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -715,6 +718,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </DomainHomeShell>
   );

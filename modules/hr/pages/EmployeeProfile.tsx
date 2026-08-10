@@ -4,6 +4,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Button, Badge } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import type { FirestoreEmployee } from '../../../types';
@@ -446,6 +447,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
 
       {/* Add Allowance Modal */}
       {showAllowanceModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
@@ -501,10 +503,12 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Add Deduction Modal */}
       {showDeductionModal && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
@@ -567,6 +571,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </div>
   );

@@ -144,6 +144,16 @@ export const ProductionFloorStock: React.FC = () => {
     toast.success('تم تصدير تقرير الفترة.');
   };
 
+  const floorHero = useMemo(
+    () => [
+      { key: 'sku', label: 'أصناف في الصالة', value: data?.balances.length || 0 },
+      { key: 'qty', label: 'إجمالي الرصيد', value: formatNumber(totalQty) },
+      { key: 'days', label: 'أيام الفترة', value: data?.daily.length || 0 },
+      { key: 'rows', label: 'بنود التقرير', value: periodRows.length },
+    ],
+    [data?.balances.length, totalQty, data?.daily.length, periodRows.length],
+  );
+
   if (!can('inventory.view')) {
     return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
   }
@@ -155,16 +165,6 @@ export const ProductionFloorStock: React.FC = () => {
   if (loading && !data) {
     return <PageContentSkeleton variant="dashboard" />;
   }
-
-  const floorHero = useMemo(
-    () => [
-      { key: 'sku', label: 'أصناف في الصالة', value: data?.balances.length || 0 },
-      { key: 'qty', label: 'إجمالي الرصيد', value: formatNumber(totalQty) },
-      { key: 'days', label: 'أيام الفترة', value: data?.daily.length || 0 },
-      { key: 'rows', label: 'بنود التقرير', value: periodRows.length },
-    ],
-    [data?.balances.length, totalQty, data?.daily.length, periodRows.length],
-  );
 
   return (
     <ModuleOpsPageShell

@@ -5,6 +5,7 @@ import { formatNumber } from '../../../utils/calculations';
 import { TableIconAction } from '@/src/components/erp';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import type { InventoryTransferRequest } from '../../../modules/inventory/types';
 import { transferRequestTypeLabel } from '../../../modules/inventory/lib/stockLabels';
@@ -36,6 +37,7 @@ export const GlobalApproveTransferModal: React.FC = () => {
   const toName = warehouseMap.get(request.toWarehouseId) || request.toWarehouseName || request.toWarehouseId;
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => close()}>
       <div className="bg-[var(--color-card)] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-[var(--color-card)] z-10">
@@ -106,5 +108,6 @@ export const GlobalApproveTransferModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

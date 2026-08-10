@@ -50,9 +50,10 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
   className,
   dir,
 }) => {
-  const showToolbar = Boolean(
-    periods?.length || onRefresh || periodExtra || rangeLabel || actions,
+  const showContextToolbar = Boolean(
+    periods?.length || onRefresh || periodExtra || rangeLabel,
   );
+  const showActionsToolbar = Boolean(actions);
 
   return (
     <div
@@ -105,7 +106,7 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
         </div>
       ) : null}
 
-      {showToolbar ? (
+      {showContextToolbar ? (
         <div className="ops-dash-toolbar">
           <div className="ops-dash-toolbar__periods">
             {(periods || []).map((opt) => (
@@ -122,7 +123,6 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
           </div>
           <div className="ops-dash-toolbar__meta">
             {rangeLabel ? <span className="ops-dash-toolbar__range">{rangeLabel}</span> : null}
-            {actions}
             {onRefresh ? (
               <div className="ops-dash-refresh">
                 <button
@@ -137,6 +137,12 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
               </div>
             ) : null}
           </div>
+        </div>
+      ) : null}
+
+      {showActionsToolbar ? (
+        <div className="ops-dash-toolbar ops-dash-toolbar--actions" role="toolbar" aria-label="إجراءات الصفحة">
+          <div className="ops-dash-toolbar__actions">{actions}</div>
         </div>
       ) : null}
 

@@ -36,11 +36,13 @@ import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { useRepairJobs } from '../hooks/useRepairJobs';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
-import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
+import { isDeliveredStatus, isUnrepairableStatus, isCancelledStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
 import {
   buildRepairOpenAgingBars,
   isRepairJobOpenStatus,
 } from '../lib/repairTechnicianHomeMetrics';
+import { getTodayDateString } from '@/utils/calculations';
+import { REPAIR_JOB_DASHBOARD_LIMIT } from '../services/repairJobService';
 import { StatusBadge } from '../components/StatusBadge';
 import { RepairAdminDashboard } from './RepairAdminDashboard';
 
@@ -102,7 +104,9 @@ const RepairOperationalDashboard: React.FC = () => {
     canViewAllBranches: repairCtx.canViewAllBranches,
     technicianOnly: repairCtx.jobsTechnicianOnly,
     technicianIds,
+    listLimit: REPAIR_JOB_DASHBOARD_LIMIT,
   });
+  const jobsTruncated = jobs.length >= REPAIR_JOB_DASHBOARD_LIMIT;
 
   const techLabelById = useMemo(() => {
     const map = new Map<string, string>();
@@ -128,8 +132,10 @@ const RepairOperationalDashboard: React.FC = () => {
   const kpis = useMemo(() => {
     const openJobs = jobs.filter((j) => isRepairJobOpenStatus(j.status, openStatusIds)).length;
     const pendingDelivery = jobs.filter((j) => mapLegacyRepairStatus(j.status) === 'ready').length;
-    const all = jobs.length || 1;
-    const successRate = (jobs.filter((j) => isDeliveredStatus(j.status)).length / all) * 100;
+    const delivered = jobs.filter((j) => isDeliveredStatus(j.status)).length;
+    const unrepairable = jobs.filter((j) => isUnrepairableStatus(j.status)).length;
+    const terminal = delivered + unrepairable;
+    const successRate = terminal > 0 ? (delivered / terminal) * 100 : 0;
     return { openJobs, pendingDelivery, successRate };
   }, [jobs, openStatusIds]);
 
@@ -151,10 +157,15 @@ const RepairOperationalDashboard: React.FC = () => {
   );
 
   const dailyTrendData = useMemo(() => {
+    const today = getTodayDateString();
+    const todayDate = new Date(`${today}T12:00:00`);
     const days = Array.from({ length: 14 }).map((_, idx) => {
-      const d = new Date();
+      const d = new Date(todayDate);
       d.setDate(d.getDate() - (13 - idx));
-      const key = d.toISOString().slice(0, 10);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const key = `${y}-${m}-${day}`;
       return { key, day: shortDay(key), created: 0, delivered: 0 };
     });
     const dayMap = new Map(days.map((d) => [d.key, d]));
@@ -210,7 +221,8 @@ const RepairOperationalDashboard: React.FC = () => {
     const m = new Map<string, number>();
     const hot = new Set(['repairing', 'testing', 'ready', 'delivered', 'unrepairable']);
     jobs.forEach((j) => {
-      if (!hot.has(j.status)) return;
+      const canonical = mapLegacyRepairStatus(j.status);
+      if (!hot.has(canonical)) return;
       const key = `${j.deviceBrand} ${j.deviceModel}`.trim() || 'غير محدد';
       m.set(key, (m.get(key) || 0) + 1);
     });
@@ -225,10 +237,20 @@ const RepairOperationalDashboard: React.FC = () => {
     [jobs, openStatusIds],
   );
 
-  const unassignedCount = jobs.filter((job) => !job.technicianId && !isDeliveredStatus(job.status)).length;
-  const waitingCustomerCount = jobs.filter((job) => ['estimate_ready', 'waiting_approval'].includes(job.status)).length;
-  const waitingPartsCount = jobs.filter((job) => job.status === 'waiting_parts').length;
-  const inWorkshopCount = jobs.filter((job) => ['diagnosing', 'repairing', 'testing'].includes(job.status)).length;
+  const unassignedCount = jobs.filter((job) => {
+    if (job.technicianId) return false;
+    const status = mapLegacyRepairStatus(job.status);
+    return !isDeliveredStatus(status) && !isUnrepairableStatus(status) && !isCancelledStatus(status);
+  }).length;
+  const waitingCustomerCount = jobs.filter((job) => {
+    const status = mapLegacyRepairStatus(job.status);
+    return status === 'estimate_ready' || status === 'waiting_approval';
+  }).length;
+  const waitingPartsCount = jobs.filter((job) => mapLegacyRepairStatus(job.status) === 'waiting_parts').length;
+  const inWorkshopCount = jobs.filter((job) => {
+    const status = mapLegacyRepairStatus(job.status);
+    return status === 'diagnosing' || status === 'repairing' || status === 'testing';
+  }).length;
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -281,6 +303,11 @@ const RepairOperationalDashboard: React.FC = () => {
       secondarySummary="إجراءات وروابط الصيانة"
       secondary={(
         <div className="flex flex-wrap gap-2">
+          {jobsTruncated ? (
+            <p className="w-full text-xs text-amber-700">
+              المؤشرات من أحدث {num(REPAIR_JOB_DASHBOARD_LIMIT)} طلباً — قد تكون الأرقام ناقصة للمستأجرين الكبار.
+            </p>
+          ) : null}
           {can('repair.jobs.create') && (
             <Button
               size="sm"

@@ -103,9 +103,13 @@ export function repairTreasuryEntryTypeChip(
     case 'EXPENSE':
       return { label: 'مصروف', type: 'danger' };
     case 'TRANSFER_OUT':
-      return { label: 'تحويل صادر', type: 'warning' };
+      return { label: 'تحويل بنكي داخلي', type: 'warning' };
     case 'TRANSFER_IN':
-      return { label: 'تحويل وارد', type: 'info' };
+      return { label: 'وارد بنكي داخلي', type: 'info' };
+    case 'SETTLEMENT_OUT':
+      return { label: 'تسوية للإدارة', type: 'warning' };
+    case 'SETTLEMENT_IN':
+      return { label: 'تسوية واردة', type: 'success' };
     case 'CLOSING':
       return { label: 'إقفال', type: 'muted' };
     default:

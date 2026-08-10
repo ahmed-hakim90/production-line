@@ -33,6 +33,7 @@ const TENANT_SCOPED_COLLECTIONS = [
   'repair_treasury_entries',
   'repair_treasury_sessions',
   'repair_treasury_month_closes',
+  'repair_treasury_settlements',
   'repair_financial_migration_reviews',
   'product_barcode_claims',
 ] as const;

@@ -126,7 +126,15 @@ const sortRepairJobsNewest = (rows: RepairJob[]): RepairJob[] =>
   );
 
 /** Cap operational repair job lists — newest first via Firestore orderBy. */
-const REPAIR_JOB_LIST_LIMIT = 400;
+export const REPAIR_JOB_LIST_LIMIT = 400;
+/** Higher cap for analytics dashboards (still bounded for client memory). */
+export const REPAIR_JOB_DASHBOARD_LIMIT = 2500;
+
+function resolveRepairJobListLimit(requested?: number): number {
+  const n = Number(requested);
+  if (!Number.isFinite(n) || n <= 0) return REPAIR_JOB_LIST_LIMIT;
+  return Math.min(Math.floor(n), REPAIR_JOB_DASHBOARD_LIMIT);
+}
 
 type NewRepairJobInput = Omit<
   RepairJob,
@@ -171,27 +179,29 @@ export const repairJobService = {
     };
   },
 
-  async listByBranch(branchId: string): Promise<RepairJob[]> {
+  async listByBranch(branchId: string, options?: { limit?: number }): Promise<RepairJob[]> {
     if (!isConfigured || !branchId) return [];
+    const lim = resolveRepairJobListLimit(options?.limit);
     const q = tenantQuery(
       db,
       REPAIR_JOBS_COLLECTION,
       where('branchId', '==', branchId),
       orderBy('createdAt', 'desc'),
-      limit(REPAIR_JOB_LIST_LIMIT),
+      limit(lim),
     );
     const snap = await getDocs(q);
     return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
   },
 
   /** Scoped multi-branch load via chunked `branchId in` (not N sequential getDocs per id beyond chunking). */
-  async listByBranches(branchIds: string[]): Promise<RepairJob[]> {
+  async listByBranches(branchIds: string[], options?: { limit?: number }): Promise<RepairJob[]> {
     if (!isConfigured) return [];
+    const lim = resolveRepairJobListLimit(options?.limit);
     const { chunkIdsForInQuery } = await import('../lib/repairBranchAccess');
     const chunks = chunkIdsForInQuery(branchIds);
     if (chunks.length === 0) return [];
     if (chunks.length === 1 && chunks[0].length === 1) {
-      return this.listByBranch(chunks[0][0]);
+      return this.listByBranch(chunks[0][0], { limit: lim });
     }
     const results = await Promise.all(
       chunks.map(async (chunk) => {
@@ -200,7 +210,7 @@ export const repairJobService = {
           REPAIR_JOBS_COLLECTION,
           where('branchId', 'in', chunk),
           orderBy('createdAt', 'desc'),
-          limit(REPAIR_JOB_LIST_LIMIT),
+          limit(lim),
         );
         const snap = await getDocs(q);
         return snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob));
@@ -210,29 +220,35 @@ export const repairJobService = {
     results.flat().forEach((job) => {
       if (job.id) byId.set(job.id, job);
     });
-    return sortRepairJobsNewest(Array.from(byId.values()));
+    return sortRepairJobsNewest(Array.from(byId.values())).slice(0, lim);
   },
 
-  async listAllBranches(): Promise<RepairJob[]> {
+  async listAllBranches(options?: { limit?: number }): Promise<RepairJob[]> {
     if (!isConfigured) return [];
+    const lim = resolveRepairJobListLimit(options?.limit);
     const q = tenantQuery(
       db,
       REPAIR_JOBS_COLLECTION,
       orderBy('createdAt', 'desc'),
-      limit(REPAIR_JOB_LIST_LIMIT),
+      limit(lim),
     );
     const snap = await getDocs(q);
     return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
   },
 
-  subscribeByBranch(branchId: string, cb: (rows: RepairJob[]) => void): Unsubscribe {
+  subscribeByBranch(
+    branchId: string,
+    cb: (rows: RepairJob[]) => void,
+    options?: { limit?: number },
+  ): Unsubscribe {
     if (!isConfigured || !branchId) return () => {};
+    const lim = resolveRepairJobListLimit(options?.limit);
     const q = tenantQuery(
       db,
       REPAIR_JOBS_COLLECTION,
       where('branchId', '==', branchId),
       orderBy('createdAt', 'desc'),
-      limit(REPAIR_JOB_LIST_LIMIT),
+      limit(lim),
     );
     return onSnapshot(
       q,
@@ -243,8 +259,13 @@ export const repairJobService = {
     );
   },
 
-  subscribeByBranches(branchIds: string[], cb: (rows: RepairJob[]) => void): Unsubscribe {
+  subscribeByBranches(
+    branchIds: string[],
+    cb: (rows: RepairJob[]) => void,
+    options?: { limit?: number },
+  ): Unsubscribe {
     if (!isConfigured) return () => {};
+    const lim = resolveRepairJobListLimit(options?.limit);
     const normalized = Array.from(new Set(branchIds.filter((id) => typeof id === 'string' && id.trim().length > 0)));
     if (normalized.length === 0) {
       cb([]);
@@ -258,7 +279,7 @@ export const repairJobService = {
         if (!row.id) return;
         unique.set(row.id, row);
       });
-      cb(sortRepairJobsNewest(Array.from(unique.values())).slice(0, REPAIR_JOB_LIST_LIMIT));
+      cb(sortRepairJobsNewest(Array.from(unique.values())).slice(0, lim));
     };
     const unsubs = normalized.map((branchId) => {
       const q = tenantQuery(
@@ -266,7 +287,7 @@ export const repairJobService = {
         REPAIR_JOBS_COLLECTION,
         where('branchId', '==', branchId),
         orderBy('createdAt', 'desc'),
-        limit(REPAIR_JOB_LIST_LIMIT),
+        limit(lim),
       );
       return onSnapshot(
         q,
@@ -284,13 +305,14 @@ export const repairJobService = {
     };
   },
 
-  subscribeAll(cb: (rows: RepairJob[]) => void): Unsubscribe {
+  subscribeAll(cb: (rows: RepairJob[]) => void, options?: { limit?: number }): Unsubscribe {
     if (!isConfigured) return () => {};
+    const lim = resolveRepairJobListLimit(options?.limit);
     const q = tenantQuery(
       db,
       REPAIR_JOBS_COLLECTION,
       orderBy('createdAt', 'desc'),
-      limit(REPAIR_JOB_LIST_LIMIT),
+      limit(lim),
     );
     return onSnapshot(
       q,

@@ -150,10 +150,12 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
       <div
         ref={ref}
         dir="rtl"
-        className="print-root arabic-export-root"
+        lang="ar"
+        className="print-root print-report arabic-export-root"
         style={{
-          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
-          width: paper.width,
+          fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
+          width: '100%',
+          maxWidth: paper.width,
           minHeight: paper.minHeight,
           margin: '0 auto',
           padding: isThermal ? '2.5mm 2mm' : dense ? '4mm 4.5mm' : '5mm 6mm',
@@ -162,39 +164,25 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           fontSize: isThermal ? '7pt' : dense ? '8pt' : '8.5pt',
           lineHeight: 1.3,
           boxSizing: 'border-box',
+          letterSpacing: 'normal',
         }}
       >
-        <div
-          style={{
-            height: '1mm',
-            background: palette.primary,
-            borderRadius: '0.5mm',
-            marginBottom: gap,
-            WebkitPrintColorAdjust: 'exact',
-            printColorAdjust: 'exact',
-          }}
-        />
-
         <header
           style={{
-            border: `1px solid ${palette.border}`,
-            borderRadius: '1.5mm',
-            overflow: 'hidden',
+            borderBottom: `2px solid ${palette.primary}`,
             marginBottom: gap,
+            paddingBottom: dense ? '2mm' : '2.5mm',
           }}
         >
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               justifyContent: 'space-between',
               gap: '2mm',
-              padding: pad,
-              borderBottom: `1.5px solid ${palette.primary}`,
-              background: '#fff',
             }}
           >
-            <div style={{ flex: 1.1, textAlign: 'right', minWidth: 0 }}>
+            <div style={{ flex: 1.1, textAlign: 'right', minWidth: 0, display: 'flex', gap: '2mm', alignItems: 'flex-start' }}>
               {ps.logoUrl ? (
                 <img
                   src={ps.logoUrl}
@@ -204,25 +192,39 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                     maxWidth: dense ? '24mm' : '32mm',
                     objectFit: 'contain',
                     display: 'block',
-                    marginBottom: '0.5mm',
+                    flexShrink: 0,
                   }}
                 />
               ) : null}
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: isThermal ? '9pt' : dense ? '11pt' : '12pt',
-                  fontWeight: 900,
-                  color: palette.primary,
-                  lineHeight: 1.15,
-                }}
-              >
-                {brandName}
-              </h1>
-              <p style={{ ...labelStyle, marginTop: '0.4mm' }}>
-                {branch?.name || 'مركز الصيانة'}
-                {branchContact ? ` · ${branchContact}` : ''}
-              </p>
+              <div style={{ minWidth: 0 }}>
+                <h1
+                  style={{
+                    margin: 0,
+                    fontSize: isThermal ? '9pt' : dense ? '11pt' : '12pt',
+                    fontWeight: 900,
+                    color: '#0f172a',
+                    lineHeight: 1.15,
+                    letterSpacing: 'normal',
+                  }}
+                >
+                  {brandName}
+                </h1>
+                <p
+                  style={{
+                    margin: '0.3mm 0 0',
+                    fontSize: '6.5pt',
+                    fontWeight: 700,
+                    color: palette.primary,
+                    letterSpacing: 'normal',
+                  }}
+                >
+                  Factory PRODUCTION SYSTEM
+                </p>
+                <p style={{ ...labelStyle, marginTop: '0.4mm' }}>
+                  {branch?.name || 'مركز الصيانة'}
+                  {branchContact ? ` · ${branchContact}` : ''}
+                </p>
+              </div>
             </div>
 
             <div style={{ flex: 1.2, textAlign: 'center', minWidth: 0 }}>
@@ -230,26 +232,27 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                 style={{
                   margin: 0,
                   display: 'inline-block',
-                  padding: '0.3mm 1.5mm',
-                  borderRadius: '999px',
-                  border: `1px solid ${isCenterCopy ? palette.primary : palette.border}`,
-                  background: isCenterCopy ? palette.primary : palette.tableRowAltBg,
-                  fontSize: isThermal ? '5pt' : '6pt',
+                  padding: '0.5mm 2mm',
+                  borderRadius: '1.2mm',
+                  background: isCenterCopy ? palette.primary : '#EEF0FA',
+                  fontSize: isThermal ? '5.5pt' : '6.5pt',
                   fontWeight: 800,
-                  color: isCenterCopy ? '#fff' : palette.mutedText,
+                  color: isCenterCopy ? '#fff' : palette.primary,
                   WebkitPrintColorAdjust: 'exact',
                   printColorAdjust: 'exact',
+                  letterSpacing: 'normal',
                 }}
               >
                 {copyLabel}
               </p>
               <h2
                 style={{
-                  margin: '0.6mm 0 0',
+                  margin: '0.8mm 0 0',
                   fontSize: isThermal ? '9pt' : dense ? '10.5pt' : '11.5pt',
                   fontWeight: 900,
                   color: palette.text,
                   lineHeight: 1.15,
+                  letterSpacing: 'normal',
                 }}
               >
                 {documentTitle}

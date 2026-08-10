@@ -17,6 +17,7 @@ import {
 import type { FirestoreRole } from '../../../types';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { useTranslation } from 'react-i18next';
 
 const COLOR_OPTIONS = [
@@ -172,6 +173,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div
       className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-start justify-center p-4 sm:p-6 overflow-y-auto"
       onClick={handleClose}
@@ -365,5 +367,6 @@ export const GlobalSystemRoleModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

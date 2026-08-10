@@ -43,6 +43,7 @@ import {
   averageScheduleAdherence,
   isPlanBehindSchedule,
   qualityRatesFromTotals,
+  resolvePlanReports,
   volumeWeightedPlanAchievement,
   yieldEfficiencyPercent,
 } from '../lib/decisionMetrics';
@@ -166,15 +167,14 @@ export const FactoryManagerDashboard: React.FC = () => {
     }
     return getPresetRange(preset);
   }, [preset, customStart, customEnd]);
+  /** شهر تقويمي (من 1 إلى أي يوم داخل نفس الشهر) — فلتر «هذا الشهر» لا ينتهي بآخر يوم */
   const fullMonthKey = useMemo(() => {
     const { start, end } = dateRange;
     if (!start || !end || start.length < 10 || end.length < 10) return null;
     const monthKey = start.slice(0, 7);
     if (end.slice(0, 7) !== monthKey) return null;
     if (start.slice(8, 10) !== '01') return null;
-    const [y, m] = monthKey.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    return end === `${monthKey}-${String(lastDay).padStart(2, '0')}` ? monthKey : null;
+    return monthKey;
   }, [dateRange]);
   const yesterdayOperationalDate = useMemo(() => {
     const d = new Date(clockNow);
@@ -446,12 +446,13 @@ export const FactoryManagerDashboard: React.FC = () => {
       : liveCostComputation.totalIndirectCost;
 
     const totalCost = totalLaborCost + totalIndirectCost;
+    const avgLaborCostPerUnit = totalProduction > 0 ? totalLaborCost / totalProduction : 0;
     const avgCostPerUnit = totalProduction > 0 ? totalCost / totalProduction : 0;
 
     const standardConfigs = lineProductConfigs;
     let standardTotalCost = 0;
     let standardTotalQty = 0;
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       const config = standardConfigs.find((c) => c.productId === r.productId && c.lineId === r.lineId);
       const stdMin = effectiveStandardAssemblyMinutes(
         r.productId,
@@ -466,15 +467,14 @@ export const FactoryManagerDashboard: React.FC = () => {
     });
     const standardAvgCost = standardTotalQty > 0 ? standardTotalCost / standardTotalQty : 0;
     const costVariance = standardAvgCost > 0
-      ? Number((((avgCostPerUnit - standardAvgCost) / standardAvgCost) * 100).toFixed(1))
+      ? Number((((avgLaborCostPerUnit - standardAvgCost) / standardAvgCost) * 100).toFixed(1))
       : 0;
 
     const activePlans = productionPlans.filter(
       (p) => p.status === 'in_progress' || p.status === 'completed' || p.status === 'planned',
     );
     const planActuals = activePlans.map((plan) => {
-      const key = `${plan.lineId}_${plan.productId}`;
-      const pReports = planReports[key] || [];
+      const pReports = resolvePlanReports(plan, planReports);
       const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
       return {
         plannedQuantity: plan.plannedQuantity,
@@ -517,8 +517,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
     const delayedPlans = productionPlans.filter((p) => {
       if (p.status !== 'in_progress' && p.status !== 'planned') return false;
-      const key = `${p.lineId}_${p.productId}`;
-      const pReports = planReports[key] || [];
+      const pReports = resolvePlanReports(p, planReports);
       const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
       return isPlanBehindSchedule(
         {
@@ -676,10 +675,6 @@ export const FactoryManagerDashboard: React.FC = () => {
     return result;
   }, [kpis, productionPlans, planReports, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, workOrderRisk.atRiskCount]);
 
-  if (loading && reports.length === 0) {
-    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
-  }
-
   const hero = useMemo(
     () => [
       {
@@ -719,6 +714,10 @@ export const FactoryManagerDashboard: React.FC = () => {
     ],
     [kpis, alertCfg.wasteThreshold, qualityKpis.pendingQuality, workOrderRisk.atRiskCount],
   );
+
+  if (loading && reports.length === 0) {
+    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
+  }
 
   return (
     <DomainHomeShell

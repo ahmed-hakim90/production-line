@@ -8,6 +8,7 @@ import { formatNumber, getTodayDateString } from '../../../utils/calculations';
 import { workOrderService } from '../../../modules/production/services/workOrderService';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { useTranslation } from 'react-i18next';
 import {
   WORK_ORDER_CREATE_PATHS,
@@ -349,6 +350,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const showEditChrome = openForEdit || isEditMode;
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onClick={handleClose}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-lg border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
@@ -618,6 +620,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

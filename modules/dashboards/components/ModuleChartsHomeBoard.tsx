@@ -244,7 +244,7 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
         <div className="ops-dash-kpi-card">
           <p className="ops-dash-kpi-card__label">كفاءة الإنتاج</p>
           <p className="ops-dash-kpi-card__value">{hero.efficiency}%</p>
-          <p className="ops-dash-kpi-card__meta">هالك {hero.wasteRatio}%</p>
+          <p className="ops-dash-kpi-card__meta">هالك الفترة {hero.wasteRatio}%</p>
         </div>
         <div className="ops-dash-kpi-card">
           <p className="ops-dash-kpi-card__label">تحقيق الخطة</p>
@@ -403,6 +403,12 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
                 {data.qualitySource === 'production' ? (
                   <p className="ops-module-charts__hint">
                     من هالك تقارير الإنتاج (لا ملخص جودة على أوامر العمل)
+                  </p>
+                ) : null}
+                {data.qualitySource === 'work_orders' && data.qualityRates ? (
+                  <p className="ops-module-charts__hint">
+                    فشل {data.qualityRates.failRate}% · إعادة {data.qualityRates.reworkRate}% · FPY{' '}
+                    {data.qualityRates.avgFpy}%
                   </p>
                 ) : null}
                 <ModuleBarChart

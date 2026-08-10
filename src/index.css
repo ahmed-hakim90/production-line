@@ -5,12 +5,16 @@
 @tailwind utilities;
 
 @layer base {
-  /* Overlays portaled here sit above in-app fixed layers (e.g. Reports z-50 / drawers z-[62]). */
+  /* Overlays portaled here sit above in-app fixed layers (topbar z-40, drawers, page chrome). */
   #erp-modal-root {
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 10060;
+  }
+
+  #erp-modal-root > * {
+    pointer-events: auto;
   }
 
   /*
@@ -88,9 +92,9 @@
     --color-card-bg: var(--color-card);
     --color-border-ui: var(--color-border);
     --color-text-1: var(--color-text);
-    --color-text-2: #64748b;
-    --color-text-3: #94a3b8;
-    --color-info: #2563eb;
+    --color-text-2: var(--color-text-muted);
+    --color-text-3: var(--color-text-muted);
+    --color-info: var(--color-primary-hex, #2563eb);
 
     /* Chart palette (global dashboards) */
     --chart-1: #1392ec;
@@ -182,6 +186,28 @@
   letter-spacing: normal !important;
   word-spacing: normal !important;
 }
+
+/* Theme-aware surface helpers — prefer these over hardcoded slate / hex in shared UI */
+@layer utilities {
+  .erp-surface {
+    background-color: var(--color-card);
+    border-color: var(--color-border);
+    color: var(--color-text);
+  }
+  .erp-muted {
+    color: var(--color-text-muted);
+  }
+  .erp-border {
+    border-color: var(--color-border);
+  }
+  .erp-page-bg {
+    background-color: var(--color-bg);
+  }
+  .erp-hover-surface:hover {
+    background-color: var(--color-surface-hover);
+  }
+}
+
 .arabic-export-root th,
 .arabic-export-root thead,
 .arabic-export-root .uppercase {
@@ -193,12 +219,29 @@
      react-to-print already renders only target content in its iframe. */
 
   @page {
-    margin: 12mm 15mm;
+    margin: 10mm;
     size: A4;
   }
 
-  .print-report {
+  html, body {
     width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Fill printable area — fixed preview widths (640px / 148mm / 210mm) must not stay centered. */
+  .print-root,
+  .print-report,
+  .arabic-export-root {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    margin-inline: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-report {
     padding: 0 !important;
     font-size: 12px !important;
     border: none !important;

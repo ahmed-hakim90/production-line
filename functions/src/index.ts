@@ -59,6 +59,7 @@ import {
 } from './repairFinancialOps.js';
 import { mutateRepairPaymentHandler } from './repairPaymentOps.js';
 import { mutateRepairTreasuryHandler } from './repairTreasuryOps.js';
+import { mutateSparePartsPurchaseInvoiceHandler } from './sparePartsPurchaseInvoiceOps.js';
 import { repairTechnicianOpsHandler } from './repairTechnicianOps.js';
 import { mutateAccountingHandler } from './accountingOps.js';
 import { mutateRepairServiceCatalogHandler } from './repairServiceCatalogOps.js';
@@ -2387,6 +2388,11 @@ export const mutateRepairPayment = onCall(
 export const mutateRepairTreasury = onCall(
   { region: 'us-central1', memory: '512MiB' },
   mutateRepairTreasuryHandler,
+);
+
+export const mutateSparePartsPurchaseInvoice = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  mutateSparePartsPurchaseInvoiceHandler,
 );
 
 export const repairTechnicianOps = onCall(

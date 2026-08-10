@@ -28,6 +28,7 @@ import { usePageBackRegistration } from './PageBackContext';
 import { tenantHomePath } from '@/lib/tenantPaths';
 import { useAppDirection } from './useAppDirection';
 import { usePwaInstall } from '@/hooks/usePwaInstall';
+import { useAppContentRefresh } from './AppContentRefresh';
 
 export interface TopbarProps {
   onMenuToggle: () => void;
@@ -67,7 +68,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
   const userEmail = useAppStore((s) => s.userEmail);
 
   const { isInstalled, canPromptInstall, promptInstall } = usePwaInstall();
-  const [refreshing, setRefreshing] = useState(false);
+  const { contentRefreshing, refreshPageContent } = useAppContentRefresh();
 
   const { isActiveItem } = useSidebarActiveRoute();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
@@ -95,9 +96,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
   }, [promptInstall]);
 
   const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    window.location.reload();
-  }, []);
+    void refreshPageContent();
+  }, [refreshPageContent]);
 
   const handleToggleLanguage = useCallback(async () => {
     const current = (i18n.language || 'ar').startsWith('en') ? 'en' : 'ar';
@@ -269,14 +269,16 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             <span className="font-mono">{i18n.language?.startsWith('en') ? 'EN' : 'AR'}</span>
           </button> */}
 
-          {/* Refresh */}
+          {/* Refresh — soft page reload (content skeleton only, no full splash) */}
           <button
+            type="button"
             onClick={handleRefresh}
-            disabled={refreshing}
+            disabled={contentRefreshing}
             className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors disabled:opacity-50"
             title={t('topbar.refresh')}
+            aria-label={t('topbar.refresh')}
           >
-            <RefreshCw size={18} className={refreshing ? 'animate-spin text-primary' : ''} />
+            <RefreshCw size={18} className={contentRefreshing ? 'animate-spin text-primary' : ''} />
           </button>
 
           {/* Background tasks */}

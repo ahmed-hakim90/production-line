@@ -18,6 +18,7 @@ import {
   REPAIR_TREASURY_ENTRIES_COLLECTION,
   REPAIR_TREASURY_MONTH_CLOSES_COLLECTION,
   REPAIR_TREASURY_SESSIONS_COLLECTION,
+  REPAIR_TREASURY_SETTLEMENTS_COLLECTION,
 } from '../collections';
 import type {
   RepairTreasuryBranchDailyBreakdown,
@@ -30,6 +31,7 @@ import type {
   RepairTreasurySession,
   RepairTreasurySessionDetailsRow,
   RepairTreasurySessionStatusFilter,
+  RepairTreasurySettlement,
 } from '../types';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { resolveRepairSettings } from '../config/repairSettings';
@@ -65,8 +67,16 @@ const emptyMonthlyReport = (
 const computeSessionBalance = (entries: RepairTreasuryEntry[]): number => entries.reduce((sum, entry) => {
   const amount = Number(entry.amount || 0);
   if (entry.entryType === 'OPENING') return sum + amount;
-  if (entry.entryType === 'INCOME' || entry.entryType === 'TRANSFER_IN') return sum + amount;
-  if (entry.entryType === 'EXPENSE' || entry.entryType === 'TRANSFER_OUT') return sum - amount;
+  if (
+    entry.entryType === 'INCOME'
+    || entry.entryType === 'TRANSFER_IN'
+    || entry.entryType === 'SETTLEMENT_IN'
+  ) return sum + amount;
+  if (
+    entry.entryType === 'EXPENSE'
+    || entry.entryType === 'TRANSFER_OUT'
+    || entry.entryType === 'SETTLEMENT_OUT'
+  ) return sum - amount;
   return sum;
 }, 0);
 const normalizeTreasuryError = (error: any, fallbackMessage: string): Error => (
@@ -154,8 +164,8 @@ export const repairTreasuryService = {
             if (entry.entryType === 'OPENING') acc.opening += amount;
             if (entry.entryType === 'INCOME') acc.income += amount;
             if (entry.entryType === 'EXPENSE') acc.expense += amount;
-            if (entry.entryType === 'TRANSFER_IN') acc.transferIn += amount;
-            if (entry.entryType === 'TRANSFER_OUT') acc.transferOut += amount;
+            if (entry.entryType === 'TRANSFER_IN' || entry.entryType === 'SETTLEMENT_IN') acc.transferIn += amount;
+            if (entry.entryType === 'TRANSFER_OUT' || entry.entryType === 'SETTLEMENT_OUT') acc.transferOut += amount;
             return acc;
           },
           { opening: 0, income: 0, expense: 0, transferIn: 0, transferOut: 0 },
@@ -661,7 +671,7 @@ export const repairTreasuryService = {
 
   async addEntry(input: {
     branchId: string;
-    entryType: Exclude<RepairTreasuryEntryType, 'OPENING' | 'CLOSING'>;
+    entryType: 'INCOME' | 'EXPENSE' | 'TRANSFER_OUT' | 'TRANSFER_IN';
     amount: number;
     note?: string;
     referenceId?: string;
@@ -706,6 +716,91 @@ export const repairTreasuryService = {
       return String(result.entryId || requestId);
     } catch (error: any) {
       throw normalizeTreasuryError(error, 'تعذر تسجيل حركة الخزينة.');
+    }
+  },
+
+  async listSettlements(opts?: {
+    status?: RepairTreasurySettlement['status'] | 'all';
+    branchId?: string;
+    limitCount?: number;
+  }): Promise<RepairTreasurySettlement[]> {
+    if (!isConfigured) return [];
+    const limitCount = Math.min(200, Math.max(1, Number(opts?.limitCount || 80)));
+    const status = opts?.status && opts.status !== 'all' ? opts.status : '';
+    const branchId = String(opts?.branchId || '').trim();
+    try {
+      const constraints = [];
+      if (status) constraints.push(where('status', '==', status));
+      if (branchId) constraints.push(where('fromBranchId', '==', branchId));
+      constraints.push(orderBy('submittedAt', 'desc'));
+      constraints.push(limit(limitCount));
+      const snap = await getDocs(tenantQuery(db, REPAIR_TREASURY_SETTLEMENTS_COLLECTION, ...constraints));
+      return snap.docs.map((row) => ({ id: row.id, ...row.data() } as RepairTreasurySettlement));
+    } catch (error: any) {
+      // Fallback without composite index: tenant-wide recent then filter client-side.
+      try {
+        const snap = await getDocs(tenantQuery(
+          db,
+          REPAIR_TREASURY_SETTLEMENTS_COLLECTION,
+          orderBy('createdAt', 'desc'),
+          limit(limitCount),
+        ));
+        return snap.docs
+          .map((row) => ({ id: row.id, ...row.data() } as RepairTreasurySettlement))
+          .filter((row) => (!status || row.status === status) && (!branchId || row.fromBranchId === branchId));
+      } catch {
+        throw normalizeTreasuryError(error, 'تعذر تحميل طلبات التسوية.');
+      }
+    }
+  },
+
+  async submitSettlement(input: {
+    branchId: string;
+    countedAmount: number;
+    expectedAmount: number;
+    note?: string;
+    varianceReason?: string;
+  }): Promise<string> {
+    if (!isConfigured) throw new Error('Firebase غير مُعد.');
+    const requestId = `settle_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    try {
+      const result = await mutateRepairTreasuryCallable({
+        operation: 'submit_settlement',
+        requestId,
+        branchId: input.branchId,
+        countedAmount: Math.abs(Number(input.countedAmount || 0)),
+        expectedAmount: Math.abs(Number(input.expectedAmount || 0)),
+        note: String(input.note || '').trim() || 'تسوية نقدية للإدارة',
+        varianceReason: String(input.varianceReason || '').trim() || undefined,
+      });
+      return String(result.settlementId || `${getCurrentTenantId()}__${requestId}`);
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر إرسال طلب التسوية.');
+    }
+  },
+
+  async approveSettlement(settlementId: string): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await mutateRepairTreasuryCallable({
+        operation: 'approve_settlement',
+        settlementId,
+      });
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر اعتماد التسوية.');
+    }
+  },
+
+  async rejectSettlement(settlementId: string, reason: string): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await mutateRepairTreasuryCallable({
+        operation: 'reject_settlement',
+        settlementId,
+        reason,
+      });
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر رفض التسوية.');
     }
   },
 

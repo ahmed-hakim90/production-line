@@ -342,6 +342,7 @@
     "appName": "Factory ERP",
     "tagline": "نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية",
     "loading": "جاري تحميل النظام...",
+    "resuming": "جاري استعادة الجلسة...",
     "footer": "Factory Production System",
     "features": {
       "production": "إدارة خطوط وخطط الإنتاج",

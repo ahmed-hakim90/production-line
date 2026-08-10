@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { CheckCircle2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { PageHeader } from '@/components/PageHeader';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { RepairOpsPageShell } from '@/modules/repair/components/RepairOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge } from '@/components/ui/badge';
@@ -207,6 +207,7 @@ export const RepairJobDetail: React.FC = () => {
   const [collectAmount, setCollectAmount] = useState('');
   const [collectMethod, setCollectMethod] = useState<RepairPaymentMethod>('cash');
   const [collectAndDeliver, setCollectAndDeliver] = useState(false);
+  const [collectReceivable, setCollectReceivable] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
   const [opsDialog, setOpsDialog] = useState<{
     mode: 'unrepairable' | 'replacement';
@@ -1007,7 +1008,7 @@ export const RepairJobDetail: React.FC = () => {
     }
   };
 
-  const openCollectDialog = (opts?: { deliverAfter?: boolean }) => {
+  const openCollectDialog = (opts?: { deliverAfter?: boolean; receivable?: boolean }) => {
     if (!paymentAuthorization?.id) {
       toast.error('جهّز إذن الدفع أولًا.');
       return;
@@ -1023,7 +1024,8 @@ export const RepairJobDetail: React.FC = () => {
     const due = Number(paymentAuthorization.balanceDue || 0);
     setCollectAmount(String(due > 0 ? due : 0));
     setCollectMethod('cash');
-    setCollectAndDeliver(Boolean(opts?.deliverAfter));
+    setCollectAndDeliver(Boolean(opts?.deliverAfter) && !opts?.receivable);
+    setCollectReceivable(Boolean(opts?.receivable));
     setCollectDialogOpen(true);
   };
 
@@ -1089,14 +1091,21 @@ export const RepairJobDetail: React.FC = () => {
     setPaymentBusy(true);
     try {
       const requestId = globalThis.crypto?.randomUUID?.() || `pay-${Date.now()}`;
-      await repairPaymentService.collect({
+      const payload = {
         authorizationId: paymentAuthorization.id,
         amount,
         method: collectMethod,
         requestId,
-      });
-      toast.success('تم تسجيل الدفعة وترحيلها للخزينة والحسابات.');
+      };
+      if (collectReceivable) {
+        await repairPaymentService.collectReceivable(payload);
+        toast.success('تم تحصيل الذمة وخصمها من ذمم العملاء.');
+      } else {
+        await repairPaymentService.collect(payload);
+        toast.success('تم تسجيل الدفعة وترحيلها للخزينة والحسابات.');
+      }
       setCollectDialogOpen(false);
+      setCollectReceivable(false);
       const authId = paymentAuthorization.id;
       await refreshJobAndPayment(job.id);
       if (collectAndDeliver) {
@@ -1472,40 +1481,46 @@ export const RepairJobDetail: React.FC = () => {
       }
     : job;
 
+  const jobSubtitle = isDeliveredStatus(job.status)
+    ? 'الطلب مقفل بعد التسليم — اطبع إذن التسليم من صندوق الإقفال أو أعد فتح الإصلاح من المزيد.'
+    : 'استقبال: منتجات · موافقة عميل · طباعة. الإسناد عبر QR — التشخيص من الورشة.';
+
+  const repairJobShellActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {shellBackAction}
+      <StatusBadge status={job.status} size="md" />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="font-semibold"
+        iconName="print"
+        tone="print"
+        solid={false}
+        title="طباعة إيصال بنسختين (مركز + عميل) والكارت الداخلي على A5"
+        onClick={() => handlePrintIntakeBundle()}
+      >
+        <span className="hidden sm:inline">طباعة A5 — نسختين + كارت</span>
+        <span className="sm:hidden">طباعة A5</span>
+      </Button>
+      {headerPrimaryAction ? (
+        <Button type="button" iconName={headerPrimaryAction.icon} onClick={headerPrimaryAction.onClick}>
+          {headerPrimaryAction.label}
+        </Button>
+      ) : null}
+      <OpsMoreActionsMenu items={headerMoreActions} />
+    </div>
+  );
+
   return (
-    <RepairOpsPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
+    <RepairOpsPageShell
+      className="mx-auto max-w-6xl erp-ds-clean"
+      dir={dir}
+      eyebrow={`طلب صيانة #${job.receiptNo}`}
+      rangeLabel={jobSubtitle}
+      actions={repairJobShellActions}
+    >
       <DetailPageStickyHeader>
-        <PageHeader
-          title={`طلب صيانة #${job.receiptNo}`}
-          subtitle={
-            isDeliveredStatus(job.status)
-              ? 'الطلب مقفل بعد التسليم — اطبع إذن التسليم من صندوق الإقفال أو أعد فتح الإصلاح من المزيد.'
-              : 'استقبال: منتجات · موافقة عميل · طباعة. الإسناد عبر QR — التشخيص من الورشة.'
-          }
-          icon="fact_check"
-          backAction={false}
-          actions={(
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={job.status} size="md" />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-9 gap-1.5 font-semibold"
-                iconName="print"
-                tone="print"
-                solid={false}
-                title="طباعة إيصال بنسختين (مركز + عميل) والكارت الداخلي على A5"
-                onClick={() => handlePrintIntakeBundle()}
-              >
-                <span className="hidden sm:inline">طباعة A5 — نسختين + كارت</span>
-                <span className="sm:hidden">طباعة A5</span>
-              </Button>
-            </div>
-          )}
-          primaryAction={headerPrimaryAction}
-          moreActions={headerMoreActions}
-        />
 
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {[
@@ -1572,10 +1587,14 @@ export const RepairJobDetail: React.FC = () => {
                       {paymentClose.step === 'blocked' ? 'موقوف' : paymentClose.stepLabel}
                     </span>
                   ) : (
-                    <span className="inline-flex items-center rounded-md border border-emerald-300/80 bg-emerald-100/90 px-2 py-0.5 text-[11px] font-medium text-emerald-900">
+                    <span className={
+                      paymentClose.canCollectReceivableAction
+                        ? 'inline-flex items-center rounded-md border border-amber-300/80 bg-amber-100/90 px-2 py-0.5 text-[11px] font-medium text-amber-900'
+                        : 'inline-flex items-center rounded-md border border-emerald-300/80 bg-emerald-100/90 px-2 py-0.5 text-[11px] font-medium text-emerald-900'
+                    }>
                       {paymentClose.isWarrantySettlement
                         ? 'ضمان — بدون تحصيل'
-                        : (paymentClose.balanceDue <= 0 ? 'مسدد بالكامل' : 'مُسلَّم')}
+                        : (paymentClose.balanceDue <= 0 ? 'مسدد بالكامل' : 'مُسلَّم برصيد')}
                     </span>
                   )}
                 </div>
@@ -1585,6 +1604,11 @@ export const RepairJobDetail: React.FC = () => {
                     <span className="font-mono font-semibold tracking-wide" dir="ltr">
                       {job.deliveryAuthorizationNo || `DEL-${job.receiptNo}`}
                     </span>
+                    {paymentClose.canCollectReceivableAction ? (
+                      <span className="mt-1 block text-amber-800">
+                        ذمة مفتوحة {paymentClose.balanceDue.toLocaleString('ar-EG')} ج.م — يمكن التحصيل الآن.
+                      </span>
+                    ) : null}
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground">
@@ -1596,19 +1620,32 @@ export const RepairJobDetail: React.FC = () => {
                   </p>
                 )}
               </div>
-              {paymentClose.canPrintAction ? (
+              {paymentClose.canPrintAction || paymentClose.canCollectReceivableAction ? (
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button type="button" onClick={() => handlePrintDeliveryAuthorization()}>
-                    طباعة إذن التسليم
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={exportingDeliveryPdf}
-                    onClick={() => void exportDeliveryAuthorization()}
-                  >
-                    {exportingDeliveryPdf ? 'جاري التصدير…' : 'تصدير PDF'}
-                  </Button>
+                  {paymentClose.canCollectReceivableAction ? (
+                    <Button
+                      type="button"
+                      disabled={paymentBusy}
+                      onClick={() => openCollectDialog({ receivable: true })}
+                    >
+                      تحصيل ذمة
+                    </Button>
+                  ) : null}
+                  {paymentClose.canPrintAction ? (
+                    <>
+                      <Button type="button" variant={paymentClose.canCollectReceivableAction ? 'outline' : 'default'} onClick={() => handlePrintDeliveryAuthorization()}>
+                        طباعة إذن التسليم
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={exportingDeliveryPdf}
+                        onClick={() => void exportDeliveryAuthorization()}
+                      >
+                        {exportingDeliveryPdf ? 'جاري التصدير…' : 'تصدير PDF'}
+                      </Button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -2029,18 +2066,27 @@ export const RepairJobDetail: React.FC = () => {
           if (!open && !paymentBusy) {
             setCollectDialogOpen(false);
             setCollectAndDeliver(false);
+            setCollectReceivable(false);
           }
         }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{collectAndDeliver ? 'تحصيل كامل وتسليم' : 'تسجيل دفعة'}</DialogTitle>
+            <DialogTitle>
+              {collectReceivable
+                ? 'تحصيل ذمة بعد التسليم'
+                : collectAndDeliver
+                  ? 'تحصيل كامل وتسليم'
+                  : 'تسجيل دفعة'}
+            </DialogTitle>
             <DialogDescription>
               الرصيد الحالي {Number(paymentAuthorization?.balanceDue || 0).toLocaleString('ar-EG', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
-              })} ج.م. ستُرحل الدفعة للخزينة والقيد المحاسبي
-              {collectAndDeliver ? ' ثم يُسلَّم الطلب ويُطبع إذن التسليم.' : '.'}
+              })} ج.م.
+              {collectReceivable
+                ? ' يُخصم من ذمم العملاء ويُرحَّل للخزينة.'
+                : ` ستُرحل الدفعة للخزينة والقيد المحاسبي${collectAndDeliver ? ' ثم يُسلَّم الطلب ويُطبع إذن التسليم.' : '.'}`}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -2081,6 +2127,7 @@ export const RepairJobDetail: React.FC = () => {
               onClick={() => {
                 setCollectDialogOpen(false);
                 setCollectAndDeliver(false);
+                setCollectReceivable(false);
               }}
             >
               إلغاء
@@ -2089,9 +2136,11 @@ export const RepairJobDetail: React.FC = () => {
               <CheckCircle2 className="ms-1 h-4 w-4" />
               {paymentBusy
                 ? 'جاري التنفيذ…'
-                : collectAndDeliver
-                  ? 'تأكيد التحصيل والتسليم'
-                  : 'تأكيد التحصيل'}
+                : collectReceivable
+                  ? 'تأكيد تحصيل الذمة'
+                  : collectAndDeliver
+                    ? 'تأكيد التحصيل والتسليم'
+                    : 'تأكيد التحصيل'}
             </Button>
           </DialogFooter>
         </DialogContent>

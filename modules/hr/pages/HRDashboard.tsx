@@ -21,6 +21,7 @@ import { getPendingApprovals } from '../approval';
 import { performanceService } from '../services/performanceService';
 import { formatNumber, formatCurrency } from '@/utils/calculations';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { MODAL_KEYS } from '@/components/modal-manager/modalKeys';
 import type { FirestoreEmployee } from '@/types';
 import type {
@@ -296,7 +297,12 @@ export const HRDashboard: React.FC = () => {
             allowanceTypes: allTypes.filter((a) => a.isActive),
             payrollStatus: pm?.status ?? null,
             pendingApprovals: pending.length,
-            incompleteAttendance: att.filter((log) => !log.checkIn || !log.checkOut).length,
+            incompleteAttendance: att.filter((log) => {
+              if (!log.checkIn) return true;
+              if (log.checkOut) return false;
+              // Shift still open today is not incomplete yet.
+              return String(log.date || '') !== getToday();
+            }).length,
             top5Late: Array.from(lateMap.values())
               .sort((a, b) => b.totalLateMinutes - a.totalLateMinutes)
               .slice(0, 5),
@@ -832,20 +838,43 @@ export const HRDashboard: React.FC = () => {
   const attKpis = useMemo(() => {
     const today = getToday();
     const todayLogs = attendance.filter((a) => a.date === today);
-    const present = todayLogs.filter((a) => a.status !== 'absent').length;
-    const absent = todayLogs.filter((a) => a.status === 'absent').length;
-    const late = todayLogs.filter((a) => a.lateMinutes > 0).length;
+    const present = todayLogs.filter((a) => a.status === 'present' || a.status === 'overtime').length;
+    const loggedAbsent = todayLogs.filter((a) => a.status === 'absent').length;
+    const late = todayLogs.filter(
+      (a) =>
+        a.lateMinutes > 0
+        || a.status === 'late'
+        || a.status === 'present_late'
+        || a.status === 'present_late_early',
+    ).length;
+    const recordedIds = new Set(todayLogs.map((a) => String(a.employeeId || '').trim()).filter(Boolean));
+    const activeEmployees = employees.filter((e) => e.isActive !== false);
+    const unrecorded = activeEmployees.filter((e) => !recordedIds.has(String(e.id || '').trim())).length;
+    // Ops KPI: logged absences + active employees with no attendance row today.
+    const todayAbsent = loggedAbsent + unrecorded;
 
     const monthLogs = attendance;
     const totalLateMins = monthLogs.reduce((s, a) => s + (a.lateMinutes || 0), 0);
-    const workingLogs = monthLogs.filter((a) => a.status !== 'absent');
+    const workingLogs = monthLogs.filter(
+      (a) => a.status === 'present' || a.status === 'overtime' || a.status === 'late'
+        || a.status === 'present_late' || a.status === 'present_late_early' || a.status === 'partial',
+    );
     const avgHours = workingLogs.length > 0
       ? workingLogs.reduce((s, a) => s + ((a.workedMinutes || 0) / 60), 0) / workingLogs.length
       : 0;
     const totalAbsences = monthLogs.filter((a) => a.status === 'absent').length;
 
-    return { todayPresent: present, todayAbsent: absent, todayLate: late, totalLateMins, avgHours, totalAbsences };
-  }, [attendance]);
+    return {
+      todayPresent: present,
+      todayAbsent,
+      todayLoggedAbsent: loggedAbsent,
+      todayUnrecorded: unrecorded,
+      todayLate: late,
+      totalLateMins,
+      avgHours,
+      totalAbsences,
+    };
+  }, [attendance, employees]);
 
   const leaveKpis = useMemo(() => {
     const month = getMonthKey();
@@ -862,7 +891,7 @@ export const HRDashboard: React.FC = () => {
   }, [leaves]);
 
   const loanKpis = useMemo(() => {
-    const active = loans.filter((l) => l.status === 'active' || l.finalStatus === 'approved');
+    const active = loans.filter((l) => l.status === 'active');
     const pending = loans.filter((l) => l.finalStatus === 'pending').length;
     const totalAmount = active.reduce((s, l) => s + (l.loanAmount || 0), 0);
     const notDisbursed = active.filter((l) => !l.disbursed).length;
@@ -963,6 +992,9 @@ export const HRDashboard: React.FC = () => {
         key: 'absent',
         label: 'غياب اليوم',
         value: formatNumber(attKpis.todayAbsent),
+        meta: attKpis.todayUnrecorded > 0
+          ? `${formatNumber(attKpis.todayLoggedAbsent)} مسجّل · ${formatNumber(attKpis.todayUnrecorded)} بدون سجل`
+          : undefined,
         toneClassName: attKpis.todayAbsent > 0 ? 'ops-dash-kpi-card--warn' : undefined,
       },
       {
@@ -1083,6 +1115,7 @@ export const HRDashboard: React.FC = () => {
     >
       {/* â”€â”€ Quick Action Dialogs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {qaOpen && (
+        <ManagedModalPortal>
         <div className="erp-modal-overlay" onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }}>
           <div className="erp-modal-panel relative w-[96vw] max-w-3xl max-h-[92dvh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
 
@@ -1745,6 +1778,7 @@ export const HRDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ

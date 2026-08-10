@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { PageHeader } from '@/components/PageHeader';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { Button } from '@/components/UI';
 import { SelectableTable, type TableColumn } from '@/components/SelectableTable';
 import { useAppStore } from '@/store/useAppStore';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { MODAL_KEYS } from '@/components/modal-manager/modalKeys';
 import { parseAttendanceCSVAuto } from '@/src/services/attendanceProcessor';
 import type { RawPunchRecord, AttendanceCSVFormat } from '@/src/services/attendanceProcessor';
@@ -610,10 +611,8 @@ export const AttendanceSyncDashboard: React.FC = () => {
             </span>
             {tab === 'new_import' ? 'سجل الاستيراد' : 'استيراد جديد'}
           </Button>
-          <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
+          <OpsMoreActionsMenu
+            items={[
                 {
                   label: 'تحديث سجل الاستيراد',
                   icon: 'refresh',
@@ -973,6 +972,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
       )}
 
       {confirmDeleteBatchId && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/35 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-4 w-full max-w-md space-y-3">
             <div className="text-sm font-bold">تأكيد حذف الدفعة</div>
@@ -985,6 +985,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

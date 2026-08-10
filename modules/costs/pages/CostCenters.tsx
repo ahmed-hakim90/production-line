@@ -3,6 +3,7 @@ import { Download, Eye, Pencil, Trash2 } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Badge, Button } from '../../../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataTable, type Column } from '../../../src/components/erp/DataTable';
 import type { RowActionMenuItem } from '../../../src/components/erp/RowActionsMenu';
@@ -249,7 +250,7 @@ export const CostCenters: React.FC = () => {
       actions.push({
         label: 'توزيع',
         icon: <Eye className="h-4 w-4" />,
-        onClick: () => navigate(`/cost-centers/${cc.id}`),
+        onClick: () => navigate(`/accounting/cost-centers/${cc.id}`),
       });
     }
     if (canManage) {
@@ -296,7 +297,7 @@ export const CostCenters: React.FC = () => {
             type="month"
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none"
+            className="rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none"
           />
           {canExport && costCenters.length > 0 ? (
             <Button variant="ghost" onClick={handleExportCenters}>
@@ -364,12 +365,15 @@ export const CostCenters: React.FC = () => {
             {canManage && <p className="text-sm mt-1">أضف مراكز التكلفة لبدء تتبع المصروفات</p>}
           </div>
       ) : viewMode === 'cards' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 gap-3 p-3 md:grid-cols-2 lg:grid-cols-3">
           {filteredCenters.map((cc) => (
-            <OpsDashPanel key={cc.id} accent="costs" className="transition-all hover:ring-2 hover:ring-primary/10">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center ${
+            <div
+              key={cc.id}
+              className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-3 transition-colors hover:bg-[var(--color-bg)]/70"
+            >
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--border-radius-base)] ${
                     cc.type === 'indirect'
                       ? 'bg-[#4F46E5]/10 text-[#4F46E5]'
                       : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'
@@ -378,9 +382,9 @@ export const CostCenters: React.FC = () => {
                       {cc.type === 'indirect' ? 'share' : 'engineering'}
                     </span>
                   </div>
-                  <div>
-                    <h4 className="font-medium text-[var(--color-text)]">{cc.name}</h4>
-                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                  <div className="min-w-0">
+                    <h4 className="truncate font-medium text-[var(--color-text)]">{cc.name}</h4>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <Badge variant={cc.type === 'indirect' ? 'warning' : 'success'}>
                         {cc.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
                       </Badge>
@@ -398,19 +402,19 @@ export const CostCenters: React.FC = () => {
                 )}
               </div>
 
-              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 mb-4">
-                <p className="text-[11px] font-medium text-[var(--color-text-muted)] mb-1">قيمة الشهر المحدد</p>
-                <p className="text-lg font-medium text-[var(--color-text)]">
+              <div className="mb-3 rounded-[var(--border-radius-base)] bg-[var(--color-card)] px-3 py-2">
+                <p className="text-[11px] font-medium text-[var(--color-text-muted)]">قيمة الشهر المحدد</p>
+                <p className="text-base font-semibold tabular-nums text-[var(--color-text)]">
                   {getSelectedMonthValue(cc.id!).toLocaleString('en-US')} ج.م
                 </p>
-                <p className="text-[11px] font-medium text-[var(--color-text-muted)] mt-1">
+                <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">
                   يشمل الإهلاك المرتبط بالمركز لهذا الشهر
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 {cc.type === 'indirect' && (
-                  <Button variant="ghost" onClick={() => navigate(`/cost-centers/${cc.id}`)} className="flex-1">
+                  <Button variant="ghost" onClick={() => navigate(`/accounting/cost-centers/${cc.id}`)} className="flex-1">
                     التوزيع
                   </Button>
                 )}
@@ -434,7 +438,7 @@ export const CostCenters: React.FC = () => {
                   </>
                 )}
               </div>
-            </OpsDashPanel>
+            </div>
           ))}
         </div>
       ) : (
@@ -449,6 +453,7 @@ export const CostCenters: React.FC = () => {
 
       {/* Delete Confirm */}
       {deleteConfirm && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-none w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <span className="material-icons-round text-rose-500 text-4xl mb-3">warning</span>
@@ -466,6 +471,7 @@ export const CostCenters: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

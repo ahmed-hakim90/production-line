@@ -7,6 +7,7 @@ import { usePermission } from '../../../utils/permissions';
 import type { CostCenter } from '../../../types';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { departmentsRef } from '../../../modules/hr/collections';
 import type { FirestoreDepartment } from '../../../modules/hr/types';
 import { useTranslation } from 'react-i18next';
@@ -213,6 +214,7 @@ export const GlobalCostCenterModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[90vh] flex flex-col"
@@ -515,5 +517,6 @@ export const GlobalCostCenterModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

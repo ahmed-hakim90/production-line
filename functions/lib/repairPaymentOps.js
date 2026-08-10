@@ -716,6 +716,16 @@ async function resolveApproval(actor, data) {
     });
     return { ok: true, approvalId, status: decision };
 }
+async function assertBranchAllowsCreditDelivery(actor, branchId) {
+    const branchSnap = await db.collection('repair_branches').doc(branchId).get();
+    if (!branchSnap.exists || String(branchSnap.data()?.tenantId || '') !== actor.tenantId) {
+        throw new HttpsError('failed-precondition', 'فرع الصيانة غير موجود.');
+    }
+    // Missing flag defaults to enabled (non-breaking for existing centers).
+    if (branchSnap.data()?.allowCreditDelivery === false) {
+        throw new HttpsError('failed-precondition', 'التسليم برصيد معطّل لهذا المركز من إعدادات الفرع.');
+    }
+}
 async function requestCredit(actor, data) {
     requirePermission(actor, ['repair.credit.request'], 'ليس لديك صلاحية طلب تسليم برصيد.');
     const authorizationId = String(data.authorizationId || '').trim();
@@ -729,6 +739,7 @@ async function requestCredit(actor, data) {
     if (isWarrantySettlement(auth)) {
         throw new HttpsError('failed-precondition', 'إذن ضمان المصنّع لا يحتاج تسليمًا برصيد.');
     }
+    await assertBranchAllowsCreditDelivery(actor, String(auth.branchId || ''));
     const scoped = await loadScopedJob(actor, String(auth.jobId || ''));
     if (String(scoped.job.status || '') !== 'ready') {
         throw new HttpsError('failed-precondition', 'طلب التسليم برصيد متاح بعد الجاهزية الفنية فقط.');
@@ -836,6 +847,7 @@ async function collectPayment(actor, data) {
         const debitAccount = method === 'cash' ? accounts.CASH : method === 'card' ? accounts.CARD : accounts.BANK;
         tx.create(paymentRef, {
             tenantId: actor.tenantId, branchId, jobId, authorizationId, paymentNo, amount, method,
+            collectionKind: 'deposit',
             status: 'posted', treasuryEntryId: treasuryEntryRef.id, journalEntryId: journalRef.id,
             createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
         });
@@ -875,6 +887,141 @@ async function collectPayment(actor, data) {
     });
     return { ok: true, paymentId, amount, ...result };
 }
+/**
+ * Collect outstanding AR after credit delivery.
+ * Journal: Dr cash/card/bank · Cr receivables (clears AR posted at deliver).
+ */
+async function collectReceivable(actor, data) {
+    requirePermission(actor, ['repair.payments.collect'], 'ليس لديك صلاحية تحصيل دفعة.');
+    const authorizationId = String(data.authorizationId || '').trim();
+    const paymentId = String(data.requestId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+    const method = String(data.method || '');
+    const amount = roundMoney(data.amount);
+    if (!authorizationId || !paymentId || amount <= 0 || !['cash', 'card', 'bank_transfer'].includes(method)) {
+        throw new HttpsError('invalid-argument', 'بيانات تحصيل الذمة غير مكتملة.');
+    }
+    const authRef = db.collection('repair_payment_authorizations').doc(authorizationId);
+    const initialAuthSnap = await authRef.get();
+    if (!initialAuthSnap.exists)
+        throw new HttpsError('not-found', 'إذن الدفع غير موجود.');
+    const initialAuth = initialAuthSnap.data();
+    if (String(initialAuth.tenantId || '') !== actor.tenantId)
+        throw new HttpsError('permission-denied', 'إذن الدفع خارج شركتك.');
+    const branchId = String(initialAuth.branchId || '');
+    const liveAccounting = await loadLiveBranchAccounting(actor, branchId);
+    if (!actor.isSuperAdmin && actor.permissions['repair.branches.manage'] !== true && !actor.branchIds.includes(branchId)) {
+        throw new HttpsError('permission-denied', 'هذا الفرع خارج نطاق صلاحياتك.');
+    }
+    const openSessions = await db.collection('repair_treasury_sessions')
+        .where('branchId', '==', branchId).where('status', '==', 'open').limit(5).get();
+    const sessionDoc = openSessions.docs
+        .filter((snap) => String(snap.data().tenantId || '') === actor.tenantId)
+        .sort((a, b) => String(b.data().openedAt || '').localeCompare(String(a.data().openedAt || '')))[0];
+    if (!sessionDoc)
+        throw new HttpsError('failed-precondition', 'لا توجد خزينة مفتوحة لهذا الفرع.');
+    const jobId = String(initialAuth.jobId || '');
+    const jobRef = db.collection('repair_jobs').doc(jobId);
+    const finRef = db.collection('repair_job_financials').doc(jobId);
+    const paymentRef = db.collection('repair_payments').doc(paymentId);
+    const treasuryEntryRef = db.collection('repair_treasury_entries').doc(`${actor.tenantId}__repair_ar_collection__${paymentId}`);
+    const journalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_ar_collection__${paymentId}`);
+    const month = String(sessionDoc.data().openedAt || new Date().toISOString()).slice(0, 7);
+    const monthCloseRef = db.collection('repair_treasury_month_closes').doc(`${actor.tenantId}_${branchId}_${month}`);
+    const at = new Date().toISOString();
+    const result = await db.runTransaction(async (tx) => {
+        const [authSnap, finSnap, sessionSnap, paymentSnap, monthCloseSnap, jobSnap] = await Promise.all([
+            tx.get(authRef), tx.get(finRef), tx.get(sessionDoc.ref), tx.get(paymentRef), tx.get(monthCloseRef), tx.get(jobRef),
+        ]);
+        if (paymentSnap.exists)
+            return { paymentNo: String(paymentSnap.data()?.paymentNo || ''), duplicated: true };
+        if (!authSnap.exists || !finSnap.exists || !sessionSnap.exists || !jobSnap.exists) {
+            throw new HttpsError('failed-precondition', 'بيانات تحصيل الذمة غير مكتملة.');
+        }
+        const job = jobSnap.data();
+        const fin = finSnap.data();
+        const jobStatus = String(job.status || '');
+        const financialState = String(job.financialState || fin.financialState || '');
+        if (!['delivered', 'completed'].includes(jobStatus)) {
+            throw new HttpsError('failed-precondition', 'تحصيل الذمم متاح بعد تسليم الطلب برصيد فقط.');
+        }
+        if (financialState !== 'delivered_on_credit' && roundMoney(fin.balanceDue) <= 0) {
+            throw new HttpsError('failed-precondition', 'لا توجد ذمة مفتوحة لهذا الطلب.');
+        }
+        if (isWarrantySettlement(fin) || isWarrantySettlement(authSnap.data())) {
+            throw new HttpsError('failed-precondition', 'طلبات الضمان لا تُحصَّل من العميل.');
+        }
+        if (sessionSnap.data()?.needsManualClose === true || String(sessionSnap.data()?.status || '') !== 'open') {
+            throw new HttpsError('failed-precondition', 'الخزينة غير متاحة للتحصيل.');
+        }
+        if (monthCloseSnap.exists && String(monthCloseSnap.data()?.status || '') === 'closed') {
+            throw new HttpsError('failed-precondition', 'شهر الخزينة مقفول.');
+        }
+        const auth = authSnap.data();
+        const balance = roundMoney(fin.balanceDue ?? auth.balanceDue);
+        if (balance <= 0)
+            throw new HttpsError('failed-precondition', 'لا يوجد رصيد ذمم متبقٍ.');
+        if (amount > balance + 0.001)
+            throw new HttpsError('invalid-argument', 'مبلغ التحصيل أكبر من الذمة المتبقية.');
+        const paid = roundMoney(roundMoney(fin.paidAmount ?? auth.paidAmount) + amount);
+        const net = roundMoney(fin.netAmount ?? auth.netAmount);
+        const nextBalance = roundMoney(net - paid);
+        const nextStatus = paymentStatus(net, paid);
+        const paymentNo = `AR-${String(auth.receiptNo || jobId)}-${paymentId.slice(-6).toUpperCase()}`;
+        const costCenterId = liveAccounting.costCenterId;
+        const accountingAccounts = liveAccounting.accountingAccounts;
+        const accounts = accountSeeds(actor.tenantId, accountingAccounts);
+        if (!accounts.RECEIVABLES.code) {
+            throw new HttpsError('failed-precondition', 'حساب ذمم العملاء غير مضبوط على الفرع.');
+        }
+        const debitAccount = method === 'cash' ? accounts.CASH : method === 'card' ? accounts.CARD : accounts.BANK;
+        if (!debitAccount.code) {
+            throw new HttpsError('failed-precondition', 'حساب طريقة التحصيل غير مضبوط على الفرع.');
+        }
+        tx.create(paymentRef, {
+            tenantId: actor.tenantId, branchId, jobId, authorizationId, paymentNo, amount, method,
+            collectionKind: 'receivable',
+            status: 'posted', treasuryEntryId: treasuryEntryRef.id, journalEntryId: journalRef.id,
+            createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
+        });
+        tx.create(treasuryEntryRef, {
+            tenantId: actor.tenantId, branchId, sessionId: sessionDoc.id, entryType: 'INCOME', amount,
+            paymentMethod: method, costCenterId, note: `تحصيل ذمة ${paymentNo}`, referenceId: jobId,
+            source: 'repair_ar_collection', createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
+        });
+        tx.create(journalRef, {
+            tenantId: actor.tenantId, branchId, costCenterId, source: 'repair_ar_collection', sourceId: paymentId,
+            referenceNo: paymentNo, status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
+            totalDebit: amount, totalCredit: amount,
+            lines: [
+                { accountCode: debitAccount.code, accountName: debitAccount.name, debit: amount, credit: 0, costCenterId },
+                { accountCode: accounts.RECEIVABLES.code, accountName: accounts.RECEIVABLES.name, debit: 0, credit: amount, costCenterId },
+            ],
+        });
+        tx.update(authRef, {
+            paidAmount: paid,
+            balanceDue: nextBalance,
+            status: nextStatus,
+            costCenterId,
+            accountingAccounts,
+            updatedAt: at,
+        });
+        tx.update(finRef, {
+            paidAmount: paid,
+            balanceDue: nextBalance,
+            paymentStatus: nextStatus,
+            costCenterId,
+            accountingAccounts,
+            settledAt: nextBalance <= 0 ? at : (fin.settledAt || null),
+            updatedAt: at,
+        });
+        tx.update(jobRef, {
+            financialState: nextBalance <= 0 ? 'settled' : 'delivered_on_credit',
+            updatedAt: at,
+        });
+        return { paymentNo, duplicated: false, nextBalance };
+    });
+    return { ok: true, paymentId, amount, ...result };
+}
 async function reversePayment(actor, data) {
     requirePermission(actor, ['repair.payments.reverse'], 'ليس لديك صلاحية عكس الدفعة.');
     const paymentId = String(data.paymentId || '').trim();
@@ -903,7 +1050,11 @@ async function reversePayment(actor, data) {
             throw new HttpsError('failed-precondition', 'بيانات الدفعة غير مكتملة.');
         if (String(paymentSnap.data()?.status || '') === 'reversed')
             return;
-        if (jobSnap.exists && (jobSnap.data()?.isClosed === true || ['delivered', 'completed'].includes(String(jobSnap.data()?.status || '')))) {
+        const collectionKind = String(paymentSnap.data()?.collectionKind || 'deposit');
+        const isReceivableCollect = collectionKind === 'receivable';
+        const jobClosed = Boolean(jobSnap.exists
+            && (jobSnap.data()?.isClosed === true || ['delivered', 'completed'].includes(String(jobSnap.data()?.status || ''))));
+        if (jobClosed && !isReceivableCollect) {
             throw new HttpsError('failed-precondition', 'أعد فتح الطلب قبل عكس دفعة طلب مُسلَّم.');
         }
         const amount = roundMoney(paymentSnap.data()?.amount);
@@ -915,19 +1066,26 @@ async function reversePayment(actor, data) {
         const costCenterId = liveAccounting.costCenterId;
         const accounts = accountSeeds(actor.tenantId, liveAccounting.accountingAccounts);
         const creditAccount = method === 'cash' ? accounts.CASH : method === 'card' ? accounts.CARD : accounts.BANK;
+        const clearingAccount = isReceivableCollect ? accounts.RECEIVABLES : accounts.CUSTOMER_DEPOSITS;
+        if (!clearingAccount.code || !creditAccount.code) {
+            throw new HttpsError('failed-precondition', 'حسابات الفرع غير مكتملة لعكس الدفعة.');
+        }
         tx.update(paymentRef, { status: 'reversed', reversedAt: at, reversedBy: actor.uid, reversalReason: reason });
         tx.create(reversalTreasuryRef, {
             tenantId: actor.tenantId, branchId, entryType: 'EXPENSE', amount,
             paymentMethod: method, costCenterId, note: `عكس ${String(payment.paymentNo || paymentId)} — ${reason}`,
-            referenceId: jobId, source: 'repair_payment_reversal', createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
+            referenceId: jobId,
+            source: isReceivableCollect ? 'repair_ar_collection_reversal' : 'repair_payment_reversal',
+            createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
         });
         tx.create(reversalJournalRef, {
             tenantId: actor.tenantId, branchId, costCenterId,
-            source: 'repair_payment_reversal', sourceId: paymentId, referenceNo: `REV-${String(payment.paymentNo || paymentId)}`,
+            source: isReceivableCollect ? 'repair_ar_collection_reversal' : 'repair_payment_reversal',
+            sourceId: paymentId, referenceNo: `REV-${String(payment.paymentNo || paymentId)}`,
             status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
             totalDebit: amount, totalCredit: amount,
             lines: [
-                { accountCode: accounts.CUSTOMER_DEPOSITS.code, accountName: accounts.CUSTOMER_DEPOSITS.name, debit: amount, credit: 0, costCenterId },
+                { accountCode: clearingAccount.code, accountName: clearingAccount.name, debit: amount, credit: 0, costCenterId },
                 { accountCode: creditAccount.code, accountName: creditAccount.name, debit: 0, credit: amount, costCenterId },
             ],
         });
@@ -947,7 +1105,18 @@ async function reversePayment(actor, data) {
             accountingAccounts: liveAccounting.accountingAccounts,
             updatedAt: at,
         });
-        tx.update(jobRef, { financialState: nextStatus === 'paid' ? 'paid' : nextStatus === 'partial' ? 'partially_paid' : 'ready_for_payment', updatedAt: at });
+        if (isReceivableCollect) {
+            tx.update(jobRef, {
+                financialState: balance > 0 ? 'delivered_on_credit' : 'settled',
+                updatedAt: at,
+            });
+        }
+        else {
+            tx.update(jobRef, {
+                financialState: nextStatus === 'paid' ? 'paid' : nextStatus === 'partial' ? 'partially_paid' : 'ready_for_payment',
+                updatedAt: at,
+            });
+        }
     });
     return { ok: true, paymentId };
 }
@@ -961,6 +1130,9 @@ async function deliver(actor, data) {
     const authId = String(initialFin?.currentAuthorizationId || '');
     if (!authId)
         throw new HttpsError('failed-precondition', 'جهّز إذن الدفع قبل التسليم.');
+    if (roundMoney(initialFin?.balanceDue) > 0 && !isWarrantySettlement(initialFin)) {
+        await assertBranchAllowsCreditDelivery(actor, scoped.branchId);
+    }
     const liveAccounting = await loadLiveBranchAccounting(actor, scoped.branchId);
     const authRef = db.collection('repair_payment_authorizations').doc(authId);
     const journalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_delivery__${jobId}`);
@@ -1115,6 +1287,8 @@ export const mutateRepairPaymentHandler = async (request) => {
         return requestCredit(actor, data);
     if (operation === 'collect')
         return collectPayment(actor, data);
+    if (operation === 'collect_receivable')
+        return collectReceivable(actor, data);
     if (operation === 'reverse_payment')
         return reversePayment(actor, data);
     if (operation === 'deliver')

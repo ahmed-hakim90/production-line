@@ -12,6 +12,7 @@ import {
   ShareResult,
 } from '../../../utils/reportExport';
 import { formatProductionReportShareCaption } from '../../../utils/productionReportShareCaption';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import {
   buildWorkersCountAutoFillFromAssignments,
@@ -2303,6 +2304,7 @@ export const QuickAction: React.FC = () => {
 
       {/* Line Workers Modal */}
       {showLineWorkers && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-2 sm:p-4" onClick={() => setShowLineWorkers(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[calc(100dvh-1rem)] sm:max-h-[80vh] border border-[var(--color-border)] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 sm:px-5 py-4 border-b border-[var(--color-border)] flex items-start justify-between gap-3 shrink-0">
@@ -2520,6 +2522,7 @@ export const QuickAction: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
       {/* Fixed-size WhatsApp share image render target */}
@@ -2543,11 +2546,11 @@ export const QuickAction: React.FC = () => {
 
       {/* Hidden print component */}
       <div
+        aria-hidden
         style={{
           position: 'fixed',
+          left: '-9999px',
           top: 0,
-          right: 0,
-          zIndex: -1,
           pointerEvents: 'none',
           direction: 'rtl',
           width: 'max-content',

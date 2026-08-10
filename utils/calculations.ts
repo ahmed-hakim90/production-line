@@ -384,8 +384,12 @@ export const buildProductionLines = (
     );
 
     if (activePlan) {
-      const key = `${line.id}_${activePlan.productId}`;
-      const historical = filterReportsForProductionPlan(activePlan, planReports[key] || []);
+      const historical = filterReportsForProductionPlan(
+        activePlan,
+        (activePlan.id && planReports[activePlan.id])
+          || planReports[`${line.id}_${activePlan.productId}`]
+          || [],
+      );
 
       const todayForPlan = filterReportsForProductionPlan(activePlan, todayReports);
       const historicalIds = new Set(historical.map((r) => r.id));
@@ -693,7 +697,8 @@ export const getExecutionDeviationTone = (deviationPct: number | null): Executio
 };
 
 /**
- * Aggregate KPI values from today's reports and (optionally) monthly reports.
+ * Aggregate KPI values from today's reports and (optionally) period/monthly reports.
+ * Efficiency and waste always follow the period set when provided so period selectors stay truthful.
  */
 export const buildDashboardKPIs = (
   todayReports: ProductionReport[],
@@ -703,20 +708,21 @@ export const buildDashboardKPIs = (
     (sum, r) => sum + (r.quantityProduced || 0),
     0
   );
-  const monthlyProduction = (monthlyReports ?? todayReports).reduce(
+  const periodReports = monthlyReports ?? todayReports;
+  const monthlyProduction = periodReports.reduce(
     (sum, r) => sum + (r.quantityProduced || 0),
     0
   );
-  const totalWaste = todayReports.reduce(
+  const totalWaste = periodReports.reduce(
     (sum, r) => sum + getReportWaste(r),
     0
   );
-  const totalTarget = todayProduction + totalWaste;
+  const totalTarget = monthlyProduction + totalWaste;
   const efficiency =
     totalTarget > 0
-      ? Number(((todayProduction / totalTarget) * 100).toFixed(1))
+      ? Number(((monthlyProduction / totalTarget) * 100).toFixed(1))
       : 0;
-  const wasteRatio = calculateWasteRatio(totalWaste, todayProduction + totalWaste);
+  const wasteRatio = calculateWasteRatio(totalWaste, monthlyProduction + totalWaste);
 
   return { todayProduction, monthlyProduction, totalProduction: todayProduction, efficiency, wasteRatio };
 };

@@ -4,6 +4,9 @@ import { TableIconAction, ToneActionButton } from '@/src/components/erp/TableIco
 import { formatNumber } from '../../../../utils/calculations';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../../utils/transferUnits';
 import type { InventoryTransferRequest, StockTransaction, TransferRequestLine } from '../../types';
+import type { StockVoucherGroup } from '../../lib/groupStockVouchers';
+import { voucherMovementTitle } from '../../lib/groupStockVouchers';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 
 export interface StockTransactionsDialogsProps {
   shareToast: string | null;
@@ -19,6 +22,9 @@ export interface StockTransactionsDialogsProps {
     lines: StockTransaction[];
   } | null;
   onCloseApproved: () => void;
+  selectedVoucher: StockVoucherGroup | null;
+  onCloseVoucher: () => void;
+  spareContext?: boolean;
   editPending: InventoryTransferRequest | null;
   editLines: TransferRequestLine[];
   editNote: string;
@@ -33,9 +39,12 @@ export interface StockTransactionsDialogsProps {
   ) => T;
   processing: boolean;
   canPrint: boolean;
+  canDelete?: boolean;
   onPrintPendingFromModal: (row: InventoryTransferRequest) => void;
   onPrintApprovedFromModal: (firstLine: StockTransaction) => void;
+  onPrintVoucherFromModal?: (group: StockVoucherGroup) => void;
   onShareTransfer: (tx: StockTransaction, scope?: 'line' | 'transfer') => void | Promise<void>;
+  onDeleteVoucherLines?: (rows: StockTransaction[]) => void;
 }
 
 export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> = ({
@@ -45,6 +54,9 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
   onClosePending,
   selectedApprovedTransfer,
   onCloseApproved,
+  selectedVoucher,
+  onCloseVoucher,
+  spareContext = false,
   editPending,
   editLines,
   editNote,
@@ -57,9 +69,12 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
   withResolvedUnitsPerCarton,
   processing,
   canPrint,
+  canDelete = false,
   onPrintPendingFromModal,
   onPrintApprovedFromModal,
+  onPrintVoucherFromModal,
   onShareTransfer,
+  onDeleteVoucherLines,
 }) => (
   <>
     {shareToast && (
@@ -86,6 +101,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     )}
 
     {selectedPending && (
+      <ManagedModalPortal>
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         role="presentation"
@@ -163,9 +179,11 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           </div>
         </div>
       </div>
+      </ManagedModalPortal>
     )}
 
     {selectedApprovedTransfer && (
+      <ManagedModalPortal>
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         role="presentation"
@@ -271,9 +289,123 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           </div>
         </div>
       </div>
+      </ManagedModalPortal>
+    )}
+
+    {selectedVoucher && (
+      <ManagedModalPortal>
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        role="presentation"
+        onClick={onCloseVoucher}
+        onKeyDown={(e) => e.key === 'Escape' && onCloseVoucher()}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="stock-tx-voucher-title"
+          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+            <h3 id="stock-tx-voucher-title" className="text-lg font-bold">
+              {voucherMovementTitle(selectedVoucher.movementType, spareContext)} #{selectedVoucher.referenceNo}
+            </h3>
+            <button
+              type="button"
+              onClick={onCloseVoucher}
+              className="text-[var(--color-text-muted)] hover:text-slate-600 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              aria-label="إغلاق النافذة"
+            >
+              <span className="material-icons-round" aria-hidden>
+                close
+              </span>
+            </button>
+          </div>
+          <div className="p-6 overflow-auto flex-1 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
+                <p className="text-xs text-slate-600">المخزن</p>
+                <p className="font-bold">
+                  {warehouseMap.get(selectedVoucher.warehouseId) ?? selectedVoucher.warehouseId}
+                </p>
+              </div>
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
+                <p className="text-xs text-slate-600">التاريخ</p>
+                <p className="font-bold text-sm tabular-nums">
+                  {new Date(selectedVoucher.createdAt).toLocaleString('ar-EG')}
+                </p>
+              </div>
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
+                <p className="text-xs text-slate-600">المنفذ</p>
+                <p className="font-bold">{selectedVoucher.createdBy}</p>
+              </div>
+            </div>
+            {selectedVoucher.note ? (
+              <p className="text-sm text-[var(--color-text-muted)]">ملاحظة: {selectedVoucher.note}</p>
+            ) : null}
+            <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <table className="erp-table w-full text-right border-collapse">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الصنف</th>
+                    <th className="erp-th">اللوكيشن</th>
+                    <th className="erp-th text-center">الكمية</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--color-border)]">
+                  {selectedVoucher.lines.map((line) => (
+                    <tr key={`${line.id || ''}-${line.itemId}`}>
+                      <td className="px-3 py-2 text-sm font-bold">
+                        {line.itemName}{' '}
+                        <span className="text-xs text-slate-500">({line.itemCode})</span>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-slate-500">{line.locationCode || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-center font-black tabular-nums">
+                        <span className={selectedVoucher.movementType === 'IN' ? 'text-emerald-600' : 'text-rose-500'}>
+                          {selectedVoucher.movementType === 'IN' ? '+' : '−'}
+                          {formatNumber(Math.abs(Number(line.quantity || 0)))}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
+            <Button variant="outline" onClick={onCloseVoucher}>
+              إغلاق
+            </Button>
+            {canPrint && onPrintVoucherFromModal ? (
+              <ToneActionButton
+                action="print"
+                disabled={processing}
+                onClick={() => onPrintVoucherFromModal(selectedVoucher)}
+              >
+                طباعة
+              </ToneActionButton>
+            ) : null}
+            {canDelete && onDeleteVoucherLines ? (
+              <Button
+                variant="outline"
+                disabled={processing}
+                onClick={() => {
+                  onDeleteVoucherLines(selectedVoucher.lines);
+                  onCloseVoucher();
+                }}
+              >
+                حذف الإذن
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+      </ManagedModalPortal>
     )}
 
     {editPending && (
+      <ManagedModalPortal>
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
         role="presentation"
@@ -360,6 +492,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           </div>
         </div>
       </div>
+      </ManagedModalPortal>
     )}
   </>
 );

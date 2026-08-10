@@ -254,7 +254,7 @@ export const DepreciationReport: React.FC = () => {
             رجوع
           </Button>
           <Select value={mode} onValueChange={(v) => setMode(v as ReportMode)}>
-            <SelectTrigger className="h-10 w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-sm">
+            <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="الفترة" />
             </SelectTrigger>
             <SelectContent>
@@ -264,7 +264,7 @@ export const DepreciationReport: React.FC = () => {
           </Select>
           <input
             type="month"
-            className="h-10 rounded border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+            className="rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
             aria-label="الشهر"
@@ -272,7 +272,7 @@ export const DepreciationReport: React.FC = () => {
         </div>
       )}
     >
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
         <OpsDashPanel title="الإهلاك حسب الفترات" accent="costs" bodyClassName="p-0">
           <DataTable
             columns={periodColumns}
@@ -290,7 +290,7 @@ export const DepreciationReport: React.FC = () => {
       </div>
 
       {mode === 'monthly' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
           <OpsDashPanel title="توزيع الإهلاك على الخطوط" accent="costs" bodyClassName="p-0">
             <DataTable
               columns={lineColumns}

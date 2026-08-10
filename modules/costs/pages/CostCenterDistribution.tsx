@@ -542,7 +542,7 @@ export const CostCenterDistribution: React.FC = () => {
           <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">error_outline</span>
             <p className="font-bold">مركز التكلفة غير موجود</p>
-            <Button variant="ghost" className="mt-4" onClick={() => navigate('/cost-centers')}>العودة</Button>
+            <Button variant="ghost" className="mt-4" onClick={() => navigate('/accounting/cost-centers')}>العودة</Button>
           </div>
         </OpsDashPanel>
       </ModuleOpsPageShell>
@@ -576,7 +576,7 @@ export const CostCenterDistribution: React.FC = () => {
       hero={distributionHero}
       actions={(
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" onClick={() => navigate('/cost-centers')}>
+          <Button variant="ghost" onClick={() => navigate('/accounting/cost-centers')}>
             <span className="material-icons-round text-sm">arrow_forward</span>
             رجوع
           </Button>

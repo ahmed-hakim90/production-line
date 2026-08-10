@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '../../../components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge, SearchableSelect } from '../components/UI';
@@ -482,13 +481,8 @@ export const SupplyCycleDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
+      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" rangeLabel="جاري التحميل" actions={shellBackAction}>
         <DetailPageStickyHeader>
-          <PageHeader
-            title="تفاصيل دورة التوريد"
-            loading
-            backAction={false}
-          />
           <OpsDashPanel title="جاري التحميل" accent="inventory">
             <SectionSkeleton rows={4} height={20} />
           </OpsDashPanel>
@@ -546,35 +540,36 @@ export const SupplyCycleDetail: React.FC = () => {
     { label: 'إجمالي الهالك', value: formatNumber(totals.totalWaste) },
   ];
 
+  const cycleShellActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {shellBackAction}
+      {canEdit ? (
+        <Button type="button" onClick={() => setShowEdit(true)}>
+          تعديل
+        </Button>
+      ) : null}
+      {canExportFromPage ? (
+        <Button type="button" variant="outline" onClick={handleExportDetail}>
+          تصدير Excel
+        </Button>
+      ) : null}
+      {showDelete ? (
+        <Button type="button" variant="destructive" onClick={() => void deleteCycle()}>
+          حذف الدورة
+        </Button>
+      ) : null}
+    </div>
+  );
+
   return (
-    <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
+    <ModuleOpsPageShell
+      className="max-w-6xl mx-auto"
+      eyebrow="تفاصيل دورة التوريد"
+      rangeLabel={`${cycle.batchCode} — ${cycle.externalLabel || `${KIND_LABEL[cycle.kind]} · ${resolveItemName(cycle)}`}`}
+      actions={cycleShellActions}
+    >
       <DetailPageStickyHeader>
-        <PageHeader
-          title={cycle.batchCode}
-          subtitle={cycle.externalLabel || `${KIND_LABEL[cycle.kind]} · ${resolveItemName(cycle)}`}
-          icon="inventory_2"
-          backAction={false}
-          primaryAction={
-            canEdit ? { label: 'تعديل', icon: 'edit', onClick: () => setShowEdit(true) } : undefined
-          }
-          moreActions={[
-            ...(canExportFromPage
-              ? [{ label: 'تصدير Excel', icon: 'download', onClick: handleExportDetail, group: 'تصدير' as const }]
-              : []),
-            ...(showDelete
-              ? [
-                  {
-                    label: 'حذف الدورة',
-                    icon: 'delete',
-                    onClick: () => void deleteCycle(),
-                    group: 'خطر' as const,
-                    danger: true,
-                  },
-                ]
-              : []),
-          ]}
-          extra={headerExtra}
-        />
+        {headerExtra}
 
         <OpsDashPanel title="ملخص سريع" accent="inventory">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

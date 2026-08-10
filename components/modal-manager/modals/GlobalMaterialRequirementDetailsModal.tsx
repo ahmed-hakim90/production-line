@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import type { MaterialRequirementLine } from '../../../modules/manufacturing/types';
 import { totalEstimatedCost } from '../../../modules/manufacturing/engines/productionPlanningEngine';
@@ -22,6 +23,7 @@ export const GlobalMaterialRequirementDetailsModal: React.FC = () => {
   if (!isOpen) return null;
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => close()}>
       <div
         className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden border flex flex-col"
@@ -72,5 +74,6 @@ export const GlobalMaterialRequirementDetailsModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

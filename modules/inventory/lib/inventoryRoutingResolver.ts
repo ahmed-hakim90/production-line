@@ -1,8 +1,51 @@
 import type { SystemSettings } from '../../../types';
 import type { Material } from '../../manufacturing/types';
-import type { InventoryRoutingSettings, ResolvedInventoryRouting } from '../types';
+import type {
+  InventoryRoutingSettings,
+  ResolvedInventoryRouting,
+  WarehouseRole,
+} from '../types';
 
 const trimId = (value: unknown) => String(value ?? '').trim();
+
+/**
+ * Prefer routing slot over the warehouse document `warehouseRole` field.
+ * Many tenants assign staging/WIP IDs in settings without updating warehouseRole,
+ * so list filters that only trust the document field hide real balances.
+ */
+export function resolveWarehouseRoleFromRouting(
+  warehouseId: string,
+  routing: Pick<
+    ResolvedInventoryRouting,
+    | 'rawMaterialWarehouseId'
+    | 'decomposedWarehouseId'
+    | 'productionFloorWarehouseId'
+    | 'productionWipWarehouseId'
+    | 'finishedStagingWarehouseId'
+    | 'finalProductWarehouseId'
+    | 'packagingSourceWarehouseId'
+    | 'packagingTargetWarehouseId'
+    | 'wasteWarehouseId'
+  >,
+  documentRole?: WarehouseRole | string | null,
+): WarehouseRole {
+  const id = trimId(warehouseId);
+  if (!id) return (documentRole as WarehouseRole) || 'general';
+  if (id === trimId(routing.rawMaterialWarehouseId)) return 'raw_material';
+  if (id === trimId(routing.decomposedWarehouseId)) return 'decomposed';
+  if (id === trimId(routing.productionFloorWarehouseId)) return 'production_floor';
+  if (id === trimId(routing.productionWipWarehouseId)) return 'production_wip';
+  if (id === trimId(routing.finishedStagingWarehouseId)) return 'finished_staging';
+  if (id === trimId(routing.finalProductWarehouseId)) return 'final_product';
+  if (
+    id === trimId(routing.packagingSourceWarehouseId)
+    || id === trimId(routing.packagingTargetWarehouseId)
+  ) {
+    return 'packaging';
+  }
+  if (id === trimId(routing.wasteWarehouseId)) return 'waste';
+  return (documentRole as WarehouseRole) || 'general';
+}
 
 export function resolveInventoryRoutingV1(systemSettings: SystemSettings): ResolvedInventoryRouting {
   const plan = systemSettings.planSettings ?? ({} as SystemSettings['planSettings']);

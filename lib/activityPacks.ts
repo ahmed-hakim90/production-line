@@ -6,6 +6,8 @@
  *
  * Platform modules (dashboards, system, HR, customers, accounting) stay available
  * whenever the tenant is active; packs only gate domain apps.
+ * Manufacturing costing screens live under the Accounting menu but keep `costs.*`
+ * permissions (Roles group still pack-gated to manufacturing).
  */
 
 export const ACTIVITY_PACK_IDS = ['manufacturing', 'repair'] as const;
@@ -30,7 +32,6 @@ const MENU_GROUP_PACKS: Record<string, readonly ActivityPackId[] | 'platform'> =
   customers: 'platform',
   repair: ['repair'],
   accounting: 'platform',
-  costs: ['manufacturing'],
   system: 'platform',
 };
 
@@ -46,6 +47,7 @@ const PERMISSION_GROUP_PACKS: Record<string, readonly ActivityPackId[] | 'platfo
   customers: 'platform',
   repair: ['repair'],
   accounting: 'platform',
+  /** Costing ops stay manufacturing-gated in Roles even though nav lives under الحسابات. */
   costs: ['manufacturing'],
   system: 'platform',
   special: 'platform',

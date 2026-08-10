@@ -88,6 +88,21 @@ const auth = (patch: Partial<RepairPaymentAuthorization> = {}): RepairPaymentAut
   assert.equal(state.step, 'print');
   assert.equal(state.stepLabel, 'جاهز للطباعة');
   assert.equal(state.canPrintAction, true);
+  assert.equal(state.canCollectReceivableAction, false);
+}
+
+{
+  const state = resolveRepairJobPaymentCloseState({
+    jobStatus: 'delivered',
+    authorization: auth({ status: 'partial', paidAmount: 200, balanceDue: 500 }),
+    canPrepare: false,
+    canCollect: true,
+    canDeliver: false,
+  });
+  assert.equal(state.step, 'print');
+  assert.equal(state.canPrintAction, true);
+  assert.equal(state.canCollectReceivableAction, true);
+  assert.match(state.stepLabel, /ذمة/);
 }
 
 {

@@ -32,6 +32,7 @@ import {
   summarizeProductionIssuesForDecision,
   summarizeReceiptsForDecision,
   summarizeStockCountSessions,
+  resolvePlanReports,
   volumeWeightedPlanAchievement,
   type PlanActualInput,
 } from '../lib/decisionMetrics';
@@ -115,8 +116,7 @@ function buildPlanActuals(
   return plans
     .filter((p) => p.status === 'in_progress' || p.status === 'planned' || p.status === 'completed')
     .map((plan) => {
-      const key = `${plan.lineId}_${plan.productId}`;
-      const reports = planReports[key] || [];
+      const reports = resolvePlanReports(plan, planReports);
       const fromReports = reports.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
       const actualQuantity = Math.max(Number(plan.producedQuantity || 0), fromReports);
       return {
@@ -226,11 +226,14 @@ export function useOperationalDecisionSnapshot(options?: {
             0,
           );
 
-          const finishedFromStaging =
-            finishedId && finishedId === packagingSourceId
-              ? packagingBalances
-              : finishedBalances;
-          const finishedQty = sumBalanceQty(finishedFromStaging, { finishedOnly: true });
+          // Staging and packaging can be different warehouses — sum both when distinct.
+          const finishedQty =
+            finishedId && packagingSourceId && finishedId === packagingSourceId
+              ? sumBalanceQty(packagingBalances, { finishedOnly: true })
+              : sumBalanceQty(finishedBalances, { finishedOnly: true })
+                + (packagingSourceId
+                  ? sumBalanceQty(packagingBalances, { finishedOnly: true })
+                  : 0);
           const wipQty = sumBalanceQty(wipBalances);
           const wasteQty = sumBalanceQty(wasteBalances);
 
@@ -262,7 +265,8 @@ export function useOperationalDecisionSnapshot(options?: {
             negativeCount: localCounts.negativeCount,
             suppliesAlertCount: Number(suppliesAlertCount || 0),
             wipQty,
-            finishedQty: Math.max(finishedQty, packagingAwaitingUnits),
+            finishedQty,
+
             wasteQty,
             receipts: allReceipts,
             countSessions,

@@ -7,6 +7,7 @@ import { ImportResult, parseExcelFile, toReportData } from '../../../utils/impor
 import { downloadReportsTemplate } from '../../../utils/downloadTemplates';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { getReportDuplicateMessage, isReportDuplicateError } from '../../../modules/production/utils/reportDuplicateError';
 import { useTranslation } from 'react-i18next';
 import {
@@ -151,6 +152,7 @@ export const GlobalImportReportsModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={handleClose}
@@ -253,6 +255,6 @@ export const GlobalImportReportsModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

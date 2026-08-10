@@ -1,11 +1,20 @@
-import React from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SingleReportPrint } from '../../../production/components/ProductionReportPrint';
+import { ProductionReportShareCard } from '../../../production/components/ProductionReportShareCard';
+import { PRINT_PREVIEW_SAMPLE_ROW } from '../../../production/lib/printPreviewSample';
 import { Button } from '../UI';
 import type { PaperOrientation, PaperSize, PrintTemplateSettings, PrintThemePreset } from '../../../../types';
 import type { ReportPrintRow } from '../../../production/components/ProductionReportPrint';
 import { getPrintThemePresetDefaults } from '../../../../utils/printTheme';
+import { exportAsImage } from '../../../../utils/reportExport';
+import { toast } from '../../../../components/Toast';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
+
+const WHATSAPP_CARD_WIDTH = 1080;
+const WHATSAPP_PREVIEW_SCALE = 0.42;
+
 type PrintTemplateSettingsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
@@ -34,6 +43,32 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
   onReset,
   sampleRows,
 }) => {
+  const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
+  const [exportingWhatsAppPng, setExportingWhatsAppPng] = useState(false);
+  const whatsAppCardRef = useRef<HTMLDivElement>(null);
+
+  const previewRow = useMemo(
+    () => sampleRows[0] ?? PRINT_PREVIEW_SAMPLE_ROW,
+    [sampleRows],
+  );
+
+  const exportWhatsAppPng = useCallback(async () => {
+    const el = whatsAppCardRef.current;
+    if (!el) {
+      toast.error('بطاقة المعاينة غير جاهزة.');
+      return;
+    }
+    setExportingWhatsAppPng(true);
+    try {
+      await exportAsImage(el, `whatsapp-preview-${previewRow.reportCode || 'report'}`);
+      toast.success('تم تحميل صورة واتساب (PNG).');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'تعذر تصدير الصورة.');
+    } finally {
+      setExportingWhatsAppPng(false);
+    }
+  }, [previewRow.reportCode]);
+
   if (!isAdmin) return null;
   return (
     <>
@@ -48,7 +83,14 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             variant="outline"
             solid={false}
           >
-            معاينة
+            معاينة الطباعة
+          </Button>
+          <Button
+            onClick={() => setShowWhatsAppPreview(true)}
+            variant="outline"
+            solid={false}
+          >
+            معاينة صورة واتساب
           </Button>
           <Button onClick={onSave} disabled={saving} solid>
             {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
@@ -422,6 +464,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
         </Button>
       </div>
       {showPreview && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
@@ -430,6 +473,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 معاينة التقرير المطبوع
               </h3>
               <button
+                type="button"
                 onClick={() => setShowPreview(false)}
                 className="w-9 h-9 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] flex items-center justify-center hover:bg-[var(--color-surface-hover)] transition-all"
               >
@@ -439,45 +483,94 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             <div className="flex-1 overflow-auto p-6 bg-[var(--color-bg)] flex justify-center">
               <div className="shadow-2xl">
                 <SingleReportPrint
-                  report={
-                    sampleRows[0] ?? {
-                      reportId: 'preview-1',
-                      reportCode: 'PR-000001',
-                      date: '2026-03-15',
-                      lineName: 'خط 1',
-                      productName: 'منتج تجريبي',
-                      employeeName: 'مشرف تجريبي',
-                      quantityProduced: 1200,
-                      wasteQuantity: 35,
-                      workersCount: 12,
-                      workersProductionCount: 6,
-                      workersPackagingCount: 3,
-                      workersQualityCount: 2,
-                      workersMaintenanceCount: 1,
-                      workersExternalCount: 0,
-                      workHours: 8,
-                      workOrderNumber: 'WO-0001',
-                      costPerUnit: 2.35,
-                    }
-                  }
+                  report={previewRow}
                   printSettings={localPrint}
                 />
               </div>
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
+      )}
+      {showWhatsAppPreview && (
+        <ManagedModalPortal>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-[var(--color-border)]">
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-[var(--color-text)] flex items-center gap-2">
+                  <span className="material-icons-round text-primary">share</span>
+                  معاينة صورة واتساب
+                </h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  نفس بطاقة المشاركة المستخدمة في تقارير الإنتاج (عرض 1080 بكسل)
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  solid={false}
+                  disabled={exportingWhatsAppPng}
+                  onClick={() => void exportWhatsAppPng()}
+                >
+                  {exportingWhatsAppPng ? 'جاري التصدير...' : 'تصدير PNG'}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setShowWhatsAppPreview(false)}
+                  className="w-9 h-9 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] flex items-center justify-center hover:bg-[var(--color-surface-hover)] transition-all"
+                >
+                  <span className="material-icons-round text-[var(--color-text-muted)]">close</span>
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto p-4 sm:p-6 bg-[var(--color-bg)] flex justify-center">
+              <div
+                className="shadow-2xl overflow-hidden bg-white rounded-[var(--border-radius-lg)]"
+                style={{ zoom: WHATSAPP_PREVIEW_SCALE }}
+              >
+                <div style={{ width: WHATSAPP_CARD_WIDTH, background: 'white' }}>
+                  <ProductionReportShareCard report={previewRow} printSettings={localPrint} />
+                </div>
+              </div>
+              {/* Full-size capture target (off-screen) — matches production WhatsApp share path */}
+              <div
+                aria-hidden
+                style={{
+                  position: 'fixed',
+                  left: -99999,
+                  top: 0,
+                  width: WHATSAPP_CARD_WIDTH,
+                  pointerEvents: 'none',
+                  zIndex: -1,
+                }}
+              >
+                <div ref={whatsAppCardRef} style={{ width: WHATSAPP_CARD_WIDTH, background: 'white' }}>
+                  <ProductionReportShareCard report={previewRow} printSettings={localPrint} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </ManagedModalPortal>
       )}
       <OpsDashPanel title="معمل تصدير الصور وواتساب">
         <p className="text-sm text-[var(--color-text-muted)] mb-3">
-          جرّب تصدير PNG ومشاركة واتساب بنفس قالب التقرير الموحّد (تقرير إنتاج، تحويل مخزن، تقرير مجمّع).
+          جرّب بطاقة مشاركة واتساب (1080) وتصدير PNG بنفس قالب الطباعة، بالإضافة إلى مستندات الطباعة وتحويل المخزن.
         </p>
-        <Link
-          to="/dev/image-export"
-          className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline"
-        >
-          <span className="material-icons-round text-base">open_in_new</span>
-          فتح معمل التصدير
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Button type="button" variant="outline" solid={false} onClick={() => setShowWhatsAppPreview(true)}>
+            معاينة صورة واتساب هنا
+          </Button>
+          <Link
+            to="/dev/image-export"
+            className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline"
+          >
+            <span className="material-icons-round text-base">open_in_new</span>
+            فتح معمل التصدير
+          </Link>
+        </div>
       </OpsDashPanel>
     </>
   );

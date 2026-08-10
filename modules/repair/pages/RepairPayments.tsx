@@ -113,6 +113,10 @@ export const RepairPayments: React.FC = () => {
   const [prepareJob, setPrepareJob] = useState<RepairJob | null>(null);
   const [collectAuth, setCollectAuth] =
     useState<RepairPaymentAuthorization | null>(null);
+  /** deposit = pre-delivery; receivable = post-delivery AR. */
+  const [collectKind, setCollectKind] = useState<"deposit" | "receivable">(
+    "deposit",
+  );
   const [discountType, setDiscountType] = useState<RepairDiscountType>("none");
   const [discountValue, setDiscountValue] = useState("0");
   const [reason, setReason] = useState("");
@@ -208,6 +212,30 @@ export const RepairPayments: React.FC = () => {
     safeReadyPage * READY_PAGE_SIZE,
   );
   const pendingApprovals = approvals.filter((row) => row.status === "pending");
+  const openReceivableAuthorizations = useMemo(
+    () =>
+      authorizations.filter((auth) => {
+        if (isWarrantySettlementAuth(auth) || isZeroValueAuthorization(auth)) {
+          return false;
+        }
+        if (!(Number(auth.balanceDue || 0) > 0.001)) return false;
+        const job = jobById.get(auth.jobId);
+        return (
+          job?.status === "delivered" ||
+          job?.status === "completed" ||
+          job?.financialState === "delivered_on_credit"
+        );
+      }),
+    [authorizations, jobById],
+  );
+  const openReceivableTotal = useMemo(
+    () =>
+      openReceivableAuthorizations.reduce(
+        (sum, auth) => sum + Number(auth.balanceDue || 0),
+        0,
+      ),
+    [openReceivableAuthorizations],
+  );
 
   useEffect(() => {
     setReadyPage(1);
@@ -305,20 +333,36 @@ export const RepairPayments: React.FC = () => {
     }
   };
 
+  const openCollectDialog = (
+    auth: RepairPaymentAuthorization,
+    kind: "deposit" | "receivable",
+  ) => {
+    setCollectKind(kind);
+    setCollectAuth(auth);
+    setAmount(String(auth.balanceDue));
+  };
+
   const collect = async () => {
     if (!collectAuth?.id) return;
     setBusy(true);
     try {
       const requestId =
         globalThis.crypto?.randomUUID?.() || `pay-${Date.now()}`;
-      await repairPaymentService.collect({
+      const payload = {
         authorizationId: collectAuth.id,
         amount: Number(amount || 0),
         method,
         requestId,
-      });
-      toast.success("تم تسجيل الدفعة وترحيلها للخزينة والحسابات.");
+      };
+      if (collectKind === "receivable") {
+        await repairPaymentService.collectReceivable(payload);
+        toast.success("تم تحصيل الذمة وخصمها من ذمم العملاء.");
+      } else {
+        await repairPaymentService.collect(payload);
+        toast.success("تم تسجيل الدفعة وترحيلها للخزينة والحسابات.");
+      }
       setCollectAuth(null);
+      setCollectKind("deposit");
       setAmount("0");
       await load();
     } catch (error: unknown) {
@@ -492,13 +536,25 @@ export const RepairPayments: React.FC = () => {
         auth.status === "partial") ? (
         <Button
           size="sm"
-          onClick={() => {
-            setCollectAuth(auth);
-            setAmount(String(auth.balanceDue));
-          }}
+          onClick={() => openCollectDialog(auth, "deposit")}
         >
           <CreditCard className="ms-1 h-3.5 w-3.5" />
           تحصيل
+        </Button>
+      ) : null}
+      {can("repair.payments.collect") &&
+      !isWarrantySettlementAuth(auth) &&
+      Number(auth.balanceDue || 0) > 0.001 &&
+      (job?.status === "delivered" ||
+        job?.status === "completed" ||
+        job?.financialState === "delivered_on_credit") ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => openCollectDialog(auth, "receivable")}
+        >
+          <WalletCards className="ms-1 h-3.5 w-3.5" />
+          تحصيل ذمة
         </Button>
       ) : null}
       {job?.status === "ready" &&
@@ -517,7 +573,8 @@ export const RepairPayments: React.FC = () => {
       {job?.status === "ready" &&
       auth.balanceDue > 0 &&
       auth.creditApprovalStatus !== "approved" &&
-      can("repair.credit.request") ? (
+      can("repair.credit.request") &&
+      branchById.get(auth.branchId)?.allowCreditDelivery !== false ? (
         <Button
           size="sm"
           variant="secondary"
@@ -552,6 +609,12 @@ export const RepairPayments: React.FC = () => {
           key: "collect",
           label: "جاهز للتحصيل",
           value: authorizations.filter((r) => r.status === "approved" || r.status === "partial").length,
+        },
+        {
+          key: "ar",
+          label: "ذمم مفتوحة",
+          value: openReceivableAuthorizations.length,
+          accent: openReceivableAuthorizations.length > 0,
         },
         {
           key: "paid",
@@ -692,6 +755,52 @@ export const RepairPayments: React.FC = () => {
                 )}
               </div>
             ))}
+          </div>
+        </OpsDashPanel>
+      ) : null}
+
+      {openReceivableAuthorizations.length > 0 ? (
+        <OpsDashPanel
+          title={`ذمم بعد التسليم · ${money(openReceivableTotal)} ج.م`}
+          accent="repair"
+          bodyClassName="p-0"
+        >
+          <div className="space-y-2 p-4">
+            {openReceivableAuthorizations.map((auth) => {
+              const job = jobById.get(auth.jobId);
+              return (
+                <div
+                  key={`ar-${auth.id}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50/50 p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-semibold">#{auth.receiptNo}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {job?.customerName || "—"} · متبقي {money(auth.balanceDue)} ج.م
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {can("repair.payments.collect") ? (
+                      <Button
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => openCollectDialog(auth, "receivable")}
+                      >
+                        <WalletCards className="ms-1 h-3.5 w-3.5" />
+                        تحصيل ذمة
+                      </Button>
+                    ) : null}
+                    {job?.id ? (
+                      <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}>
+                        <Button size="sm" variant="outline">
+                          فتح الطلب
+                        </Button>
+                      </Link>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </OpsDashPanel>
       ) : null}
@@ -930,14 +1039,23 @@ export const RepairPayments: React.FC = () => {
 
       <Dialog
         open={Boolean(collectAuth)}
-        onOpenChange={(open) => !open && setCollectAuth(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCollectAuth(null);
+            setCollectKind("deposit");
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>تسجيل دفعة</DialogTitle>
+            <DialogTitle>
+              {collectKind === "receivable" ? "تحصيل ذمة بعد التسليم" : "تسجيل دفعة"}
+            </DialogTitle>
             <DialogDescription>
-              الرصيد الحالي {money(collectAuth?.balanceDue)} ج.م. ستُرحل الدفعة
-              للخزينة والقيد المحاسبي.
+              الرصيد الحالي {money(collectAuth?.balanceDue)} ج.م.
+              {collectKind === "receivable"
+                ? " يُخصم من ذمم العملاء ويُرحَّل للخزينة."
+                : " ستُرحل الدفعة للخزينة والقيد المحاسبي."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
@@ -971,12 +1089,22 @@ export const RepairPayments: React.FC = () => {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCollectAuth(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCollectAuth(null);
+                setCollectKind("deposit");
+              }}
+            >
               إلغاء
             </Button>
             <Button disabled={busy} onClick={() => void collect()}>
               <CheckCircle2 className="ms-1 h-4 w-4" />
-              {busy ? "جاري الترحيل…" : "تأكيد التحصيل"}
+              {busy
+                ? "جاري الترحيل…"
+                : collectKind === "receivable"
+                  ? "تأكيد تحصيل الذمة"
+                  : "تأكيد التحصيل"}
             </Button>
           </DialogFooter>
         </DialogContent>

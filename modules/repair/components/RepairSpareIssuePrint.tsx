@@ -1,4 +1,11 @@
 import React from 'react';
+import type { PrintTemplateSettings } from '../../../types';
+import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
+import { Factory_REPAIR_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import {
+  FactoryPrintSectionTitle,
+  FactoryPrintShell,
+} from '@/src/components/erp/FactoryPrintShell';
 import { REPAIR_SPARE_ISSUE_STATUS_LABELS } from '../lib/repairSpareIssue';
 import { normalizeRepairSpareIssueAllocations } from '../lib/repairSpareIssueAllocation';
 import type { RepairSpareIssue } from '../types';
@@ -19,193 +26,110 @@ const formatPrintDate = (value?: string) => {
 type Props = {
   issue: RepairSpareIssue | null;
   paperSize?: 'a4' | 'a5';
+  printSettings?: PrintTemplateSettings;
 };
 
 export const RepairSpareIssuePrint = React.forwardRef<HTMLDivElement, Props>(
-  ({ issue, paperSize = 'a4' }, ref) => {
+  ({ issue, paperSize = 'a4', printSettings }, ref) => {
     if (!issue) return <div ref={ref} />;
-    const isA5 = paperSize === 'a5';
-    const cell: React.CSSProperties = {
-      border: '1px solid #cbd5e1',
-      padding: '5.5px 6.5px',
-      verticalAlign: 'top',
-    };
-    const headCell: React.CSSProperties = {
-      ...cell,
-      background: '#0f172a',
-      color: '#fff',
-      fontWeight: 800,
-      textAlign: 'center',
-    };
-    const numericCell: React.CSSProperties = {
-      ...cell,
-      textAlign: 'center',
-      whiteSpace: 'nowrap',
-      fontVariantNumeric: 'tabular-nums',
-    };
-    const avoidBreak: React.CSSProperties = { breakInside: 'avoid', pageBreakInside: 'avoid' };
-    const infoBox: React.CSSProperties = {
-      border: '1px solid #cbd5e1',
-      borderRadius: 7,
-      padding: '6px 8px',
-      minHeight: 40,
-    };
-    const infoLabel: React.CSSProperties = { margin: 0, color: '#64748b', fontSize: 9.5, fontWeight: 800 };
-    const infoValue: React.CSSProperties = {
-      margin: '2px 0 0',
-      color: '#0f172a',
-      fontSize: 11.5,
-      fontWeight: 900,
-      overflowWrap: 'anywhere',
-      lineHeight: 1.35,
-    };
+
+    const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const accent = ps.primaryColor || undefined;
+    const isA5 = paperSize === 'a5' || ps.paperSize === 'a5';
+    const printedAt = new Date().toLocaleString('ar-EG');
     const totalQty = (issue.lines || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
+    const statusLabel = REPAIR_SPARE_ISSUE_STATUS_LABELS[issue.status] || issue.status;
 
     return (
-      <div
+      <FactoryPrintShell
         ref={ref}
-        dir="rtl"
-        style={{
-          width: '190mm',
-          minHeight: isA5 ? '128mm' : '270mm',
-          boxSizing: 'border-box',
-          background: '#fff',
-          color: '#0f172a',
-          padding: '7mm 9mm',
-          fontFamily: '"Cairo", "Tahoma", "Arial", sans-serif',
-          fontSize: 12,
-          lineHeight: 1.45,
-        }}
+        companyName={ps.headerText || 'مركز الصيانة'}
+        documentType="سند صرف قطع غيار"
+        printDate={printedAt}
+        logoUrl={ps.logoUrl}
+        brandAccent={accent}
+        footerTagline={ps.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        paperWidth={isA5 ? '148mm' : '210mm'}
+        minHeight={isA5 ? '210mm' : '297mm'}
+        padding={isA5 ? '7mm 8mm' : '10mm 12mm'}
+        dense={isA5}
+        metaCards={[
+          { label: 'رقم السند', value: issue.referenceNo || '—' },
+          { label: 'التاريخ', value: formatPrintDate(issue.createdAt) },
+          { label: 'المخزن', value: issue.warehouseName || issue.warehouseId || '—' },
+          { label: 'الحالة', value: statusLabel },
+        ]}
+        kpis={[
+          { label: 'الفرع', value: issue.branchName || '—', tone: 'default' },
+          { label: 'طلب الصيانة', value: issue.jobCode || issue.jobId || '—', tone: 'indigo' },
+          { label: 'إجمالي الكمية', value: formatQty(totalQty), tone: 'green' },
+          { label: 'عدد البنود', value: (issue.lines || []).length, tone: 'default' },
+        ]}
+        signatures={[
+          { title: 'أمين المخزن' },
+          { title: 'مستلم الصيانة' },
+          { title: 'اعتماد الإدارة' },
+        ]}
       >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            gap: 12,
-            borderBottom: '2px solid #0f172a',
-            paddingBottom: 8,
-            marginBottom: 8,
-          }}
-        >
-          <div>
-            <p style={{ margin: 0, color: '#64748b', fontSize: 10.5, fontWeight: 800 }}>صيانة — قطع الغيار</p>
-            <h1 style={{ margin: '1px 0', color: '#0f172a', fontSize: 22, fontWeight: 900, lineHeight: 1.1 }}>
-              سند صرف قطع غيار
-            </h1>
-            <p
-              style={{
-                margin: 0,
-                direction: 'ltr',
-                textAlign: 'right',
-                fontFamily: 'monospace',
-                fontSize: 12.5,
-                fontWeight: 800,
-              }}
-            >
-              {issue.referenceNo}
-            </p>
-          </div>
-          <div style={{ width: 210, border: '1px solid #cbd5e1', borderRadius: 7, overflow: 'hidden', fontSize: 10 }}>
-            {[
-              ['الحالة', REPAIR_SPARE_ISSUE_STATUS_LABELS[issue.status] || issue.status],
-              ['التاريخ', formatPrintDate(issue.createdAt)],
-              ['المخزن', issue.warehouseName || issue.warehouseId],
-            ].map(([label, value], index) => (
-              <div
-                key={label}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '66px 1fr',
-                  borderBottom: index === 2 ? 'none' : '1px solid #e2e8f0',
-                }}
-              >
-                <span style={{ background: '#f1f5f9', padding: '4px 6px', fontWeight: 800 }}>{label}</span>
-                <span style={{ padding: '4px 6px', overflowWrap: 'anywhere' }}>{value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <section className="mb-4">
+          <FactoryPrintSectionTitle title="تفاصيل الصرف" accent={accent} />
+          <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
+            <thead>
+              <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
+                <th className="border border-slate-200 px-2 py-2" style={{ width: '28%' }}>اللوكيشن</th>
+                <th className="border border-slate-200 px-2 py-2" style={{ width: '36%' }}>القطعة</th>
+                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '16%' }}>الكمية</th>
+                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '20%' }}>الوحدة</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(issue.lines || []).map((line, index) => {
+                const allocations = normalizeRepairSpareIssueAllocations(line);
+                const locationLabel =
+                  allocations.length > 0
+                    ? allocations
+                        .map((a) => {
+                          const rackShelf = [a.rack, a.shelf].filter(Boolean).join(' / ');
+                          return `${a.locationCode}${rackShelf ? ` (${rackShelf})` : ''}: ${formatQty(a.quantity)}`;
+                        })
+                        .join('، ')
+                    : '—';
+                return (
+                  <tr
+                    key={line.lineId || `${line.itemId}-${line.locationId || ''}`}
+                    className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}
+                    style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
+                  >
+                    <td className="border border-slate-200 px-2 py-2 text-[10px] font-semibold text-slate-700 break-words">
+                      {locationLabel}
+                    </td>
+                    <td className="border border-slate-200 px-2 py-2 text-[12px] font-extrabold text-slate-900 break-words">
+                      {line.itemName}
+                      {line.itemCode ? ` (${line.itemCode})` : ''}
+                    </td>
+                    <td
+                      className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums"
+                      style={{ color: accent }}
+                    >
+                      {formatQty(line.quantity)}
+                    </td>
+                    <td className="border border-slate-200 px-2 py-2 text-center text-[11px] font-bold text-slate-700">
+                      {line.unit || 'piece'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 7, marginBottom: 8 }}>
-          {[
-            ['الفرع', issue.branchName || '—'],
-            ['طلب الصيانة', issue.jobCode || issue.jobId || '—'],
-            ['إجمالي الكمية', formatQty(totalQty)],
-          ].map(([label, value]) => (
-            <div key={label} style={infoBox}>
-              <p style={infoLabel}>{label}</p>
-              <p style={infoValue}>{value}</p>
-            </div>
-          ))}
-        </div>
-
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 10 }}>
-          <colgroup>
-            <col style={{ width: '28%' }} />
-            <col style={{ width: '36%' }} />
-            <col style={{ width: '16%' }} />
-            <col style={{ width: '20%' }} />
-          </colgroup>
-          <thead>
-            <tr>
-              <th style={{ ...headCell, textAlign: 'right' }}>اللوكيشن</th>
-              <th style={{ ...headCell, textAlign: 'right' }}>القطعة</th>
-              <th style={headCell}>الكمية</th>
-              <th style={headCell}>الوحدة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(issue.lines || []).map((line) => {
-              const allocations = normalizeRepairSpareIssueAllocations(line);
-              const locationLabel = allocations.length > 0
-                ? allocations
-                  .map((a) => {
-                    const rackShelf = [a.rack, a.shelf].filter(Boolean).join(' / ');
-                    return `${a.locationCode}${rackShelf ? ` (${rackShelf})` : ''}: ${formatQty(a.quantity)}`;
-                  })
-                  .join('، ')
-                : '—';
-              return (
-                <tr key={line.lineId || `${line.itemId}-${line.locationId || ''}`}>
-                  <td style={{ ...cell, fontSize: 9.5, overflowWrap: 'anywhere' }}>{locationLabel}</td>
-                  <td style={{ ...cell, fontWeight: 800, overflowWrap: 'anywhere' }}>
-                    {line.itemName}
-                    {line.itemCode ? ` (${line.itemCode})` : ''}
-                  </td>
-                  <td style={{ ...numericCell, fontWeight: 900 }}>{formatQty(line.quantity)}</td>
-                  <td style={numericCell}>{line.unit || 'piece'}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        <div style={{ ...avoidBreak, marginTop: 10 }}>
-          {issue.note?.trim() ? (
-            <div style={{ ...infoBox, marginBottom: 12 }}>
-              <p style={infoLabel}>ملاحظات</p>
-              <p style={infoValue}>{issue.note}</p>
-            </div>
-          ) : null}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 34,
-              textAlign: 'center',
-              fontSize: 11,
-              fontWeight: 800,
-            }}
-          >
-            {['أمين المخزن', 'مستلم الصيانة', 'اعتماد الإدارة'].map((label) => (
-              <div key={label} style={{ borderTop: '1.5px solid #0f172a', paddingTop: 5 }}>
-                {label}
-              </div>
-            ))}
+        {issue.note?.trim() ? (
+          <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+            <p className="text-[10px] font-bold text-slate-500">ملاحظات</p>
+            <p className="mt-1 text-[12px] font-extrabold text-slate-800">{issue.note}</p>
           </div>
-        </div>
-      </div>
+        ) : null}
+      </FactoryPrintShell>
     );
   },
 );

@@ -18,21 +18,38 @@ import { cn } from '@/lib/utils';
 import { OfflineConnectionBanner } from './OfflineConnectionBanner';
 import { useOnlineStatus } from './useOnlineStatus';
 import { useAppDirection } from './useAppDirection';
+import { PageRouteFallback } from '@/components/PageRouteFallback';
+import { SidebarSkeleton } from '@/src/shared/ui/skeletons/SidebarSkeleton';
+import { TopbarSkeleton } from '@/src/shared/ui/skeletons/TopbarSkeleton';
+import { AppContentRefreshProvider, useAppContentRefresh } from './AppContentRefresh';
 
 const APP_VERSION = __APP_VERSION__;
 
 export interface AppLayoutProps {
   children: React.ReactNode;
+  /**
+   * Full chrome skeletons (sidebar + topbar + content). Rare cold gates only.
+   */
+  shellLoading?: boolean;
+  /**
+   * Keep real sidebar/topbar; only main page content becomes skeleton
+   * (bootstrap after hydrate, or topbar soft refresh).
+   */
+  contentLoading?: boolean;
 }
 
-// Inner component consumes the shared sidebar context
-const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
+const AppLayoutInner: React.FC<AppLayoutProps> = ({
+  children,
+  shellLoading = false,
+  contentLoading = false,
+}) => {
   const { t } = useTranslation();
   const { isRTL } = useAppDirection();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { collapsed, toggleCollapse } = useSidebar();
   const { can, canViewActivityLog } = usePermission();
   const location = useLocation();
+  const { contentRefreshing, contentKey } = useAppContentRefresh();
   const themeSettings = useAppStore((s) => s.systemSettings?.theme ?? DEFAULT_THEME);
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
@@ -62,8 +79,8 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
     [can, inventoryWarehouseId, roleKey],
   );
   const online = useOnlineStatus();
+  const showContentSkeleton = shellLoading || contentLoading || contentRefreshing;
 
-  // Margin matches sidebar width: collapsed=52px icon bar, expanded=260px
   const contentMargin = isRTL
     ? (collapsed ? 'lg:mr-[52px]' : 'lg:mr-[260px]')
     : (collapsed ? 'lg:ml-[52px]' : 'lg:ml-[260px]');
@@ -76,7 +93,11 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
       >
         {t('layout.skipToMainContent')}
       </a>
-      <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      {shellLoading ? (
+        <SidebarSkeleton collapsed={collapsed} />
+      ) : (
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      )}
 
       <div
         className={[
@@ -86,10 +107,14 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
         ].join(' ')}
       >
         <PageBackProvider>
-          <Topbar
-            onMenuToggle={() => setSidebarOpen((o) => !o)}
-            onSidebarCollapseToggle={toggleCollapse}
-          />
+          {shellLoading ? (
+            <TopbarSkeleton />
+          ) : (
+            <Topbar
+              onMenuToggle={() => setSidebarOpen((o) => !o)}
+              onSidebarCollapseToggle={toggleCollapse}
+            />
+          )}
 
           <OfflineConnectionBanner online={online} />
 
@@ -113,7 +138,13 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
                 paddingBottom: 'var(--layout-main-padding-y, 1rem)',
               }}
             >
-              <PageShell>{children}</PageShell>
+              <PageShell>
+                {showContentSkeleton ? (
+                  <PageRouteFallback bare />
+                ) : (
+                  <div key={contentKey}>{children}</div>
+                )}
+              </PageShell>
             </div>
           </main>
 
@@ -156,7 +187,6 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             </div>
           </footer>
 
-          {/* Global jobs panel/history mounted once for the full app layout */}
           {canViewActivityLog && <GlobalBackgroundJobs />}
           {useRepairBottomBar ? (
             <RepairMobileBottomBar onMoreClick={() => setSidebarOpen(true)} />
@@ -169,9 +199,16 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
   );
 };
 
-// Outer component provides shared sidebar context to the entire layout tree
-export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => (
+export const AppLayout: React.FC<AppLayoutProps> = ({
+  children,
+  shellLoading,
+  contentLoading,
+}) => (
   <SidebarProvider>
-    <AppLayoutInner>{children}</AppLayoutInner>
+    <AppContentRefreshProvider>
+      <AppLayoutInner shellLoading={shellLoading} contentLoading={contentLoading}>
+        {children}
+      </AppLayoutInner>
+    </AppContentRefreshProvider>
   </SidebarProvider>
 );

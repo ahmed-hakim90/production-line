@@ -5,6 +5,7 @@ import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { stockService } from '../../../modules/inventory/services/stockService';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import type { StockAdjustmentReason, StockCountSession } from '../../../modules/inventory/types';
 import { formatNumber } from '../../../utils/calculations';
@@ -61,6 +62,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => close()}>
       <div
         className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col border"
@@ -161,5 +163,6 @@ export const GlobalStockCountSessionModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

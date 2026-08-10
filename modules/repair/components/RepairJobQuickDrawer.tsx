@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,13 +9,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { REPAIR_JOB_STATUS_LABELS, type RepairJob } from '../types';
+import { useAppStore } from '@/store/useAppStore';
+import { useManagedPrint } from '@/utils/printManager';
+import type { RepairJob } from '../types';
 import { buildRepairTrackPublicUrl } from '../lib/repairPublicLinks';
 import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
 import { WhatsAppShare } from './WhatsAppShare';
 import { StatusBadge } from './StatusBadge';
 import { computeRepairJobCost } from '../utils/repairBusinessLogic';
-import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
+import { RepairJobPrint } from './RepairJobPrint';
 
 type RepairJobQuickDrawerProps = {
   open: boolean;
@@ -27,48 +29,6 @@ type RepairJobQuickDrawerProps = {
   showWorkshopLink?: boolean;
 };
 
-const printJobSummary = (job: RepairJob, branchName?: string, technicianName?: string) => {
-  const popup = window.open('', '_blank', 'width=900,height=700');
-  if (!popup) return;
-  const partsText = Array.isArray(job.partsUsed) && job.partsUsed.length > 0
-    ? job.partsUsed.map((part) => `${part.partName} x${part.quantity}`).join(' | ')
-    : '-';
-
-  popup.document.write(`
-    <html dir="rtl">
-      <head>
-        <title>طلب صيانة #${job.receiptNo}</title>
-        <style>
-          body { font-family: Tahoma, Arial, sans-serif; margin: 24px; color: #111827; }
-          h2 { margin: 0 0 10px; }
-          .muted { color: #6b7280; font-size: 13px; margin-bottom: 16px; }
-          table { border-collapse: collapse; width: 100%; }
-          th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: right; vertical-align: top; }
-          th { width: 220px; background: #f9fafb; }
-        </style>
-      </head>
-      <body>
-        <h2>تفاصيل طلب الصيانة #${job.receiptNo || '-'}</h2>
-        <div class="muted">تاريخ الإنشاء: ${new Date(job.createdAt).toLocaleString('ar-EG')}</div>
-        <table>
-          <tr><th>العميل</th><td>${job.customerName || '-'}</td></tr>
-          <tr><th>الهاتف</th><td>${job.customerPhone || '-'}</td></tr>
-          <tr><th>الفرع</th><td>${branchName || '-'}</td></tr>
-          <tr><th>الحالة</th><td>${REPAIR_JOB_STATUS_LABELS[mapLegacyRepairStatus(job.status)] || REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</td></tr>
-          <tr><th>الفني المسند</th><td>${technicianName || (job.technicianId ? `ID: ${job.technicianId}` : 'غير مسند')}</td></tr>
-          <tr><th>الجهاز</th><td>${`${job.deviceBrand || ''} ${job.deviceModel || ''}`.trim() || '-'}</td></tr>
-          <tr><th>التكلفة النهائية</th><td>${Number(job.finalCostOverride ?? job.finalCost ?? 0).toLocaleString('ar-EG')}</td></tr>
-          <tr><th>وصف العطل</th><td>${job.problemDescription || '-'}</td></tr>
-          <tr><th>قطع الغيار المطلوبة/المستخدمة</th><td>${partsText}</td></tr>
-        </table>
-      </body>
-    </html>
-  `);
-  popup.document.close();
-  popup.focus();
-  popup.print();
-};
-
 export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
   open,
   onOpenChange,
@@ -78,7 +38,15 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
   technicianName,
   showWorkshopLink = false,
 }) => {
-  const trackUrl = useMemo(() => {
+  const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: job?.receiptNo ? `طلب-صيانة-${job.receiptNo}` : 'طلب-صيانة',
+  });
+
+  const trackUrl = React.useMemo(() => {
     if (!job) return '';
     return buildRepairTrackPublicUrl({
       tenantSlug,
@@ -86,7 +54,8 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
       customerPhone: job.customerPhone,
     });
   }, [job, tenantSlug]);
-  const whatsappText = useMemo(() => {
+
+  const whatsappText = React.useMemo(() => {
     if (!job) return '';
     return formatRepairWhatsAppMessage(job, trackUrl || undefined);
   }, [job, trackUrl]);
@@ -126,7 +95,7 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap pt-1">
-            <Button type="button" variant="outline" onClick={() => printJobSummary(job, branchName, technicianName)}>
+            <Button type="button" variant="outline" onClick={() => handlePrint()}>
               طباعة
             </Button>
             <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
@@ -146,6 +115,28 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
               {trackUrl}
             </div>
           ) : null}
+        </div>
+
+        <div className="fixed left-[-10000px] top-0" aria-hidden>
+          <RepairJobPrint
+            ref={printRef}
+            job={job}
+            branch={
+              branchName
+                ? {
+                    tenantId: '',
+                    name: branchName,
+                    address: '',
+                    phone: '',
+                    isMain: false,
+                    createdAt: job.createdAt || new Date().toISOString(),
+                  }
+                : null
+            }
+            trackUrl={trackUrl || undefined}
+            printSettings={printTemplate}
+            copyKind="customer"
+          />
         </div>
       </DialogContent>
     </Dialog>

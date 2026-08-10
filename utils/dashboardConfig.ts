@@ -137,7 +137,7 @@ export const AVAILABLE_QUICK_ACTIONS: QuickActionDefinition[] = [
   { key: 'attendance', label: 'سجل الحضور', icon: 'fingerprint', color: 'violet', actionType: 'navigate', target: '/hr/attendance/logs', permission: 'attendance.view' },
   { key: 'approval_center', label: 'مركز الموافقات', icon: 'fact_check', color: 'amber', actionType: 'navigate', target: '/hr/approval-center', permission: 'approval.view' },
   { key: 'payroll', label: 'كشف الرواتب', icon: 'receipt_long', color: 'rose', actionType: 'navigate', target: '/hr/payroll', permission: 'payroll.view' },
-  { key: 'cost_centers', label: 'مراكز التكلفة', icon: 'account_balance', color: 'slate', actionType: 'navigate', target: '/cost-centers', permission: 'costs.view' },
+  { key: 'cost_centers', label: 'مراكز التكلفة', icon: 'account_balance', color: 'slate', actionType: 'navigate', target: '/accounting/cost-centers', permission: 'costs.view' },
   { key: 'settings', label: 'الإعدادات', icon: 'settings', color: 'primary', actionType: 'navigate', target: '/settings', permission: 'settings.view' },
   { key: 'roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings', color: 'rose', actionType: 'navigate', target: '/roles', permission: 'roles.manage' },
   { key: 'export_product_summary', label: 'تصدير ملخص المنتجات (Excel)', icon: 'download', color: 'emerald', actionType: 'export_excel', permission: 'reports.view' },

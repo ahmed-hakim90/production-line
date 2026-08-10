@@ -206,7 +206,7 @@ export const AssetsList: React.FC = () => {
         <button
           type="button"
           className="text-right"
-          onClick={() => asset.id && navigate(`/costs/assets/${asset.id}`)}
+          onClick={() => asset.id && navigate(`/accounting/assets/${asset.id}`)}
         >
           <div className="font-medium">{asset.name}</div>
           <div className="text-xs text-[var(--color-text-muted)]">{asset.code}</div>
@@ -273,14 +273,14 @@ export const AssetsList: React.FC = () => {
       {
         label: 'عرض التفاصيل',
         icon: <Eye className="h-4 w-4" />,
-        onClick: () => asset.id && navigate(`/costs/assets/${asset.id}`),
+        onClick: () => asset.id && navigate(`/accounting/assets/${asset.id}`),
       },
     ];
     if (canEdit) {
       items.push({
         label: 'تعديل',
         icon: <Pencil className="h-4 w-4" />,
-        onClick: () => asset.id && navigate(`/costs/assets/${asset.id}`),
+        onClick: () => asset.id && navigate(`/accounting/assets/${asset.id}`),
       });
     }
     if (canDelete && asset.id) {
@@ -312,7 +312,7 @@ export const AssetsList: React.FC = () => {
             <>
               <input
                 type="month"
-                className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+                className="rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
               />
@@ -396,7 +396,6 @@ export const AssetsList: React.FC = () => {
       )}
 
       <OpsDashPanel title="قائمة الأصول" accent="costs" bodyClassName="p-0">
-        <div className="p-4">
         <SmartFilterBar
       pageId="assets-list"
           searchPlaceholder="بحث بالاسم أو الكود"
@@ -429,7 +428,7 @@ export const AssetsList: React.FC = () => {
           onAdvancedFilterChange={(key, value) => {
             if (key === 'category') setCategory(value === 'all' ? '' : value);
           }}
-          className="mb-0 border-0"
+          className="mb-0 border-0 rounded-none"
         />
         <DataTable
           columns={columns}
@@ -438,7 +437,6 @@ export const AssetsList: React.FC = () => {
           emptyMessage="لا توجد أصول مسجلة"
           getRowActions={getRowActions}
         />
-        </div>
       </OpsDashPanel>
 
       {canEdit && (

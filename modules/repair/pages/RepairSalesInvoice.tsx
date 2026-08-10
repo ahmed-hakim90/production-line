@@ -8,8 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Pencil, Trash2, XCircle } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
 import { SearchableSelect } from '@/components/UI';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -42,6 +40,7 @@ import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { RepairSalesInvoicePrint } from '../components/RepairSalesInvoicePrint';
 import { useManagedPrint } from '../../../utils/printManager';
+import { exportToPDF } from '../../../utils/reportExport';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const PAGE_SIZE = 20;
@@ -82,7 +81,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
   const [price, setPrice] = useState('');
   const [discountType, setDiscountType] = useState<'none' | 'amount' | 'percent'>('none');
   const [discountValue, setDiscountValue] = useState('0');
-  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bank_transfer'>('cash');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bank_transfer' | 'credit'>('cash');
   const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -699,27 +698,11 @@ export const RepairSalesInvoicePage: React.FC = () => {
     }
     setIsExportingPdf(true);
     try {
-      const canvas = await html2canvas(printRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      });
-      const imageData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 8;
-      const availableWidth = pageWidth - margin * 2;
-      const availableHeight = pageHeight - margin * 2;
-      const imageHeight = (canvas.height * availableWidth) / canvas.width;
-      if (imageHeight <= availableHeight) {
-        pdf.addImage(imageData, 'PNG', margin, margin, availableWidth, imageHeight);
-      } else {
-        const ratio = availableHeight / imageHeight;
-        pdf.addImage(imageData, 'PNG', margin, margin, availableWidth * ratio, availableHeight);
-      }
       const safeInvoiceNo = String(printableInvoice.invoiceNo || 'invoice').replace(/[^\w-]/g, '_');
-      pdf.save(`invoice-${safeInvoiceNo}.pdf`);
+      await exportToPDF(printRef.current, `invoice-${safeInvoiceNo}`, {
+        paperSize: printTemplate?.paperSize,
+        orientation: printTemplate?.orientation,
+      });
       if (showSuccessToast) toast.success('تم تصدير PDF بنجاح.');
       return true;
     } catch {
@@ -882,7 +865,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
         </div>
       )}
     >
-      <div className="grid gap-4 xl:grid-cols-12">
+      <div className="grid items-start gap-4 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-7 no-print">
           {editingInvoiceId && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm">
@@ -961,8 +944,16 @@ export const RepairSalesInvoicePage: React.FC = () => {
                     <SelectItem value="cash">نقدي</SelectItem>
                     <SelectItem value="card">بطاقة</SelectItem>
                     <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                    {branches.find((b) => String(b.id || '') === branchId)?.allowCreditSalesInvoices === true ? (
+                      <SelectItem value="credit">آجل (ذمم)</SelectItem>
+                    ) : null}
                   </SelectContent>
                 </Select>
+                {paymentMethod === 'credit' ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    تُرحَّل على ذمم العميل بدون دخول للخزينة. تأكد من تفعيل الآجل على الفرع.
+                  </p>
+                ) : null}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -1169,19 +1160,20 @@ export const RepairSalesInvoicePage: React.FC = () => {
             </div>
           </OpsDashPanel>
 
-          <div className="overflow-auto rounded-lg border bg-white shadow-sm max-h-[70vh]">
-            <RepairSalesInvoicePrint
-              ref={printRef}
-              invoice={printableInvoice}
-              branchName={printableInvoice ? branchNameById(printableInvoice.branchId) : activeBranch?.name}
-              printSettings={printTemplate}
-            />
-            {!printableInvoice && (
-              <div className="px-4 py-16 text-center text-sm text-muted-foreground">
-                لا توجد فاتورة للمعاينة حاليًا.
-              </div>
-            )}
-          </div>
+          {printableInvoice ? (
+            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-white shadow-sm">
+              <RepairSalesInvoicePrint
+                ref={printRef}
+                invoice={printableInvoice}
+                branchName={branchNameById(printableInvoice.branchId)}
+                printSettings={printTemplate}
+              />
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              لا توجد فاتورة للمعاينة حاليًا.
+            </div>
+          )}
         </div>
       </div>
 

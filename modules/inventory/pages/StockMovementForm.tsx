@@ -2,8 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button, SearchableSelect } from '../components/UI';
-import { PageHeader } from '@/components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '../../../store/useAppStore';
 import { stockService } from '../services/stockService';
@@ -14,7 +14,7 @@ import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { warehouseRackService } from '../services/warehouseRackService';
-import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack, TransferRequestLine } from '../types';
+import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack, TransferRequestLine, StockTransaction } from '../types';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { StockAvailabilityHint } from '../components/StockAvailabilityHint';
 import { usePermission } from '../../../utils/permissions';
@@ -30,7 +30,9 @@ import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData
 import type { TransferDisplayUnitMode } from '../utils/transferUnits';
 import {
   INV_REF_REGEX,
+  applyScannedCodeToLines,
   createTransferLine,
+  findItemOptionByCode,
   formatInvReference,
   lineQuantityInPieces as lineQtyPieces,
   validateTransferLines,
@@ -65,6 +67,14 @@ import {
 } from '../lib/componentCatalogOptions';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { WAREHOUSE_ROLE_LABELS } from '../lib/stockLabels';
+import { movementLabel } from './stockTransactions/types';
+import { formatNumber } from '../../../utils/calculations';
+import {
+  flattenRecentVoucherFeed,
+  voucherDestinationLabel,
+  voucherMovementTitle,
+  voucherPrintFilePrefix,
+} from '../lib/groupStockVouchers';
 import { filterManualTransferWarehouses } from '../lib/manualTransferWarehouses';
 import {
   defaultItemLocationKey,
@@ -77,6 +87,7 @@ import { applyWarehouseBalanceDeltas, type WarehouseBalanceDelta } from '../lib/
 import { mapGroupedSequentialParallel } from '../../shared/lib/mapGroupedSequentialParallel';
 import {
   fetchCachedPageData,
+  invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 
@@ -157,9 +168,16 @@ export const StockMovementForm: React.FC = () => {
   const [adjustmentReason, setAdjustmentReason] = useState<StockAdjustmentReason>('manual_correction');
   const [quantity, setQuantity] = useState<number>(0);
   const [voucherNote, setVoucherNote] = useState('');
+  const [scanCode, setScanCode] = useState('');
   const [transferItems, setTransferItems] = useState<TransferLine[]>([createTransferLine()]);
+  const scanInputRef = useRef<HTMLInputElement>(null);
   const [nextReferenceSeq, setNextReferenceSeq] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [recentTxs, setRecentTxs] = useState<StockTransaction[]>([]);
+  const [recentLoading, setRecentLoading] = useState(false);
+  const [defaultLocationsByKey, setDefaultLocationsByKey] = useState(
+    () => new Map<string, { locationId: string; locationCode?: string }>(),
+  );
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const [previewData, setPreviewData] = useState<StockTransferPrintData | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
@@ -220,6 +238,25 @@ export const StockMovementForm: React.FC = () => {
     }
     const bals = await stockService.getBalances(whId);
     setBalances(bals);
+  }, []);
+
+  const loadRecentMovements = useCallback(async (whId: string) => {
+    if (!whId) {
+      setRecentTxs([]);
+      return;
+    }
+    setRecentLoading(true);
+    try {
+      const page = await stockService.getTransactionsPaged({
+        warehouseId: whId,
+        limit: 20,
+      });
+      setRecentTxs(page.items);
+    } catch {
+      setRecentTxs([]);
+    } finally {
+      setRecentLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -372,7 +409,8 @@ export const StockMovementForm: React.FC = () => {
 
   useEffect(() => {
     void loadBalancesForWarehouse(effectiveWarehouseId);
-  }, [effectiveWarehouseId, loadBalancesForWarehouse]);
+    void loadRecentMovements(effectiveWarehouseId);
+  }, [effectiveWarehouseId, loadBalancesForWarehouse, loadRecentMovements]);
 
   const selectedFromWarehouse = warehouses.find((w) => w.id === effectiveWarehouseId);
   const selectedToWarehouse = warehouses.find((w) => w.id === toWarehouseId);
@@ -413,6 +451,30 @@ export const StockMovementForm: React.FC = () => {
         })),
     [warehouseLocations, effectiveWarehouseId, inactiveRackIds],
   );
+  const usesLineLocations =
+    (movementType === 'IN' || movementType === 'OUT')
+    && locationSelectOptions.length > 0
+    && (itemType === 'raw_material' || isSparePartsContext);
+
+  useEffect(() => {
+    if (!effectiveWarehouseId || !usesLineLocations) {
+      setDefaultLocationsByKey(new Map());
+      return;
+    }
+    let cancelled = false;
+    void defaultItemLocationService.getAll(effectiveWarehouseId)
+      .then((rows) => {
+        if (cancelled) return;
+        setDefaultLocationsByKey(indexDefaultItemLocations(rows));
+      })
+      .catch(() => {
+        if (!cancelled) setDefaultLocationsByKey(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveWarehouseId, usesLineLocations]);
+
   const itemSelectOptions = useMemo(
     () =>
       itemOptions.map((opt) => {
@@ -512,6 +574,17 @@ export const StockMovementForm: React.FC = () => {
     return resolveComponentStockIdentity(component, balances, effectiveWarehouseId, movement);
   };
 
+  const resolvePreferredLineLocation = (itemId: string, currentLocationId?: string) => {
+    const current = String(currentLocationId || '').trim();
+    if (current) return current;
+    if (!itemId) return String(locationId || '').trim();
+    const identity = resolveLineStockIdentity(itemId, movementType === 'OUT' ? 'OUT' : 'IN');
+    const linked = defaultLocationsByKey.get(
+      defaultItemLocationKey(identity.itemType, identity.itemId),
+    );
+    return String(linked?.locationId || locationId || '').trim();
+  };
+
   const lineQuantityInPieces = (line: TransferLine) =>
     lineQtyPieces(line, getItemById(line.itemId), itemType);
 
@@ -553,12 +626,41 @@ export const StockMovementForm: React.FC = () => {
     });
 
   const showShareFeedback = (result: ShareResult) => {
-    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التحويلة' });
+    const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'الإذن' });
     if (!msg) return;
     toast.success(msg);
   };
 
-  const printTransfer = async (fileName: string) => {
+  const buildInOutPrintPayload = (resolvedReferenceNo: string): StockTransferPrintData => ({
+    transferNo: resolvedReferenceNo,
+    createdAt: new Date().toISOString(),
+    fromWarehouseName: selectedFromWarehouse?.name || effectiveWarehouseId,
+    toWarehouseName: voucherDestinationLabel(
+      movementType === 'OUT' ? 'OUT' : 'IN',
+      isSparePartsContext,
+    ),
+    note: voucherNote.trim() || undefined,
+    statusLabel: voucherMovementTitle(
+      movementType === 'OUT' ? 'OUT' : 'IN',
+      isSparePartsContext,
+    ),
+    items: transferItems.map((line) => {
+      const item = getItemById(line.itemId)!;
+      const isCarton = itemType === 'finished_good' && line.unit === 'carton';
+      const qtyPieces = lineQuantityInPieces(line);
+      return {
+        itemName: item.name,
+        itemCode: item.code,
+        unitLabel: isCarton ? 'كرتونة' : 'قطعة',
+        quantity: Number(line.quantity || 0),
+        quantityPieces: qtyPieces,
+        unitsPerCarton: isCarton ? Number(item.unitsPerCarton || 0) : undefined,
+      };
+    }),
+    createdBy: userDisplayName || 'Current User',
+  });
+
+  const printDocument = async (fileName: string) => {
     if (!transferPrintRef.current) return;
     if (isMobilePrint) {
       await exportToPDF(transferPrintRef.current, fileName, {
@@ -569,6 +671,10 @@ export const StockMovementForm: React.FC = () => {
       return;
     }
     handleTransferPrint();
+  };
+
+  const printTransfer = async (fileName: string) => {
+    await printDocument(fileName);
   };
 
   const handleSubmit = async (afterSaveAction: 'none' | 'print' | 'preview' | 'share' = 'none') => {
@@ -753,17 +859,12 @@ export const StockMovementForm: React.FC = () => {
           }, { path: INVENTORY_TRANSFER_CREATE_PATHS.movementsForm })).requestId;
         }
       } else if (movementType === 'IN' || movementType === 'OUT') {
-        const validationError = validateTransferLines(transferItems, itemType, getItemById);
+        const validationError = validateTransferLines(transferItems, itemType, getItemById, {
+          requireLocation: usesLineLocations,
+          allowSameItemDifferentLocation: usesLineLocations,
+        });
         if (validationError) {
           toast.error(validationError);
-          return;
-        }
-        if (itemType === 'raw_material' && locationSelectOptions.length > 0 && !locationId) {
-          toast.error(
-            isSparePartsContext
-              ? 'حدد الرف/اللوكيشن قبل تسجيل إذن الإضافة.'
-              : 'حدد اللوكيشن قبل تسجيل حركة مكون.',
-          );
           return;
         }
 
@@ -772,6 +873,8 @@ export const StockMovementForm: React.FC = () => {
           item: TransferItemOption;
           qty: number;
           stockIdentity: ReturnType<typeof resolveLineStockIdentity>;
+          lineLocationId?: string;
+          lineLocationCode?: string;
         }> = [];
         for (const line of transferItems) {
           const item = getItemById(line.itemId);
@@ -782,7 +885,16 @@ export const StockMovementForm: React.FC = () => {
             toast.error(`الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`);
             return;
           }
-          prepared.push({ line, item, qty, stockIdentity });
+          const lineLocationId = String(line.locationId || locationId || '').trim();
+          const lineLocation = warehouseLocations.find((loc) => loc.id === lineLocationId);
+          prepared.push({
+            line,
+            item,
+            qty,
+            stockIdentity,
+            lineLocationId: lineLocationId || undefined,
+            lineLocationCode: lineLocation?.code,
+          });
         }
         if (prepared.length === 0) {
           toast.error('تعذر ترحيل أي صنف.');
@@ -794,8 +906,8 @@ export const StockMovementForm: React.FC = () => {
           async (row) => {
             txId = unwrapOrThrow(await createStockMovement({
               warehouseId: effectiveWarehouseId,
-              locationId: locationId || undefined,
-              locationCode: selectedLocation?.code,
+              locationId: row.lineLocationId,
+              locationCode: row.lineLocationCode,
               toWarehouseId: undefined,
               itemType: row.stockIdentity.itemType,
               itemId: row.stockIdentity.itemId,
@@ -867,7 +979,22 @@ export const StockMovementForm: React.FC = () => {
               : `تم تسجيل الوارد (${transferItems.length} صنف) بنجاح.`)
             : movementType === 'OUT'
               ? `تم تسجيل المنصرف (${transferItems.length} صنف) بنجاح.`
-              : 'تم تسجيل الحركة بنجاح.');
+              : 'تم تسجيل الحركة بنجاح.',
+        (movementType === 'IN' || movementType === 'OUT')
+          ? {
+              action: {
+                label: 'فتح في السجل',
+                onClick: () => {
+                  const qs = new URLSearchParams();
+                  if (effectiveWarehouseId) qs.set('warehouseId', effectiveWarehouseId);
+                  if (isSparePartsContext) qs.set('focus', 'spare');
+                  qs.set('q', resolvedReferenceNo);
+                  navigate(`/inventory/transactions?${qs.toString()}`);
+                },
+              },
+            }
+          : undefined,
+      );
 
       const balanceDeltas: WarehouseBalanceDelta[] = [];
       if ((movementType === 'IN' || movementType === 'OUT') && effectiveWarehouseId) {
@@ -902,20 +1029,33 @@ export const StockMovementForm: React.FC = () => {
         setBalances((prev) => applyWarehouseBalanceDeltas(prev, balanceDeltas));
       }
 
-      const shouldPrintTransfer =
-        movementType === 'TRANSFER' && !isShelfTransfer && afterSaveAction !== 'none';
-      const printPayload = shouldPrintTransfer
-        ? buildTransferPrintData(resolvedReferenceNo, txId)
-        : null;
-      const printAction = shouldPrintTransfer ? afterSaveAction : 'none';
+      const shouldPrintVoucher =
+        afterSaveAction !== 'none'
+        && (
+          (movementType === 'TRANSFER' && !isShelfTransfer)
+          || movementType === 'IN'
+          || movementType === 'OUT'
+        );
+      const printPayload = !shouldPrintVoucher
+        ? null
+        : movementType === 'TRANSFER'
+          ? buildTransferPrintData(resolvedReferenceNo, txId)
+          : buildInOutPrintPayload(resolvedReferenceNo);
+      const printAction = shouldPrintVoucher ? afterSaveAction : 'none';
+      const printFilePrefix =
+        movementType === 'TRANSFER'
+          ? 'اذن-تحويل'
+          : voucherPrintFilePrefix(movementType === 'OUT' ? 'OUT' : 'IN', isSparePartsContext);
 
       setNextReferenceSeq((prev) => {
         const match = resolvedReferenceNo.match(INV_REF_REGEX);
         const fromUsedRef = match ? Number(match[1] || 0) + 1 : prev + 1;
         return Math.max(prev + 1, fromUsedRef);
       });
-      resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : 'IN');
+      resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : movementType === 'OUT' ? 'OUT' : 'IN');
       setSaving(false);
+      invalidatePageDataCache('inventory:stock-transactions');
+      void loadRecentMovements(effectiveWarehouseId);
 
       if (printPayload && printAction !== 'none') {
         if (printAction === 'preview') {
@@ -925,14 +1065,14 @@ export const StockMovementForm: React.FC = () => {
           setPrintData(printPayload);
           await waitForExportPaint(150);
           if (transferShareCardRef.current) {
-            const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${printPayload.transferNo}`);
+            const result = await shareToWhatsApp(transferShareCardRef.current, `stock-voucher-${printPayload.transferNo}`);
             showShareFeedback(result);
           }
           setTimeout(() => setPrintData(null), 1200);
         } else {
           setPrintData(printPayload);
           await new Promise((r) => setTimeout(r, 250));
-          await printTransfer(`اذن-تحويل-${printPayload.transferNo}`);
+          await printTransfer(`${printFilePrefix}-${printPayload.transferNo}`);
           setTimeout(() => setPrintData(null), 1200);
         }
       }
@@ -946,9 +1086,16 @@ export const StockMovementForm: React.FC = () => {
 
   const handlePrintFromPreview = async () => {
     if (!previewData) return;
+    const prefix = previewData.statusLabel?.includes('إضافة')
+      ? 'اذن-اضافة'
+      : previewData.statusLabel?.includes('منصرف')
+        ? 'اذن-منصرف'
+        : previewData.toWarehouseName?.includes('وارد')
+          ? 'اذن-وارد'
+          : 'اذن';
     setPrintData(previewData);
     await new Promise((r) => setTimeout(r, 250));
-    await printTransfer(`اذن-تحويل-${previewData.transferNo}`);
+    await printTransfer(`${prefix}-${previewData.transferNo}`);
     setTimeout(() => setPrintData(null), 1200);
   };
 
@@ -963,7 +1110,17 @@ export const StockMovementForm: React.FC = () => {
     }
 
     if (movementType === 'TRANSFER' || movementType === 'IN' || movementType === 'OUT') {
-      const validationError = validateTransferLines(transferItems, itemType, getItemById);
+      const validationError = validateTransferLines(
+        transferItems,
+        itemType,
+        getItemById,
+        movementType === 'TRANSFER'
+          ? undefined
+          : {
+              requireLocation: usesLineLocations,
+              allowSameItemDifferentLocation: usesLineLocations,
+            },
+      );
       if (validationError) {
         toast.error(validationError);
         return;
@@ -971,26 +1128,7 @@ export const StockMovementForm: React.FC = () => {
       if (movementType === 'TRANSFER') {
         setPreviewData(buildTransferPrintData(referenceNo, null));
       } else {
-        setPreviewData({
-          transferNo: referenceNo,
-          createdAt: new Date().toISOString(),
-          fromWarehouseName: selectedFromWarehouse?.name || effectiveWarehouseId,
-          toWarehouseName: movementType === 'IN' ? 'وارد للمخزن' : 'منصرف من المخزن',
-          items: transferItems.map((line) => {
-            const item = getItemById(line.itemId)!;
-            const isCarton = itemType === 'finished_good' && line.unit === 'carton';
-            const qtyPieces = lineQuantityInPieces(line);
-            return {
-              itemName: item.name,
-              itemCode: item.code,
-              unitLabel: isCarton ? 'كرتونة' : 'قطعة',
-              quantity: Number(line.quantity || 0),
-              quantityPieces: qtyPieces,
-              unitsPerCarton: isCarton ? Number(item.unitsPerCarton || 0) : undefined,
-            };
-          }),
-          createdBy: userDisplayName || 'Current User',
-        });
+        setPreviewData(buildInOutPrintPayload(referenceNo));
       }
       setShowPrintPreview(true);
       return;
@@ -1025,6 +1163,47 @@ export const StockMovementForm: React.FC = () => {
     setShowPrintPreview(true);
   };
 
+  const handleApplyScanCode = () => {
+    const code = scanCode.trim();
+    if (!code) return;
+    if (!(movementType === 'IN' || movementType === 'OUT')) {
+      toast.error('مسح الكود متاح لإذن الوارد والمنصرف فقط.');
+      return;
+    }
+    const matched = findItemOptionByCode(itemOptions, code);
+    if (!matched) {
+      toast.error('لم يُعثر على صنف مطابق لهذا الكود تمامًا.');
+      setScanCode('');
+      scanInputRef.current?.focus();
+      return;
+    }
+    const preferredLocation = resolvePreferredLineLocation(matched.id, locationId);
+    const result = applyScannedCodeToLines({
+      lines: transferItems,
+      itemId: matched.id,
+      locationId: preferredLocation || undefined,
+      unit: 'piece',
+    });
+    setTransferItems(result.lines);
+    setScanCode('');
+    toast.success(
+      result.action === 'incremented'
+        ? `تمت زيادة كمية ${matched.name}`
+        : `تمت إضافة ${matched.name}`,
+    );
+    scanInputRef.current?.focus();
+  };
+
+  const addVoucherLine = () => {
+    setTransferItems((prev) => [
+      ...prev,
+      createTransferLine({
+        locationId: locationId || '',
+        unit: itemType === 'finished_good' ? 'piece' : 'piece',
+      }),
+    ]);
+  };
+
   const pageTitle = isSparePartsContext && movementType === 'IN'
     ? 'إذن إضافة قطع غيار'
     : movementType === 'IN'
@@ -1052,6 +1231,7 @@ export const StockMovementForm: React.FC = () => {
         : movementType === 'TRANSFER'
           ? 'حفظ التحويلة'
           : 'حفظ التسوية';
+  const recentFeed = useMemo(() => flattenRecentVoucherFeed(recentTxs), [recentTxs]);
 
   /* ── ERPNext field helpers ── */
   const fieldClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f8f9fa] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-white focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
@@ -1063,42 +1243,43 @@ export const StockMovementForm: React.FC = () => {
       eyebrow={pageTitle}
       rangeLabel={pageSubtitle}
       actions={
-        can('inventory.transactions.create') ? (
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
-            variant="primary"
-            onClick={() => void handleSubmit('none')}
-            disabled={saving}
+            variant="outline"
+            onClick={() => openImportInByCodeModal(itemType === 'raw_material' ? 'raw_material' : 'finished_good')}
+            disabled={!can('inventory.transactions.create') || saving}
           >
-            {saving ? 'جاري الحفظ...' : primarySaveLabel}
+            <span className="material-icons-round text-sm">upload</span>
+            استيراد إدخال بالكود
           </Button>
-        ) : undefined
-      }
-    >
-      <PageHeader
-        title={pageTitle}
-        subtitle={pageSubtitle}
-        icon="inventory_2"
-        backAction={false}
-        moreActions={[
-          {
-            label: 'استيراد إدخال بالكود',
-            icon: 'upload',
-            onClick: () => openImportInByCodeModal(itemType === 'raw_material' ? 'raw_material' : 'finished_good'),
-            disabled: !can('inventory.transactions.create') || saving,
-          },
-          {
-            label: 'سجل حركات المخازن',
-            icon: 'swap_horiz',
-            onClick: () =>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
               navigate(
                 warehouseId
                   ? `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}`
                   : '/inventory/transactions',
-              ),
-          },
-        ]}
-      />
+              )
+            }
+          >
+            <span className="material-icons-round text-sm">swap_horiz</span>
+            سجل حركات المخازن
+          </Button>
+          {can('inventory.transactions.create') ? (
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => void handleSubmit('none')}
+              disabled={saving}
+            >
+              {saving ? 'جاري الحفظ...' : primarySaveLabel}
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
 
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
@@ -1231,16 +1412,27 @@ export const StockMovementForm: React.FC = () => {
           {movementType !== 'TRANSFER' && locationSelectOptions.length > 0 && (
             <div>
               <label className={labelClass}>
-                {isSparePartsContext ? 'الرف / اللوكيشن' : 'اللوكيشن'}
+                {usesLineLocations
+                  ? (isSparePartsContext ? 'الرف الافتراضي للأسطر' : 'اللوكيشن الافتراضي للأسطر')
+                  : (isSparePartsContext ? 'الرف / اللوكيشن' : 'اللوكيشن')}
               </label>
               <SearchableSelect
                 options={locationSelectOptions}
                 value={locationId}
-                onChange={(value) => setLocationId(value)}
+                onChange={(value) => {
+                  setLocationId(value);
+                  if (usesLineLocations && value) {
+                    setTransferItems((prev) =>
+                      prev.map((line) => (line.locationId ? line : { ...line, locationId: value })),
+                    );
+                  }
+                }}
                 placeholder={
-                  itemType === 'raw_material'
-                    ? 'مطلوب للمكونات وقطع الغيار'
-                    : 'اختياري للمنتجات'
+                  usesLineLocations
+                    ? 'يُطبَّق على الأسطر الجديدة والفارغة'
+                    : itemType === 'raw_material'
+                      ? 'مطلوب للمكونات وقطع الغيار'
+                      : 'اختياري للمنتجات'
                 }
               />
             </div>
@@ -1361,18 +1553,48 @@ export const StockMovementForm: React.FC = () => {
           {/* Multi-line items (IN / OUT / TRANSFER) */}
           {usesMultiLineItems && (
             <div className="md:col-span-2 space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <label className={labelClass} style={{ marginBottom: 0 }}>{linesSectionLabel}</label>
                 <Button
                   type="button"
                   variant="secondary"
                   className="hidden sm:inline-flex"
-                  onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
+                  onClick={addVoucherLine}
                   disabled={saving}
                 >
                   {addLineLabel}
                 </Button>
               </div>
+
+              {(movementType === 'IN' || movementType === 'OUT') && (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    ref={scanInputRef}
+                    type="text"
+                    className={fieldClass}
+                    value={scanCode}
+                    onChange={(e) => setScanCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleApplyScanCode();
+                      }
+                    }}
+                    placeholder="امسح أو اكتب كود الصنف ثم Enter"
+                    autoComplete="off"
+                    disabled={saving}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="sm:w-auto w-full shrink-0"
+                    onClick={handleApplyScanCode}
+                    disabled={saving || !scanCode.trim()}
+                  >
+                    إضافة بالكود
+                  </Button>
+                </div>
+              )}
 
               {/* Lines table */}
               <div
@@ -1383,13 +1605,16 @@ export const StockMovementForm: React.FC = () => {
                 <div
                   className="hidden sm:grid gap-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] px-3 py-2"
                   style={{
-                    gridTemplateColumns: itemType === 'finished_good' ? '1fr 160px 140px 40px' : '1fr 140px 40px',
+                    gridTemplateColumns: itemType === 'finished_good'
+                      ? (usesLineLocations ? '1fr 140px 180px 120px 40px' : '1fr 160px 140px 40px')
+                      : (usesLineLocations ? '1fr 180px 120px 40px' : '1fr 140px 40px'),
                     borderBottom: '1px solid var(--color-border)',
                     background: '#f8f9fa',
                   }}
                 >
                   <span>الصنف</span>
                   {itemType === 'finished_good' ? <span className="text-center">الوحدة</span> : null}
+                  {usesLineLocations ? <span className="text-center">الرف</span> : null}
                   <span className="text-center">الكمية</span>
                   <span />
                 </div>
@@ -1403,6 +1628,9 @@ export const StockMovementForm: React.FC = () => {
                     .reduce((sum, x) => sum + lineQuantityInPieces(x), 0);
                   const remaining = available - requestedForItem;
                   const showAvailability = movementType === 'OUT' || movementType === 'TRANSFER';
+                  const desktopCols = itemType === 'finished_good'
+                    ? (usesLineLocations ? '1fr 140px 180px 120px 40px' : '1fr 160px 140px 40px')
+                    : (usesLineLocations ? '1fr 180px 120px 40px' : '1fr 140px 40px');
                   return (
                     <div
                       key={line.id}
@@ -1412,9 +1640,7 @@ export const StockMovementForm: React.FC = () => {
                       {/* ── Desktop grid ── */}
                       <div
                         className="hidden sm:grid gap-0 items-start"
-                        style={{
-                          gridTemplateColumns: itemType === 'finished_good' ? '1fr 160px 140px 40px' : '1fr 140px 40px',
-                        }}
+                        style={{ gridTemplateColumns: desktopCols }}
                       >
                         <div className="pl-3">
                           <SearchableSelect
@@ -1422,7 +1648,15 @@ export const StockMovementForm: React.FC = () => {
                             value={line.itemId}
                             onChange={(value) =>
                               setTransferItems((prev) =>
-                                prev.map((x) => (x.id === line.id ? { ...x, itemId: value } : x)),
+                                prev.map((x) =>
+                                  x.id === line.id
+                                    ? {
+                                        ...x,
+                                        itemId: value,
+                                        locationId: resolvePreferredLineLocation(value, x.locationId),
+                                      }
+                                    : x,
+                                ),
                               )
                             }
                             placeholder="ابحث واختر الصنف"
@@ -1452,6 +1686,21 @@ export const StockMovementForm: React.FC = () => {
                                 {Number(lineItem?.unitsPerCarton || 0) > 0 ? `${lineItem?.unitsPerCarton} وحدة/كرتونة` : 'لا توجد قيمة'}
                               </p>
                             )}
+                          </div>
+                        ) : null}
+
+                        {usesLineLocations ? (
+                          <div className="px-2">
+                            <SearchableSelect
+                              options={locationSelectOptions}
+                              value={line.locationId || ''}
+                              onChange={(value) =>
+                                setTransferItems((prev) =>
+                                  prev.map((x) => (x.id === line.id ? { ...x, locationId: value } : x)),
+                                )
+                              }
+                              placeholder="اختر الرف"
+                            />
                           </div>
                         ) : null}
 
@@ -1487,7 +1736,15 @@ export const StockMovementForm: React.FC = () => {
                             value={line.itemId}
                             onChange={(value) =>
                               setTransferItems((prev) =>
-                                prev.map((x) => (x.id === line.id ? { ...x, itemId: value } : x)),
+                                prev.map((x) =>
+                                  x.id === line.id
+                                    ? {
+                                        ...x,
+                                        itemId: value,
+                                        locationId: resolvePreferredLineLocation(value, x.locationId),
+                                      }
+                                    : x,
+                                ),
                               )
                             }
                             placeholder="ابحث واختر الصنف"
@@ -1503,6 +1760,22 @@ export const StockMovementForm: React.FC = () => {
                             </p>
                           )}
                         </div>
+
+                        {usesLineLocations ? (
+                          <div>
+                            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الرف</span>
+                            <SearchableSelect
+                              options={locationSelectOptions}
+                              value={line.locationId || ''}
+                              onChange={(value) =>
+                                setTransferItems((prev) =>
+                                  prev.map((x) => (x.id === line.id ? { ...x, locationId: value } : x)),
+                                )
+                              }
+                              placeholder="اختر الرف"
+                            />
+                          </div>
+                        ) : null}
 
                         <div className={`grid gap-2 ${itemType === 'finished_good' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                           {itemType === 'finished_good' ? (
@@ -1532,7 +1805,7 @@ export const StockMovementForm: React.FC = () => {
                 type="button"
                 variant="secondary"
                 className="w-full sm:hidden"
-                onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
+                onClick={addVoucherLine}
                 disabled={saving}
               >
                 {addLineLabel}
@@ -1557,7 +1830,7 @@ export const StockMovementForm: React.FC = () => {
               معاينة
             </Button>
           )}
-          {movementType === 'TRANSFER' && (
+          {(movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER') && (
             <Button
               type="button"
               variant="secondary"
@@ -1565,7 +1838,18 @@ export const StockMovementForm: React.FC = () => {
               onClick={() => void handleSubmit('share')}
               disabled={!can('inventory.transactions.create') || saving}
             >
-              {saving ? 'جاري الحفظ...' : 'حفظ ومشاركة واتساب'}
+              {saving ? 'جاري الحفظ...' : 'حفظ ومشاركة'}
+            </Button>
+          )}
+          {(movementType === 'IN' || movementType === 'OUT' || (movementType === 'TRANSFER' && !isShelfTransfer)) && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              onClick={() => void handleSubmit('print')}
+              disabled={!can('inventory.transactions.create') || saving}
+            >
+              {saving ? 'جاري الحفظ...' : 'حفظ وطباعة'}
             </Button>
           )}
           <Button
@@ -1580,6 +1864,126 @@ export const StockMovementForm: React.FC = () => {
         </div>
       </div>
       </OpsDashPanel>
+
+      {effectiveWarehouseId ? (
+        <OpsDashPanel
+          title="آخر الحركات في المخزن"
+          accent="inventory"
+          bodyClassName="p-0"
+          action={(
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                navigate(
+                  `/inventory/transactions?warehouseId=${encodeURIComponent(effectiveWarehouseId)}${
+                    isSparePartsContext ? '&focus=spare' : ''
+                  }`,
+                )
+              }
+            >
+              عرض السجل الكامل
+            </Button>
+          )}
+        >
+          <div className="overflow-x-auto">
+            <table className="erp-table w-full min-w-[640px] text-right border-collapse">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">التاريخ</th>
+                  <th className="erp-th">الصنف</th>
+                  <th className="erp-th">الحركة</th>
+                  <th className="erp-th text-center">الكمية</th>
+                  <th className="erp-th">المرجع</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--color-border)]">
+                {recentLoading && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-400">
+                      جاري التحميل...
+                    </td>
+                  </tr>
+                )}
+                {!recentLoading && recentFeed.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400">
+                      لا توجد حركات حديثة لهذا المخزن.
+                    </td>
+                  </tr>
+                )}
+                {!recentLoading &&
+                  recentFeed.map((entry) => {
+                    if (entry.kind === 'voucher') {
+                      const group = entry.group;
+                      const qtySum = group.lines.reduce((s, l) => s + Math.abs(Number(l.quantity || 0)), 0);
+                      return (
+                        <tr key={`recent-voucher-${group.movementType}-${group.referenceNo}`} className="bg-sky-50/30">
+                          <td className="px-4 py-2.5 text-xs text-slate-500 tabular-nums">
+                            {new Date(group.createdAt).toLocaleString('ar-EG')}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <p className="text-sm font-bold">
+                              {voucherMovementTitle(group.movementType, isSparePartsContext)} #{group.referenceNo}
+                            </p>
+                            <p className="text-xs text-[var(--color-text-muted)]">
+                              {group.lines.length} أصناف
+                              {group.note ? ` · ${group.note}` : ''}
+                            </p>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-semibold">
+                            {movementLabel[group.movementType]}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span
+                              className={`font-black tabular-nums ${
+                                group.movementType === 'IN' ? 'text-emerald-600' : 'text-rose-500'
+                              }`}
+                            >
+                              {group.movementType === 'IN' ? '+' : '−'}
+                              {formatNumber(qtySum)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs font-mono text-slate-500">
+                            {group.referenceNo}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const tx = entry.tx;
+                    return (
+                      <tr key={tx.id || `${tx.itemId}-${tx.createdAt}`}>
+                        <td className="px-4 py-2.5 text-xs text-slate-500 tabular-nums">
+                          {new Date(tx.createdAt).toLocaleString('ar-EG')}
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <p className="text-sm font-bold">{tx.itemName}</p>
+                          <p className="text-xs font-mono text-[var(--color-text-muted)]">{tx.itemCode}</p>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs font-semibold">
+                          {movementLabel[tx.movementType] ?? tx.movementType}
+                        </td>
+                        <td className="px-4 py-2.5 text-center">
+                          <span
+                            className={`font-black tabular-nums ${
+                              Number(tx.quantity) >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                            }`}
+                          >
+                            {Number(tx.quantity) >= 0 ? '+' : ''}
+                            {formatNumber(tx.quantity)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs font-mono text-slate-500">
+                          {tx.referenceNo || '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </OpsDashPanel>
+      ) : null}
 
       {/* Hidden print component */}
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
@@ -1596,6 +2000,7 @@ export const StockMovementForm: React.FC = () => {
 
       {/* Print preview modal */}
       {showPrintPreview && previewData && (
+        <ManagedModalPortal>
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4"
           onClick={() => setShowPrintPreview(false)}
@@ -1636,6 +2041,7 @@ export const StockMovementForm: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
     </ModuleOpsPageShell>

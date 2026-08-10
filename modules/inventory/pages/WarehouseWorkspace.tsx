@@ -64,6 +64,11 @@ function roleActions(
       // Primary ops live in «تحكم المخزن» — keep inquiry/count links here only.
       return [
         {
+          label: 'إذن إضافة',
+          path: `/inventory/movements?warehouseId=${encodeURIComponent(warehouseId)}&movementType=IN`,
+          description: 'تسجيل وارد متعدد الأسطر لقطع الغيار',
+        },
+        {
           label: 'أرصدة أول المدة / الجرد',
           path: `/inventory/counts?warehouseId=${encodeURIComponent(warehouseId)}`,
           description: 'جلسات الجرد والاعتماد — أو ارفع أول المدة من أعلى هذه الصفحة',
@@ -80,8 +85,8 @@ function roleActions(
         },
         {
           label: 'الحركات',
-          path: `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}`,
-          description: 'أحدث حركات الصرف والوارد',
+          path: `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}&focus=spare`,
+          description: 'أذون الإضافة والصرف وحركات قطع الغيار',
         },
         {
           label: 'مواقع الأرفف',
@@ -734,7 +739,7 @@ export const WarehouseWorkspace: React.FC = () => {
         </OpsDashPanel>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <OpsDashPanel title="أرصدة سريعة" accent="inventory">
           {balances.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)]">لا أرصدة بعد.</p>

@@ -180,6 +180,10 @@ export const repairPaymentService = {
   collect(input: { authorizationId: string; amount: number; method: RepairPaymentMethod; requestId: string }) {
     return mutateRepairPaymentCallable({ operation: 'collect', ...input });
   },
+  /** Post-delivery AR clear: Dr cash · Cr receivables. */
+  collectReceivable(input: { authorizationId: string; amount: number; method: RepairPaymentMethod; requestId: string }) {
+    return mutateRepairPaymentCallable({ operation: 'collect_receivable', ...input });
+  },
   reverse(input: { paymentId: string; reason: string }) {
     return mutateRepairPaymentCallable({ operation: 'reverse_payment', ...input });
   },

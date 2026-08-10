@@ -5,6 +5,7 @@ import { Badge, Button, KPIBox } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useShallowStore } from '../../../store/useAppStore';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { scanEventService } from '../services/scanEventService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { formatNumber, getTodayDateString } from '../../../utils/calculations';
@@ -632,6 +633,7 @@ export const WorkOrderScanner: React.FC = () => {
       </OpsDashPanel>
 
       {closeModalOpen && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !closeBusy && setCloseModalOpen(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-bold mb-1">تأكيد إنهاء أمر الشغل</h3>
@@ -692,6 +694,7 @@ export const WorkOrderScanner: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
 
     </ModuleOpsPageShell>

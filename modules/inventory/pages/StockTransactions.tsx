@@ -25,7 +25,6 @@ import {
   waitForExportPaint,
   type ShareResult,
 } from '../../../utils/reportExport';
-import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { toast } from '../../../components/Toast';
@@ -46,6 +45,12 @@ import {
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import type { StockSourceModule } from '../types';
 import { sourceModuleLabel } from '../lib/stockLabels';
+import {
+  buildVoucherPrintDataFromTransactions,
+  groupManualVoucherTransactions,
+  isRepairStockSource,
+  type StockVoucherGroup,
+} from '../lib/groupStockVouchers';
 import { StockTransactionsTable } from './stockTransactions/StockTransactionsTable';
 import { StockTransactionsDialogs } from './stockTransactions/StockTransactionsDialogs';
 import { movementLabel } from './stockTransactions/types';
@@ -58,6 +63,28 @@ import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 const PAGE_SIZE = 25;
 const APP_VERSION = __APP_VERSION__;
 const TX_CACHE_PREFIX = 'inventory:stock-transactions';
+const SPARE_WAREHOUSE_ROLES = new Set(['spare_parts_central', 'maintenance_center']);
+
+const ALL_SOURCE_MODULES: StockSourceModule[] = [
+  'production_report',
+  'manual_movement',
+  'transfer_request',
+  'stock_count',
+  'packaging',
+  'work_order',
+  'production_issue',
+  'disassembly',
+  'supplies_receipt',
+  'department_consumable_issue',
+  'department_consumable_return',
+  'spare_parts_replenishment',
+  'spare_parts_purchase',
+  'repair_spare_issue',
+  'repair_spare_return',
+  'repair_customer_custody',
+  'repair_unrepairable',
+  'legacy',
+];
 
 type StockTransactionsPageData = {
   transactions: StockTransaction[];
@@ -112,7 +139,7 @@ export const StockTransactions: React.FC = () => {
   const [sourceModuleFilter, setSourceModuleFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('q') || searchParams.get('referenceNo') || '');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<'export' | 'delete' | ''>('');
@@ -128,6 +155,10 @@ export const StockTransactions: React.FC = () => {
     toWarehouseId: string;
     lines: StockTransaction[];
   } | null>(null);
+  const [selectedVoucher, setSelectedVoucher] = useState<StockVoucherGroup | null>(null);
+  const [repairOpsOnly, setRepairOpsOnly] = useState(
+    () => searchParams.get('focus') === 'repair' || searchParams.get('focus') === 'spare',
+  );
   const [editPending, setEditPending] = useState<InventoryTransferRequest | null>(null);
   const [editLines, setEditLines] = useState<TransferRequestLine[]>([]);
   const [editNote, setEditNote] = useState('');
@@ -198,9 +229,19 @@ export const StockTransactions: React.FC = () => {
     if (queryItemType === 'raw_material' || queryItemType === 'finished_good' || queryItemType === 'material') {
       setItemTypeFilter(queryItemType);
     }
+    const querySearch = searchParams.get('q') || searchParams.get('referenceNo') || '';
+    if (querySearch) setSearch(querySearch);
+    setRepairOpsOnly(searchParams.get('focus') === 'repair' || searchParams.get('focus') === 'spare');
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const warehouseMap = useMemo(() => new Map(warehouses.map((w) => [w.id, w.name])), [warehouses]);
+  const selectedWarehouse = useMemo(
+    () => warehouses.find((w) => w.id === warehouseFilter),
+    [warehouses, warehouseFilter],
+  );
+  const spareContext = Boolean(
+    selectedWarehouse?.warehouseRole && SPARE_WAREHOUSE_ROLES.has(selectedWarehouse.warehouseRole),
+  );
   const unitsPerCartonByProductId = useMemo(
     () => new Map(rawProducts.map((p) => [p.id || '', Number(p.unitsPerCarton || 0)])),
     [rawProducts],
@@ -212,7 +253,11 @@ export const StockTransactions: React.FC = () => {
   };
   const filtered = useMemo(() => transactions.filter((tx) => {
     const q = search.trim().toLowerCase();
-    const matchesSearch = !q || tx.itemName.toLowerCase().includes(q) || tx.itemCode.toLowerCase().includes(q);
+    const matchesSearch = !q
+      || tx.itemName.toLowerCase().includes(q)
+      || tx.itemCode.toLowerCase().includes(q)
+      || String(tx.referenceNo || '').toLowerCase().includes(q)
+      || String(tx.note || '').toLowerCase().includes(q);
     const matchesWarehouse = scoped
       ? warehouseIds.length > 0 &&
         (warehouseFilter
@@ -225,11 +270,12 @@ export const StockTransactions: React.FC = () => {
     const matchesMovement = !movementFilter || tx.movementType === movementFilter;
     const matchesSource = !sourceModuleFilter
       || (sourceModuleFilter === 'legacy' ? !tx.sourceModule : tx.sourceModule === sourceModuleFilter);
+    const matchesRepairOps = !repairOpsOnly || isRepairStockSource(tx.sourceModule) || tx.sourceModule === 'manual_movement';
     const createdMs = new Date(tx.createdAt).getTime();
     const matchesFrom = !dateFrom || createdMs >= new Date(dateFrom).getTime();
     const matchesTo = !dateTo || createdMs <= new Date(`${dateTo}T23:59:59`).getTime();
-    return matchesSearch && matchesWarehouse && matchesItemType && matchesMovement && matchesSource && matchesFrom && matchesTo;
-  }), [transactions, search, warehouseFilter, itemTypeFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo, scoped, warehouseIds]);
+    return matchesSearch && matchesWarehouse && matchesItemType && matchesMovement && matchesSource && matchesRepairOps && matchesFrom && matchesTo;
+  }), [transactions, search, warehouseFilter, itemTypeFilter, movementFilter, sourceModuleFilter, repairOpsOnly, dateFrom, dateTo, scoped, warehouseIds]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedRows = useMemo(
     () => filtered.filter((row) => row.id && selectedSet.has(row.id)),
@@ -249,9 +295,9 @@ export const StockTransactions: React.FC = () => {
         const matchesMovement = !movementFilter || movementFilter === 'TRANSFER';
         const linesText = row.lines.map((line) => `${line.itemName} ${line.itemCode}`).join(' ').toLowerCase();
         const matchesSearch = !q || row.referenceNo.toLowerCase().includes(q) || linesText.includes(q);
-        return matchesWarehouse && matchesMovement && matchesSearch;
+        return matchesWarehouse && matchesMovement && matchesSearch && !repairOpsOnly;
       }),
-    [pendingTransfers, search, warehouseFilter, movementFilter, scoped, warehouseIds],
+    [pendingTransfers, search, warehouseFilter, movementFilter, repairOpsOnly, scoped, warehouseIds],
   );
   const combinedRows = useMemo(() => {
     const nonTransferRows = filtered.filter((tx) => tx.movementType !== 'TRANSFER');
@@ -264,10 +310,17 @@ export const StockTransactions: React.FC = () => {
       transferMap.set(ref, bucket);
     }
 
-    const txRows = nonTransferRows.map((tx) => ({
+    const { singles, vouchers } = groupManualVoucherTransactions(nonTransferRows);
+
+    const txRows = singles.map((tx) => ({
       kind: 'transaction' as const,
       sortAt: new Date(tx.createdAt).getTime(),
       tx,
+    }));
+    const voucherRows = vouchers.map((group) => ({
+      kind: 'voucher' as const,
+      sortAt: new Date(group.createdAt).getTime(),
+      group,
     }));
     const approvedTransferRows = Array.from(transferMap.entries()).map(([referenceNo, rows]) => {
       const outRows = rows.filter((r) => r.transferDirection === 'OUT');
@@ -291,7 +344,7 @@ export const StockTransactions: React.FC = () => {
       sortAt: new Date(row.createdAt).getTime(),
       row,
     }));
-    return [...txRows, ...approvedTransferRows, ...pendingRows].sort((a, b) => b.sortAt - a.sortAt);
+    return [...txRows, ...voucherRows, ...approvedTransferRows, ...pendingRows].sort((a, b) => b.sortAt - a.sortAt);
   }, [filtered, pendingFiltered]);
 
   const totalPages = Math.max(1, Math.ceil(combinedRows.length / PAGE_SIZE));
@@ -303,7 +356,7 @@ export const StockTransactions: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, warehouseFilter, itemTypeFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo]);
+  }, [search, warehouseFilter, itemTypeFilter, movementFilter, sourceModuleFilter, repairOpsOnly, dateFrom, dateTo]);
 
   const visibleSelectableIds = useMemo(() => {
     const ids: string[] = [];
@@ -386,7 +439,7 @@ export const StockTransactions: React.FC = () => {
     if (tx.movementType !== 'TRANSFER') return;
     const transferNo = tx.referenceNo?.trim();
     if (!transferNo) {
-      toast.warning('لا يمكن إلغاء التحويلة بدون رقم مرجع.');
+      toast.warning('لا يمكن طباعة التحويلة بدون رقم مرجع.');
       return;
     }
 
@@ -424,7 +477,30 @@ export const StockTransactions: React.FC = () => {
       handleTransferPrint();
       setTimeout(() => setPrintData(null), 1000);
     } catch (error: any) {
-      toast.error(error?.message || 'تعذر إلغاء التحويلة.');
+      toast.error(error?.message || 'تعذر طباعة التحويلة.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const printVoucherGroup = async (group: StockVoucherGroup) => {
+    if (!group.referenceNo.trim() || group.lines.length === 0) {
+      toast.warning('لا توجد بيانات كافية لطباعة الإذن.');
+      return;
+    }
+    setProcessing(true);
+    try {
+      const payload = buildVoucherPrintDataFromTransactions({
+        group,
+        warehouseName: warehouseMap.get(group.warehouseId) ?? group.warehouseId,
+        spareContext: spareContext || repairOpsOnly,
+      });
+      setPrintData(payload);
+      await new Promise((r) => setTimeout(r, 250));
+      handleTransferPrint();
+      setTimeout(() => setPrintData(null), 1000);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر طباعة الإذن.');
     } finally {
       setProcessing(false);
     }
@@ -690,14 +766,27 @@ export const StockTransactions: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      eyebrow="سجل حركات المخزون"
-      rangeLabel="تتبع كامل لكل حركة على المنتجات والخامات"
+      eyebrow={spareContext || repairOpsOnly ? 'حركات قطع الغيار والصيانة' : 'سجل حركات المخزون'}
+      rangeLabel={
+        spareContext || repairOpsOnly
+          ? 'أذون الإضافة والصرف والتموين وسندات قطع الغيار'
+          : 'تتبع كامل لكل حركة على المنتجات والخامات'
+      }
       actions={(
         <div className="flex flex-wrap items-center gap-2">
           {can('inventory.transactions.create') ? (
-            <Button variant="primary" onClick={() => navigate('/inventory/movements')}>
+            <Button
+              variant="primary"
+              onClick={() =>
+                navigate(
+                  spareContext && warehouseFilter
+                    ? `/inventory/movements?warehouseId=${encodeURIComponent(warehouseFilter)}&movementType=IN`
+                    : '/inventory/movements?movementType=IN',
+                )
+              }
+            >
               <span className="material-icons-round text-sm">add</span>
-              إدخال حركة
+              {spareContext ? 'إذن إضافة' : 'إدخال حركة'}
             </Button>
           ) : null}
           {can('inventory.transactions.export') && effectiveExportRows.length > 0 ? (
@@ -718,7 +807,7 @@ export const StockTransactions: React.FC = () => {
       <OpsDashPanel title="الحركات والتحويلات" accent="inventory" bodyClassName="p-0">
         <SmartFilterBar
       pageId="stock-transactions"
-          searchPlaceholder="ابحث بالاسم أو الكود..."
+          searchPlaceholder="ابحث بالاسم أو الكود أو رقم المرجع..."
           searchValue={search}
           onSearchChange={setSearch}
           quickFilters={[
@@ -726,16 +815,30 @@ export const StockTransactions: React.FC = () => {
               key: 'movement',
               placeholder: 'كل أنواع الحركة',
               options: [
-                { value: 'IN', label: 'وارد' },
+                { value: 'IN', label: spareContext ? 'إذن إضافة' : 'وارد' },
                 { value: 'OUT', label: 'منصرف' },
                 { value: 'TRANSFER', label: 'تحويل' },
                 { value: 'ADJUSTMENT', label: 'تسوية' },
               ],
               width: 'w-[150px]',
             },
+            {
+              key: 'repairOps',
+              placeholder: 'النطاق',
+              options: [
+                { value: 'repair', label: 'صيانة / قطع غيار' },
+              ],
+              width: 'w-[160px]',
+            },
           ]}
-          quickFilterValues={{ movement: movementFilter || 'all' }}
-          onQuickFilterChange={(_, value) => setMovementFilter(value === 'all' ? '' : value)}
+          quickFilterValues={{
+            movement: movementFilter || 'all',
+            repairOps: repairOpsOnly ? 'repair' : 'all',
+          }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'movement') setMovementFilter(value === 'all' ? '' : value);
+            if (key === 'repairOps') setRepairOpsOnly(value === 'repair');
+          }}
           advancedFilters={[
             {
               key: 'warehouse',
@@ -748,20 +851,7 @@ export const StockTransactions: React.FC = () => {
               key: 'sourceModule',
               label: 'المصدر',
               placeholder: 'كل المصادر',
-              options: ([
-                'production_report',
-                'manual_movement',
-                'transfer_request',
-                'stock_count',
-                'packaging',
-                'work_order',
-                'production_issue',
-                'disassembly',
-                'supplies_receipt',
-                'department_consumable_issue',
-                'department_consumable_return',
-                'legacy',
-              ] as StockSourceModule[]).map((value) => ({
+              options: ALL_SOURCE_MODULES.map((value) => ({
                 value,
                 label: sourceModuleLabel(value),
               })),
@@ -825,6 +915,7 @@ export const StockTransactions: React.FC = () => {
           warehouseMap={warehouseMap}
           transferDisplayUnit={transferDisplayUnit}
           withResolvedUnitsPerCarton={withResolvedUnitsPerCarton}
+          spareContext={spareContext || repairOpsOnly}
           perm={{
             export: can('inventory.transactions.export'),
             print: can('inventory.transactions.print'),
@@ -838,6 +929,8 @@ export const StockTransactions: React.FC = () => {
           onEditRow={(tx) => void editRow(tx)}
           onDeleteRows={(rows) => void deleteRows(rows)}
           onOpenApproved={setSelectedApprovedTransfer}
+          onOpenVoucher={setSelectedVoucher}
+          onPrintVoucher={(group) => void printVoucherGroup(group)}
           onOpenPending={(row) => openModal(MODAL_KEYS.INVENTORY_APPROVE_TRANSFER, {
             request: row,
             warehouseMap,
@@ -924,6 +1017,9 @@ export const StockTransactions: React.FC = () => {
         onClosePending={() => setSelectedPending(null)}
         selectedApprovedTransfer={selectedApprovedTransfer}
         onCloseApproved={() => setSelectedApprovedTransfer(null)}
+        selectedVoucher={selectedVoucher}
+        onCloseVoucher={() => setSelectedVoucher(null)}
+        spareContext={spareContext || repairOpsOnly}
         editPending={editPending}
         editLines={editLines}
         editNote={editNote}
@@ -940,7 +1036,10 @@ export const StockTransactions: React.FC = () => {
         canPrint={can('inventory.transactions.print')}
         onPrintPendingFromModal={(row) => void printPendingTransfer(row)}
         onPrintApprovedFromModal={(line) => void printTransferFromRow(line)}
+        onPrintVoucherFromModal={(group) => void printVoucherGroup(group)}
         onShareTransfer={(tx, scope) => void shareTransferFromRow(tx, scope ?? 'line')}
+        onDeleteVoucherLines={(rows) => void deleteRows(rows)}
+        canDelete={can('inventory.transactions.delete')}
       />
     </ModuleOpsPageShell>
   );

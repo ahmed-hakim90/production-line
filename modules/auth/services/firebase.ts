@@ -734,6 +734,7 @@ export type MutateRepairPaymentInput = {
     | "resolve_approval"
     | "request_credit"
     | "collect"
+    | "collect_receivable"
     | "reverse_payment"
     | "deliver"
     | "request_customer_approval";
@@ -770,13 +771,24 @@ export const mutateRepairPaymentCallable = async (
 };
 
 export type MutateRepairTreasuryInput = {
-  operation: "post_manual_entry";
-  requestId: string;
-  branchId: string;
-  entryType: "INCOME" | "EXPENSE" | "TRANSFER_OUT" | "TRANSFER_IN";
-  amount: number;
-  note: string;
-  paymentMethod: "cash" | "card" | "bank_transfer";
+  operation:
+    | "post_manual_entry"
+    | "submit_settlement"
+    | "approve_settlement"
+    | "reject_settlement";
+  requestId?: string;
+  settlementId?: string;
+  branchId?: string;
+  fromBranchId?: string;
+  entryType?: "INCOME" | "EXPENSE" | "TRANSFER_OUT" | "TRANSFER_IN";
+  amount?: number;
+  countedAmount?: number;
+  expectedAmount?: number;
+  note?: string;
+  varianceReason?: string;
+  reason?: string;
+  rejectionReason?: string;
+  paymentMethod?: "cash" | "card" | "bank_transfer";
   expenseType?: string;
 };
 
@@ -914,7 +926,33 @@ export type MutateRepairSalesInvoiceInput = {
   discountValue?: number;
   approve?: boolean;
   rejectionReason?: string;
-  paymentMethod?: "cash" | "card" | "bank_transfer";
+  paymentMethod?: "cash" | "card" | "bank_transfer" | "credit";
+};
+
+export type MutateSparePartsPurchaseInvoiceInput = {
+  operation: "post";
+  requestId: string;
+  supplierName?: string;
+  supplierInvoiceNo?: string;
+  notes?: string;
+  lines: Array<{ materialId: string; quantity: number; unitPrice: number }>;
+};
+
+export const mutateSparePartsPurchaseInvoiceCallable = async (
+  input: MutateSparePartsPurchaseInvoiceInput,
+): Promise<Record<string, unknown> & { ok: true; invoiceId?: string; invoiceNo?: string }> => {
+  if (!isConfigured || !functionsClient)
+    throw new Error("Firebase not configured");
+  const callable = httpsCallable<
+    MutateSparePartsPurchaseInvoiceInput,
+    Record<string, unknown> & { ok: true; invoiceId?: string; invoiceNo?: string }
+  >(functionsClient, "mutateSparePartsPurchaseInvoice");
+  try {
+    const result = await callable(input);
+    return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
 };
 
 export const mutateRepairSalesInvoiceCallable = async (

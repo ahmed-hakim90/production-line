@@ -3,6 +3,7 @@ import { Loader2, UserPlus, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import type { FirestoreRole } from '../../../types';
 import { useTranslation } from 'react-i18next';
 
@@ -73,6 +74,7 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
   };
 
   return (
+    <ManagedModalPortal>
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !submitting && close()}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -116,6 +118,6 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };
-

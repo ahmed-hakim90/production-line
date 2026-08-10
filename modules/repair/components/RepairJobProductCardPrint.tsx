@@ -58,11 +58,12 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
     };
 
     return (
-      <div ref={ref} dir="rtl" className="print-root arabic-export-root">
+      <div ref={ref} dir="rtl" lang="ar" className="print-root print-report arabic-export-root">
         <div
           style={{
-            fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
-            width: '148mm',
+            fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
+            width: '100%',
+            maxWidth: '148mm',
             margin: '0 auto',
             padding: '3mm 3.5mm',
             background: '#fff',
@@ -70,20 +71,18 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
             fontSize: '8pt',
             lineHeight: 1.25,
             boxSizing: 'border-box',
+            letterSpacing: 'normal',
           }}
         >
           <div
             style={{
-              border: `1.5px solid ${ps.primaryColor}`,
-              borderRadius: '2mm',
+              borderBottom: `2px solid ${ps.primaryColor}`,
               overflow: 'hidden',
             }}
           >
             <div
               style={{
-                padding: '2mm 3mm',
-                borderBottom: `2px solid ${ps.primaryColor}`,
-                background: palette.tableRowAltBg,
+                padding: '2mm 0 2.5mm',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -98,9 +97,12 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
                     style={{ maxHeight: '7mm', objectFit: 'contain', marginBottom: '0.4mm', display: 'block' }}
                   />
                 ) : null}
-                <h1 style={{ margin: 0, fontSize: '11pt', fontWeight: 900, color: ps.primaryColor, lineHeight: 1.15 }}>
+                <h1 style={{ margin: 0, fontSize: '11pt', fontWeight: 900, color: '#0f172a', lineHeight: 1.15, letterSpacing: 'normal' }}>
                   {ps.headerText || 'مركز الصيانة'}
                 </h1>
+                <p style={{ margin: '0.2mm 0 0', fontSize: '6pt', fontWeight: 700, color: ps.primaryColor, letterSpacing: 'normal' }}>
+                  Factory PRODUCTION SYSTEM
+                </p>
                 <p style={{ margin: '0.3mm 0 0', fontSize: '8pt', fontWeight: 900, lineHeight: 1.15 }}>
                   كارت طلب الصيانة الداخلي
                 </p>

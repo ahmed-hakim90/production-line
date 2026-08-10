@@ -61,6 +61,21 @@ const QUICK_LINKS = [
     permission: "accounting.inventory.view" as const,
   },
   {
+    path: "/accounting/monthly-costs",
+    label: "تكلفة الإنتاج الشهرية",
+    icon: FileSpreadsheet,
+    desc: "احتساب وإقفال تكلفة التصنيع",
+    permission: "costs.view" as const,
+  },
+  {
+    path: "/accounting/cost-centers",
+    label: "مراكز التكلفة",
+    icon: BookOpen,
+    desc: "توزيع وتحميل التكاليف",
+    permission: "costs.view" as const,
+    anyOfPermissions: ["costs.view", "accounting.view"] as const,
+  },
+  {
     path: "/accounting/settings",
     label: "الإعدادات",
     icon: Settings2,
@@ -88,22 +103,34 @@ export const AccountingDashboard: React.FC = () => {
     () => postedEntries(journals, from, to),
     [journals, from, to],
   );
+  const asOfEntries = useMemo(
+    () => postedEntries(journals, undefined, to),
+    [journals, to],
+  );
   const trial = useMemo(
     () => buildTrialBalance(accounts, filteredEntries),
     [accounts, filteredEntries],
+  );
+  const asOfTrial = useMemo(
+    () => buildTrialBalance(accounts, asOfEntries),
+    [accounts, asOfEntries],
+  );
+  const knownAccountCodes = useMemo(
+    () => new Set(accounts.map((account) => account.code)),
+    [accounts],
   );
   const totals = useMemo(
     () => ({
       debit: accountingMoney(trial.reduce((sum, row) => sum + row.debit, 0)),
       credit: accountingMoney(trial.reduce((sum, row) => sum + row.credit, 0)),
       assets: accountingMoney(
-        trial
-          .filter((row) => row.type === "asset")
+        asOfTrial
+          .filter((row) => row.type === "asset" && knownAccountCodes.has(row.code))
           .reduce((sum, row) => sum + row.balance, 0),
       ),
       liabilities: accountingMoney(
-        -trial
-          .filter((row) => row.type === "liability")
+        -asOfTrial
+          .filter((row) => row.type === "liability" && knownAccountCodes.has(row.code))
           .reduce((sum, row) => sum + row.balance, 0),
       ),
       revenue: accountingMoney(
@@ -119,7 +146,7 @@ export const AccountingDashboard: React.FC = () => {
           .reduce((sum, row) => sum + row.balance, 0),
       ),
     }),
-    [trial],
+    [trial, asOfTrial, knownAccountCodes],
   );
 
   const net = accountingMoney(totals.revenue - totals.expenses);
@@ -133,26 +160,30 @@ export const AccountingDashboard: React.FC = () => {
       key: "assets",
       label: "إجمالي الأصول",
       value: loading ? "…" : formatAccountingMoney(totals.assets),
+      meta: `حتى ${to}`,
       accent: true as const,
     },
     {
       key: "liabilities",
       label: "الالتزامات",
       value: loading ? "…" : formatAccountingMoney(totals.liabilities),
+      meta: `حتى ${to}`,
     },
     {
       key: "revenue",
       label: "الإيرادات",
       value: loading ? "…" : formatAccountingMoney(totals.revenue),
+      meta: `${from} → ${to}`,
     },
     {
       key: "expenses",
       label: "المصروفات",
       value: loading ? "…" : formatAccountingMoney(totals.expenses),
+      meta: `${from} → ${to}`,
     },
     {
       key: "net",
-      label: "صافي الحركة",
+      label: "صافي الفترة",
       value: loading ? "…" : formatAccountingMoney(net),
       meta: `${from} → ${to}`,
     },
@@ -178,9 +209,12 @@ export const AccountingDashboard: React.FC = () => {
       secondarySummary="اختصارات التشغيل"
       secondary={(
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {QUICK_LINKS.filter(
-            (item) => !item.permission || can(item.permission),
-          ).map((item) => {
+          {QUICK_LINKS.filter((item) => {
+            if (item.anyOfPermissions?.length) {
+              return item.anyOfPermissions.some((p) => can(p));
+            }
+            return !item.permission || can(item.permission);
+          }).map((item) => {
             const Icon = item.icon;
             return (
               <Link

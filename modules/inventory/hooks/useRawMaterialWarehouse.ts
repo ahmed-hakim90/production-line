@@ -23,11 +23,19 @@ export function useRawMaterialWarehouse() {
   useEffect(() => {
     let cancelled = false;
     setLoadingWarehouse(true);
-    void warehouseService.getAllWarehouses().then((rows) => {
-      if (cancelled) return;
-      setWarehouses(rows);
-      setLoadingWarehouse(false);
-    });
+    void warehouseService
+      .getAllWarehouses()
+      .then((rows) => {
+        if (cancelled) return;
+        setWarehouses(rows);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWarehouses([]);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingWarehouse(false);
+      });
     return () => {
       cancelled = true;
     };

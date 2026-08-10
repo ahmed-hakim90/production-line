@@ -372,7 +372,7 @@ export const RepairSettings: React.FC = () => {
       eyebrow="إعدادات الصيانة"
       className="pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6"
       actions={(
-        <Button onClick={onSave} disabled={saving} size="sm" className="hidden sm:inline-flex shrink-0 min-h-11 touch-manipulation">
+        <Button onClick={onSave} disabled={saving} size="sm" className="hidden sm:inline-flex shrink-0">
           {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </Button>
       )}

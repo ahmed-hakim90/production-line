@@ -3,6 +3,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { PrintTemplateSettings } from '@/types';
 import { DEFAULT_PRINT_TEMPLATE } from '@/utils/dashboardConfig';
 import { getPrintThemePalette } from '@/utils/printTheme';
+import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
+import { Factory_DEFAULT_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
 
 export interface QualitySummaryPrintData {
   inspectedUnits: number;
@@ -35,7 +37,7 @@ const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
 };
 
 const fmtNum = (value: number, decimalPlaces: number) =>
-  value.toLocaleString('en-US', {
+  value.toLocaleString('ar-EG', {
     minimumFractionDigits: decimalPlaces,
     maximumFractionDigits: decimalPlaces,
   });
@@ -43,122 +45,82 @@ const fmtNum = (value: number, decimalPlaces: number) =>
 export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReportPrintProps>(
   ({ title, subtitle, generatedAt, workOrderNumber, summary, topDefects, printSettings }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-    const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
-    const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
 
     return (
-      <div
+      <PrintReportLayout
         ref={ref}
-        dir="rtl"
-        style={{
-          fontFamily: 'Calibri, Segoe UI, Tahoma, sans-serif',
-          width: paper.width,
-          minHeight: paper.minHeight,
-          padding: ps.paperSize === 'thermal' ? '4mm 3mm' : '12mm 15mm',
-          background: '#fff',
-          color: palette.text,
-          ['--print-text' as any]: palette.text,
-          ['--print-muted-text' as any]: palette.mutedText,
-          ['--print-border' as any]: palette.border,
-          ['--print-th-bg' as any]: palette.tableHeaderBg,
-          ['--print-th-text' as any]: palette.tableHeaderText,
-          ['--print-row-alt' as any]: palette.tableRowAltBg,
-          fontSize: ps.paperSize === 'thermal' ? '8pt' : '11pt',
-          lineHeight: 1.5,
-          boxSizing: 'border-box',
+        companyName={ps.headerText || 'مؤسسة المغربي'}
+        reportType={title || 'تقرير الجودة'}
+        printDate={now}
+        logoUrl={ps.logoUrl}
+        brandAccent={ps.primaryColor}
+        footerTagline={ps.footerText?.trim() || Factory_DEFAULT_FOOTER_TAGLINE}
+        paperSize={ps.paperSize}
+        orientation={ps.orientation}
+        meta={{
+          reportNumber: workOrderNumber || '—',
+          reportDate: now,
+          lineName: subtitle || 'قسم إدارة الجودة',
+          supervisorName: 'تقارير الجودة',
         }}
-      >
-        <div style={{ textAlign: 'center', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: ps.paperSize === 'thermal' ? '2mm' : '6mm' }}>
-          {ps.logoUrl && (
-            <img
-              src={ps.logoUrl}
-              alt="logo"
-              style={{ maxHeight: ps.paperSize === 'thermal' ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
-            />
-          )}
-          <h1 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '12pt' : '20pt', fontWeight: 900, color: palette.primary }}>
-            {ps.headerText}
-          </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
-            قسم إدارة الجودة - تقارير الجودة
-          </p>
-        </div>
-
-        <div style={{ marginBottom: ps.paperSize === 'thermal' ? '3mm' : '6mm' }}>
-          <h2 style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '10pt' : '16pt', fontWeight: 800, color: palette.text }}>{title}</h2>
-          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: ps.paperSize === 'thermal' ? '7pt' : '10pt', color: palette.mutedText }}>{subtitle}</p>}
-          <p style={{ margin: '2mm 0 0', fontSize: ps.paperSize === 'thermal' ? '6pt' : '9pt', color: palette.mutedText }}>
-            تاريخ الطباعة: {now}
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: ps.paperSize === 'thermal' ? '2mm' : '4mm', marginBottom: ps.paperSize === 'thermal' ? '3mm' : '6mm', flexWrap: 'wrap' }}>
-          <SummaryBox label="تم الفحص" value={fmtNum(summary.inspectedUnits, 0)} color={palette.primary} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="ناجح" value={fmtNum(summary.passedUnits, 0)} color={palette.success} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="فاشل" value={fmtNum(summary.failedUnits, 0)} color={palette.danger} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="إعادة تشغيل" value={fmtNum(summary.reworkUnits, 0)} color={palette.warning} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="معدل العيوب" value={`${fmtNum(summary.defectRate, dp)}%`} color={palette.warning} small={ps.paperSize === 'thermal'} />
-          <SummaryBox label="FPY" value={`${fmtNum(summary.firstPassYield, dp)}%`} color={palette.primary} small={ps.paperSize === 'thermal'} />
-        </div>
-
-        <table
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: ps.paperSize === 'thermal' ? '7pt' : '9.5pt',
-            marginBottom: ps.paperSize === 'thermal' ? '3mm' : '8mm',
-          }}
-        >
-          <thead>
-            <tr style={{ background: palette.tableHeaderBg }}>
-              <Th>#</Th>
-              <Th>سبب العيب</Th>
-              <Th align="center">الكمية</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {topDefects.length === 0 ? (
-              <tr>
-                <Td colSpan={3}>لا توجد عيوب مسجلة</Td>
-              </tr>
-            ) : (
-              topDefects.map((item, idx) => (
-                <tr key={`${item.reasonLabel}_${idx}`} style={{ background: idx % 2 === 0 ? '#fff' : 'var(--print-row-alt, #f8fafc)' }}>
-                  <Td>{idx + 1}</Td>
-                  <Td>{item.reasonLabel}</Td>
-                  <Td align="center" bold color={palette.primary}>{fmtNum(item.quantity, 0)}</Td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-
-        {ps.paperSize !== 'thermal' && (
-          <div style={{ marginTop: '15mm', display: 'flex', justifyContent: 'space-between', gap: '20mm' }}>
-            <SignatureBlock label="مدير الجودة" />
-            <SignatureBlock label="مشرف الجودة" />
-            <SignatureBlock label="مدير الإنتاج" />
-          </div>
-        )}
-
-        <div style={{ marginTop: ps.paperSize === 'thermal' ? '3mm' : '10mm', borderTop: `1px solid ${palette.border}`, paddingTop: '3mm', textAlign: 'center' }}>
-          {ps.showQRCode && (
-            <div style={{ marginBottom: '3mm' }}>
-              <QRCodeSVG
-                value={`quality-kpi|${workOrderNumber || 'snapshot'}|inspected:${summary.inspectedUnits}|failed:${summary.failedUnits}`}
-                size={ps.paperSize === 'thermal' ? 40 : 64}
-                level="L"
-              />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: palette.mutedText }}>رمز QR للتحقق من صحة تقرير الجودة</p>
-            </div>
-          )}
-          <p style={{ margin: 0, fontSize: ps.paperSize === 'thermal' ? '6pt' : '8pt', color: palette.mutedText }}>
-            {ps.footerText} - {now}
-          </p>
-        </div>
-      </div>
+        metaCards={[
+          { label: 'أمر الشغل', value: workOrderNumber || '—' },
+          { label: 'التاريخ', value: now },
+          { label: 'القسم', value: 'إدارة الجودة' },
+          { label: 'الملخص', value: subtitle || title || '—' },
+        ]}
+        kpis={[
+          { label: 'تم الفحص', value: summary.inspectedUnits, color: 'indigo' },
+          { label: 'ناجح', value: summary.passedUnits, color: 'green' },
+          { label: 'فاشل', value: summary.failedUnits, color: 'red' },
+          { label: 'إعادة تشغيل', value: summary.reworkUnits, color: 'sky' },
+          { label: 'معدل العيوب', value: `${fmtNum(summary.defectRate, dp)}%`, color: 'red' },
+          { label: 'FPY', value: `${fmtNum(summary.firstPassYield, dp)}%`, color: 'indigo' },
+        ]}
+        sections={[
+          {
+            title: 'أهم أسباب العيوب',
+            rows:
+              topDefects.length === 0
+                ? [{ label: 'العيوب', value: 'لا توجد عيوب مسجلة' }]
+                : topDefects.map((item, idx) => ({
+                    label: `${idx + 1}. ${item.reasonLabel}`,
+                    value: fmtNum(item.quantity, 0),
+                    highlight: true,
+                  })),
+          },
+          ...(ps.showQRCode
+            ? [
+                {
+                  title: 'التحقق',
+                  rows: [
+                    {
+                      label: 'رمز QR',
+                      fullWidth: true as const,
+                      value: (
+                        <div className="flex flex-col items-center gap-1 py-1">
+                          <QRCodeSVG
+                            value={`quality-kpi|${workOrderNumber || 'snapshot'}|inspected:${summary.inspectedUnits}|failed:${summary.failedUnits}`}
+                            size={64}
+                            level="L"
+                          />
+                          <span className="text-[10px] font-bold text-slate-500">رمز QR للتحقق من صحة تقرير الجودة</span>
+                        </div>
+                      ),
+                    },
+                  ],
+                },
+              ]
+            : []),
+        ]}
+        signatures={[
+          { title: 'مدير الجودة' },
+          { title: 'مشرف الجودة' },
+          { title: 'مدير الإنتاج' },
+        ]}
+      />
     );
   },
 );

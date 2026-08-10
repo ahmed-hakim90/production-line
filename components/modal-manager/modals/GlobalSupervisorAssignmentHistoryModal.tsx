@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { Button } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { useSupervisorStore } from '../../../modules/production/stores/useSupervisorStore';
 import type { HistoryPeriod, SupervisorAssignmentAction } from '../../../modules/production/services/supervisorDistributionService';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
@@ -69,6 +70,7 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
   if (!isOpen) return null;
 
   return (
+    <ManagedModalPortal>
     <div
       dir={dir}
       className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/35 p-4"
@@ -125,5 +127,6 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
         </div>
       </div>
     </div>
+    </ManagedModalPortal>
   );
 };

@@ -5,6 +5,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
+import { ManagedModalPortal } from '../ManagedModalPortal';
 import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
 import { resolveReportType, workOrderMatchesReportType } from '../../../modules/production/utils/reportTypes';
@@ -564,7 +565,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   };
 
   return (
-    <>
+    <ManagedModalPortal>
     <div
       className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
       onClick={closeModal}
@@ -1167,6 +1168,6 @@ export const GlobalCreateReportModal: React.FC = () => {
         </div>
       </div>
     </div>
-    </>
+    </ManagedModalPortal>
   );
 };

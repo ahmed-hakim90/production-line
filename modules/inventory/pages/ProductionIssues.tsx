@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
@@ -1284,11 +1285,11 @@ export const ProductionIssues: React.FC = () => {
         </div>
       </div>
       <div
+        aria-hidden
         style={{
           position: 'fixed',
+          left: '-9999px',
           top: 0,
-          right: 0,
-          zIndex: -1,
           pointerEvents: 'none',
           direction: 'rtl',
           width: '210mm',
@@ -1304,6 +1305,7 @@ export const ProductionIssues: React.FC = () => {
         />
       </div>
       {shortageModalOpen && shortageRows.length > 0 && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShortageModalOpen(false)}>
           <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
@@ -1359,8 +1361,10 @@ export const ProductionIssues: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
       {lineAction && (
+        <ManagedModalPortal>
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeLineAction}>
           <div className="w-full max-w-xl rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
@@ -1425,6 +1429,7 @@ export const ProductionIssues: React.FC = () => {
             </div>
           </div>
         </div>
+        </ManagedModalPortal>
       )}
     </ModuleOpsPageShell>
   );

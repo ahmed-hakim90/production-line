@@ -36,13 +36,12 @@ export function resolveHomeChartDrilldown(
     case 'production':
       return withQuery('/production-plans', { dateFrom: start, dateTo: end });
     case 'costs':
-      return '/monthly-costs';
+      return '/accounting/monthly-costs';
     case 'plans': {
       const statusMap: Record<string, string> = {
         مخطط: 'planned',
         جاري: 'in_progress',
         مكتمل: 'completed',
-        متأخر: 'in_progress',
         ملغي: 'cancelled',
       };
       return withQuery('/production-plans', {

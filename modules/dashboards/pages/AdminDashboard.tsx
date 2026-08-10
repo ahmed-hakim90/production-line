@@ -126,6 +126,7 @@ import {
   laborUtilizationPercent,
   outputVsIdealPercent,
   qualityRatesFromTotals,
+  resolvePlanReports,
   volumeWeightedPlanAchievement,
   yieldEfficiencyPercent,
 } from '../lib/decisionMetrics';
@@ -859,14 +860,14 @@ export const AdminDashboard: React.FC = () => {
       ? Number(monthlyCostSummary?.totals.indirectCost || 0)
       : liveCostComputation.totalIndirectCost;
 
-    const computedTotalCost = totalLaborCost + totalIndirectCost;
-    const totalCost = computedTotalCost;
+    const totalCost = totalLaborCost + totalIndirectCost;
+    const avgLaborCostPerUnit = totalProduction > 0 ? totalLaborCost / totalProduction : 0;
     const avgCostPerUnit = totalProduction > 0 ? totalCost / totalProduction : 0;
 
     const standardConfigs = lineProductConfigs;
     let standardTotalCost = 0;
     let standardTotalQty = 0;
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       const config = standardConfigs.find((c) => c.productId === r.productId && c.lineId === r.lineId);
       const stdMin = effectiveStandardAssemblyMinutes(
         r.productId,
@@ -880,16 +881,16 @@ export const AdminDashboard: React.FC = () => {
       }
     });
     const standardAvgCost = standardTotalQty > 0 ? standardTotalCost / standardTotalQty : 0;
+    // Compare labor actual vs labor standard (same basis — loaded cost is shown separately).
     const costVariance = standardAvgCost > 0
-      ? Number((((avgCostPerUnit - standardAvgCost) / standardAvgCost) * 100).toFixed(1))
+      ? Number((((avgLaborCostPerUnit - standardAvgCost) / standardAvgCost) * 100).toFixed(1))
       : 0;
 
     const activePlans = productionPlans.filter(
       (p) => p.status === 'in_progress' || p.status === 'completed' || p.status === 'planned',
     );
     const planActuals = activePlans.map((plan) => {
-      const key = `${plan.lineId}_${plan.productId}`;
-      const pReports = planReports[key] || [];
+      const pReports = resolvePlanReports(plan, planReports);
       const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
       return {
         plannedQuantity: plan.plannedQuantity,
@@ -1523,8 +1524,7 @@ export const AdminDashboard: React.FC = () => {
 
     const delayedPlans = productionPlans.filter((p) => {
       if (p.status !== 'in_progress' && p.status !== 'planned') return false;
-      const key = `${p.lineId}_${p.productId}`;
-      const pReports = planReports[key] || [];
+      const pReports = resolvePlanReports(p, planReports);
       const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
       return isPlanBehindSchedule(
         {
@@ -3098,7 +3098,7 @@ export const AdminDashboard: React.FC = () => {
                   {costCentersSummary.map((cc, i) => (
                     <div
                       key={`cc-m-${i}`}
-                      onClick={() => navigate('/cost-centers')}
+                      onClick={() => navigate('/accounting/cost-centers')}
                       className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm cursor-pointer"
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -3130,7 +3130,7 @@ export const AdminDashboard: React.FC = () => {
                   </thead>
                   <tbody>
                     {costCentersSummary.map((cc, i) => (
-                      <tr key={i} onClick={() => navigate('/cost-centers')} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
+                      <tr key={i} onClick={() => navigate('/accounting/cost-centers')} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
                         <td className="py-2.5 px-3 font-bold text-sm">{cc.name}</td>
                         <td className="py-2.5 px-3">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${

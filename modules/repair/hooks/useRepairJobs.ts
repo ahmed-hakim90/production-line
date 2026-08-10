@@ -35,6 +35,8 @@ export function useRepairJobs(params: {
   technicianIds?: string[];
   /** بحث خادمي آمن لموظف مركز الاتصال عبر كل المراكز. */
   callCenterGlobal?: boolean;
+  /** Override list cap (dashboards may use REPAIR_JOB_DASHBOARD_LIMIT). */
+  listLimit?: number;
 }) {
   const [debouncedSearch, setDebouncedSearch] = useState(params.searchText || '');
 
@@ -97,6 +99,7 @@ export function useRepairJobs(params: {
       params.minPhoneDigitsForQuery ?? '',
       phoneFilterRaw,
       params.callCenterGlobal ? debouncedSearch : '',
+      params.listLimit ?? '',
     ],
     queryFn: async (): Promise<RepairJob[]> => {
       if (
@@ -110,6 +113,7 @@ export function useRepairJobs(params: {
       ) {
         return [];
       }
+      const listOpts = params.listLimit ? { limit: params.listLimit } : undefined;
       if (params.technicianOnly) {
         return repairTechnicianService.list();
       }
@@ -117,14 +121,14 @@ export function useRepairJobs(params: {
         return repairCustomerOperationsService.listCallCenterJobs(debouncedSearch);
       }
       if (params.canViewAllBranches) {
-        return repairJobService.listAllBranches();
+        return repairJobService.listAllBranches(listOpts);
       }
       if (branchIdsKey.length > 0) {
-        return repairJobService.listByBranches(branchIdsKey);
+        return repairJobService.listByBranches(branchIdsKey, listOpts);
       }
       const single = params.branchId || '';
       if (!single) return [];
-      return repairJobService.listByBranch(single);
+      return repairJobService.listByBranch(single, listOpts);
     },
     enabled,
     refetchInterval: 90_000,

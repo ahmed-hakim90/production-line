@@ -35,6 +35,10 @@ assert.equal(
 );
 assert.equal(
   isWaitingCustomerApproval({ status: 'repairing', approvalStatus: 'pending' }),
+  false,
+);
+assert.equal(
+  isWaitingCustomerApproval({ status: 'diagnosing', approvalStatus: 'pending' }),
   true,
 );
 assert.equal(
