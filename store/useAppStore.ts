@@ -3173,6 +3173,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (saved) {
           void get().autoGeneratePlanMaterialRequirements(saved);
         }
+        const supervisorId = String(data.supervisorId || saved?.supervisorId || '').trim();
+        if (supervisorId) {
+          const { _rawProducts } = get();
+          const product = _rawProducts.find((p) => p.id === (data.productId || saved?.productId));
+          const qty = Number(data.plannedQuantity ?? saved?.plannedQuantity ?? 0);
+          await notificationService.create({
+            recipientId: supervisorId,
+            type: 'production_plan_assigned',
+            title: 'خطة إنتاج جديدة',
+            message: `خطة إنتاج — ${product?.name ?? ''} — ${Number.isFinite(qty) ? qty : 0} وحدة`,
+            referenceId: id,
+            isRead: false,
+          }).catch((notifyError) => {
+            console.warn('production plan notify failed:', notifyError);
+          });
+        }
       }
       return id;
     } catch (error) {

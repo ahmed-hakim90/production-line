@@ -604,7 +604,22 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
     if (tokens.length === 0) return;
 
     const notificationId = String(after.id);
-    const deepLink = '/activity-log';
+    const type = String(payload.type || '').trim();
+    const referenceId = String(payload.referenceId || '').trim();
+    let deepLink = '/activity-log';
+    if (type === 'production_plan_assigned') {
+      deepLink = '/production-plans';
+    } else if (type.startsWith('work_order')) {
+      deepLink = referenceId
+        ? `/work-orders?highlight=${encodeURIComponent(referenceId)}`
+        : '/work-orders';
+    } else if (type === 'production_report' || type === 'daily_report_missing') {
+      deepLink = '/reports';
+    } else if (type.startsWith('quality_report')) {
+      deepLink = '/quality/reports';
+    } else if (type === 'inventory_transfer_pending') {
+      deepLink = '/inventory/transfer-approvals';
+    }
     const multicast = {
       tokens,
       notification: {
@@ -613,9 +628,10 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
       },
       data: {
         notificationId,
-        type: String(payload.type || ''),
-        referenceId: String(payload.referenceId || ''),
+        type,
+        referenceId,
         link: deepLink,
+        url: deepLink,
       },
       android: {
         notification: {

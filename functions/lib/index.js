@@ -465,7 +465,26 @@ export const sendPushOnNotificationCreate = onDocumentWritten({
     if (tokens.length === 0)
         return;
     const notificationId = String(after.id);
-    const deepLink = '/activity-log';
+    const type = String(payload.type || '').trim();
+    const referenceId = String(payload.referenceId || '').trim();
+    let deepLink = '/activity-log';
+    if (type === 'production_plan_assigned') {
+        deepLink = '/production-plans';
+    }
+    else if (type.startsWith('work_order')) {
+        deepLink = referenceId
+            ? `/work-orders?highlight=${encodeURIComponent(referenceId)}`
+            : '/work-orders';
+    }
+    else if (type === 'production_report' || type === 'daily_report_missing') {
+        deepLink = '/reports';
+    }
+    else if (type.startsWith('quality_report')) {
+        deepLink = '/quality/reports';
+    }
+    else if (type === 'inventory_transfer_pending') {
+        deepLink = '/inventory/transfer-approvals';
+    }
     const multicast = {
         tokens,
         notification: {
@@ -474,9 +493,10 @@ export const sendPushOnNotificationCreate = onDocumentWritten({
         },
         data: {
             notificationId,
-            type: String(payload.type || ''),
-            referenceId: String(payload.referenceId || ''),
+            type,
+            referenceId,
             link: deepLink,
+            url: deepLink,
         },
         android: {
             notification: {
@@ -493,8 +513,8 @@ export const sendPushOnNotificationCreate = onDocumentWritten({
         },
         webpush: {
             notification: {
-                icon: '/icons/pwa-icon-192.png',
-                badge: '/icons/pwa-icon-192.png',
+                icon: '/icons/forgeops-app-icon-192.png',
+                badge: '/icons/forgeops-app-icon-192.png',
                 requireInteraction: false,
                 silent: false,
                 vibrate: [150, 50, 150],
@@ -619,8 +639,8 @@ export const onProductionReportCreated = onDocumentCreated({
                 notification: {
                     title: reportTitle,
                     body: reportBody,
-                    icon: '/icons/pwa-icon-192.png',
-                    badge: '/icons/pwa-icon-192.png',
+                    icon: '/icons/forgeops-app-icon-192.png',
+                    badge: '/icons/forgeops-app-icon-192.png',
                     tag: `production-report-${reportId}`,
                     renotify: true,
                     requireInteraction: false,

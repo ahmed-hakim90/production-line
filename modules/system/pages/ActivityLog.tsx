@@ -5,17 +5,19 @@ import { Badge, Button, LoadingSkeleton, SearchableSelect } from '../components/
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
+import { employeeService } from '../../hr/employeeService';
+import { roleService } from '../services/roleService';
+import { presenceService } from '../../../services/presenceService';
+import { notificationComposerService } from '../../../services/notificationComposerService';
+import { userService } from '../../../services/userService';
 import type {
   ActivityLog as ActivityLogType,
   ActivityAction,
   FirestoreEmployee,
   FirestoreRole,
+  FirestoreUser,
   UserPresence,
 } from '../../../types';
-import { employeeService } from '../../hr/employeeService';
-import { roleService } from '../services/roleService';
-import { presenceService } from '../../../services/presenceService';
-import { notificationComposerService } from '../../../services/notificationComposerService';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -98,6 +100,7 @@ export const ActivityLogPage: React.FC = () => {
   const [hasMore, setHasMore] = useState(() => initialLogsCache?.hasMore ?? false);
   const [presences, setPresences] = useState<UserPresence[]>([]);
   const [employeesById, setEmployeesById] = useState<Record<string, FirestoreEmployee>>({});
+  const [accountUsersById, setAccountUsersById] = useState<Record<string, FirestoreUser>>({});
   const [roles, setRoles] = useState<FirestoreRole[]>([]);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState('');
@@ -176,15 +179,22 @@ export const ActivityLogPage: React.FC = () => {
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([employeeService.getAll(), roleService.getAll()]).then(([employees, rolesRows]) => {
-      if (!mounted) return;
-      const byId = (employees || []).reduce<Record<string, FirestoreEmployee>>((acc, row) => {
-        if (row.id) acc[row.id] = row;
-        return acc;
-      }, {});
-      setEmployeesById(byId);
-      setRoles(rolesRows || []);
-    });
+    void Promise.all([employeeService.getAll(), roleService.getAll(), userService.getAll()]).then(
+      ([employees, rolesRows, users]) => {
+        if (!mounted) return;
+        const byId = (employees || []).reduce<Record<string, FirestoreEmployee>>((acc, row) => {
+          if (row.id) acc[row.id] = row;
+          return acc;
+        }, {});
+        const usersById = (users || []).reduce<Record<string, FirestoreUser>>((acc, row) => {
+          if (row.id && row.isActive !== false) acc[row.id] = row;
+          return acc;
+        }, {});
+        setEmployeesById(byId);
+        setAccountUsersById(usersById);
+        setRoles(rolesRows || []);
+      },
+    );
     return () => {
       mounted = false;
     };
@@ -305,37 +315,91 @@ export const ActivityLogPage: React.FC = () => {
       .sort((a, b) => b.dayDate.getTime() - a.dayDate.getTime());
   }, [visibleLogs]);
 
+  /** Only employees linked to an active login account — notification/push recipients. */
+  const accountLinkedEmployees = useMemo(() => {
+    const rows = (Object.values(employeesById) as FirestoreEmployee[])
+      .filter((e) => {
+        if (e.isActive === false) return false;
+        const userId = String(e.userId || '').trim();
+        return Boolean(userId && accountUsersById[userId]);
+      })
+      .map((employee) => {
+        const user = accountUsersById[String(employee.userId || '')];
+        const email = String(user?.email || employee.email || '').trim();
+        const displayName = String(user?.displayName || '').trim();
+        const label = [
+          employee.name || displayName || email || 'مستخدم',
+          employee.code ? `(${employee.code})` : '',
+          email ? `— ${email}` : '',
+        ].filter(Boolean).join(' ');
+        return { employee, user, email, displayName, label };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+    return rows;
+  }, [employeesById, accountUsersById]);
+
   const employeeOptions = useMemo(
-    () =>
-      (Object.values(employeesById) as FirestoreEmployee[])
-        .filter((e) => e.isActive !== false)
-        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar')),
-    [employeesById],
+    () => accountLinkedEmployees.map((row) => row.employee),
+    [accountLinkedEmployees],
   );
 
   const employeeSearchOptions = useMemo(
     () =>
-      employeeOptions.map((employee) => ({
-        value: String(employee.id || ''),
-        label: `${employee.name}${employee.code ? ` (${employee.code})` : ''}`,
+      accountLinkedEmployees.map((row) => ({
+        value: String(row.employee.id || ''),
+        label: row.label,
       })),
-    [employeeOptions],
+    [accountLinkedEmployees],
   );
 
   const filteredEmployeesForMulti = useMemo(() => {
     const needle = employeeSearchQuery.trim().toLowerCase();
-    if (!needle) return employeeOptions;
-    return employeeOptions.filter((employee) => {
-      const name = String(employee.name || '').toLowerCase();
-      const code = String(employee.code || '').toLowerCase();
-      return name.includes(needle) || code.includes(needle);
+    if (!needle) return accountLinkedEmployees;
+    return accountLinkedEmployees.filter((row) => {
+      const name = String(row.employee.name || '').toLowerCase();
+      const code = String(row.employee.code || '').toLowerCase();
+      const email = row.email.toLowerCase();
+      const displayName = row.displayName.toLowerCase();
+      return (
+        name.includes(needle)
+        || code.includes(needle)
+        || email.includes(needle)
+        || displayName.includes(needle)
+      );
     });
-  }, [employeeOptions, employeeSearchQuery]);
+  }, [accountLinkedEmployees, employeeSearchQuery]);
 
   const toggleMultiRecipient = (employeeId: string) => {
     setSelectedEmployeeIds((prev) =>
       prev.includes(employeeId) ? prev.filter((id) => id !== employeeId) : [...prev, employeeId],
     );
+  };
+
+  const visibleMultiIds = useMemo(
+    () => filteredEmployeesForMulti.map((row) => String(row.employee.id || '')).filter(Boolean),
+    [filteredEmployeesForMulti],
+  );
+
+  const allVisibleSelected =
+    visibleMultiIds.length > 0 && visibleMultiIds.every((id) => selectedEmployeeIds.includes(id));
+
+  const selectAllVisibleRecipients = () => {
+    setSelectedEmployeeIds((prev) => Array.from(new Set([...prev, ...visibleMultiIds])));
+  };
+
+  const clearVisibleRecipients = () => {
+    const visible = new Set(visibleMultiIds);
+    setSelectedEmployeeIds((prev) => prev.filter((id) => !visible.has(id)));
+  };
+
+  const selectAllActiveRecipients = () => {
+    setSelectedEmployeeIds(
+      employeeOptions.map((e) => String(e.id || '')).filter(Boolean),
+    );
+  };
+
+  const clearAllRecipients = () => {
+    setSelectedEmployeeIds([]);
   };
 
   const handleRolesChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -416,15 +480,21 @@ export const ActivityLogPage: React.FC = () => {
             {(targetMode === 'single' || targetMode === 'multi') && (
               <div className="md:col-span-2">
                 <label className="text-xs font-bold text-[var(--color-text-muted)]">
-                  {targetMode === 'single' ? 'اختيار مستخدم' : 'اختيار مستخدمين بالبحث'}
+                  {targetMode === 'single' ? 'اختيار مستخدم له حساب' : 'اختيار مستخدمين لهم حساب'}
                 </label>
+                <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                  يظهر فقط الحسابات النشطة المرتبطة بملف موظف. غير المرتبطين من صفحة المستخدمين لن يظهروا هنا.
+                  {accountLinkedEmployees.length === 0
+                    ? ' — لا يوجد حالياً مستخدمون مرتبطون.'
+                    : ` — ${accountLinkedEmployees.length} مستخدم.`}
+                </p>
                 {targetMode === 'single' ? (
                   <SearchableSelect
                     className="mt-1"
                     options={employeeSearchOptions}
                     value={selectedEmployeeIds[0] || ''}
                     onChange={(value) => setSelectedEmployeeIds(value ? [value] : [])}
-                    placeholder="ابحث باسم أو كود المستخدم"
+                    placeholder="ابحث بالاسم أو الكود أو الإيميل"
                   />
                 ) : (
                   <div className="mt-1 border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-card)] p-2.5 space-y-2">
@@ -432,11 +502,46 @@ export const ActivityLogPage: React.FC = () => {
                       className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2 text-sm"
                       value={employeeSearchQuery}
                       onChange={(e) => setEmployeeSearchQuery(e.target.value)}
-                      placeholder="ابحث باسم أو كود المستخدم"
+                      placeholder="ابحث بالاسم أو الكود أو الإيميل"
                     />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="!h-auto !px-2 !py-1 text-[11px]"
+                        onClick={allVisibleSelected ? clearVisibleRecipients : selectAllVisibleRecipients}
+                        disabled={visibleMultiIds.length === 0}
+                      >
+                        {allVisibleSelected ? 'إلغاء الظاهر' : 'تحديد الظاهر'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="!h-auto !px-2 !py-1 text-[11px]"
+                        onClick={selectAllActiveRecipients}
+                        disabled={employeeOptions.length === 0}
+                      >
+                        تحديد الكل
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="!h-auto !px-2 !py-1 text-[11px]"
+                        onClick={clearAllRecipients}
+                        disabled={selectedEmployeeIds.length === 0}
+                      >
+                        مسح الكل
+                      </Button>
+                      <span className="text-[11px] text-[var(--color-text-muted)]">
+                        ظاهر {visibleMultiIds.length} · مختار {selectedEmployeeIds.length}
+                      </span>
+                    </div>
                     <div className="max-h-40 overflow-y-auto space-y-1">
-                      {filteredEmployeesForMulti.map((employee) => {
-                        const id = String(employee.id || '');
+                      {filteredEmployeesForMulti.map((row) => {
+                        const id = String(row.employee.id || '');
                         const checked = selectedEmployeeIds.includes(id);
                         return (
                           <label key={id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[var(--color-bg)] cursor-pointer">
@@ -445,19 +550,18 @@ export const ActivityLogPage: React.FC = () => {
                               checked={checked}
                               onChange={() => toggleMultiRecipient(id)}
                             />
-                            <span className="text-sm text-[var(--color-text)]">
-                              {employee.name} {employee.code ? `(${employee.code})` : ''}
-                            </span>
+                            <span className="text-sm text-[var(--color-text)]">{row.label}</span>
                           </label>
                         );
                       })}
                       {filteredEmployeesForMulti.length === 0 && (
-                        <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">لا توجد نتائج مطابقة.</p>
+                        <p className="text-xs text-[var(--color-text-muted)] px-2 py-1">
+                          {accountLinkedEmployees.length === 0
+                            ? 'لا يوجد مستخدمون مرتبطون بموظفين. اربطهم من صفحة المستخدمين أولاً.'
+                            : 'لا توجد نتائج مطابقة.'}
+                        </p>
                       )}
                     </div>
-                    {selectedEmployeeIds.length > 0 && (
-                      <p className="text-xs text-[var(--color-text-muted)]">تم اختيار {selectedEmployeeIds.length} مستخدم</p>
-                    )}
                   </div>
                 )}
               </div>

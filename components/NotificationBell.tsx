@@ -24,6 +24,7 @@ const TYPE_ICONS: Record<string, string> = {
   work_order_assigned: 'assignment',
   work_order_updated: 'edit_note',
   work_order_completed: 'check_circle',
+  production_plan_assigned: 'assignment',
   quality_report_created: 'verified',
   quality_report_updated: 'rule',
   manual_broadcast: 'campaign',
@@ -35,6 +36,7 @@ const TYPE_COLORS: Record<string, string> = {
   work_order_assigned: 'text-[rgb(var(--color-primary))]',
   work_order_updated: 'text-[rgb(var(--color-warning))]',
   work_order_completed: 'text-[rgb(var(--color-success))]',
+  production_plan_assigned: 'text-[rgb(var(--color-primary))]',
   quality_report_created: 'text-[rgb(var(--color-secondary))]',
   quality_report_updated: 'text-[rgb(var(--color-secondary))]',
   manual_broadcast: 'text-[rgb(var(--color-primary))]',
@@ -122,6 +124,11 @@ export const NotificationBell: React.FC = () => {
     if (n.type === 'production_report') {
       setOpen(false);
       navigate(withTenantPath(tenantSlug, '/reports'));
+      return;
+    }
+    if (n.type === 'production_plan_assigned') {
+      setOpen(false);
+      navigate(withTenantPath(tenantSlug, '/production-plans'));
       return;
     }
     if (n.referenceId && n.type.startsWith('work_order')) {

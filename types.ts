@@ -1033,6 +1033,7 @@ export type NotificationType =
   | "work_order_assigned"
   | "work_order_updated"
   | "work_order_completed"
+  | "production_plan_assigned"
   | "quality_report_created"
   | "quality_report_updated"
   | "report_compliance_daily"
