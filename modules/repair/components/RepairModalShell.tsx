@@ -2,6 +2,7 @@ import React from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
+import { MODAL_SHELL_Z_CLASS } from '@/lib/overlayStack';
 
 type ModalShellProps = {
   title: string;
@@ -20,7 +21,7 @@ export const RepairModalShell: React.FC<ModalShellProps> = ({
 }) => (
   <ManagedModalPortal>
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+      className={`fixed inset-0 ${MODAL_SHELL_Z_CLASS} flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4`}
       onClick={onClose}
       role="presentation"
     >

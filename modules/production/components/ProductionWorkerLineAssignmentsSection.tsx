@@ -194,7 +194,7 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
       {showModal && canManage && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
           onClick={closeModal}
         >
           <div

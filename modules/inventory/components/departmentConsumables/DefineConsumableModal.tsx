@@ -103,7 +103,7 @@ export const DefineConsumableModal: React.FC<Props> = ({
       title="تعريف مستهلك جديد"
       onClose={handleClose}
       maxWidthClassName="max-w-md"
-      zIndexClassName="z-[60]"
+      zIndexClassName="z-[10050]"
       footer={(
         <>
           <Button type="button" variant="secondary" onClick={handleClose}>إلغاء</Button>

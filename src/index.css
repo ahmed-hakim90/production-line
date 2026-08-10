@@ -5,7 +5,19 @@
 @tailwind utilities;
 
 @layer base {
-  /* Overlays portaled here sit above in-app fixed layers (topbar z-40, drawers, page chrome). */
+  /*
+   * Overlay stacking (inside #erp-modal-root):
+   * - Dialog / Sheet / ManagedModalPortal / .erp-modal-overlay: --z-modal (10050)
+   * - Select / Popover / Dropdown / Tooltip: --z-floating (10100)
+   * - Toasts: --z-toast (10200)
+   * Container itself is above page chrome (topbar z-40, drawers).
+   */
+  :root {
+    --z-modal: 10050;
+    --z-floating: 10100;
+    --z-toast: 10200;
+  }
+
   #erp-modal-root {
     position: fixed;
     inset: 0;
@@ -14,6 +26,18 @@
   }
 
   #erp-modal-root > * {
+    pointer-events: auto;
+  }
+
+  /* Host for every ManagedModalPortal — keeps child z-* below floating menus. */
+  #erp-modal-root > .erp-managed-modal-layer {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-modal);
+    pointer-events: none;
+  }
+
+  #erp-modal-root > .erp-managed-modal-layer > * {
     pointer-events: auto;
   }
 

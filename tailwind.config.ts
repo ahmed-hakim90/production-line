@@ -12,6 +12,12 @@ const config: Config = {
     "./src/**/*.{ts,tsx}",
     "./components/**/*.{ts,tsx}",
     "./modules/**/*.{ts,tsx}",
+    "./lib/**/*.{ts,tsx}",
+  ],
+  safelist: [
+    // Overlay stacking — referenced via shared constants (lib/overlayStack.ts)
+    "z-[10050]",
+    "z-[10100]",
   ],
   theme: {
     extend: {

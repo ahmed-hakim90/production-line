@@ -2,6 +2,7 @@ import * as React from "react"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn, getRootPortalContainer } from "@/lib/utils"
+import { FLOATING_MENU_Z_CLASS } from "@/lib/overlayStack"
 
 const Popover = PopoverPrimitive.Root
 
@@ -17,7 +18,7 @@ const PopoverContent = React.forwardRef<
       align={align}
       sideOffset={sideOffset}
       className={cn(
-        "z-[70] w-72 rounded-md border bg-popover p-4 text-popover-foreground opacity-100 shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-popover-content-transform-origin]",
+        `${FLOATING_MENU_Z_CLASS} w-72 rounded-md border bg-popover p-4 text-popover-foreground opacity-100 shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-popover-content-transform-origin]`,
         className
       )}
       {...props}

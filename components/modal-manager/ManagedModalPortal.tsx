@@ -11,6 +11,10 @@ type Props = {
 /**
  * Mount overlays into `#erp-modal-root` so they sit above page chrome
  * and are never trapped by ModuleOpsPageShell / toolbar stacking contexts.
+ *
+ * The host layer uses the shared modal z-index so Select/Popover/Dropdown
+ * (floating z) always paint above every managed modal, regardless of the
+ * child's local `z-50` / `z-[300]` / `z-[1000]` class.
  */
 export const ManagedModalPortal: React.FC<Props> = ({ children, open = true }) => {
   if (!open) return null;
@@ -18,7 +22,7 @@ export const ManagedModalPortal: React.FC<Props> = ({ children, open = true }) =
   const container = getPortalContainer();
   if (!container) return <>{children}</>;
   return createPortal(
-    <div className="pointer-events-auto">{children}</div>,
+    <div className="erp-managed-modal-layer">{children}</div>,
     container,
   );
 };
