@@ -49,7 +49,7 @@ export const productionPlanService = {
       const q = query(
         tenantQuery(db, COLLECTION),
         where('lineId', '==', lineId),
-        where('status', 'in', ['planned', 'in_progress']),
+        where('status', 'in', ['planned', 'in_progress', 'paused']),
       );
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionPlan));
@@ -59,15 +59,37 @@ export const productionPlanService = {
     }
   },
 
+  async getActiveByProduct(productId: string): Promise<ProductionPlan[]> {
+    if (!isConfigured) return [];
+    try {
+      const q = query(
+        tenantQuery(db, COLLECTION),
+        where('productId', '==', productId),
+        where('status', 'in', ['planned', 'in_progress', 'paused']),
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionPlan));
+    } catch (error) {
+      console.error('productionPlanService.getActiveByProduct error:', error);
+      throw error;
+    }
+  },
+
   async create(data: Omit<ProductionPlan, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
       await assertProductionProductId(String(data.productId || ''));
-      const ref = await addDoc(collection(db, COLLECTION), {
-        ...data,
+      const { lineId, supervisorId, ...rest } = data;
+      const payload: Record<string, unknown> = {
+        ...rest,
         createdAt: serverTimestamp(),
         tenantId: getCurrentTenantId(),
-      });
+      };
+      const trimmedLineId = String(lineId || '').trim();
+      if (trimmedLineId) payload.lineId = trimmedLineId;
+      const trimmedSupervisorId = String(supervisorId || '').trim();
+      if (trimmedSupervisorId) payload.supervisorId = trimmedSupervisorId;
+      const ref = await addDoc(collection(db, COLLECTION), payload);
       return ref.id;
     } catch (error) {
       console.error('productionPlanService.create error:', error);
@@ -115,14 +137,9 @@ export const productionPlanService = {
   async getActiveByLineAndProduct(lineId: string, productId: string): Promise<ProductionPlan[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        tenantQuery(db, COLLECTION),
-        where('lineId', '==', lineId),
-        where('productId', '==', productId),
-        where('status', 'in', ['planned', 'in_progress']),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionPlan));
+      // Product-scoped active plans; lineId kept for callers but no longer filters.
+      void lineId;
+      return this.getActiveByProduct(productId);
     } catch (error) {
       console.error('productionPlanService.getActiveByLineAndProduct error:', error);
       throw error;

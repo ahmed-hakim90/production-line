@@ -11,7 +11,7 @@ Hakimo is **one platform**, but each module must feel like its own **app** (home
 |-------|------|
 | **UX App** | Each MOD has its own home (`DomainHomeShell` / `ModuleOpsPageShell`), persona bottom bar where needed, and module-local navigation. Same **Hakimo Flow** design language everywhere. |
 | **Activity packs** | `tenants.activityPacks`: `manufacturing` \| `repair`. Missing/empty → **both** (Production never breaks). Gates menu groups + Roles catalog groups. Platform always on: dashboards, HR, customers, accounting, system. |
-| **Permission engine** | Flat Firestore keys + matrix catalog (`utils/permissionCatalog.ts`): per page/resource → **عرض / إضافة / تعديل / حذف** + named actions. UI: Roles modal matrix. Runtime pilots: `useResourcePermission` on products, quality.workers, inventory/warehouses, customers, catalog.categories, lines/lineStatus, roles/users, materials. Server still exact-key authoritative. |
+| **Permission engine** | Flat Firestore keys + matrix catalog (`utils/permissionCatalog.ts`): per page/resource → **عرض / إضافة / تعديل / حذف** + named actions. UI: Roles modal matrix. Runtime pilots: `useResourcePermission` on products, quality.workers, inventory/warehouses, customers, catalog.categories, lines/lineStatus, roles/users, materials. Server still exact-key authoritative. Module KPI boards use dedicated keys (`productionDashboard.view`, `hrDashboard.view`, `factoryDashboard.view`, `repair.dashboard.view`) — not operational `plans.view` / `reports.view`. |
 | **Domain ownership** | One module owns its aggregates, statuses, and write paths (e.g. Repair owns jobs; Inventory owns stock movements; Production owns plans/reports). |
 | **Cross-module talk** | Prefer: typed services / application use-cases / shared domain libs — **not** importing another module’s pages or UI state. Reads may use shared query services; writes stay in the owning module (or Cloud Functions when authoritative). |
 | **Platform core** | Auth, tenant, permissions, theme/tokens, shells, print, notifications — shared only as platform, never as business rules of another MOD. |
@@ -31,7 +31,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 - Tenant-scoped routes under `/t/:tenantSlug/...`
 - Shared permissions (`utils/permissions.ts`), menu (`config/menu.config.ts`), inventory warehouse scope
 - Visual language: **Hakimo Flow** — tokens in `src/index.css` / `DEFAULT_THEME`; runtime apply via `applyAppTheme` (`core/ui-engine/theme/tenantTheme.ts`); shells `DomainHomeShell` + `ModuleOpsPageShell`; doc `docs/HAKIMO_FLOW.md`
-- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars (`applyAppTheme`); product UI is guarded by `npm run arch:check:theme-tokens` (blocks hex + slate/gray + semantic Tailwind palettes mapped to success/warning/danger/primary/secondary; sidebar colorful + charts use `--chart-*` via `core/ui-engine/theme/chartColors.ts`). `systemSettings.printTemplate` drives paper / WhatsApp PNG plus per-document field visibility / custom lines / print font (full registry: production/worker/missing/supervisor/BOM, repair invoice/payment/spare/treasury/receipt/card/delivery, stock/item/supplies, accounting, quality, payslip, routing, catalog product detail). Preview: `/settings/reports` + `/dev/image-export`. Auth/splash branding panel uses **fixed ForgeOps green** (`PRODUCT_BRAND.splashHex` / `--splash-brand`) — never tenant primary. Print/WhatsApp soft accents derive from `printTemplate.primaryColor` with UI theme fallback via `resolvePrintAccentHex`. Theme-preset color pickers still use literal hex by design.
+- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars (`applyAppTheme`); product UI is guarded by `npm run arch:check:theme-tokens` (blocks hex + slate/gray + semantic Tailwind palettes mapped to success/warning/danger/primary/secondary; sidebar colorful + charts use `--chart-*` via `core/ui-engine/theme/chartColors.ts`). `systemSettings.printTemplate` drives paper / WhatsApp PNG plus per-document field visibility / custom lines / print font (full registry: production/worker/missing/supervisor/BOM, repair invoice/payment/spare/treasury/receipt/card/delivery, stock/item/supplies, accounting, quality, payslip, routing, catalog product detail). Preview: `/settings/reports` + `/dev/image-export`. Auth/splash branding panel uses **fixed ForgeOps blue** (`PRODUCT_BRAND.splashHex` / `--splash-brand`) — never tenant primary. Print/WhatsApp soft accents derive from `printTemplate.primaryColor` with UI theme fallback via `resolvePrintAccentHex`. Theme-preset color pickers still use literal hex by design.
 
 ## Modules (MOD)
 
@@ -98,8 +98,8 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Resume last tenant (PWA start) | `/` → `/t/{lastSlug}/` (manifest rewritten to tenant while in-app) |
 | Register company | `/register-company` |
 | Tenant login gateway | `/login` |
-| Production home board (KPIs + charts) | `/production` |
-| Supervisor analysis home (level 2) | `/supervisor` |
+| Production home board (KPIs + charts) | `/production` (`productionDashboard.view` / factory / admin) |
+| Supervisor analysis home (level 2) | `/` (الرئيسية) — also `/supervisor`; not a production sidebar item |
 | Warehouses hub (filters, no sidebar spam) | `/inventory/warehouses` |
 | Shelf locations | `/inventory/locations` |
 | Production issue | `/inventory/production-issues` |

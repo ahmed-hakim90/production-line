@@ -380,7 +380,9 @@ export const buildProductionLines = (
       buildCodeFromLineName(line.name) ||
       line.id!;
     const activePlan = productionPlans.find(
-      (p) => p.lineId === line.id && (p.status === 'in_progress' || p.status === 'planned')
+      (p) =>
+        p.lineId === line.id
+        && (p.status === 'in_progress' || p.status === 'planned' || p.status === 'paused'),
     );
 
     if (activePlan) {
@@ -556,21 +558,41 @@ export const calculateRemainingDays = (plannedEndDate: string): number => {
 };
 
 /**
- * Derive a human-readable smart status from progress vs time ratios.
+ * Map a production plan's stored/effective status to the operational smart status.
+ * Idle → stopped is already persisted on PlanStatus via reconcile; this is display mapping.
  */
 export const calculateSmartStatus = (
-  progressRatio: number,
-  timeRatio: number,
+  _progressRatio: number,
+  _timeRatio: number,
   status: ProductionPlan['status'],
 ): SmartStatus => {
-  if (status === 'completed') return 'completed';
-  if (status === 'paused' || status === 'cancelled') return 'at_risk';
+  switch (status) {
+    case 'completed':
+      return 'completed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'paused':
+      return 'stopped';
+    case 'in_progress':
+      return 'working';
+    case 'planned':
+    default:
+      return 'not_working';
+  }
+};
 
-  const gap = timeRatio - progressRatio;
-  if (gap <= 5) return 'on_track';
-  if (gap <= 20) return 'at_risk';
-  if (gap <= 40) return 'delayed';
-  return 'critical';
+/** Short Arabic detail under the smart-status label. */
+export const getSmartStatusDetail = (
+  status: ProductionPlan['status'],
+  remainingDays: number,
+): string => {
+  if (status === 'completed') return 'تم بلوغ الكمية المخططة';
+  if (status === 'cancelled') return 'الخطة ملغاة';
+  if (status === 'paused') return 'مرّ يومان بدون إنتاج';
+  if (status === 'planned') return 'بانتظار أول إنتاج';
+  if (remainingDays > 0) return `${remainingDays} يوم متبقي`;
+  if (remainingDays === 0) return 'آخر يوم في الخطة';
+  return 'تجاوز تاريخ الانتهاء المخطط';
 };
 
 /**

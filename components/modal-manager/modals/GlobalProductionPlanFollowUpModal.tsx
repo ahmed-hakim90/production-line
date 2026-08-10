@@ -31,15 +31,18 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
   const typedPayload = (payload || {}) as ModalPayload;
   const planId = String(typedPayload.planId || '').trim();
   const productId = String(typedPayload.productId || '').trim();
-  const lineId = String(typedPayload.lineId || '').trim();
+  const payloadLineId = String(typedPayload.lineId || '').trim();
 
   const [options, setOptions] = useState<ComponentOption[]>([]);
   const [componentId, setComponentId] = useState('');
+  const [selectedLineId, setSelectedLineId] = useState('');
   const [shortageQty, setShortageQty] = useState<number>(0);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const lineId = payloadLineId || selectedLineId;
 
   const productName = useMemo(
     () => products.find((p) => p.id === productId)?.name || '—',
@@ -84,11 +87,12 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
   useEffect(() => {
     if (!isOpen) return;
     setComponentId('');
+    setSelectedLineId(payloadLineId);
     setShortageQty(0);
     setNote('');
     setSaving(false);
     setError(null);
-  }, [isOpen]);
+  }, [isOpen, payloadLineId]);
 
   if (!isOpen) return null;
 
@@ -148,7 +152,20 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
             </div>
             <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5">
               <p className="mb-1 text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.line')}</p>
-              <p className="break-words font-bold text-[var(--color-text)]">{lineName}</p>
+              {payloadLineId ? (
+                <p className="break-words font-bold text-[var(--color-text)]">{lineName}</p>
+              ) : (
+                <select
+                  value={selectedLineId}
+                  onChange={(e) => setSelectedLineId(e.target.value)}
+                  className="w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2 text-sm font-bold outline-none"
+                >
+                  <option value="">اختر الخط...</option>
+                  {lines.map((line) => (
+                    <option key={line.id} value={line.id}>{line.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 

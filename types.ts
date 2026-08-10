@@ -731,12 +731,13 @@ export type PlanPriority = "low" | "medium" | "high" | "urgent";
 export type PlanStatus =
   "planned" | "in_progress" | "completed" | "paused" | "cancelled";
 export type SmartStatus =
-  "on_track" | "at_risk" | "delayed" | "critical" | "completed";
+  "working" | "not_working" | "stopped" | "completed" | "cancelled";
 
 export interface ProductionPlan {
   id?: string;
   productId: string;
-  lineId: string;
+  /** Optional legacy field — plans are product-scoped, not line-scoped. */
+  lineId?: string;
   plannedQuantity: number;
   producedQuantity: number;
   startDate: string;
@@ -748,6 +749,7 @@ export interface ProductionPlan {
   estimatedCost: number;
   actualCost: number;
   planType?: "finished_product" | "component_injection";
+  /** Optional legacy field — not set from plan create/edit UI. */
   supervisorId?: string;
   shift?: ProductionReportShift;
   workOrderId?: string;

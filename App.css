@@ -385,14 +385,14 @@ button {
   overflow: hidden;
 }
 
-/* ── Left branding panel (desktop only) — fixed ForgeOps green, not tenant theme ── */
+/* ── Left branding panel (desktop only) — fixed ForgeOps blue, not tenant theme ── */
 .erp-auth-panel {
   display: none;
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
   padding: 48px 48px;
-  background: linear-gradient(155deg, var(--splash-brand-light, #3A7868) 0%, var(--splash-brand-dark, #234F45) 100%);
+  background: linear-gradient(155deg, var(--splash-brand-light, #2B63B5) 0%, var(--splash-brand-dark, #163A6B) 100%);
   position: relative;
   overflow: hidden;
   min-width: 360px;
@@ -1240,14 +1240,14 @@ button {
   margin-top: 6px;
 }
 
-/* Register company — branded panel background (fixed ForgeOps green + asset) */
+/* Register company — branded panel background (fixed ForgeOps blue + asset) */
 .register-company-auth-panel.erp-auth-panel {
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, var(--splash-brand-light, #3A7868) 92%, transparent) 0%,
-      color-mix(in srgb, var(--splash-brand, #2D6255) 90%, #0f172a) 55%,
-      color-mix(in srgb, var(--splash-brand-dark, #234F45) 88%, #0f172a) 100%
+      color-mix(in srgb, var(--splash-brand-light, #2B63B5) 92%, transparent) 0%,
+      color-mix(in srgb, var(--splash-brand, #1E4D8C) 90%, #0f172a) 55%,
+      color-mix(in srgb, var(--splash-brand-dark, #163A6B) 88%, #0f172a) 100%
     ),
     url('/landing/register-panel-bg.png') center / cover no-repeat;
 }
@@ -1442,9 +1442,9 @@ button {
 
 .app-splash {
   /* Fixed ForgeOps public brand — never follows tenant --color-primary */
-  --splash-brand: #2D6255;
-  --splash-brand-dark: #234F45;
-  --splash-brand-light: #3A7868;
+  --splash-brand: #1E4D8C;
+  --splash-brand-dark: #163A6B;
+  --splash-brand-light: #2B63B5;
 
   min-height: 100vh;
   min-height: 100dvh;

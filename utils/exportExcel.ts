@@ -866,8 +866,8 @@ const PLAN_PRIORITY_AR: Record<string, string> = {
 };
 
 const PLAN_STATUS_AR: Record<string, string> = {
-  planned: 'مخطط',
-  in_progress: 'قيد التنفيذ',
+  planned: 'مش شغال',
+  in_progress: 'شغال',
   completed: 'مكتمل',
   paused: 'متوقف',
   cancelled: 'ملغي',
@@ -887,7 +887,7 @@ export const exportProductionPlans = (
   const rows = plans.map((plan) => ({
     'اسم المنتج': lookups.getProductName(plan.productId),
     'كود المنتج': lookups.getProductCode(plan.productId),
-    'خط الإنتاج': lookups.getLineName(plan.lineId),
+    'خط الإنتاج': plan.lineId ? lookups.getLineName(plan.lineId) : '—',
     'الكمية المخططة': plan.plannedQuantity,
     'الكمية المنتجة': plan.producedQuantity ?? 0,
     'تاريخ البدء': plan.plannedStartDate || plan.startDate,

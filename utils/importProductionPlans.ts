@@ -131,12 +131,13 @@ export async function parseProductionPlansExcel(
     const product = productCode
       ? productsByCode.get(productCode)
       : productsByName.get(productName);
+    const hasLineInput = Boolean(lineCode || lineName);
     const line = lineCode
       ? linesByCode.get(lineCode)
       : linesByName.get(lineName);
 
     if (!product) errors.push('المنتج غير موجود (بالاسم أو الكود)');
-    if (!line) errors.push('خط الإنتاج غير موجود (بالاسم أو الكود)');
+    if (hasLineInput && !line) errors.push('خط الإنتاج غير موجود (بالاسم أو الكود)');
     if (plannedQuantity <= 0) errors.push('الكمية المخططة يجب أن تكون أكبر من 0');
     if (!startDate) errors.push('تاريخ البدء غير مقروء');
     else if (!isValidDate(startDate)) errors.push(`تاريخ البدء غير صالح: ${startDate}`);

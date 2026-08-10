@@ -20,7 +20,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
     <style>
-      /* Cold boot: branded splash — fixed ForgeOps green (not tenant theme) */
+      /* Cold boot: branded splash — fixed ForgeOps blue (not tenant theme) */
       #html-splash {
         position: fixed;
         inset: 0;
@@ -30,7 +30,7 @@
         align-items: center;
         justify-content: center;
         gap: 20px;
-        background: linear-gradient(165deg, var(--splash-brand, #2D6255) 0%, var(--splash-brand-dark, #234F45) 100%);
+        background: linear-gradient(165deg, var(--splash-brand, #1E4D8C) 0%, var(--splash-brand-dark, #163A6B) 100%);
         color: #fff;
       }
       #html-splash img {
@@ -238,13 +238,13 @@
 
     <script>
       /**
-       * Cold splash uses fixed ForgeOps brand green — never tenant theme primary.
+       * Cold splash uses fixed ForgeOps brand blue — never tenant theme primary.
        * Tenant theme still applies to the app chrome after login.
        */
       (function () {
-        var SPLASH = '#2D6255';
-        var SPLASH_DARK = '#234F45';
-        var SPLASH_LIGHT = '#3A7868';
+        var SPLASH = '#1E4D8C';
+        var SPLASH_DARK = '#163A6B';
+        var SPLASH_LIGHT = '#2B63B5';
         try {
           document.documentElement.style.setProperty('--splash-brand', SPLASH);
           document.documentElement.style.setProperty('--splash-brand-dark', SPLASH_DARK);

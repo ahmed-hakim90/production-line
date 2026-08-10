@@ -128,7 +128,7 @@ export const AVAILABLE_QUICK_ACTIONS: QuickActionDefinition[] = [
   { key: 'quick_action', label: 'إدخال سريع', icon: 'bolt', color: 'amber', actionType: 'navigate', target: '/quick-action', permission: 'quickAction.view' },
   { key: 'quick_inventory_transfer', label: 'تحويل مخزن سريع', icon: 'swap_horiz', color: 'emerald', actionType: 'navigate', target: '/quick-inventory-transfer', permission: 'inventory.transactions.create' },
   { key: 'transfer_approvals', label: 'اعتماد التحويلات', icon: 'verified_user', color: 'amber', actionType: 'navigate', target: '/inventory/transfer-approvals', permission: 'inventory.view' },
-  { key: 'packaging_control', label: 'تحكم التغليف', icon: 'package_2', color: 'violet', actionType: 'navigate', target: '/production/packaging/control', permission: 'reports.view' },
+  { key: 'packaging_control', label: 'تحكم التغليف', icon: 'package_2', color: 'violet', actionType: 'navigate', target: '/production/packaging/control', permission: 'productionHandover.approve' },
   { key: 'reports', label: 'التقارير', icon: 'bar_chart', color: 'primary', actionType: 'navigate', target: '/reports', permission: 'reports.view' },
   { key: 'quality_final', label: 'الفحص النهائي', icon: 'task_alt', color: 'emerald', actionType: 'navigate', target: '/quality/final-inspection', permission: 'quality.finalInspection.view' },
   { key: 'quality_ipqc', label: 'IPQC', icon: 'rule', color: 'violet', actionType: 'navigate', target: '/quality/ipqc', permission: 'quality.ipqc.view' },

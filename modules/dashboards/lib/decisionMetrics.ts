@@ -17,13 +17,14 @@ export type PlanActualInput = {
   status?: ProductionPlan['status'];
 };
 
-/** Prefer plan id so concurrent plans on the same line+product do not share one bucket. */
+/** Prefer plan id so concurrent plans on the same product do not share one bucket. */
 export function planReportsLookupKey(
   plan: Pick<ProductionPlan, 'id' | 'lineId' | 'productId'>,
 ): string {
   const id = String(plan.id || '').trim();
   if (id) return id;
-  return `${plan.lineId}_${plan.productId}`;
+  if (plan.lineId) return `${plan.lineId}_${plan.productId}`;
+  return `product_${plan.productId}`;
 }
 
 export function resolvePlanReports(
@@ -32,8 +33,11 @@ export function resolvePlanReports(
 ): { quantityProduced?: number }[] {
   const byId = String(plan.id || '').trim();
   if (byId && planReports[byId]) return planReports[byId];
-  const legacy = `${plan.lineId}_${plan.productId}`;
-  return planReports[legacy] || [];
+  if (plan.lineId) {
+    const legacy = `${plan.lineId}_${plan.productId}`;
+    if (planReports[legacy]) return planReports[legacy];
+  }
+  return planReports[`product_${plan.productId}`] || [];
 }
 
 /** Volume-weighted plan fulfilment: Σ min(actual, planned) / Σ planned × 100 */

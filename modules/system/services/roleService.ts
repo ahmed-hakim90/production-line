@@ -16,6 +16,7 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { FirestoreRole } from '../../../types';
+import { BUILTIN_ROLE_PERMISSION_LOCKS } from '@/utils/builtinRolePermissionLocks';
 import { ALL_PERMISSIONS, type Permission } from '../../../utils/permissions';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import {
@@ -79,6 +80,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'routing.analytics',
           'routing.execute',
           'factoryDashboard.view',
+          'productionDashboard.view',
           'supplyCycles.view',
           'supplyCycles.manage',
           'supplyCycles.close',
@@ -122,6 +124,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
         permissions: permsFrom([
           'dashboard.view',
           'employeeDashboard.view',
+          'productionDashboard.view',
           'products.view',
           'lines.view',
           'employees.view',
@@ -170,6 +173,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
         permissions: permsFrom([
           'dashboard.view',
           'employeeDashboard.view',
+          // No productionDashboard.view — line supervisors use /supervisor, not factory KPIs.
           'reports.view',
           'reports.create',
           'reports.componentWaste.create',
@@ -179,7 +183,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'supplyCycles.view',
           // No inventory.view — supervisors request issues via production portal only.
           'productionIssue.request',
-          'plans.view',
+          // No plans.view — factory/hall planning board, not line supervisor.
           'leave.view',
           'leave.create',
           'print',
@@ -462,11 +466,12 @@ const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [
 const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permission[]> = {
   factory_manager: [
     ...FACTORY_MANAGER_PRODUCTION_WORKER_PERMS,
+    'productionDashboard.view',
     'sparePartsReplenishment.view',
     'sparePartsReplenishment.approve',
     'sparePartsReplenishment.responsibleApprove',
   ],
-  hall_supervisor: HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS,
+  hall_supervisor: [...HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS, 'productionDashboard.view'],
   materials_warehouse: [
     'bom.view',
     'departmentConsumables.view',
@@ -646,6 +651,7 @@ export const roleService = {
       }
 
       await this.ensureProductionWorkerPermissionsOnRoles();
+      await this.ensureBuiltinRolePermissionLocks();
       await this.ensureRepairBuiltinRoleCatalogPermissions();
       await this.ensureAdminRoleCatalogPermissions();
       return this.getAll();
@@ -686,6 +692,39 @@ export const roleService = {
         if (next[perm] === true || next[perm] === false) continue;
         next[perm] = true;
         changed = true;
+      }
+      if (changed) {
+        await this.update(role.id, {
+          permissions: next,
+          ...(role.roleKey ? {} : { roleKey }),
+        });
+        patched += 1;
+      }
+    }
+    return patched;
+  },
+
+  /**
+   * Force-off locked permissions on built-in roles (e.g. line supervisor ≠ factory plans board).
+   */
+  async ensureBuiltinRolePermissionLocks(): Promise<number> {
+    if (!isConfigured) return 0;
+    const roles = await this.getAll();
+    let patched = 0;
+    for (const role of roles) {
+      const roleKey = resolveDefaultRoleKey(role);
+      if (!role.id || !roleKey) continue;
+      const toLock = BUILTIN_ROLE_PERMISSION_LOCKS[roleKey];
+      if (!toLock?.length) continue;
+
+      const current = role.permissions ?? {};
+      const next = { ...current };
+      let changed = false;
+      for (const perm of toLock) {
+        if (next[perm] === true) {
+          next[perm] = false;
+          changed = true;
+        }
       }
       if (changed) {
         await this.update(role.id, {

@@ -56,6 +56,7 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'sparePartsReplenishment.responsibleApprove',
     'sparePartsReplenishment.reject',
     'sparePartsReplenishment.cancel',
+    'productionDashboard.view',
   ],
   hall_supervisor: [
     'reports.create',
@@ -64,6 +65,7 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'production.workers.view',
     'production.workerReports.view',
     'production.workerRatings.view',
+    'productionDashboard.view',
   ],
   materials_warehouse: [
     'bom.view',

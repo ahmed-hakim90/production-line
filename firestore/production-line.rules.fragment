@@ -297,6 +297,58 @@
         || (warehouseId is string && warehouseId != '' && warehouseId == pl_boundInventoryWarehouseId());
     }
 
+    /**
+     * List/count-safe warehouse gate: unbound users must not force resource.data evaluation,
+     * otherwise RunAggregationQuery hits permission-denied (often via the 1000-expression cap).
+     */
+    function pl_inventoryWarehouseUnboundOr(docWarehouseReadable) {
+      return pl_isSuperAdmin()
+        || !pl_isInventoryWarehouseBound()
+        || docWarehouseReadable;
+    }
+
+    /**
+     * Compact permission OR (single role doc read) — avoids repeating pl_hasErpPermission
+     * which re-expands exists/get/roleBelongsToTenant and blows the expression budget on list/count.
+     */
+    function pl_rolePermMapOk() {
+      return pl_authSignedIn()
+        && exists(pl_currentUserPath())
+        && exists(pl_currentRolePath())
+        && pl_roleBelongsToTenant();
+    }
+
+    function pl_rolePermTrue(permissions, key) {
+      return key in permissions && permissions[key] == true;
+    }
+
+    function pl_canReadSparePartsReplenishmentPerm() {
+      let p = pl_currentRoleDoc().data.permissions;
+      return pl_isSuperAdmin()
+        || (
+          pl_rolePermMapOk()
+          && (
+            pl_rolePermTrue(p, 'sparePartsReplenishment.view')
+            || pl_rolePermTrue(p, 'sparePartsReplenishment.create')
+            || pl_rolePermTrue(p, 'sparePartsReplenishment.receive')
+            || pl_rolePermTrue(p, 'inventory.view')
+          )
+        );
+    }
+
+    function pl_canReadRepairSpareIssuePerm() {
+      let p = pl_currentRoleDoc().data.permissions;
+      return pl_isSuperAdmin()
+        || (
+          pl_rolePermMapOk()
+          && (
+            pl_rolePermTrue(p, 'repairSpareIssues.view')
+            || pl_rolePermTrue(p, 'repair.parts.view')
+            || pl_rolePermTrue(p, 'repair.view')
+          )
+        );
+    }
+
     function pl_canReadWarehouseIdField() {
       return pl_sameTenantOrLegacyRead()
         && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
@@ -1470,53 +1522,58 @@
           || pl_hasErpPermission('inventory.view')
           || pl_isSuperAdmin()
         )
-        && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
+        && pl_inventoryWarehouseUnboundOr(
+          pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''))
+        );
       allow create, update, delete: if false;
     }
 
     // Repair spare issues: client read only; mutations via Admin SDK callables.
+    // Keep permission/warehouse checks compact — dashboard uses getCountFromServer (list).
     match /repair_spare_issues/{docId} {
       allow read: if pl_isActiveUser()
-        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
-        && (
-          pl_hasErpPermission('repairSpareIssues.view')
-          || pl_hasErpPermission('repair.parts.view')
-          || pl_hasErpPermission('repair.view')
-          || pl_isSuperAdmin()
-        )
-        && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
+        && (resource.data.tenantId == pl_tenantId() || pl_isSuperAdmin())
+        && pl_canReadRepairSpareIssuePerm()
+        && pl_inventoryWarehouseUnboundOr(
+          pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''))
+        );
       allow create, update, delete: if false;
     }
 
     // Spare-parts replenishment: client read only; mutations via Admin SDK callables.
     match /spare_parts_replenishment_requests/{docId} {
       allow read: if pl_isActiveUser()
-        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
-        && (
-          pl_hasErpPermission('sparePartsReplenishment.view')
-          || pl_hasErpPermission('sparePartsReplenishment.create')
-          || pl_hasErpPermission('sparePartsReplenishment.receive')
-          || pl_hasErpPermission('inventory.view')
-          || pl_isSuperAdmin()
-        )
-        && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
+        && (resource.data.tenantId == pl_tenantId() || pl_isSuperAdmin())
+        && pl_canReadSparePartsReplenishmentPerm()
+        && pl_inventoryWarehouseUnboundOr(
+          pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('toWarehouseId', ''))
+        );
       allow create, update, delete: if false;
     }
 
     // Spare-parts recall (center → central): client read only; mutations via callables.
     match /spare_parts_recall_requests/{docId} {
       allow read: if pl_isActiveUser()
-        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
+        && (resource.data.tenantId == pl_tenantId() || pl_isSuperAdmin())
         && (
-          pl_hasErpPermission('sparePartsRecall.view')
-          || pl_hasErpPermission('sparePartsRecall.create')
-          || pl_hasErpPermission('sparePartsRecall.confirm')
-          || pl_hasErpPermission('sparePartsRecall.cancel')
-          || pl_hasErpPermission('sparePartsReplenishment.view')
-          || pl_hasErpPermission('inventory.view')
-          || pl_isSuperAdmin()
+          pl_isSuperAdmin()
+          || (
+            pl_rolePermMapOk()
+            && (
+              pl_rolePermTrue(pl_currentRoleDoc().data.permissions, 'sparePartsRecall.view')
+              || pl_rolePermTrue(pl_currentRoleDoc().data.permissions, 'sparePartsRecall.create')
+              || pl_rolePermTrue(pl_currentRoleDoc().data.permissions, 'sparePartsRecall.confirm')
+              || pl_rolePermTrue(pl_currentRoleDoc().data.permissions, 'sparePartsRecall.cancel')
+              || pl_rolePermTrue(pl_currentRoleDoc().data.permissions, 'sparePartsReplenishment.view')
+              || pl_rolePermTrue(pl_currentRoleDoc().data.permissions, 'inventory.view')
+            )
+          )
         )
-        && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
+        && pl_inventoryWarehouseUnboundOr(
+          pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('toWarehouseId', ''))
+        );
       allow create, update, delete: if false;
     }
 

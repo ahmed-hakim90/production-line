@@ -89,6 +89,7 @@ import {
   workOrderMatchesReportType,
 } from '../modules/production/utils/reportTypes';
 import {
+  deriveProductionPlanAutoStatus,
   filterReportsForProductionPlan,
 } from '../modules/production/utils/productionPlanReports';
 import {
@@ -115,6 +116,7 @@ import { costAllocationService } from '../modules/costs/services/costAllocationS
 import { laborSettingsService } from '../modules/costs/services/laborSettingsService';
 import { monthlyProductionCostService } from '../modules/costs/services/monthlyProductionCostService';
 import { roleService } from '../modules/system/services/roleService';
+import { getBuiltInRoleKey } from '../modules/system/lib/visibleRoles';
 import { userService } from '../services/userService';
 import { tenantService } from '../services/tenantService';
 import { activityLogService } from '../modules/system/services/activityLogService';
@@ -160,6 +162,7 @@ import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { checkPermission, isPackagingOnlyPermissions, normalizeRolePermissions, type Permission } from '../utils/permissions';
+import { applyBuiltinRolePermissionLocks } from '../utils/builtinRolePermissionLocks';
 import { DEFAULT_PLAN_SETTINGS, DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
 import {
   applyAppTheme,
@@ -1056,10 +1059,10 @@ async function resolveProductionReportExecutionLinks(
     : explicitPlanId && workOrderPlanId === explicitPlanId
       ? explicitPlan
       : null;
-  const activePlans = await productionPlanService.getActiveByLineAndProduct(input.lineId, input.productId);
+  const activePlans = await productionPlanService.getActiveByProduct(input.productId);
   const planReportType = effectivePlanReportType(reportType);
   const matchesReportContext = (plan: ProductionPlan | null): boolean => {
-    if (!plan || plan.lineId !== input.lineId || plan.productId !== input.productId) return false;
+    if (!plan || plan.productId !== input.productId) return false;
     const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
     return planType === planReportType;
   };
@@ -1070,7 +1073,7 @@ async function resolveProductionReportExecutionLinks(
 
   if (!explicitPlan && !workOrderPlan && matchingActivePlans.length > 1) {
     throw new Error(
-      'يوجد أكثر من خطة نشطة لنفس الخط والمنتج. أنشئ التقرير من الخطة المطلوبة لضمان الربط الصحيح.',
+      'يوجد أكثر من خطة نشطة لنفس المنتج. أنشئ التقرير من الخطة المطلوبة لضمان الربط الصحيح.',
     );
   }
 
@@ -1098,6 +1101,7 @@ async function resolveProductionReportExecutionLinks(
 function deriveProductionPlanAutoPatch(
   plan: ProductionPlan,
   reports: ProductionReport[],
+  todayDate: string = getTodayDateString(),
 ): Partial<ProductionPlan> | null {
   const plannedQty = Number(plan.plannedQuantity || 0);
   const planReports = filterReportsForProductionPlan(plan, reports);
@@ -1106,24 +1110,20 @@ function deriveProductionPlanAutoPatch(
   const achievementPercent = plannedQty > 0
     ? Math.round((producedQty / plannedQty) * 1000) / 10
     : 0;
-  const hasReportProgress = planReports.some((report) => Number(report.quantityProduced || 0) > 0);
-  const hasProgress = producedQty > 0 || hasReportProgress;
-
-  let nextStatus = plan.status;
-  if (plannedQty > 0 && producedQty >= plannedQty && plan.status !== 'completed') {
-    nextStatus = 'completed';
-  } else if (plan.status === 'completed' && (plannedQty <= 0 || producedQty < plannedQty)) {
-    nextStatus = hasProgress ? 'in_progress' : 'planned';
-  } else if (plan.status === 'planned' && hasProgress) {
-    nextStatus = 'in_progress';
-  } else if (plan.status === 'in_progress' && !hasProgress) {
-    nextStatus = 'planned';
-  }
-
-  const firstReportDate = planReports
+  const producingDates = planReports
     .filter((report) => Number(report.quantityProduced || 0) > 0 && Boolean(report.date))
-    .map((report) => report.date)
-    .sort((a, b) => a.localeCompare(b))[0];
+    .map((report) => String(report.date).slice(0, 10))
+    .sort((a, b) => a.localeCompare(b));
+  const firstReportDate = producingDates[0];
+  const lastReportDate = producingDates[producingDates.length - 1] || null;
+  const hasProgress = producedQty > 0 || Boolean(firstReportDate);
+
+  const nextStatus = deriveProductionPlanAutoStatus(
+    plan,
+    producedQty,
+    lastReportDate,
+    todayDate,
+  );
 
   const patch: Partial<ProductionPlan> = {};
   if (nextStatus !== plan.status) {
@@ -1851,7 +1851,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       userRoleId: role.id!,
       userRoleName: role.name,
       userRoleColor: role.color,
-      userPermissions: normalizeRolePermissions(role.permissions),
+      userPermissions: applyBuiltinRolePermissionLocks(
+        normalizeRolePermissions(role.permissions),
+        getBuiltInRoleKey(role),
+      ),
     });
   },
 
@@ -2376,18 +2379,14 @@ export const useAppStore = create<AppState>((set, get) => ({
           try {
             const plans = get().productionPlans;
             const activePlans = plans.filter(
-              (p) => p.status === 'in_progress' || p.status === 'planned',
+              (p) => p.status === 'in_progress' || p.status === 'planned' || p.status === 'paused',
             );
             const nextPlanReports: Record<string, ProductionReport[]> = {};
             const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
             const planReportResults = await Promise.allSettled(
               activePlans.map(async (plan) => {
-                const key = plan.id || `${plan.lineId}_${plan.productId}`;
-                const reports = await reportService.getByLineAndProduct(
-                  plan.lineId,
-                  plan.productId,
-                  plan.startDate,
-                );
+                const key = plan.id || `product_${plan.productId}`;
+                const reports = await reportService.getByProduct(plan.productId);
                 return { plan, key, reports };
               }),
             );
@@ -3093,18 +3092,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const productionPlans = await productionPlanService.getAll();
         const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
-        // Include completed plans so deleting/reducing linked reports can reopen them.
         const reconcilablePlans = productionPlans.filter(
-          (p) => p.status === 'in_progress' || p.status === 'planned' || p.status === 'completed',
+          (p) =>
+            p.status === 'in_progress'
+            || p.status === 'planned'
+            || p.status === 'paused'
+            || p.status === 'completed',
         );
         const planReports: Record<string, ProductionReport[]> = {};
         const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
         await Promise.all(
           reconcilablePlans.map(async (plan) => {
-            const key = plan.id || `${plan.lineId}_${plan.productId}`;
-            const reports = await reportService.getByLineAndProduct(
-              plan.lineId, plan.productId, plan.startDate
-            );
+            const key = plan.id || `product_${plan.productId}`;
+            const reports = await reportService.getByProduct(plan.productId);
             planReports[key] = filterReportsForProductionPlan(plan, reports);
             if (!plan.id) return;
             const patch = deriveProductionPlanAutoPatch(plan, reports);
@@ -5626,11 +5626,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!plan?.id) {
         throw new Error('خطة الإنتاج غير موجودة.');
       }
-      const reports = await reportService.getByLineAndProduct(
-        plan.lineId,
-        plan.productId,
-        plan.startDate || plan.plannedStartDate || undefined,
-      );
+      const reports = await reportService.getByProduct(plan.productId);
       const patch = deriveProductionPlanAutoPatch(plan, reports);
       if (patch) {
         await productionPlanService.update(id, patch);

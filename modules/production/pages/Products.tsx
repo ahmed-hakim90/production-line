@@ -3229,14 +3229,14 @@ export const Products: React.FC = () => {
         const selling = raw?.sellingPrice ?? 0;
         return (
           <ManagedModalPortal>
-          <>
+          <div className="fixed inset-0 z-[10050]">
             <div
-              className="fixed inset-0 bg-black/35 z-[10050] mt-0"
+              className="absolute inset-0 bg-black/35"
               onClick={() => setDetailDrawerProductId(null)}
               aria-hidden
             />
             <aside
-              className="fixed top-0 right-0 h-screen w-[min(460px,96vw)] bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl z-[61] overflow-y-auto flex flex-col"
+              className="absolute top-0 right-0 h-full w-[min(460px,96vw)] bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl overflow-y-auto flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-start justify-between gap-2 shrink-0">
@@ -3429,7 +3429,7 @@ export const Products: React.FC = () => {
                 </div>
               </div>
             </aside>
-          </>
+          </div>
           </ManagedModalPortal>
         );
       })()}

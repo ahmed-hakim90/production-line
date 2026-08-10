@@ -101,7 +101,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
   const { can } = usePermission();
   const modules = useMemo(
     () => ({
-      production: can('dashboard.view') || can('factoryDashboard.view') || can('adminDashboard.view') || can('plans.view'),
+      production: can('productionDashboard.view') || can('factoryDashboard.view') || can('adminDashboard.view'),
       inventory: can('inventory.view'),
       hr: can('hrDashboard.view') || can('employees.view'),
       costs: can('costs.view'),
@@ -514,12 +514,13 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
   const planStatusBars = useMemo<ModuleChartSeries>(() => {
     const planned = productionPlans.filter((p) => p.status === 'planned').length;
     const inProgress = productionPlans.filter((p) => p.status === 'in_progress').length;
+    const paused = productionPlans.filter((p) => p.status === 'paused').length;
     const completed = productionPlans.filter((p) => p.status === 'completed').length;
     const cancelled = productionPlans.filter((p) => p.status === 'cancelled').length;
-    // Status partition only — behind-schedule is a schedule KPI, not a status bucket.
     return [
-      { name: 'مخطط', value: planned },
-      { name: 'جاري', value: inProgress },
+      { name: 'شغال', value: inProgress },
+      { name: 'مش شغال', value: planned },
+      { name: 'متوقف', value: paused },
       { name: 'مكتمل', value: completed },
       { name: 'ملغي', value: cancelled },
     ];

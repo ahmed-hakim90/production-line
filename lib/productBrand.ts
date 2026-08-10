@@ -4,10 +4,10 @@ export const PRODUCT_BRAND = {
   /** Short line under copyright / PWA full name */
   systemLine: 'ForgeOps',
   /**
-   * Fixed public splash / auth branding panel color.
+   * Fixed public splash / auth branding panel color (ForgeOps blue).
    * Never follows tenant theme — avoids green/purple flicker across boot and login.
    */
-  splashHex: '#2D6255',
-  splashDarkHex: '#234F45',
-  splashLightHex: '#3A7868',
+  splashHex: '#1E4D8C',
+  splashDarkHex: '#163A6B',
+  splashLightHex: '#2B63B5',
 } as const;

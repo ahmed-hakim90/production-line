@@ -9,12 +9,12 @@ import {
   formatNumber,
   formatCurrency,
   calculateAvgAssemblyTime,
-  calculateDailyCapacity,
   calculateEstimatedDays,
   calculatePlanProgress,
   calculateProgressRatio,
   calculateTimeRatio,
   calculateSmartStatus,
+  getSmartStatusDetail,
   calculateForecastFinishDate,
   calculateRemainingDays,
   addDaysToDate,
@@ -62,23 +62,22 @@ import {
   WORK_ORDER_OPERATION_KEYS,
   isOperationPathEnabled,
 } from '@/modules/system/lib/operationPathSettings';
-
-// â”€â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+import { PLAN_STATUS_SORT_RANK } from '../utils/productionPlanReports';
 
 const STATUS_CONFIG: Record<PlanStatus, { label: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger' }> = {
-  planned: { label: 'مخطط', variant: 'info' },
-  in_progress: { label: 'قيد التنفيذ', variant: 'warning' },
+  planned: { label: 'مش شغال', variant: 'info' },
+  in_progress: { label: 'شغال', variant: 'warning' },
   completed: { label: 'مكتمل', variant: 'success' },
   paused: { label: 'متوقف', variant: 'neutral' },
   cancelled: { label: 'ملغي', variant: 'danger' },
 };
 
-const SMART_STATUS_CONFIG: Record<SmartStatus, { label: string; color: string }> = {
-  on_track: { label: 'في المسار', color: 'text-[rgb(var(--color-success))]' },
-  at_risk: { label: 'معرض للخطر', color: 'text-[rgb(var(--color-warning))]' },
-  delayed: { label: 'متأخر', color: 'text-[rgb(var(--color-warning))]' },
-  critical: { label: 'حرج', color: 'text-[rgb(var(--color-danger))]' },
-  completed: { label: 'مكتمل', color: 'text-[rgb(var(--color-success))]' },
+const SMART_STATUS_CONFIG: Record<SmartStatus, { label: string; color: string; bar: string }> = {
+  working: { label: 'شغال', color: 'text-[rgb(var(--color-warning))]', bar: 'bg-[rgb(var(--color-warning))]' },
+  not_working: { label: 'مش شغال', color: 'text-[rgb(var(--color-primary))]', bar: 'bg-[rgb(var(--color-primary))]' },
+  stopped: { label: 'متوقف', color: 'text-[var(--color-text-muted)]', bar: 'bg-[var(--color-text-muted)]' },
+  completed: { label: 'مكتمل', color: 'text-[rgb(var(--color-success))]', bar: 'bg-[rgb(var(--color-success))]' },
+  cancelled: { label: 'ملغي', color: 'text-[rgb(var(--color-danger))]', bar: 'bg-[rgb(var(--color-danger))]' },
 };
 
 const PRIORITY_CONFIG: Record<PlanPriority, { label: string; color: string; bg: string }> = {
@@ -101,6 +100,7 @@ type EnrichedPlan = ProductionPlan & {
   progressRatio: number;
   timeRatio: number;
   smartStatus: SmartStatus;
+  smartDetail: string;
   forecastFinishDate: string;
   remainingDays: number;
   remaining: number;
@@ -211,7 +211,6 @@ export const ProductionPlans: React.FC = () => {
 
   // â”€â”€ Form state â”€â”€
   const [formProductId, setFormProductId] = useState(searchParams.get('productId') || '');
-  const [formLineId, setFormLineId] = useState('');
   const [formQuantity, setFormQuantity] = useState<number>(Number(searchParams.get('quantity')) || 0);
   const [formDailyTarget, setFormDailyTarget] = useState<number>(0);
   const [formStartDate, setFormStartDate] = useState(() => getTodayDateString());
@@ -245,7 +244,6 @@ export const ProductionPlans: React.FC = () => {
     plannedQuantity: 0,
     avgDailyTarget: 0,
     startDate: '',
-    lineId: '',
     priority: 'medium' as PlanPriority,
     acceptsProductionFromReports: true,
   });
@@ -296,21 +294,12 @@ export const ProductionPlans: React.FC = () => {
     [_rawProducts],
   );
 
-  // â”€â”€ Dynamic calculations â”€â”€
   const calculations = useMemo(() => {
     if (!formProductId || formQuantity <= 0) return null;
 
-    const line = formLineId ? _rawLines.find((l) => l.id === formLineId) : null;
     const selectedProduct = products.find((p) => p.id === formProductId);
-
-    const lineProductReports = formLineId
-      ? productReports.filter((r) => r.lineId === formLineId)
-      : [];
-    const reportsForCalc = lineProductReports.length > 0 ? lineProductReports : productReports;
-
-    const config = formLineId
-      ? lineProductConfigs.find((c) => c.productId === formProductId && c.lineId === formLineId)
-      : undefined;
+    const reportsForCalc = productReports;
+    const config = lineProductConfigs.find((c) => c.productId === formProductId);
     const avgTime = calculateAvgAssemblyTime(reportsForCalc);
     const planningTime = effectivePlanningAssemblyMinutes(
       formProductId,
@@ -319,9 +308,6 @@ export const ProductionPlans: React.FC = () => {
       routingTotalTimeSecondsByProduct,
     );
     const effectiveTime = planningTime > 0 ? planningTime : (avgTime > 0 ? avgTime : 0);
-    const dailyCapacity = line && effectiveTime > 0
-      ? calculateDailyCapacity(line.maxWorkers, line.dailyWorkingHours, effectiveTime)
-      : 0;
 
     const productAvgDailyProduction = Number(selectedProduct?.avgDailyProduction || 0);
     const usesProductAverage = productAvgDailyProduction > 0;
@@ -343,7 +329,7 @@ export const ProductionPlans: React.FC = () => {
         ? operationalCalc.dailyTarget
         : usesProductAverage
           ? productAvgDailyProduction
-          : dailyCapacity;
+          : 0;
     const estimatedDays = calculateEstimatedDays(formQuantity, effectiveDailyRate);
     const avgDailyTarget = effectiveDailyRate > 0 ? Math.ceil(effectiveDailyRate) : 0;
     const plannedEndDate = usesOperationalPeriodTarget && operationalCalc.period
@@ -358,7 +344,7 @@ export const ProductionPlans: React.FC = () => {
 
     return {
       avgAssemblyTime: effectiveTime,
-      dailyCapacity,
+      dailyCapacity: 0,
       productAvgDailyProduction,
       usesProductAverage,
       usesOperationalPeriodTarget,
@@ -373,14 +359,15 @@ export const ProductionPlans: React.FC = () => {
       avgDailyTarget,
       usesManualDailyTarget: manualDailyTarget > 0,
     };
-  }, [formProductId, formLineId, formQuantity, formDailyTarget, formStartDate, productReports, _rawLines, lineProductConfigs, routingVarianceBasisSecondsByProduct, routingTotalTimeSecondsByProduct, laborSettings, products, planSettings.useOperationalPeriodDailyTarget, planSettings.operationalMonthStartDay]);
+  }, [formProductId, formQuantity, formDailyTarget, formStartDate, productReports, lineProductConfigs, routingVarianceBasisSecondsByProduct, routingTotalTimeSecondsByProduct, laborSettings, products, planSettings.useOperationalPeriodDailyTarget, planSettings.operationalMonthStartDay]);
 
   // â”€â”€ Enriched plans with computed metrics â”€â”€
   const enrichedPlans = useMemo<EnrichedPlan[]>(() => {
     return productionPlans.map((plan) => {
       const reportCount =
         (plan.id ? planReports[plan.id]?.length : undefined)
-        ?? planReports[`${plan.lineId}_${plan.productId}`]?.length
+        ?? planReports[`product_${plan.productId}`]?.length
+        ?? (plan.lineId ? planReports[`${plan.lineId}_${plan.productId}`]?.length : undefined)
         ?? 0;
       const produced = plan.producedQuantity ?? 0;
       const hasExecutionSignal = produced > 0 || reportCount > 0;
@@ -390,14 +377,13 @@ export const ProductionPlans: React.FC = () => {
           : plan.status;
       const progressRatio = calculateProgressRatio(produced, plan.plannedQuantity);
       const timeRatio = plan.plannedEndDate ? calculateTimeRatio(plan.plannedStartDate || plan.startDate, plan.plannedEndDate) : 0;
-      const smartStatus = hasExecutionSignal
-        ? calculateSmartStatus(progressRatio, timeRatio, effectiveStatus)
-        : 'on_track';
+      const smartStatus = calculateSmartStatus(progressRatio, timeRatio, effectiveStatus);
       const forecastFinishDate = plan.plannedEndDate
         ? calculateForecastFinishDate(plan.plannedStartDate || plan.startDate, produced, plan.plannedQuantity, plan.avgDailyTarget || 0)
         : '—';
       const remainingDays = plan.plannedEndDate ? calculateRemainingDays(plan.plannedEndDate) : 0;
       const remaining = Math.max(plan.plannedQuantity - produced, 0);
+      const smartDetail = getSmartStatusDetail(effectiveStatus, remainingDays);
 
       return {
         ...plan,
@@ -408,6 +394,7 @@ export const ProductionPlans: React.FC = () => {
         progressRatio,
         timeRatio,
         smartStatus,
+        smartDetail,
         forecastFinishDate,
         remainingDays,
         remaining,
@@ -438,8 +425,6 @@ export const ProductionPlans: React.FC = () => {
   }, [enrichedPlans, filterSearch, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo, _rawProducts, _rawLines]);
 
   const sortedPlans = useMemo(() => {
-    if (!sortField) return filteredPlans;
-
     const priorityRank: Record<PlanPriority, number> = {
       low: 1,
       medium: 2,
@@ -448,6 +433,19 @@ export const ProductionPlans: React.FC = () => {
     };
 
     const sorted = [...filteredPlans].sort((a, b) => {
+      if (!sortField) {
+        const statusDiff =
+          (PLAN_STATUS_SORT_RANK[a.effectiveStatus] ?? 99)
+          - (PLAN_STATUS_SORT_RANK[b.effectiveStatus] ?? 99);
+        if (statusDiff !== 0) return statusDiff;
+        const priorityDiff =
+          priorityRank[b.priority || 'medium'] - priorityRank[a.priority || 'medium'];
+        if (priorityDiff !== 0) return priorityDiff;
+        return String(b.plannedStartDate || b.startDate || '').localeCompare(
+          String(a.plannedStartDate || a.startDate || ''),
+        );
+      }
+
       let left: string | number = 0;
       let right: string | number = 0;
 
@@ -482,12 +480,14 @@ export const ProductionPlans: React.FC = () => {
       }
 
       if (typeof left === 'string' && typeof right === 'string') {
-        return left.localeCompare(right, 'ar');
+        const cmp = left.localeCompare(right, 'ar');
+        return sortDirection === 'asc' ? cmp : -cmp;
       }
-      return Number(left) - Number(right);
+      const numeric = Number(left) - Number(right);
+      return sortDirection === 'asc' ? numeric : -numeric;
     });
 
-    return sortDirection === 'asc' ? sorted : sorted.reverse();
+    return sorted;
   }, [filteredPlans, sortField, sortDirection, _rawProducts, _rawLines]);
 
   const groupedPlanSections = useMemo<PlanGroupSection[]>(() => {
@@ -502,8 +502,10 @@ export const ProductionPlans: React.FC = () => {
       let label = 'غير محدد';
 
       if (groupBy === 'line') {
-        key = plan.lineId || 'unknown-line';
-        label = _rawLines.find((line) => line.id === plan.lineId)?.name || 'خط غير معروف';
+        key = plan.lineId || 'no-line';
+        label = plan.lineId
+          ? (_rawLines.find((line) => line.id === plan.lineId)?.name || 'خط غير معروف')
+          : 'بدون خط';
       } else if (groupBy === 'product') {
         key = plan.productId || 'unknown-product';
         label = _rawProducts.find((product) => product.id === plan.productId)?.name || 'منتج غير معروف';
@@ -624,8 +626,12 @@ export const ProductionPlans: React.FC = () => {
 
   // â”€â”€ KPIs â”€â”€
   const kpis = useMemo(() => {
-    const active = enrichedPlans.filter((p) => p.effectiveStatus === 'in_progress' || p.effectiveStatus === 'planned');
-    const delayed = enrichedPlans.filter((p) => p.smartStatus === 'delayed' || p.smartStatus === 'critical');
+    const active = enrichedPlans.filter((p) =>
+      p.effectiveStatus === 'in_progress'
+      || p.effectiveStatus === 'planned'
+      || p.effectiveStatus === 'paused',
+    );
+    const delayed = enrichedPlans.filter((p) => p.effectiveStatus === 'paused');
     const totalRemaining = active.reduce((s, p) => s + p.remaining, 0);
     const avgCompletion = active.length > 0
       ? Number((active.reduce((s, p) => s + Math.min(p.progressRatio, 100), 0) / active.length).toFixed(1))
@@ -636,34 +642,25 @@ export const ProductionPlans: React.FC = () => {
   // â”€â”€ Handlers â”€â”€
 
   const handleCreate = async () => {
-    if (!formProductId || !formLineId || formQuantity <= 0 || !uid || !calculations) return;
+    if (!formProductId || formQuantity <= 0 || !uid || !calculations) return;
 
     if (!planSettings.allowMultipleActivePlans) {
-      const existing = await productionPlanService.getActiveByLine(formLineId);
+      const existing = await productionPlanService.getActiveByProduct(formProductId);
       if (existing.length > 0) {
         setCapacityWarning({ show: false, load: 0, capacity: 0 });
-        alert('لا يمكن إنشاء خطة جديدة — يوجد خطة نشطة بالفعل على هذا الخط');
+        alert('لا يمكن إنشاء خطة جديدة — يوجد خطة نشطة بالفعل لهذا المنتج');
         return;
       }
-    }
-
-    const existingPlans = await productionPlanService.getActiveByLine(formLineId);
-    const currentLoad = existingPlans.reduce((s, p) => s + (p.avgDailyTarget || 0), 0);
-    const newTarget = calculations.avgDailyTarget;
-    if (calculations.dailyCapacity > 0 && (currentLoad + newTarget) > calculations.dailyCapacity) {
-      setCapacityWarning({ show: true, load: currentLoad + newTarget, capacity: calculations.dailyCapacity });
-      return;
     }
 
     await saveNewPlan();
   };
 
   const saveNewPlan = async () => {
-    if (!formProductId || !formLineId || formQuantity <= 0 || !uid || !calculations) return;
+    if (!formProductId || formQuantity <= 0 || !uid || !calculations) return;
     setSaving(true);
     await createProductionPlan({
       productId: formProductId,
-      lineId: formLineId,
       planType: formPlanType,
       plannedQuantity: formQuantity,
       producedQuantity: 0,
@@ -680,7 +677,6 @@ export const ProductionPlans: React.FC = () => {
       createdBy: uid,
     }, { path: PRODUCTION_PLAN_CREATE_PATHS.plansPage });
     setFormProductId('');
-    setFormLineId('');
     setFormQuantity(0);
     setFormDailyTarget(0);
     setFormPriority('medium');
@@ -705,7 +701,6 @@ export const ProductionPlans: React.FC = () => {
       startDate: editForm.startDate,
       plannedStartDate: editForm.startDate,
       plannedEndDate: durationDays > 0 ? addDaysToDate(editForm.startDate, durationDays) : editPlan.plannedEndDate,
-      lineId: editForm.lineId,
       priority: editForm.priority,
       acceptsProductionFromReports: editForm.acceptsProductionFromReports,
     }, { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageEdit });
@@ -793,9 +788,9 @@ export const ProductionPlans: React.FC = () => {
   };
 
   const getCurrentRunningAction = (plan: EnrichedPlan): string => {
-    if (plan.effectiveStatus === 'in_progress') return 'التنفيذ شغال حالياً على الخطة';
-    if (plan.effectiveStatus === 'planned') return 'جاهزة للتشغيل (يمكن بدء أمر شغل)';
-    if (plan.effectiveStatus === 'paused') return 'التشغيل متوقف مؤقتاً ويحتاج استئناف';
+    if (plan.effectiveStatus === 'in_progress') return 'شغال حالياً على الخطة';
+    if (plan.effectiveStatus === 'planned') return 'مش شغال بعد — بانتظار أول إنتاج';
+    if (plan.effectiveStatus === 'paused') return 'متوقف — مرّ يومان بدون إنتاج';
     if (plan.effectiveStatus === 'completed') return 'الخطة مكتملة، لا يوجد أكشن تشغيلي مفتوح';
     return 'الخطة ملغاة، تم إيقاف كل الأكشنات';
   };
@@ -813,8 +808,7 @@ export const ProductionPlans: React.FC = () => {
       reportType,
       productionPlanId: plan.id,
       productId: plan.productId,
-      lineId: plan.lineId,
-      supervisorId: plan.supervisorId,
+      lineId: plan.lineId || '',
       date: plan.startDate || plan.plannedStartDate || getTodayDateString(),
       shift: plan.shift,
       workOrderId: plan.workOrderId,
@@ -826,7 +820,7 @@ export const ProductionPlans: React.FC = () => {
       { key: 'active', label: 'خطط نشطة', value: formatNumber(kpis.activeCount) },
       {
         key: 'delayed',
-        label: 'خطط متأخرة',
+        label: 'خطط متوقفة',
         value: formatNumber(kpis.delayedCount),
         accent: kpis.delayedCount > 0,
       },
@@ -897,7 +891,7 @@ export const ProductionPlans: React.FC = () => {
             </div>
             <div className="pl-8">
               <DialogTitle className="text-lg font-bold text-[var(--color-text)]">إنشاء خطة إنتاج جديدة</DialogTitle>
-              <p className="text-xs text-[var(--color-text-muted)] font-medium">حدد المنتج والخط والكمية لحساب التقديرات تلقائياً</p>
+              <p className="text-xs text-[var(--color-text-muted)] font-medium">حدد المنتج والكمية لحساب التقديرات تلقائياً</p>
             </div>
           </div>
 
@@ -912,19 +906,6 @@ export const ProductionPlans: React.FC = () => {
                 placeholder="ابحث واختر المنتج..."
                 className="h-auto min-h-12 p-3.5 rounded-[var(--border-radius-lg)] bg-[var(--color-card)]"
               />
-            </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج *</label>
-              <Select value={formLineId || 'none'} onValueChange={(value) => setFormLineId(value === 'none' ? '' : value)}>
-                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
-                  <SelectValue placeholder="اختر الخط..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">اختر الخط...</SelectItem>
-                  {_rawLines.map((l) => (<SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
@@ -945,7 +926,7 @@ export const ProductionPlans: React.FC = () => {
               <p className="text-[11px] text-[var(--color-text-muted)] font-medium">
                 {planSettings.useOperationalPeriodDailyTarget !== false
                   ? 'إذا تركته فارغًا: كمية الخطة ÷ أيام الشغل في فترة التشغيل (٢٦→٢٦، الجمعة إجازة). يمكن تجاوزه يدويًا.'
-                  : 'إذا تركته فارغًا سيتم استخدام متوسط المنتج أو طاقة الخط.'}
+                  : 'إذا تركته فارغًا سيتم استخدام متوسط الإنتاج اليومي للمنتج.'}
               </p>
             </div>
 
@@ -1038,7 +1019,7 @@ export const ProductionPlans: React.FC = () => {
                         ? `من فترة التشغيل (${calculations.operationalWorkingDays} يوم شغل)`
                         : calculations.usesProductAverage
                           ? 'من سجل المنتج'
-                          : 'احتساب من طاقة الخط'}
+                          : 'أدخل تارجت يومي أو متوسط المنتج'}
                   </p>
                 </div>
                 <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
@@ -1073,7 +1054,7 @@ export const ProductionPlans: React.FC = () => {
 
           <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
             <Button variant="outline" onClick={() => setFormOpen(false)}>إلغاء</Button>
-            <Button variant="primary" onClick={handleCreate} disabled={saving || !formProductId || !formLineId || formQuantity <= 0}>
+            <Button variant="primary" onClick={handleCreate} disabled={saving || !formProductId || formQuantity <= 0}>
               {saving ? 'جاري الحفظ...' : 'إنشاء خطة'}
             </Button>
           </DialogFooter>
@@ -1107,7 +1088,7 @@ export const ProductionPlans: React.FC = () => {
       <OpsDashPanel title="الخطط" accent="plans" bodyClassName="p-0">
       <SmartFilterBar
       pageId="production-plans"
-        searchPlaceholder="ابحث بالخط أو المنتج أو الكود..."
+        searchPlaceholder="ابحث بالمنتج أو الكود..."
         searchValue={filterSearch}
         onSearchChange={setFilterSearch}
         periods={[
@@ -1238,7 +1219,7 @@ export const ProductionPlans: React.FC = () => {
                 <div className="space-y-1">
                   <h3 className="text-lg font-bold text-[var(--color-text)]">تفاصيل الخطة</h3>
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    {_rawProducts.find((p) => p.id === activeDrawerPlan.productId)?.name ?? '—'} • {_rawLines.find((l) => l.id === activeDrawerPlan.lineId)?.name ?? '—'}
+                    {_rawProducts.find((p) => p.id === activeDrawerPlan.productId)?.name ?? '—'}
                   </p>
                 </div>
                 <button onClick={() => setActiveDrawerPlanId(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
@@ -1250,7 +1231,10 @@ export const ProductionPlans: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                     <p className="text-xs text-[var(--color-text-muted)]">الحالة</p>
-                    <div className="mt-1"><Badge variant={STATUS_CONFIG[activeDrawerPlan.effectiveStatus].variant as any}>{STATUS_CONFIG[activeDrawerPlan.effectiveStatus].label}</Badge></div>
+                    <p className={`mt-1 text-sm font-bold ${SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].color}`}>
+                      {SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].label}
+                    </p>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">{activeDrawerPlan.smartDetail}</p>
                   </div>
                   <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                     <p className="text-xs text-[var(--color-text-muted)]">الأولوية</p>
@@ -1276,11 +1260,11 @@ export const ProductionPlans: React.FC = () => {
                     <span className="font-bold text-primary">{Math.min(activeDrawerPlan.progressRatio, 100)}%</span>
                   </div>
                   <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
-                    <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(activeDrawerPlan.progressRatio, 100)}%` }} />
+                    <div
+                      className={`h-full rounded-full ${SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].bar}`}
+                      style={{ width: `${Math.min(activeDrawerPlan.progressRatio, 100)}%` }}
+                    />
                   </div>
-                  <p className={`text-xs font-bold ${SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].color}`}>
-                    الحالة الذكية: {SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].label}
-                  </p>
                 </div>
 
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-2 text-sm">
@@ -1383,7 +1367,7 @@ export const ProductionPlans: React.FC = () => {
 
               <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-2">
                 {canEdit && planEditEnabled && (
-                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, lineId: activeDrawerPlan.lineId, priority: activeDrawerPlan.priority || 'medium', acceptsProductionFromReports: activeDrawerPlan.acceptsProductionFromReports !== false }); setActiveDrawerPlanId(null); }}>
+                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, priority: activeDrawerPlan.priority || 'medium', acceptsProductionFromReports: activeDrawerPlan.acceptsProductionFromReports !== false }); setActiveDrawerPlanId(null); }}>
                       تعديل
                     </Button>
                 )}
@@ -1441,17 +1425,6 @@ export const ProductionPlans: React.FC = () => {
               <button onClick={() => setEditPlan(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors"><span className="material-icons-round">close</span></button>
             </div>
             <div className="p-6 space-y-5">
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">خط الإنتاج</label>
-                <Select value={editForm.lineId} onValueChange={(value) => setEditForm({ ...editForm, lineId: value })}>
-                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {_rawLines.map((l) => (<SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>))}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المخططة</label>
                 <input type="number" min={1} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" value={editForm.plannedQuantity || ''} onChange={(e) => setEditForm({ ...editForm, plannedQuantity: Number(e.target.value) })} />
@@ -1574,7 +1547,7 @@ export const ProductionPlans: React.FC = () => {
   function TableView({ groups }: { groups: PlanGroupSection[] }) {
     const totalPlans = groups.reduce((sum, group) => sum + group.plans.length, 0);
     const hasActionColumn = canEdit || canDelete || canCreateReport;
-    const columnCount = (canEdit ? 1 : 0) + 8 + (canViewCosts ? 1 : 0) + (hasActionColumn ? 1 : 0);
+    const columnCount = (canEdit ? 1 : 0) + 7 + (canViewCosts ? 1 : 0) + (hasActionColumn ? 1 : 0);
 
     return (
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
@@ -1641,7 +1614,6 @@ export const ProductionPlans: React.FC = () => {
                   {group.plans.map((plan) => {
                     const product = _rawProducts.find((p) => p.id === plan.productId);
                     const line = _rawLines.find((l) => l.id === plan.lineId);
-                    const statusInfo = STATUS_CONFIG[plan.effectiveStatus];
                     const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
                     const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
 
@@ -1661,7 +1633,8 @@ export const ProductionPlans: React.FC = () => {
                         <div className="grid grid-cols-2 gap-2 text-xs">
                           <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
                             <p className="text-[var(--color-text-muted)] mb-0.5">الحالة</p>
-                            <p className="font-bold text-[var(--color-text)]">{statusInfo.label}</p>
+                            <p className={`font-bold ${smartInfo.color}`}>{smartInfo.label}</p>
+                            <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{plan.smartDetail}</p>
                           </div>
                           <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
                             <p className="text-[var(--color-text-muted)] mb-0.5">التقدم</p>
@@ -1669,12 +1642,8 @@ export const ProductionPlans: React.FC = () => {
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <div className="flex justify-between text-xs font-bold">
-                            <span className="text-[var(--color-text-muted)]">التنفيذ</span>
-                            <span className={smartInfo.color}>{smartInfo.label}</span>
-                          </div>
                           <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
-                            <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(plan.progressRatio, 100)}%` }} />
+                            <div className={`h-full rounded-full ${smartInfo.bar}`} style={{ width: `${Math.min(plan.progressRatio, 100)}%` }} />
                           </div>
                         </div>
                         <div className="text-xs text-[var(--color-text-muted)] space-y-1">
@@ -1719,9 +1688,8 @@ export const ProductionPlans: React.FC = () => {
                     <th className="erp-th text-center">الأولوية</th>
                     <th className="erp-th text-center">الكمية</th>
                     <th className="erp-th text-center">الفترة</th>
-                    <th className="erp-th text-center">الحالة</th>
                     <th className="erp-th text-center">التقدم</th>
-                    <th className="erp-th text-center">الحالة الذكية</th>
+                    <th className="erp-th text-center">الحالة</th>
                     {canViewCosts && <th className="erp-th text-center">التكلفة</th>}
                     {hasActionColumn && <th className="erp-th text-center">إجراءات</th>}
                   </tr>
@@ -1739,7 +1707,6 @@ export const ProductionPlans: React.FC = () => {
                       {group.plans.map((plan) => {
                         const product = _rawProducts.find((p) => p.id === plan.productId);
                         const line = _rawLines.find((l) => l.id === plan.lineId);
-                        const statusInfo = STATUS_CONFIG[plan.effectiveStatus];
                         const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
                         const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
 
@@ -1775,15 +1742,19 @@ export const ProductionPlans: React.FC = () => {
                               <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{product?.code}</p>
                             </td>
                             <td className="px-4 py-3.5">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/lines/${plan.lineId}`);
-                                }}
-                                className="text-sm font-bold text-primary hover:underline text-right"
-                              >
-                                {line?.name ?? '—'}
-                              </button>
+                              {plan.lineId ? (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/lines/${plan.lineId}`);
+                                  }}
+                                  className="text-sm font-bold text-primary hover:underline text-right"
+                                >
+                                  {line?.name ?? '—'}
+                                </button>
+                              ) : (
+                                <span className="text-sm text-[var(--color-text-muted)]">—</span>
+                              )}
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold ${priorityInfo.bg} ${priorityInfo.color}`}>
@@ -1796,10 +1767,7 @@ export const ProductionPlans: React.FC = () => {
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <p className="text-xs font-medium text-[var(--color-text-muted)]">{plan.plannedStartDate || plan.startDate}</p>
-                              {plan.plannedEndDate && <p className="text-[10px] text-[var(--color-text-muted)]">â†’ {plan.plannedEndDate}</p>}
-                            </td>
-                            <td className="px-4 py-3.5 text-center">
-                              <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
+                              {plan.plannedEndDate && <p className="text-[10px] text-[var(--color-text-muted)]">→ {plan.plannedEndDate}</p>}
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <div className="flex flex-col items-center gap-1.5">
@@ -1808,7 +1776,7 @@ export const ProductionPlans: React.FC = () => {
                                 </span>
                                 <div className="w-20 h-1.5 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                                   <div
-                                    className={`h-full rounded-full transition-all duration-500 ${plan.progressRatio >= 100 ? 'bg-[rgb(var(--color-success)/0.1)]0' : plan.progressRatio >= 50 ? 'bg-[rgb(var(--color-primary)/0.1)]0' : 'bg-[rgb(var(--color-warning)/0.1)]0'}`}
+                                    className={`h-full rounded-full transition-all duration-500 ${smartInfo.bar}`}
                                     style={{ width: `${Math.min(plan.progressRatio, 100)}%` }}
                                   />
                                 </div>
@@ -1817,9 +1785,7 @@ export const ProductionPlans: React.FC = () => {
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <span className={`text-xs font-bold ${smartInfo.color}`}>{smartInfo.label}</span>
-                              {plan.remainingDays > 0 && plan.effectiveStatus !== 'completed' && (
-                                <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{plan.remainingDays} يوم متبقي</p>
-                              )}
+                              <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{plan.smartDetail}</p>
                             </td>
                             {canViewCosts && (
                               <td className="px-4 py-3.5 text-center">
@@ -1834,7 +1800,7 @@ export const ProductionPlans: React.FC = () => {
                                 <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                                   {canEdit && planEditEnabled && (
                                       <button
-                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium', acceptsProductionFromReports: plan.acceptsProductionFromReports !== false }); }}
+                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, priority: plan.priority || 'medium', acceptsProductionFromReports: plan.acceptsProductionFromReports !== false }); }}
                                         className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
                                         <span className="material-icons-round text-sm">edit</span>
                                       </button>
@@ -1894,7 +1860,7 @@ export const ProductionPlans: React.FC = () => {
   // â”€â”€â”€ Kanban View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function KanbanView({ plans }: { plans: typeof enrichedPlans }) {
-    const columns: PlanStatus[] = ['planned', 'in_progress', 'completed', 'paused', 'cancelled'];
+    const columns: PlanStatus[] = ['in_progress', 'planned', 'paused', 'completed', 'cancelled'];
 
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -1942,7 +1908,10 @@ export const ProductionPlans: React.FC = () => {
                       </div>
 
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className={`font-bold ${smartInfo.color}`}>{smartInfo.label}</span>
+                        <div className="text-right">
+                          <span className={`font-bold ${smartInfo.color}`}>{smartInfo.label}</span>
+                          <p className="text-[var(--color-text-muted)] mt-0.5">{plan.smartDetail}</p>
+                        </div>
                         <span className="text-[var(--color-text-muted)]">{plan.plannedStartDate || plan.startDate}</span>
                       </div>
                     </div>
@@ -1961,8 +1930,6 @@ export const ProductionPlans: React.FC = () => {
       </div>
     );
   }
-
-  // â”€â”€â”€ Timeline View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function TimelineView({ plans }: { plans: typeof enrichedPlans }) {
     const activePlans = plans.filter((p) => p.plannedStartDate || p.startDate);
@@ -1990,14 +1957,6 @@ export const ProductionPlans: React.FC = () => {
       return { right: `${(startOffset / totalDays) * 100}%`, width: `${(duration / totalDays) * 100}%` };
     };
 
-    const smartStatusColors: Record<SmartStatus, string> = {
-      on_track: 'bg-[rgb(var(--color-success)/0.1)]0',
-      at_risk: 'bg-[rgb(var(--color-warning)/0.1)]0',
-      delayed: 'bg-[rgb(var(--color-warning)/0.1)]0',
-      critical: 'bg-[rgb(var(--color-danger)/0.1)]0',
-      completed: 'bg-[rgb(var(--color-success))]',
-    };
-
     return (
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-3">
@@ -2017,7 +1976,7 @@ export const ProductionPlans: React.FC = () => {
             const start = plan.plannedStartDate || plan.startDate;
             const end = plan.plannedEndDate || addDaysToDate(start, plan.estimatedDurationDays || 7);
             const barStyle = getBarStyle(start, end);
-            const smartColor = smartStatusColors[plan.smartStatus];
+            const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
 
             return (
               <div key={plan.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
@@ -2026,18 +1985,20 @@ export const ProductionPlans: React.FC = () => {
                   <p className="text-[10px] text-[var(--color-text-muted)]">{line?.name ?? '—'}</p>
                 </div>
                 <div className="flex-1 relative h-8 bg-[var(--color-bg)] rounded-[var(--border-radius-base)] overflow-hidden">
-                  {/* Today marker */}
                   <div className="absolute top-0 bottom-0 w-px bg-[rgb(var(--color-danger))] z-10" style={{ right: `${todayPercent}%` }} />
-                  {/* Plan bar */}
                   <div
-                    className={`absolute top-1 bottom-1 rounded-[var(--border-radius-sm)] ${smartColor} opacity-80 flex items-center justify-center`}
+                    className={`absolute top-1 bottom-1 rounded-[var(--border-radius-sm)] ${smartInfo.bar} opacity-80 flex items-center justify-center`}
                     style={{ right: barStyle.right, width: barStyle.width, minWidth: '20px' }}
-                    title={`${start} â†’ ${end} | ${Math.min(plan.progressRatio, 100)}%`}
+                    title={`${start} → ${end} | ${smartInfo.label} | ${Math.min(plan.progressRatio, 100)}%`}
                   >
                     {parseFloat(barStyle.width) > 8 && (
                       <span className="text-[10px] font-bold text-white drop-shadow-sm">{Math.min(plan.progressRatio, 100)}%</span>
                     )}
                   </div>
+                </div>
+                <div className="w-full sm:w-28 shrink-0 text-left sm:text-right">
+                  <p className={`text-[11px] font-bold ${smartInfo.color}`}>{smartInfo.label}</p>
+                  <p className="text-[10px] text-[var(--color-text-muted)]">{plan.smartDetail}</p>
                 </div>
               </div>
             );
@@ -2046,15 +2007,12 @@ export const ProductionPlans: React.FC = () => {
 
         <div className="px-5 pb-4 flex flex-wrap items-center gap-3 sm:gap-4 text-[10px] text-[var(--color-text-muted)] font-medium">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-danger))]"></span> اليوم</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-success)/0.1)]0"></span> في المسار</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-warning)/0.1)]0"></span> معرض للخطر</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-warning)/0.1)]0"></span> متأخر</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-danger)/0.1)]0"></span> حرج</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-warning))]"></span> شغال</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-primary))]"></span> مش شغال</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[var(--color-text-muted)]"></span> متوقف</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-success))]"></span> مكتمل</span>
         </div>
       </div>
     );
   }
 };
-
-
-

@@ -353,10 +353,10 @@ export const ProductionDashboard: React.FC = () => {
 
   const showPlanGauge = hero.planAchievement > 0 || data.planTotalCount > 0;
   const activePlans =
-    data.planStatusBars.find((r) => r.name === 'جاري')?.value
+    data.planStatusBars.find((r) => r.name === 'شغال')?.value
     ?? 0;
   const plannedPlans =
-    data.planStatusBars.find((r) => r.name === 'مخطط')?.value
+    data.planStatusBars.find((r) => r.name === 'مش شغال')?.value
     ?? 0;
 
   const heroCards = [
@@ -452,12 +452,16 @@ export const ProductionDashboard: React.FC = () => {
               <GhostButton iconName="assignment" tone="edit">أوامر الشغل</GhostButton>
             </Link>
           )}
-          {(can('productionIssue.request') || can('plans.view') || can('workOrders.view')) && (
+          {can('productionIssue.request') && (
             <Link to={tenantPath('/production/issue-requests')}>
               <GhostButton iconName="fact_check" tone="approve">طلبات الصرف</GhostButton>
             </Link>
           )}
-          {(can('reports.view') || can('reports.packaging.create')) && (
+          {(can('productionHandover.approve')
+            || can('inventory.transfers.approve')
+            || can('reports.packaging.create')
+            || can('factoryDashboard.view')
+            || can('adminDashboard.view')) && (
             <Link to={tenantPath('/production/packaging/control')}>
               <GhostButton iconName="package_2" tone="share">تحكم التغليف</GhostButton>
             </Link>
@@ -499,7 +503,7 @@ export const ProductionDashboard: React.FC = () => {
           className="ops-module-charts__qty text-start"
           onClick={() => drill('plans', 'جاري')}
         >
-          <p className="ops-module-charts__qty-label">خطط جارية / مخطط</p>
+          <p className="ops-module-charts__qty-label">خطط شغال / مش شغال</p>
           <p className="ops-module-charts__qty-value">
             {formatNumber(activePlans)} / {formatNumber(plannedPlans)}
           </p>

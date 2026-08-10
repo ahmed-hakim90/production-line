@@ -259,7 +259,11 @@ export const PackagingControl: React.FC = () => {
       refreshing={loading}
       actions={(
         <div className="flex flex-wrap gap-2">
-          {can('reports.view') || can('reports.packaging.create') ? (
+          {can('reports.packaging.create')
+            || can('productionHandover.approve')
+            || can('inventory.transfers.approve')
+            || can('factoryDashboard.view')
+            || can('adminDashboard.view') ? (
             <Link to={withTenantPath(tenantSlug, '/reports')}>
               <PrimaryButton iconName="description" tone="execute">
                 تقرير تغليف

@@ -46,13 +46,12 @@ const SupplyCycleDetail = lazyNamed(() => import('../pages/SupplyCycleDetail'), 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
   {
     path: '/production',
+    // Locked board: factory-wide production KPIs (not supervisor day-to-day ops).
+    permission: 'productionDashboard.view',
     permissionsAny: [
-      'plans.view',
-      'workOrders.view',
-      'reports.view',
+      'productionDashboard.view',
       'factoryDashboard.view',
-      'quickAction.view',
-      'dashboard.view',
+      'adminDashboard.view',
     ],
     component: ProductionDashboard,
     skeleton: 'dashboard',
@@ -69,14 +68,19 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   {
     path: '/production/issue-requests',
     permission: 'productionIssue.request',
-    permissionsAny: ['productionIssue.request', 'plans.view', 'workOrders.view'],
     component: ProductionIssueRequests,
     skeleton: 'dashboard',
   },
   {
     path: '/production/packaging/control',
-    permission: 'reports.view',
-    permissionsAny: ['reports.view', 'reports.packaging.create'],
+    permission: 'productionHandover.approve',
+    permissionsAny: [
+      'productionHandover.approve',
+      'inventory.transfers.approve',
+      'reports.packaging.create',
+      'factoryDashboard.view',
+      'adminDashboard.view',
+    ],
     component: PackagingControl,
     skeleton: 'dashboard',
   },

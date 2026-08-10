@@ -134,6 +134,8 @@ export const LineWorkerAssignment: React.FC = () => {
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
   const [updatingLaborRoleId, setUpdatingLaborRoleId] = useState<string | null>(null);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
+  /** Avoid caching an empty roster before supervisor line scope (or store lines) is ready. */
+  const [supervisorLinesLoaded, setSupervisorLinesLoaded] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
@@ -163,10 +165,12 @@ export const LineWorkerAssignment: React.FC = () => {
     let mounted = true;
     if (!isSupervisorReporter || !currentEmployee?.id) {
       setAssignedLineIds(new Set());
+      setSupervisorLinesLoaded(true);
       return () => {
         mounted = false;
       };
     }
+    setSupervisorLinesLoaded(false);
     supervisorLineAssignmentService
       .getActiveByDate(selectedDate)
       .then((rows) => {
@@ -178,10 +182,12 @@ export const LineWorkerAssignment: React.FC = () => {
             .filter(Boolean),
         );
         setAssignedLineIds(ids);
+        setSupervisorLinesLoaded(true);
       })
       .catch(() => {
         if (!mounted) return;
         setAssignedLineIds(new Set());
+        setSupervisorLinesLoaded(true);
       });
     return () => {
       mounted = false;
@@ -205,6 +211,11 @@ export const LineWorkerAssignment: React.FC = () => {
     () => visibleLines.map((line) => String(line.id || '')).filter(Boolean),
     [visibleLines],
   );
+  const visibleLinesScopeKey = useMemo(
+    () => visibleLineIdList.slice().sort().join(',') || 'none',
+    [visibleLineIdList],
+  );
+  const assignmentScopeReady = supervisorLinesLoaded && (!isSupervisorReporter || Boolean(currentEmployee?.id));
 
   const buildPermanentDisplayRows = useCallback((
     permanentRows: ProductionLineWorkerAssignment[],
@@ -242,9 +253,13 @@ export const LineWorkerAssignment: React.FC = () => {
       .filter((row): row is DisplayLineWorkerAssignment => Boolean(row));
   }, [selectedDate]);
 
-  const assignmentCacheKey = `production:lineWorkerAssign:${selectedDate}:${selectedLineId || 'all'}`;
+  // Scope must be part of the key: an early fetch with empty visible lines must not
+  // poison the 45s cache / in-flight dedupe used after supervisor lines resolve.
+  const assignmentCacheKey = `production:lineWorkerAssign:${selectedDate}:${selectedLineId || 'all'}:${visibleLinesScopeKey}`;
 
   const loadAssignments = useCallback(async (opts?: { force?: boolean }) => {
+    if (!assignmentScopeReady) return;
+
     const cached = peekPageDataCache<{ allDay: DisplayLineWorkerAssignment[]; assignments: DisplayLineWorkerAssignment[] }>(assignmentCacheKey);
     if (cached) {
       setAllDayAssignments(cached.allDay);
@@ -257,11 +272,12 @@ export const LineWorkerAssignment: React.FC = () => {
       const { data } = await fetchCachedPageData(
         assignmentCacheKey,
         async () => {
+          const lineIds = visibleLineIdList;
           const [dailyRows, productionWorkers, permanentByLine] = await Promise.all([
             lineAssignmentService.getByDate(selectedDate),
             productionWorkerService.getAll(),
             Promise.all(
-              visibleLineIdList.map(async (lineId) => ({
+              lineIds.map(async (lineId) => ({
                 lineId,
                 rows: await productionLineWorkerAssignmentService.getActiveByLineAndDate(lineId, selectedDate),
               })),
@@ -274,7 +290,7 @@ export const LineWorkerAssignment: React.FC = () => {
           const permanentDisplayRows = buildPermanentDisplayRows(permanentRows, workersById, dailyRows);
           const legacyRows = (
             await Promise.all(
-              visibleLineIdList
+              lineIds
                 .filter((lineId) => !linesWithPermanent.has(lineId))
                 .map((lineId) => lineAssignmentService.getByLineAndDate(lineId, selectedDate)),
             )
@@ -300,6 +316,7 @@ export const LineWorkerAssignment: React.FC = () => {
     }
   }, [
     assignmentCacheKey,
+    assignmentScopeReady,
     selectedDate,
     selectedLineId,
     isSupervisorReporter,
@@ -314,8 +331,9 @@ export const LineWorkerAssignment: React.FC = () => {
   }, [assignmentCacheKey, loadAssignments]);
 
   useEffect(() => {
+    if (!assignmentScopeReady) return;
     void loadAssignments();
-  }, [loadAssignments]);
+  }, [assignmentScopeReady, loadAssignments]);
 
   useEffect(() => {
     if (!selectedLineId) return;

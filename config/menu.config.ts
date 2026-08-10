@@ -221,27 +221,16 @@ export const MENU_CONFIG: MenuGroup[] = [
         label: 'لوحة الإنتاج',
         icon: 'dashboard',
         path: '/production',
-        permission: 'plans.view',
+        // Factory-wide KPIs — not operational keys like plans/reports/quickAction.
+        permission: 'productionDashboard.view',
         anyOfPermissions: [
-          'plans.view',
-          'workOrders.view',
-          'reports.view',
+          'productionDashboard.view',
           'factoryDashboard.view',
-          'quickAction.view',
-          'dashboard.view',
+          'adminDashboard.view',
         ],
         exact: true,
       },
-      {
-        key: 'supervisor-dashboard',
-        label: 'لوحة المشرف',
-        icon: 'engineering',
-        path: '/supervisor',
-        permission: 'employeeDashboard.view',
-        anyOfPermissions: ['employeeDashboard.view', 'quickAction.view'],
-        selfSupervisorOnly: true,
-        exact: true,
-      },
+      // لوحة المشرف = الرئيسية للمشرف (`/` → SupervisorDashboard) — لا تكرار في سايدبار الإنتاج.
       { key: 'quick', label: 'إدخال سريع', icon: 'bolt', path: '/quick-action', permission: 'quickAction.view' },
       {
         key: 'production-requests',
@@ -253,14 +242,22 @@ export const MENU_CONFIG: MenuGroup[] = [
         activePatterns: ['/production/requests', '/team-requests'],
       },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
-      { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
+      {
+        key: 'plans',
+        label: 'خطط الإنتاج',
+        icon: 'event_note',
+        path: '/production-plans',
+        permission: 'plans.view',
+        // Factory/hall planning — not line supervisor day-to-day.
+        excludeRoleKeys: ['supervisor'],
+      },
       {
         key: 'production-issue-requests',
         label: 'طلبات صرف الإنتاج',
         icon: 'fact_check',
         path: '/production/issue-requests',
+        // Must match page gate — plans.view alone opened a dead "no permission" screen.
         permission: 'productionIssue.request',
-        anyOfPermissions: ['productionIssue.request', 'plans.view', 'workOrders.view'],
         activePatterns: ['/production/issue-requests'],
       },
       {
@@ -268,9 +265,15 @@ export const MENU_CONFIG: MenuGroup[] = [
         label: 'تحكم التغليف',
         icon: 'package_2',
         path: '/production/packaging/control',
-        permission: 'reports.view',
-        // Production packaging only — not generic inventory.view (repair reception has that for spare parts).
-        anyOfPermissions: ['reports.view', 'reports.packaging.create'],
+        // Receipt + variance hub — not line-supervisor reports.view.
+        permission: 'productionHandover.approve',
+        anyOfPermissions: [
+          'productionHandover.approve',
+          'inventory.transfers.approve',
+          'reports.packaging.create',
+          'factoryDashboard.view',
+          'adminDashboard.view',
+        ],
         excludeRoleKeys: ['materials_warehouse', 'repair_reception', 'repair_technician'],
         activePatterns: ['/production/packaging/', '/inventory/packaging/'],
       },

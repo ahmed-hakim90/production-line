@@ -416,8 +416,12 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                   <span className="text-[rgb(var(--color-primary))]"> ({t('modalManager.createWorkOrder.ofPlanned', { value: formatNumber(selectedPlan.plannedQuantity || 0) })})</span>
                   <span className="mx-1 text-[rgb(var(--color-primary))]">—</span>
                   {productNameById.get(selectedPlan.productId) || t('modalManager.createWorkOrder.unknownProduct')}
-                  <span className="mx-1 text-[rgb(var(--color-primary))]">/</span>
-                  {lines.find((l) => l.id === selectedPlan.lineId)?.name || t('modalManager.createWorkOrder.unknownLine')}
+                  {selectedPlan.lineId ? (
+                    <>
+                      <span className="mx-1 text-[rgb(var(--color-primary))]">/</span>
+                      {lines.find((l) => l.id === selectedPlan.lineId)?.name || t('modalManager.createWorkOrder.unknownLine')}
+                    </>
+                  ) : null}
                 </p>
                 <p className={selectedPlan.acceptsProductionFromReports === false ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-primary))]'}>
                   {selectedPlan.acceptsProductionFromReports === false
@@ -460,7 +464,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                   className="bg-[var(--color-card)]"
                 />
               </div>
+            </>
+          )}
 
+          {(!selectedPlan || !selectedPlan.lineId) && (
               <div>
                 <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productionLineRequired')}</label>
                 <select
@@ -474,7 +481,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                   ))}
                 </select>
               </div>
-            </>
           )}
 
           <div>

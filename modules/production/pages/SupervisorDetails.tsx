@@ -163,8 +163,8 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
 ];
 
 const PLAN_STATUS_LABELS: Record<ProductionPlan['status'], { label: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger' }> = {
-  planned: { label: 'مخطط', variant: 'info' },
-  in_progress: { label: 'قيد التنفيذ', variant: 'warning' },
+  planned: { label: 'مش شغال', variant: 'info' },
+  in_progress: { label: 'شغال', variant: 'warning' },
   completed: { label: 'مكتمل', variant: 'success' },
   paused: { label: 'متوقف', variant: 'neutral' },
   cancelled: { label: 'ملغي', variant: 'danger' },

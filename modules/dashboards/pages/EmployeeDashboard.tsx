@@ -128,6 +128,12 @@ export const EmployeeDashboard: React.FC = () => {
   }));
 
   const { can } = usePermission();
+  const canPackagingControl =
+    can('productionHandover.approve')
+    || can('inventory.transfers.approve')
+    || can('reports.packaging.create')
+    || can('factoryDashboard.view')
+    || can('adminDashboard.view');
   const products = useAppStore((s) => s.products);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const systemSettings = useAppStore((s) => s.systemSettings);
@@ -690,7 +696,11 @@ export const EmployeeDashboard: React.FC = () => {
               اعتماد التحويلات
             </GhostButton>
           )}
-          {(can('reports.packaging.create' as any) || can('reports.view' as any)) && (
+          {(can('reports.packaging.create' as any)
+            || can('productionHandover.approve' as any)
+            || can('inventory.transfers.approve' as any)
+            || can('factoryDashboard.view' as any)
+            || can('adminDashboard.view' as any)) && (
             <GhostButton
               type="button"
               onClick={() => navigate('/production/packaging/control')}
@@ -863,7 +873,10 @@ export const EmployeeDashboard: React.FC = () => {
             decisionSnapshot.materials.assemblableCoveragePercent < 90)) && (
         <OpsDashPanel title="قرارات تشغيلية اليوم" accent="production">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {decisionSnapshot.issues.openCount > 0 && (
+              {decisionSnapshot.issues.openCount > 0 &&
+                (can('productionIssue.request' as any)
+                  || can('productionIssue.approve' as any)
+                  || can('inventory.view' as any)) && (
                 <button
                   type="button"
                   onClick={() => navigate(
@@ -882,7 +895,8 @@ export const EmployeeDashboard: React.FC = () => {
                   </p>
                 </button>
               )}
-              {decisionSnapshot.packaging.awaitingUnits > 0 && (
+              {canPackagingControl
+                && decisionSnapshot.packaging.awaitingUnits > 0 && (
                 <button
                   type="button"
                   onClick={() => navigate('/production/packaging/control')}
@@ -938,7 +952,7 @@ export const EmployeeDashboard: React.FC = () => {
                   </p>
                 </button>
               )}
-              {(can('productionIssue.request' as any) || can('plans.view' as any) || can('inventory.view' as any)) &&
+              {(can('productionIssue.request' as any) || can('inventory.view' as any)) &&
                 (decisionSnapshot.materials.plansWithShortage > 0 ||
                   (decisionSnapshot.materials.assemblableCoveragePercent != null &&
                     decisionSnapshot.materials.assemblableCoveragePercent < 90)) && (

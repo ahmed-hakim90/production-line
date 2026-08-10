@@ -169,7 +169,6 @@ export const ProductionIssueRequests: React.FC = () => {
 
   const [planModalOpen, setPlanModalOpen] = useState(false);
   const [planProductId, setPlanProductId] = useState('');
-  const [planLineId, setPlanLineId] = useState('');
   const [planQuantity, setPlanQuantity] = useState('');
   const [planSaving, setPlanSaving] = useState(false);
 
@@ -553,15 +552,14 @@ export const ProductionIssueRequests: React.FC = () => {
   const openCreatePlan = (row: AssemblableCapacityRow) => {
     setPlanProductId(row.productId);
     setPlanQuantity(String(Math.max(1, Math.floor(Number(row.maxAssemblable || 0)) || 1)));
-    setPlanLineId(activeLines[0]?.id || '');
     setPlanModalOpen(true);
   };
 
   const savePlan = async () => {
     if (!canCreatePlan || !uid) return;
     const qty = Number(planQuantity);
-    if (!planProductId || !planLineId || !(qty > 0)) {
-      setMessage('حدد المنتج والخط وكمية أكبر من صفر لإنشاء الخطة.');
+    if (!planProductId || !(qty > 0)) {
+      setMessage('حدد المنتج وكمية أكبر من صفر لإنشاء الخطة.');
       return;
     }
     setPlanSaving(true);
@@ -572,7 +570,6 @@ export const ProductionIssueRequests: React.FC = () => {
       const estimatedDays = Math.max(1, calculateEstimatedDays(qty, avgDailyTarget));
       const planId = await createProductionPlan({
         productId: planProductId,
-        lineId: planLineId,
         planType: 'finished_product',
         plannedQuantity: qty,
         producedQuantity: 0,
@@ -1244,19 +1241,6 @@ export const ProductionIssueRequests: React.FC = () => {
               المنتج: <span className="font-bold text-[var(--color-text)]">{planProductName}</span>
             </p>
             <label className="block space-y-1">
-              <span className="text-xs font-bold text-[var(--color-text-muted)]">خط الإنتاج</span>
-              <select
-                className="w-full rounded-lg border px-3 py-2 text-sm"
-                value={planLineId}
-                onChange={(e) => setPlanLineId(e.target.value)}
-              >
-                <option value="">اختر الخط…</option>
-                {activeLines.map((line) => (
-                  <option key={line.id} value={line.id}>{line.name || line.id}</option>
-                ))}
-              </select>
-            </label>
-            <label className="block space-y-1">
               <span className="text-xs font-bold text-[var(--color-text-muted)]">كمية الخطة</span>
               <input
                 type="number"
@@ -1271,7 +1255,7 @@ export const ProductionIssueRequests: React.FC = () => {
           </div>
           <DialogFooter className="gap-2">
             <GhostButton iconName="close" tone="neutral" onClick={() => setPlanModalOpen(false)} disabled={planSaving}>إلغاء</GhostButton>
-            <PrimaryButton iconName="add_circle" tone="submit" disabled={planSaving || !planLineId} onClick={() => void savePlan()}>
+            <PrimaryButton iconName="add_circle" tone="submit" disabled={planSaving || !planProductId} onClick={() => void savePlan()}>
               {planSaving ? 'جاري الحفظ…' : 'إنشاء الخطة'}
             </PrimaryButton>
           </DialogFooter>

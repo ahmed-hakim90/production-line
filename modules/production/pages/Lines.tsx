@@ -71,8 +71,9 @@ export const Lines: React.FC = () => {
     const loadDailyData = async () => {
       const today = getTodayDateString();
       try {
+        const lineIds = _rawLines.map((line) => String(line.id || '').trim()).filter(Boolean);
         const [workersAssignments, supervisorAssignments] = await Promise.all([
-          lineAssignmentService.getByDate(today),
+          lineAssignmentService.getEffectiveByDate(today, lineIds),
           supervisorLineAssignmentService.getActiveByDate(today),
         ]);
         setTodayAssignments(workersAssignments);
@@ -94,7 +95,7 @@ export const Lines: React.FC = () => {
       }
     };
     void loadDailyData();
-  }, [_rawEmployees]);
+  }, [_rawEmployees, _rawLines]);
 
   const getTodayWorkersCount = (lineId: string) =>
     todayAssignments.filter((a) => a.lineId === lineId).length;

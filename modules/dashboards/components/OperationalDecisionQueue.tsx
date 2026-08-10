@@ -78,12 +78,19 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
     behindScheduleCount,
   } = snapshot;
 
+  // Gate on keys Firestore rules accept for list/count (incl. frontend aliases).
   const canSeeRepairReplenishment =
     can('sparePartsReplenishment.view')
+    || can('sparePartsReplenishment.create')
     || can('sparePartsReplenishment.approve')
     || can('sparePartsReplenishment.prepare')
-    || can('sparePartsReplenishment.receive');
-  const canSeeRepairSpareIssues = can('repairSpareIssues.view');
+    || can('sparePartsReplenishment.receive')
+    || can('inventory.view');
+  const canSeeRepairSpareIssues =
+    can('repairSpareIssues.view')
+    || can('repairSpareIssues.create')
+    || can('repair.parts.view')
+    || can('repair.view');
   const [repairCounts, setRepairCounts] = useState({
     centralPending: 0,
     awaitingReceive: 0,
@@ -153,7 +160,7 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
           ? 'warning'
           : 'ok',
       path: '/production/packaging/control',
-      anyOf: ['reports.view', 'reports.packaging.create', 'productionHandover.approve'],
+      anyOf: ['productionHandover.approve', 'inventory.transfers.approve', 'reports.packaging.create', 'factoryDashboard.view', 'adminDashboard.view'],
     },
     {
       id: 'fg-entry',
@@ -246,7 +253,6 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
             : 'ok',
       path: '/production/issue-requests',
       anyOf: [
-        'plans.view',
         'productionIssue.request',
         'factoryDashboard.view',
         'adminDashboard.view',
@@ -543,7 +549,11 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
             طلبات الصرف
           </GhostButton>
         )}
-        {(can('reports.packaging.create' as any) || can('reports.view' as any)) && (
+        {(can('reports.packaging.create' as any)
+          || can('productionHandover.approve' as any)
+          || can('inventory.transfers.approve' as any)
+          || can('factoryDashboard.view' as any)
+          || can('adminDashboard.view' as any)) && (
           <GhostButton onClick={() => navigate('/production/packaging/control')} iconName="package_2" className="h-8 px-2.5 text-xs">
             تحكم التغليف
           </GhostButton>

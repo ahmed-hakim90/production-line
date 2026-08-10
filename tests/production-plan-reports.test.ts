@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
-import { buildProductionLines } from '../utils/calculations.ts';
+import { buildProductionLines, calculateSmartStatus, getSmartStatusDetail } from '../utils/calculations.ts';
 import {
+  deriveProductionPlanAutoStatus,
   filterReportsForProductionPlan,
   planAcceptsDirectReportProduction,
+  resolveProductionPlanQuantityStartDate,
 } from '../modules/production/utils/productionPlanReports.ts';
 import { ProductionLineStatus, type ProductionPlan, type ProductionReport } from '../types.ts';
 
 const plan: ProductionPlan = {
   id: 'plan-1',
   productId: 'product-1',
-  lineId: 'line-1',
   plannedQuantity: 100,
   producedQuantity: 0,
   startDate: '2026-06-01',
@@ -23,6 +24,7 @@ const plan: ProductionPlan = {
   planType: 'finished_product',
   status: 'in_progress',
   createdBy: 'user-1',
+  createdAt: '2026-06-01T08:00:00.000Z',
 };
 
 const report = (overrides: Partial<ProductionReport>): ProductionReport => ({
@@ -39,7 +41,12 @@ const report = (overrides: Partial<ProductionReport>): ProductionReport => ({
 });
 
 const enabledReport = report({ id: 'enabled', quantityProduced: 40 });
-const legacyReport = report({ id: 'legacy', quantityProduced: 15 });
+const otherLineReport = report({ id: 'other-line', lineId: 'line-2', quantityProduced: 12 });
+const beforeCreateReport = report({
+  id: 'before-create',
+  date: '2026-05-31',
+  quantityProduced: 99,
+});
 const independentWorkOrderReport = report({
   id: 'independent-work-order',
   quantityProduced: 25,
@@ -59,16 +66,18 @@ const packagingReport = report({
 
 assert.equal(planAcceptsDirectReportProduction(plan), true);
 assert.equal(planAcceptsDirectReportProduction({ ...plan, acceptsProductionFromReports: false }), false);
+assert.equal(resolveProductionPlanQuantityStartDate(plan), '2026-06-01');
 
 assert.deepEqual(
   filterReportsForProductionPlan(plan, [
     enabledReport,
+    otherLineReport,
+    beforeCreateReport,
     independentWorkOrderReport,
-    legacyReport,
     explicitlyLinkedReport,
     packagingReport,
   ]).map((r) => r.id),
-  ['enabled', 'legacy', 'linked-to-plan'],
+  ['enabled', 'other-line', 'linked-to-plan'],
 );
 
 assert.deepEqual(
@@ -78,6 +87,35 @@ assert.deepEqual(
   ]),
   [],
 );
+
+assert.equal(
+  deriveProductionPlanAutoStatus(plan, 0, null, '2026-06-10'),
+  'planned',
+);
+assert.equal(
+  deriveProductionPlanAutoStatus(plan, 40, '2026-06-10', '2026-06-10'),
+  'in_progress',
+);
+assert.equal(
+  deriveProductionPlanAutoStatus(plan, 40, '2026-06-08', '2026-06-10'),
+  'paused',
+);
+assert.equal(
+  deriveProductionPlanAutoStatus(plan, 100, '2026-06-01', '2026-06-10'),
+  'completed',
+);
+assert.equal(
+  deriveProductionPlanAutoStatus({ ...plan, status: 'cancelled' }, 40, '2026-06-10', '2026-06-10'),
+  'cancelled',
+);
+
+assert.equal(calculateSmartStatus(50, 50, 'in_progress'), 'working');
+assert.equal(calculateSmartStatus(0, 0, 'planned'), 'not_working');
+assert.equal(calculateSmartStatus(40, 80, 'paused'), 'stopped');
+assert.equal(calculateSmartStatus(100, 100, 'completed'), 'completed');
+assert.equal(getSmartStatusDetail('paused', 5), 'مرّ يومان بدون إنتاج');
+assert.equal(getSmartStatusDetail('in_progress', 12), '12 يوم متبقي');
+assert.equal(getSmartStatusDetail('planned', 0), 'بانتظار أول إنتاج');
 
 const lines = buildProductionLines(
   [{
@@ -98,7 +136,7 @@ const lines = buildProductionLines(
   [independentWorkOrderReport],
   [],
   [],
-  [plan],
+  [{ ...plan, lineId: 'line-1' }],
   { 'line-1_product-1': [enabledReport] },
   [],
 );

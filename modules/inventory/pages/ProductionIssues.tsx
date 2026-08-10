@@ -474,7 +474,7 @@ export const ProductionIssues: React.FC = () => {
       : open;
     return rows.map((plan) => {
       const productLabel = productLabelById.get(plan.productId) || productNameById.get(plan.productId) || plan.productId;
-      const lineName = lineNameById.get(plan.lineId);
+      const lineName = plan.lineId ? lineNameById.get(plan.lineId) : undefined;
       const date = plan.plannedStartDate || plan.startDate;
       const remaining = Number(plan.remainingQuantity ?? 0) > 0
         ? Number(plan.remainingQuantity)

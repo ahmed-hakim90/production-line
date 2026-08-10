@@ -386,7 +386,7 @@ export function applyTenantTheme(theme: TenantTheme, themeSettings?: ThemeSettin
   root.style.setProperty('--color-text', theme.colorText);
   root.style.setProperty('--color-primary', toRgbChannels(theme.primaryColor));
   root.style.setProperty('--color-primary-hex', theme.primaryColor);
-  // Public splash/auth brand panel — fixed ForgeOps green (never tenant primary).
+  // Public splash/auth brand panel — fixed ForgeOps blue (never tenant primary).
   root.style.setProperty('--splash-brand', PRODUCT_BRAND.splashHex);
   root.style.setProperty('--splash-brand-dark', PRODUCT_BRAND.splashDarkHex);
   root.style.setProperty('--splash-brand-light', PRODUCT_BRAND.splashLightHex);

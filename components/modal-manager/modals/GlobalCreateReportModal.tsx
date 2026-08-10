@@ -10,7 +10,7 @@ import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
 import { resolveReportType, workOrderMatchesReportType } from '../../../modules/production/utils/reportTypes';
 import { filterProductionProducts } from '../../../modules/production/utils/isProductionProduct';
-import { canonicalPackagingLine } from '../../../modules/production/utils/packagingLine';
+import { canonicalPackagingLine, isPackagingLineId } from '../../../modules/production/utils/packagingLine';
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
 import { loadReportsComponentLabelOptions } from '../../../modules/production/utils/injectionComponentOptions';
@@ -35,9 +35,11 @@ import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import type { LineWorkerAssignment } from '../../../types';
 import {
   buildWorkersCountAutoFillFromAssignments,
+  buildWorkersCountAutoFill,
   shouldApplyWorkersCountAutoFill,
   sumWorkersCountPatch,
 } from '@/modules/production/utils/lineAssignmentWorkersCount';
+import { buildReportPrefillFromWorkOrder } from '@/modules/production/utils/workOrderReportPrefill';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import {
   PRODUCTION_REPORT_CREATE_PATHS,
@@ -110,6 +112,9 @@ export const GlobalCreateReportModal: React.FC = () => {
     date?: string;
     shift?: ProductionReportShift;
     workOrderId?: string;
+    quantityProduced?: number;
+    workHours?: number;
+    workersCount?: number;
     source?: string;
   } | undefined;
   const { can, isPackagingOnly } = usePermission();
@@ -154,7 +159,9 @@ export const GlobalCreateReportModal: React.FC = () => {
       ? PRODUCTION_REPORT_CREATE_PATHS.productionPlan
       : modalPayload?.source === 'supervisorDetails'
         ? PRODUCTION_REPORT_CREATE_PATHS.supervisorDetails
-        : PRODUCTION_REPORT_CREATE_PATHS.globalModal;
+        : modalPayload?.source === 'supervisorDashboard'
+          ? PRODUCTION_REPORT_CREATE_PATHS.supervisorDashboard
+          : PRODUCTION_REPORT_CREATE_PATHS.globalModal;
   const isComponentEntryLocked = modalPayload?.reportType === 'component_injection';
   const availableReportTypes = useMemo<Array<ReportFormState['reportType']>>(() => {
     if (isComponentEntryLocked) return ['component_injection'];
@@ -341,6 +348,8 @@ export const GlobalCreateReportModal: React.FC = () => {
       setFormLineWorkers([]);
       return;
     }
+    // Calendar today as roster source: backdated reports reuse today's distribution
+    // when the past day was never assigned.
     const assignmentSourceDate = getTodayDateString();
     lineAssignmentService.getByLineAndDate(form.lineId, assignmentSourceDate)
       .then((list) => setFormLineWorkers(
@@ -432,6 +441,22 @@ export const GlobalCreateReportModal: React.FC = () => {
       shift: modalPayload.shift ?? prev.shift,
       workOrderId: modalPayload.workOrderId ?? prev.workOrderId,
       packagingLines: prev.reportType === 'packaging' ? prev.packagingLines : [],
+      ...(Number(modalPayload.quantityProduced || 0) > 0
+        ? { quantityProduced: Number(modalPayload.quantityProduced) }
+        : {}),
+      ...(Number(modalPayload.workHours || 0) > 0
+        ? { workHours: Number(modalPayload.workHours) }
+        : {}),
+      ...(Number(modalPayload.workersCount || 0) > 0
+        ? {
+          workersCount: Number(modalPayload.workersCount),
+          workersProductionCount: Number(modalPayload.workersCount),
+          workersPackagingCount: 0,
+          workersQualityCount: 0,
+          workersMaintenanceCount: 0,
+          workersExternalCount: 0,
+        }
+        : {}),
     }));
   }, [
     isOpen,
@@ -443,6 +468,77 @@ export const GlobalCreateReportModal: React.FC = () => {
     modalPayload?.date,
     modalPayload?.shift,
     modalPayload?.workOrderId,
+    modalPayload?.quantityProduced,
+    modalPayload?.workHours,
+    modalPayload?.workersCount,
+  ]);
+
+  useEffect(() => {
+    if (!isOpen || !modalPayload?.workOrderId || modalPayload.productionPlanId) return;
+    const wo = workOrders.find((row) => row.id === modalPayload.workOrderId);
+    if (!wo) return;
+    const prefill = buildReportPrefillFromWorkOrder(wo, {
+      isPackagingLine: isPackagingLineId(wo.lineId, lines),
+    });
+    if (!prefill) return;
+    const lockedEmployeeId = shouldLockEmployeeToCurrent && currentEmployee?.id
+      ? currentEmployee.id
+      : prefill.employeeId;
+    const nextType = availableReportTypes.includes(prefill.reportType)
+      ? prefill.reportType
+      : (availableReportTypes[0] ?? prefill.reportType);
+    const workersSeed = Number(modalPayload.workersCount || 0) > 0
+      ? Number(modalPayload.workersCount)
+      : (prefill.workersCount ?? 0);
+    const hoursSeed = Number(modalPayload.workHours || 0) > 0
+      ? Number(modalPayload.workHours)
+      : (prefill.workHours ?? 0);
+    const qtySeed = Number(modalPayload.quantityProduced || 0) > 0
+      ? Number(modalPayload.quantityProduced)
+      : 0;
+    const workersPatch = workersSeed > 0
+      ? buildWorkersCountAutoFill(workersSeed, {
+        reportType: nextType === 'packaging' ? 'packaging' : nextType,
+        isPackagingLine: isPackagingLineId(wo.lineId, lines),
+      })
+      : {};
+
+    setForm((prev) => ({
+      ...prev,
+      reportType: nextType,
+      workOrderId: prefill.workOrderId,
+      lineId: prefill.lineId,
+      productId: prefill.productId,
+      employeeId: lockedEmployeeId,
+      date: modalPayload.date ?? prev.date,
+      quantityProduced: qtySeed > 0 ? qtySeed : prev.quantityProduced,
+      workHours: hoursSeed > 0 ? hoursSeed : prev.workHours,
+      workersCount: Number(workersPatch.workersCount ?? (nextType === 'finished_product' ? 0 : workersSeed)),
+      workersProductionCount: Number(workersPatch.workersProductionCount ?? 0),
+      workersPackagingCount: Number(workersPatch.workersPackagingCount ?? 0),
+      workersQualityCount: Number(workersPatch.workersQualityCount ?? 0),
+      workersMaintenanceCount: Number(workersPatch.workersMaintenanceCount ?? 0),
+      workersExternalCount: Number(workersPatch.workersExternalCount ?? 0),
+      packagingLines: nextType === 'packaging'
+        ? [{ ...newEmptyPackagingLine(), productId: prefill.productId }]
+        : [],
+    }));
+    if (workersSeed > 0) {
+      lastAutoFilledWorkersCountRef.current = workersSeed;
+    }
+  }, [
+    isOpen,
+    modalPayload?.workOrderId,
+    modalPayload?.productionPlanId,
+    modalPayload?.date,
+    modalPayload?.quantityProduced,
+    modalPayload?.workHours,
+    modalPayload?.workersCount,
+    workOrders,
+    lines,
+    shouldLockEmployeeToCurrent,
+    currentEmployee?.id,
+    availableReportTypes,
   ]);
 
   useEffect(() => {
@@ -636,17 +732,41 @@ export const GlobalCreateReportModal: React.FC = () => {
                   setForm((prev) => ({ ...prev, workOrderId: '' }));
                   return;
                 }
+                const prefill = buildReportPrefillFromWorkOrder(wo, {
+                  isPackagingLine: isPackagingLineId(wo.lineId, lines),
+                });
+                const nextType = wo.workOrderType === 'component_injection' && canManageComponentInjectionReports
+                  ? 'component_injection' as const
+                  : form.reportType === 'packaging'
+                    ? 'packaging' as const
+                    : (prefill?.reportType ?? form.reportType);
+                const workersPatch = prefill?.workersCount
+                  ? buildWorkersCountAutoFill(prefill.workersCount, {
+                    reportType: nextType === 'packaging' ? 'packaging' : nextType,
+                    isPackagingLine: isPackagingLineId(wo.lineId, lines),
+                  })
+                  : {};
                 setForm((prev) => ({
                   ...prev,
                   workOrderId: wo.id ?? '',
-                  reportType: wo.workOrderType === 'component_injection' ? 'component_injection' : prev.reportType,
+                  reportType: nextType,
                   lineId: wo.lineId,
                   productId: wo.productId,
                   employeeId: shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
-                  packagingLines: prev.reportType === 'packaging'
+                  workHours: prefill?.workHours ?? prev.workHours,
+                  workersCount: Number(workersPatch.workersCount ?? (nextType === 'finished_product' ? prev.workersCount : (prefill?.workersCount ?? prev.workersCount))),
+                  workersProductionCount: workersPatch.workersProductionCount ?? prev.workersProductionCount,
+                  workersPackagingCount: workersPatch.workersPackagingCount ?? (workersPatch.workersProductionCount !== undefined ? 0 : prev.workersPackagingCount),
+                  workersQualityCount: workersPatch.workersQualityCount ?? (workersPatch.workersProductionCount !== undefined ? 0 : prev.workersQualityCount),
+                  workersMaintenanceCount: workersPatch.workersMaintenanceCount ?? (workersPatch.workersProductionCount !== undefined ? 0 : prev.workersMaintenanceCount),
+                  workersExternalCount: workersPatch.workersExternalCount ?? (workersPatch.workersProductionCount !== undefined ? 0 : prev.workersExternalCount),
+                  packagingLines: nextType === 'packaging' || prev.reportType === 'packaging'
                     ? [{ ...newEmptyPackagingLine(), productId: wo.productId }]
                     : prev.packagingLines,
                 }));
+                if (prefill?.workersCount) {
+                  lastAutoFilledWorkersCountRef.current = prefill.workersCount;
+                }
               }}
             >
               <option value="">{t('modalManager.createReport.selectWorkOrder')}</option>

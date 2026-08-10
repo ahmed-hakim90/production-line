@@ -81,6 +81,7 @@ export type Permission =
   | 'employeeDashboard.view'
   | 'selfService.view'
   | 'factoryDashboard.view'
+  | 'productionDashboard.view'
   | 'adminDashboard.view'
   | 'attendance.view' | 'attendance.import' | 'attendance.sync' | 'attendance.process' | 'attendance.edit'
   | 'leave.view' | 'leave.create' | 'leave.manage'
@@ -136,6 +137,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'dashboard.view', label: 'عرض لوحة التحكم' },
       { key: 'employeeDashboard.view', label: 'عرض لوحة الموظف' },
       { key: 'factoryDashboard.view', label: 'عرض لوحة مدير المصنع' },
+      { key: 'productionDashboard.view', label: 'عرض لوحة الإنتاج' },
       { key: 'adminDashboard.view', label: 'عرض لوحة مدير النظام' },
     ],
   },

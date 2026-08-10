@@ -1362,5 +1362,95 @@ await seed();
   }));
 }
 
+// 12) Spare-parts replenishment + repair spare issues: unbound list/count-safe; bound needs warehouse filter.
+{
+  const createdAt = new Date();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adb = context.firestore();
+    await adb.collection('repair_spare_issues').doc('rsi-whA').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whA',
+      status: 'submitted',
+      createdAt,
+    });
+    await adb.collection('repair_spare_issues').doc('rsi-whB').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whB',
+      status: 'draft',
+      createdAt,
+    });
+    await adb.collection('spare_parts_replenishment_requests').doc('spr-whA').set({
+      tenantId: 'tenantA',
+      fromWarehouseId: 'whA',
+      toWarehouseId: 'whB',
+      status: 'submitted',
+      createdAt,
+    });
+    await adb.collection('spare_parts_replenishment_requests').doc('spr-whB').set({
+      tenantId: 'tenantA',
+      fromWarehouseId: 'whB',
+      toWarehouseId: 'whC',
+      status: 'responsible_approved',
+      createdAt,
+    });
+  });
+
+  // Unbound inventory viewer: tenant-scoped status list must succeed (dashboard getCountFromServer).
+  const unboundInvDb = testEnv.authenticatedContext('userAUsersManager').firestore();
+  await assertSucceeds(
+    unboundInvDb.collection('spare_parts_replenishment_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', 'in', ['submitted', 'approved', 'prepared'])
+      .get(),
+  );
+  await assertSucceeds(
+    unboundInvDb.collection('spare_parts_replenishment_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', '==', 'responsible_approved')
+      .get(),
+  );
+
+  // Unbound repair operator: spare-issue pending statuses without warehouse filter.
+  const unboundRepairDb = testEnv.authenticatedContext('userAOperator').firestore();
+  await assertSucceeds(
+    unboundRepairDb.collection('repair_spare_issues')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', 'in', ['draft', 'submitted', 'approved'])
+      .get(),
+  );
+
+  // Bound inventory viewer: must filter warehouse; unconstrained tenant list fails.
+  const boundInvDb = testEnv.authenticatedContext('userAWarehouseBound').firestore();
+  await assertFails(
+    boundInvDb.collection('spare_parts_replenishment_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', 'in', ['submitted', 'approved', 'prepared'])
+      .get(),
+  );
+  await assertSucceeds(
+    boundInvDb.collection('spare_parts_replenishment_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', 'in', ['submitted', 'approved', 'prepared'])
+      .where('fromWarehouseId', '==', 'whA')
+      .get(),
+  );
+
+  // Bound center parts user: must filter warehouseId for repair spare issues.
+  const boundRepairDb = testEnv.authenticatedContext('userACenterParts').firestore();
+  await assertFails(
+    boundRepairDb.collection('repair_spare_issues')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', 'in', ['draft', 'submitted', 'approved'])
+      .get(),
+  );
+  await assertSucceeds(
+    boundRepairDb.collection('repair_spare_issues')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', 'in', ['draft', 'submitted', 'approved'])
+      .where('warehouseId', '==', 'whA')
+      .get(),
+  );
+}
+
 await testEnv.cleanup();
 assert.ok(true);

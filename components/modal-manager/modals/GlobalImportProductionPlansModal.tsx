@@ -112,7 +112,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
 
         await createProductionPlan({
           productId: row.productId,
-          lineId: row.lineId,
+          ...(row.lineId ? { lineId: row.lineId } : {}),
           plannedQuantity: row.plannedQuantity,
           producedQuantity: 0,
           startDate: row.startDate,

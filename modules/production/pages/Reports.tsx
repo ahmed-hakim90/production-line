@@ -911,8 +911,10 @@ export const Reports: React.FC = () => {
   const loadWorkersForReportDate = useCallback(async (
     lineId: string,
     reportDate: string,
-    assignmentSourceDate: string,
+    assignmentSourceDate: string = getTodayDateString(),
   ) => {
+    // Default roster source = calendar today so a backdated report can reuse today's
+    // distribution when the past day was never assigned. Edit flows may pass reportDate.
     const sourceWorkers = await lineAssignmentService.getByLineAndDate(lineId, assignmentSourceDate);
     if (assignmentSourceDate === reportDate) return sourceWorkers;
 
@@ -4525,13 +4527,13 @@ export const Reports: React.FC = () => {
         const reapplyingInventory = Boolean(row.id && reapplyingReportInventoryId === row.id);
         return (
           <ManagedModalPortal>
-          <>
+          <div className="fixed inset-0 z-[10050]">
             <div
-              className="fixed inset-0 bg-black/35 z-[10050]"
+              className="absolute inset-0 bg-black/35"
               onClick={() => setSelectedReportDrawer(null)}
             />
             <aside
-              className="fixed top-0 right-0 h-screen w-[min(460px,96vw)] bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl z-[61] overflow-y-auto flex flex-col"
+              className="absolute top-0 right-0 h-full w-[min(460px,96vw)] bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl overflow-y-auto flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -4767,7 +4769,7 @@ export const Reports: React.FC = () => {
                 </Button>
               </div>
             </aside>
-          </>
+          </div>
           </ManagedModalPortal>
         );
       })()}
@@ -5530,7 +5532,7 @@ export const Reports: React.FC = () => {
                   {blockWithoutPlan && (
                     <div className="mx-4 sm:mx-6 mb-2 bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
                       <ReportIcon name="block" className="text-[rgb(var(--color-danger))] text-lg" />
-                      <p className="text-xs font-bold text-[rgb(var(--color-danger))]">لا يوجد خطة إنتاج نشطة لهذا الخط والمنتج — التقارير بدون خطة غير مسموحة</p>
+                      <p className="text-xs font-bold text-[rgb(var(--color-danger))]">لا يوجد خطة إنتاج نشطة لهذا المنتج — التقارير بدون خطة غير مسموحة</p>
                     </div>
                   )}
                   {overProduced && (

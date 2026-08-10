@@ -15,6 +15,7 @@ import { formatProductionReportShareCaption } from '../../../utils/productionRep
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import {
+  buildWorkersCountAutoFill,
   buildWorkersCountAutoFillFromAssignments,
   countOperatorsFromAssignments,
   shouldApplyWorkersCountAutoFill,
@@ -39,6 +40,7 @@ import {
   isInjectionShiftSelected,
 } from '../utils/injectionReportShift';
 import { canonicalPackagingLine, effectivePackagingPieces, isPackagingLineId } from '../utils/packagingLine';
+import { buildReportPrefillFromWorkOrder } from '../utils/workOrderReportPrefill';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS, ProductionLineStatus } from '../../../types';
 import {
   SingleReportPrint,
@@ -353,6 +355,8 @@ export const QuickAction: React.FC = () => {
     }))
   ), []);
   const loadWorkersForReportDate = useCallback(async (lineIdValue: string, reportDate: string) => {
+    // Roster source is always calendar today: if the supervisor forgot to distribute
+    // workers on a past day, entering that day's report still picks up today's line links.
     const assignmentSourceDate = getTodayDateString();
     const sourceWorkers = await lineAssignmentService.getByLineAndDate(lineIdValue, assignmentSourceDate);
     if (assignmentSourceDate === reportDate) return sourceWorkers;
@@ -1532,19 +1536,64 @@ export const QuickAction: React.FC = () => {
   const handleSelectWO = useCallback((woId: string) => {
     const wo = scopedActiveWOs.find((w) => w.id === woId);
     if (!wo) return;
+
+    let nextReportType = reportType;
     if (wo.workOrderType === 'component_injection') {
-      if (canManageComponentInjectionReports) setReportType('component_injection');
+      if (canManageComponentInjectionReports) {
+        nextReportType = 'component_injection';
+        setReportType('component_injection');
+      }
     } else if (reportType === 'packaging') {
+      nextReportType = 'packaging';
       setReportType('packaging');
     } else if (canCreateFinishedReports) {
+      nextReportType = 'finished_product';
       setReportType('finished_product');
     }
+
     setLineId(wo.lineId);
     setProductId(wo.productId);
-    if (reportType === 'packaging') {
+    if (nextReportType === 'packaging') {
       setPackagingLines([{ ...newEmptyPackagingLine(), productId: wo.productId }]);
     }
     setEmployeeId(shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId);
+
+    const prefill = buildReportPrefillFromWorkOrder(wo, {
+      isPackagingLine: isPackagingLineId(wo.lineId, _rawLines),
+    });
+    if (!prefill) return;
+
+    if (prefill.workHours != null) {
+      setHours(String(prefill.workHours));
+    }
+
+    // Seed headcount from the work order; line distribution (if any) overwrites via effect.
+    if (prefill.workersCount == null) return;
+
+    const patch = nextReportType === 'packaging'
+      ? buildWorkersCountAutoFill(prefill.workersCount, { reportType: 'packaging' })
+      : nextReportType === 'component_injection'
+        ? buildWorkersCountAutoFill(prefill.workersCount, { reportType: 'component_injection' })
+        : buildWorkersCountAutoFill(prefill.workersCount, {
+          reportType: 'finished_product',
+          isPackagingLine: isPackagingLineId(wo.lineId, _rawLines),
+        });
+
+    if (patch.workersCount !== undefined) {
+      const value = String(patch.workersCount);
+      if (nextReportType === 'component_injection') setInjectionWorkersCount(value);
+      else if (nextReportType === 'packaging') setPackagingWorkersCount(value);
+    }
+    if (patch.workersProductionCount !== undefined) {
+      setWorkersProduction(String(patch.workersProductionCount));
+      setWorkersPackaging(String(patch.workersPackagingCount || 0));
+      setWorkersQuality(String(patch.workersQualityCount || 0));
+      setWorkersMaintenance(String(patch.workersMaintenanceCount || 0));
+      setWorkersExternal(String(patch.workersExternalCount || 0));
+    } else if (patch.workersPackagingCount !== undefined) {
+      setWorkersPackaging(String(patch.workersPackagingCount));
+    }
+    lastAutoFilledWorkersCountRef.current = sumWorkersCountPatch(patch);
   }, [
     scopedActiveWOs,
     shouldLockEmployeeToCurrent,
@@ -1552,6 +1601,7 @@ export const QuickAction: React.FC = () => {
     canManageComponentInjectionReports,
     canCreateFinishedReports,
     reportType,
+    _rawLines,
   ]);
 
   useEffect(() => {

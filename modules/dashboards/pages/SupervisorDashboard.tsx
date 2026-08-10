@@ -16,11 +16,13 @@ import { withTenantPath } from '@/lib/tenantPaths';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { SupervisorWorkOrderQuickReportDialog } from '@/modules/dashboards/components/SupervisorWorkOrderQuickReportDialog';
 import { useOperationalDecisionSnapshot } from '@/modules/dashboards/hooks/useOperationalDecisionSnapshot';
 import { SUPERVISOR_PORTAL_PATHS } from '@/modules/dashboards/lib/portalHome';
 import { supervisorLineAssignmentService } from '@/modules/production/services/supervisorLineAssignmentService';
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '@/store/useAppStore';
 import type { ProductionPlan, ProductionReport, WorkOrder } from '@/types';
+import { usePermission } from '@/utils/permissions';
 import {
   calculatePlanProgress,
   calculateWasteRatio,
@@ -119,6 +121,8 @@ function ChartTooltip({
 export const SupervisorDashboard: React.FC = () => {
   const navigate = useTenantNavigate();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const { can } = usePermission();
+  const canCreateReport = can('reports.create') || can('reports.componentInjection.manage');
   const tenantPath = useCallback(
     (path: string) => withTenantPath(tenantSlug, path),
     [tenantSlug],
@@ -152,11 +156,12 @@ export const SupervisorDashboard: React.FC = () => {
   const { snapshot: decisionSnapshot, loading: decisionLoading, refresh: refreshDecision } =
     useOperationalDecisionSnapshot();
 
-  const [period, setPeriod] = useState<Period>('daily');
+  const [period, setPeriod] = useState<Period>('monthly');
   const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
+  const [quickReportWorkOrder, setQuickReportWorkOrder] = useState<WorkOrder | null>(null);
   const today = getTodayDateString();
 
   const employee = useMemo(
@@ -268,10 +273,15 @@ export const SupervisorDashboard: React.FC = () => {
 
     const employeeLineIds = [...new Set(periodReports.map((r) => r.lineId))];
     const visibleLineIds = [...new Set([...employeeLineIds, ...assignedLineIds])];
+    const employeeProductIds = [...new Set(periodReports.map((r) => r.productId))];
     const activePlans = productionPlans.filter(
       (p) =>
-        (p.status === 'in_progress' || p.status === 'planned') &&
-        visibleLineIds.includes(p.lineId),
+        (p.status === 'in_progress' || p.status === 'planned' || p.status === 'paused')
+        && (
+          !p.lineId
+          || visibleLineIds.includes(p.lineId)
+          || employeeProductIds.includes(p.productId)
+        ),
     );
 
     let totalPlannedQty = 0;
@@ -333,17 +343,27 @@ export const SupervisorDashboard: React.FC = () => {
           .map((r) => r.lineId),
       ),
     ];
+    const employeeProductIds = [
+      ...new Set(
+        [...todayReports, ...monthlyReports]
+          .filter((r) => r.employeeId === employee.id)
+          .map((r) => r.productId),
+      ),
+    ];
     const visibleLineIds = [...new Set([...employeeLineIds, ...assignedLineIds])];
 
     const plan = productionPlans.find(
       (p) =>
-        (p.status === 'in_progress' || p.status === 'planned') &&
-        visibleLineIds.includes(p.lineId),
+        (p.status === 'in_progress' || p.status === 'planned' || p.status === 'paused')
+        && (
+          employeeProductIds.includes(p.productId)
+          || (p.lineId ? visibleLineIds.includes(p.lineId) : false)
+        ),
     );
     if (!plan) return null;
 
     const product = _rawProducts.find((p) => p.id === plan.productId);
-    const line = _rawLines.find((l) => l.id === plan.lineId);
+    const line = plan.lineId ? _rawLines.find((l) => l.id === plan.lineId) : undefined;
     const historical = resolvePlanReports(plan, planReports);
     const fromReports = historical.reduce(
       (sum, r) => sum + Number(r.quantityProduced || 0),
@@ -351,7 +371,7 @@ export const SupervisorDashboard: React.FC = () => {
     );
     const globalProduced = Math.max(Number(plan.producedQuantity || 0), fromReports);
     const periodProduced = periodReports
-      .filter((r) => r.productId === plan.productId && r.lineId === plan.lineId)
+      .filter((r) => r.productId === plan.productId)
       .reduce((sum, r) => sum + (r.quantityProduced || 0), 0);
     const globalRemaining = Math.max(plan.plannedQuantity - globalProduced, 0);
     const progress = calculatePlanProgress(globalProduced, plan.plannedQuantity);
@@ -494,9 +514,11 @@ export const SupervisorDashboard: React.FC = () => {
           <Link to={tenantPath(SUPERVISOR_PORTAL_PATHS.quickAction)}>
             <PrimaryButton iconName="bolt" tone="execute">إدخال سريع</PrimaryButton>
           </Link>
-          <Link to={tenantPath(SUPERVISOR_PORTAL_PATHS.productionIssueRequests)}>
-            <GhostButton iconName="fact_check" tone="approve">طلبات الصرف</GhostButton>
-          </Link>
+          {can('productionIssue.request') ? (
+            <Link to={tenantPath(SUPERVISOR_PORTAL_PATHS.productionIssueRequests)}>
+              <GhostButton iconName="fact_check" tone="approve">طلبات الصرف</GhostButton>
+            </Link>
+          ) : null}
           <Link to={tenantPath(SUPERVISOR_PORTAL_PATHS.reports)}>
             <GhostButton iconName="bar_chart" tone="view">التقارير</GhostButton>
           </Link>
@@ -504,30 +526,41 @@ export const SupervisorDashboard: React.FC = () => {
       )}
     >
       <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
+        {can('productionIssue.request') ? (
+          <button
+            type="button"
+            className="ops-module-charts__qty text-start"
+            onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.productionIssueRequests)}
+          >
+            <p className="ops-module-charts__qty-label">صرف مفتوح</p>
+            <p className="ops-module-charts__qty-value">
+              {decisionLoading ? '…' : formatNumber(decisionSnapshot.issues.openCount)}
+            </p>
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="ops-module-charts__qty text-start"
+            onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.teamActions)}
+          >
+            <p className="ops-module-charts__qty-label">طلبات الإنتاج</p>
+            <p className="ops-module-charts__qty-value">→</p>
+          </button>
+        )}
         <button
           type="button"
           className="ops-module-charts__qty text-start"
-          onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.productionIssueRequests)}
+          onClick={() => navigate('/work-orders')}
         >
-          <p className="ops-module-charts__qty-label">صرف مفتوح</p>
+          <p className="ops-module-charts__qty-label">أوامر نشطة</p>
           <p className="ops-module-charts__qty-value">
-            {decisionLoading ? '…' : formatNumber(decisionSnapshot.issues.openCount)}
+            {formatNumber(myActiveWorkOrders.length)}
           </p>
         </button>
         <button
           type="button"
           className="ops-module-charts__qty text-start"
-          onClick={() => navigate('/production/packaging/control')}
-        >
-          <p className="ops-module-charts__qty-label">تغليف بانتظار</p>
-          <p className="ops-module-charts__qty-value">
-            {decisionLoading ? '…' : formatNumber(decisionSnapshot.packaging.awaitingUnits)}
-          </p>
-        </button>
-        <button
-          type="button"
-          className="ops-module-charts__qty text-start"
-          onClick={() => navigate('/production-plans')}
+          onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.reports)}
         >
           <p className="ops-module-charts__qty-label">متأخر جدول</p>
           <p className="ops-module-charts__qty-value">
@@ -547,7 +580,77 @@ export const SupervisorDashboard: React.FC = () => {
       </div>
 
       <OpsDashPanel
-        title="الإنتاج اليومي"
+        title="أوامر الشغل النشطة"
+        accent="production"
+        action={(
+          <button
+            type="button"
+            className="ops-dash-panel__action"
+            onClick={() => navigate('/work-orders')}
+          >
+            الكل
+          </button>
+        )}
+      >
+        {workOrdersPreview.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">
+            لا توجد أوامر شغل نشطة مسندة إليك
+          </p>
+        ) : (
+          <ul className="divide-y divide-[var(--color-border)]">
+            {workOrdersPreview.map((wo) => {
+              const product = _rawProducts.find((p) => p.id === wo.productId);
+              const line = _rawLines.find((l) => l.id === wo.lineId);
+              const produced = Math.max(
+                Number(wo.producedQuantity || 0),
+                Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0),
+              );
+              const progress =
+                wo.quantity > 0 ? Math.min(Math.round((produced / wo.quantity) * 100), 100) : 0;
+              return (
+                <li key={wo.id || wo.workOrderNumber} className="py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold text-[rgb(var(--color-warning))]">
+                          #{wo.workOrderNumber}
+                        </span>
+                        <StatusBadge label={STATUS_LABELS[wo.status] || wo.status} />
+                      </div>
+                      <p className="text-sm font-medium text-[var(--color-text)] truncate mt-0.5">
+                        {product?.name ?? '—'}
+                      </p>
+                      <p className="text-[11px] text-[var(--color-text-muted)]">
+                        {line?.name ?? '—'}
+                        {wo.targetDate ? ` · ${wo.targetDate}` : ''}
+                        {' · '}
+                        <span className="tabular-nums">{formatNumber(produced)}/{formatNumber(wo.quantity)}</span>
+                        {' · '}
+                        <span className="tabular-nums font-bold">{progress}%</span>
+                      </p>
+                    </div>
+                    {canCreateReport && wo.id ? (
+                      <PrimaryButton
+                        type="button"
+                        size="sm"
+                        tone="execute"
+                        iconName="add_chart"
+                        className="shrink-0"
+                        onClick={() => setQuickReportWorkOrder(wo)}
+                      >
+                         انشاء تقرير سريع
+                      </PrimaryButton>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </OpsDashPanel>
+
+      <OpsDashPanel
+        title="تقارير الإنتاج"
         accent="production"
         action={(
           <button
@@ -591,13 +694,15 @@ export const SupervisorDashboard: React.FC = () => {
           title="الخطة النشطة"
           accent="plans"
           action={(
-            <button
-              type="button"
-              className="ops-dash-panel__action"
-              onClick={() => navigate('/production-plans')}
-            >
-              الخطط
-            </button>
+            can('plans.view') ? (
+              <button
+                type="button"
+                className="ops-dash-panel__action"
+                onClick={() => navigate('/production-plans')}
+              >
+                الخطط
+              </button>
+            ) : undefined
           )}
         >
           <div className="flex items-start justify-between gap-3 mb-3">
@@ -606,7 +711,15 @@ export const SupervisorDashboard: React.FC = () => {
               <p className="text-xs text-[var(--color-text-muted)]">{activePlan.lineName}</p>
             </div>
             <StatusBadge
-              label={activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'}
+              label={
+                activePlan.status === 'in_progress'
+                  ? 'شغال'
+                  : activePlan.status === 'paused'
+                    ? 'متوقف'
+                    : activePlan.status === 'completed'
+                      ? 'مكتمل'
+                      : 'مش شغال'
+              }
             />
           </div>
           <div className="flex justify-between text-sm font-bold mb-2">
@@ -656,68 +769,26 @@ export const SupervisorDashboard: React.FC = () => {
         </OpsDashPanel>
       ) : null}
 
-      <OpsDashPanel
-        title="أوامر الشغل النشطة"
-        accent="production"
-        action={(
-          <button
-            type="button"
-            className="ops-dash-panel__action"
-            onClick={() => navigate('/work-orders')}
-          >
-            الكل
-          </button>
-        )}
-      >
-        {workOrdersPreview.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">
-            لا توجد أوامر شغل نشطة مسندة إليك
-          </p>
-        ) : (
-          <ul className="divide-y divide-[var(--color-border)]">
-            {workOrdersPreview.map((wo) => {
-              const product = _rawProducts.find((p) => p.id === wo.productId);
-              const line = _rawLines.find((l) => l.id === wo.lineId);
-              const produced = Math.max(
-                Number(wo.producedQuantity || 0),
-                Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0),
-              );
-              const progress =
-                wo.quantity > 0 ? Math.min(Math.round((produced / wo.quantity) * 100), 100) : 0;
-              return (
-                <li key={wo.id || wo.workOrderNumber}>
-                  <Link
-                    to={tenantPath('/work-orders')}
-                    className="flex items-center justify-between gap-3 py-3 hover:bg-[var(--color-border)]/20 rounded-md px-1 -mx-1 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-[rgb(var(--color-warning))]">
-                          #{wo.workOrderNumber}
-                        </span>
-                        <StatusBadge label={STATUS_LABELS[wo.status] || wo.status} />
-                      </div>
-                      <p className="text-sm font-medium text-[var(--color-text)] truncate mt-0.5">
-                        {product?.name ?? '—'}
-                      </p>
-                      <p className="text-[11px] text-[var(--color-text-muted)]">
-                        {line?.name ?? '—'}
-                        {wo.targetDate ? ` · ${wo.targetDate}` : ''}
-                      </p>
-                    </div>
-                    <div className="text-end shrink-0">
-                      <p className="text-sm font-bold tabular-nums">{progress}%</p>
-                      <p className="text-[10px] text-[var(--color-text-muted)] tabular-nums">
-                        {formatNumber(produced)}/{formatNumber(wo.quantity)}
-                      </p>
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </OpsDashPanel>
+      <SupervisorWorkOrderQuickReportDialog
+        open={Boolean(quickReportWorkOrder)}
+        workOrder={quickReportWorkOrder}
+        supervisorEmployeeId={employee?.id || ''}
+        productName={
+          quickReportWorkOrder
+            ? _rawProducts.find((p) => p.id === quickReportWorkOrder.productId)?.name
+            : undefined
+        }
+        lineName={
+          quickReportWorkOrder
+            ? _rawLines.find((l) => l.id === quickReportWorkOrder.lineId)?.name
+            : undefined
+        }
+        onClose={() => setQuickReportWorkOrder(null)}
+        onSaved={() => {
+          void refreshPeriodReports();
+          void refreshDecision();
+        }}
+      />
     </DomainHomeShell>
   );
 };
