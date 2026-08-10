@@ -299,7 +299,7 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
         <div className="flex flex-wrap gap-2 items-center">
           {canSwitchWarehouse && (
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm font-semibold text-[var(--color-text)]"
               value={warehouseId}
               onChange={(e) => setWarehouseId(e.target.value)}
               aria-label="تبديل مخزن المستلزمات"
@@ -328,7 +328,7 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
             onClick={() => setKindFilter((prev) => (prev === kind ? '' : kind))}
             className={`rounded-xl border px-3 py-3 text-right transition-colors ${
               kindFilter === kind
-                ? 'border-indigo-300 bg-indigo-50 dark:bg-indigo-950/30'
+                ? 'border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.2)]'
                 : 'border-[var(--color-border)] bg-[var(--color-card)]'
             }`}
           >

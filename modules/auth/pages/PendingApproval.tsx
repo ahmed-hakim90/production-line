@@ -55,7 +55,7 @@ export const PendingApproval: React.FC = () => {
             {/* User info card */}
             <div
               className="rounded-[var(--border-radius-lg)] border p-4 mb-4"
-              style={{ background: '#f8f9fa', borderColor: 'var(--color-border)' }}
+              style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}
             >
               <div className="flex items-center gap-3 mb-3">
                 <div
@@ -75,8 +75,8 @@ export const PendingApproval: React.FC = () => {
                 className="flex items-center gap-2 px-3 py-2.5 rounded-[var(--border-radius-base)]"
                 style={{ background: '#fffbeb', border: '1px solid #fde68a' }}
               >
-                <span className="material-icons-round text-amber-500" style={{ fontSize: 18 }}>schedule</span>
-                <span className="text-[12.5px] font-semibold text-amber-700">الحالة: بانتظار الموافقة</span>
+                <span className="material-icons-round text-[rgb(var(--color-warning))]" style={{ fontSize: 18 }}>schedule</span>
+                <span className="text-[12.5px] font-semibold text-[rgb(var(--color-warning))]">الحالة: بانتظار الموافقة</span>
               </div>
             </div>
 
@@ -114,7 +114,7 @@ export const PendingApproval: React.FC = () => {
               <button
                 onClick={logout}
                 className="w-full h-[40px] flex items-center justify-center gap-2 text-[13px] font-semibold text-[var(--color-text-muted)] rounded-[var(--border-radius-base)] transition-colors"
-                style={{ background: '#f0f2f5', border: '1px solid var(--color-border)' }}
+                style={{ background: 'var(--color-surface-hover)', border: '1px solid var(--color-border)' }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = '#e8eaed')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = '#f0f2f5')}
               >

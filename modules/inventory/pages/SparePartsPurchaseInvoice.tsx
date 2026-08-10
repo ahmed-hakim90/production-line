@@ -4,9 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { useAppStore } from '../../../store/useAppStore';
 import { materialService } from '../../manufacturing/services/materialService';
 import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import type { Material } from '../../manufacturing/types';
@@ -20,6 +23,13 @@ type DraftLine = {
   unitPrice: string;
 };
 
+type PurchaseInvoiceFormDraft = {
+  supplierName: string;
+  supplierInvoiceNo: string;
+  notes: string;
+  lines: DraftLine[];
+};
+
 const money = (n: number) =>
   n.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -30,9 +40,20 @@ const emptyLine = (): DraftLine => ({
   unitPrice: '0',
 });
 
+const isPurchaseInvoiceFormDraftEmpty = (draft: PurchaseInvoiceFormDraft): boolean => {
+  const hasHeader = Boolean(draft.supplierName.trim() || draft.supplierInvoiceNo.trim() || draft.notes.trim());
+  const hasLines = draft.lines.some((line) => (
+    Boolean(line.materialId)
+    || String(line.quantity || '1') !== '1'
+    || String(line.unitPrice || '0') !== '0'
+  ));
+  return !hasHeader && !hasLines;
+};
+
 export const SparePartsPurchaseInvoicePage: React.FC = () => {
   const { dir } = useAppDirection();
   const { can } = usePermission();
+  const user = useAppStore((s) => s.userProfile);
   const canPost = can('inventory.transactions.create')
     || can('sparePartsReplenishment.prepare')
     || can('repair.parts.manage');
@@ -45,6 +66,44 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const purchaseDraftValue = useMemo<PurchaseInvoiceFormDraft>(() => ({
+    supplierName,
+    supplierInvoiceNo,
+    notes,
+    lines,
+  }), [supplierName, supplierInvoiceNo, notes, lines]);
+
+  const { hasDraft, clearDraft } = useLocalFormDraft<PurchaseInvoiceFormDraft>({
+    formKey: 'inventory:sparePurchaseInvoice',
+    tenantId: getCurrentTenantIdOrNull() || user?.tenantId,
+    userId: user?.id,
+    value: purchaseDraftValue,
+    isEmpty: isPurchaseInvoiceFormDraftEmpty,
+    onRestore: (draft) => {
+      setSupplierName(String(draft.supplierName || ''));
+      setSupplierInvoiceNo(String(draft.supplierInvoiceNo || ''));
+      setNotes(String(draft.notes || ''));
+      setLines(
+        Array.isArray(draft.lines) && draft.lines.length > 0
+          ? draft.lines.map((line) => ({
+              key: String(line.key || emptyLine().key),
+              materialId: String(line.materialId || ''),
+              quantity: String(line.quantity || '1'),
+              unitPrice: String(line.unitPrice || '0'),
+            }))
+          : [emptyLine()],
+      );
+    },
+  });
+
+  const resetPurchaseDraftForm = () => {
+    clearDraft();
+    setLines([emptyLine()]);
+    setSupplierName('');
+    setSupplierInvoiceNo('');
+    setNotes('');
+  };
 
   const spareMaterials = useMemo(
     () => materials.filter((m) => isMaterialAvailableForSpareParts(m) && m.isActive !== false),
@@ -103,6 +162,7 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
         lines: payload,
       });
       toast.success(`تم ترحيل فاتورة الشراء ${result.invoiceNo} وتحديث متوسط التكلفة.`);
+      clearDraft();
       setLines([emptyLine()]);
       setSupplierName('');
       setSupplierInvoiceNo('');
@@ -219,12 +279,17 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
           <Button type="button" variant="outline" disabled={!canPost || busy} onClick={() => setLines((prev) => [...prev, emptyLine()])}>
             بند إضافي
           </Button>
+          {hasDraft ? (
+            <Button type="button" variant="ghost" disabled={busy} onClick={resetPurchaseDraftForm}>
+              مسح المسودة
+            </Button>
+          ) : null}
           <Button type="button" disabled={!canPost || busy} onClick={() => void post()}>
             {busy ? 'جارٍ الترحيل…' : `ترحيل الفاتورة · ${money(draftTotal)} ج.م`}
           </Button>
         </div>
         {!canPost ? (
-          <p className="mt-2 text-xs text-rose-700">ليس لديك صلاحية ترحيل فواتير شراء القطع.</p>
+          <p className="mt-2 text-xs text-[rgb(var(--color-danger))]">ليس لديك صلاحية ترحيل فواتير شراء القطع.</p>
         ) : null}
       </OpsDashPanel>
 

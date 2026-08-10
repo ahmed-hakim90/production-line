@@ -510,7 +510,7 @@ export const EmployeeDashboard: React.FC = () => {
       {
         key: 'referenceNo',
         header: 'المرجع',
-        cell: (row) => <span className="font-medium text-[#0F172A]">{row.referenceNo || '—'}</span>,
+        cell: (row) => <span className="font-medium text-[var(--color-text)]">{row.referenceNo || '—'}</span>,
         sortable: true,
       },
       {
@@ -609,8 +609,8 @@ export const EmployeeDashboard: React.FC = () => {
                   key={i}
                   className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                     alert.type === 'danger'
-                      ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
-                      : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
+                      ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))]'
+                      : 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border-[rgb(var(--color-warning)/0.25)] text-[rgb(var(--color-warning))]'
                   }`}
                 >
                   <span className="material-icons-round text-lg">{alert.icon}</span>
@@ -712,7 +712,7 @@ export const EmployeeDashboard: React.FC = () => {
               ابحث عن منتج له مسار نشط، ثم اعرض الخطة أو ابدأ تنفيذ المسار.
             </p>
             {activeRoutingPlansError && (
-              <div className="rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-950/30 px-3 py-2 text-xs text-rose-800 dark:text-rose-200 flex flex-wrap items-center gap-2">
+              <div className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.2)] px-3 py-2 text-xs text-[rgb(var(--color-danger))] dark:text-[rgb(var(--color-danger))] flex flex-wrap items-center gap-2">
                 تعذر تحميل خطط المسارات.
                 <GhostButton
                   type="button"
@@ -830,7 +830,7 @@ export const EmployeeDashboard: React.FC = () => {
                   key={row.id || row.referenceNo}
                   className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
                 >
-                  <p className="font-medium text-[#0F172A]">{row.referenceNo || '—'}</p>
+                  <p className="font-medium text-[var(--color-text)]">{row.referenceNo || '—'}</p>
                   <p className="mt-1 text-sm text-[var(--color-text-muted)]">{row.lines[0]?.itemName || '—'}</p>
                   <div className="mt-2 flex flex-wrap gap-3 text-xs tabular-nums text-[var(--color-text-muted)]">
                     <span>الكمية {formatNumber(row.lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0))}</span>
@@ -871,13 +871,13 @@ export const EmployeeDashboard: React.FC = () => {
                       ? '/inventory/production-issues'
                       : '/production/issue-requests',
                   )}
-                  className="text-right rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50/80 px-3.5 py-3 hover:shadow-sm"
+                  className="text-right rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/80 px-3.5 py-3 hover:shadow-sm"
                 >
-                  <p className="text-xs font-bold text-amber-800">صرف إنتاج معلّق</p>
-                  <p className="text-xl font-black tabular-nums text-amber-900 mt-0.5">
+                  <p className="text-xs font-bold text-[rgb(var(--color-warning))]">صرف إنتاج معلّق</p>
+                  <p className="text-xl font-black tabular-nums text-[rgb(var(--color-warning))] mt-0.5">
                     {decisionLoading ? '…' : decisionSnapshot.issues.openCount}
                   </p>
-                  <p className="text-[11px] text-amber-800/80 mt-1">
+                  <p className="text-[11px] text-[rgb(var(--color-warning))]/80 mt-1">
                     تنفيذ {decisionSnapshot.issues.fulfilmentPercent}% · {formatNumber(decisionSnapshot.issues.openRequestedQty)} وحدة
                   </p>
                 </button>
@@ -886,13 +886,13 @@ export const EmployeeDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/production/packaging/control')}
-                  className="text-right rounded-[var(--border-radius-lg)] border border-slate-200 bg-slate-50/80 px-3.5 py-3 hover:shadow-sm"
+                  className="text-right rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3.5 py-3 hover:shadow-sm"
                 >
-                  <p className="text-xs font-bold text-slate-700">بانتظار التغليف</p>
-                  <p className="text-xl font-black tabular-nums text-slate-900 mt-0.5">
+                  <p className="text-xs font-bold text-[var(--color-text)]">بانتظار التغليف</p>
+                  <p className="text-xl font-black tabular-nums text-[var(--color-text)] mt-0.5">
                     {decisionLoading ? '…' : formatNumber(decisionSnapshot.packaging.awaitingUnits)}
                   </p>
-                  <p className="text-[11px] text-slate-600 mt-1">
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
                     {decisionSnapshot.packaging.skuCount} صنف · تحويلات معلّقة {decisionSnapshot.packaging.pendingTransfers}
                   </p>
                 </button>
@@ -902,15 +902,15 @@ export const EmployeeDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/inventory/exceptions')}
-                  className="text-right rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50/80 px-3.5 py-3 hover:shadow-sm"
+                  className="text-right rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/80 px-3.5 py-3 hover:shadow-sm"
                 >
-                  <p className="text-xs font-bold text-rose-800">مخاطر المخزون</p>
-                  <p className="text-xl font-black tabular-nums text-rose-900 mt-0.5">
+                  <p className="text-xs font-bold text-[rgb(var(--color-danger))]">مخاطر المخزون</p>
+                  <p className="text-xl font-black tabular-nums text-[rgb(var(--color-danger))] mt-0.5">
                     {decisionLoading
                       ? '…'
                       : decisionSnapshot.inventory.negativeCount + decisionSnapshot.inventory.lowStockCount}
                   </p>
-                  <p className="text-[11px] text-rose-800/80 mt-1">
+                  <p className="text-[11px] text-[rgb(var(--color-danger))]/80 mt-1">
                     سالب {decisionSnapshot.inventory.negativeCount} · تحت الحد {decisionSnapshot.inventory.lowStockCount}
                     {decisionSnapshot.inventory.finishedDaysOfCover != null
                       ? ` · تغطية ${decisionSnapshot.inventory.finishedDaysOfCover} يوم`
@@ -923,17 +923,17 @@ export const EmployeeDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/inventory/counts')}
-                  className="text-right rounded-[var(--border-radius-lg)] border border-indigo-200 bg-indigo-50/80 px-3.5 py-3 hover:shadow-sm"
+                  className="text-right rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/80 px-3.5 py-3 hover:shadow-sm"
                 >
-                  <p className="text-xs font-bold text-indigo-800">الجرد والمطابقة</p>
-                  <p className="text-xl font-black tabular-nums text-indigo-900 mt-0.5">
+                  <p className="text-xs font-bold text-[rgb(var(--color-primary))]">الجرد والمطابقة</p>
+                  <p className="text-xl font-black tabular-nums text-[rgb(var(--color-primary))] mt-0.5">
                     {decisionLoading
                       ? '…'
                       : decisionSnapshot.stockCounts.accuracyPercent != null
                         ? `${decisionSnapshot.stockCounts.accuracyPercent}%`
                         : decisionSnapshot.stockCounts.openSessions + decisionSnapshot.stockCounts.awaitingApproval}
                   </p>
-                  <p className="text-[11px] text-indigo-800/80 mt-1">
+                  <p className="text-[11px] text-[rgb(var(--color-primary))]/80 mt-1">
                     مفتوح {decisionSnapshot.stockCounts.openSessions} · اعتماد {decisionSnapshot.stockCounts.awaitingApproval}
                   </p>
                 </button>
@@ -945,17 +945,17 @@ export const EmployeeDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => navigate('/production/issue-requests')}
-                  className="text-right rounded-[var(--border-radius-lg)] border border-orange-200 bg-orange-50/80 px-3.5 py-3 hover:shadow-sm"
+                  className="text-right rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/80 px-3.5 py-3 hover:shadow-sm"
                 >
-                  <p className="text-xs font-bold text-orange-800">جاهزية المواد / التجميع</p>
-                  <p className="text-xl font-black tabular-nums text-orange-900 mt-0.5">
+                  <p className="text-xs font-bold text-[rgb(var(--color-warning))]">جاهزية المواد / التجميع</p>
+                  <p className="text-xl font-black tabular-nums text-[rgb(var(--color-warning))] mt-0.5">
                     {decisionLoading
                       ? '…'
                       : decisionSnapshot.materials.assemblableCoveragePercent != null
                         ? `${decisionSnapshot.materials.assemblableCoveragePercent}%`
                         : `${decisionSnapshot.materials.readinessPercent}%`}
                   </p>
-                  <p className="text-[11px] text-orange-800/80 mt-1">
+                  <p className="text-[11px] text-[rgb(var(--color-warning))]/80 mt-1">
                     {decisionSnapshot.materials.assemblableCoveragePercent != null
                       ? `تحت القدرة ${decisionSnapshot.materials.plansBelowAssemblable} · عجز ${formatNumber(decisionSnapshot.materials.assemblableShortfallQty)}`
                       : `نواقص ${decisionSnapshot.materials.plansWithShortage} خطة · ${formatNumber(decisionSnapshot.materials.totalShortageQty)} مكوّن`}
@@ -979,20 +979,20 @@ export const EmployeeDashboard: React.FC = () => {
                   <StatusBadge label={activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'} />
                 )}
               >
-                <p className="text-[11px] text-slate-400 mb-4">{activePlan.productName} — {activePlan.lineName ?? ''}</p>
+                <p className="text-[11px] text-[var(--color-text-muted)] mb-4">{activePlan.productName} — {activePlan.lineName ?? ''}</p>
 
                 {/* Progress bar — prominent */}
                 <div className="mb-5">
                   <div className="flex justify-between text-sm font-bold mb-2">
                     <span className="text-[var(--color-text-muted)]">التقدم الإجمالي</span>
-                    <span className={activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}>
+                    <span className={activePlan.progress >= 80 ? 'text-[rgb(var(--color-success))]' : activePlan.progress >= 50 ? 'text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--color-warning))]'}>
                       {activePlan.progress}%
                     </span>
                   </div>
-                  <div className="w-full h-4 bg-[#f0f2f5] rounded-full overflow-hidden">
+                  <div className="w-full h-4 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-1000 ${
-                        activePlan.progress >= 80 ? 'bg-emerald-500' : activePlan.progress >= 50 ? 'bg-blue-500' : 'bg-amber-500'
+                        activePlan.progress >= 80 ? 'bg-[rgb(var(--color-success)/0.1)]0' : activePlan.progress >= 50 ? 'bg-[rgb(var(--color-primary)/0.1)]0' : 'bg-[rgb(var(--color-warning)/0.1)]0'
                       }`}
                       style={{ width: `${Math.min(activePlan.progress, 100)}%` }}
                     />
@@ -1005,11 +1005,11 @@ export const EmployeeDashboard: React.FC = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
                     { label: 'المخطط', value: formatNumber(activePlan.plannedQuantity), color: 'text-[var(--color-text)]' },
-                    { label: `منتظژج (${periodLabel})`, value: formatNumber(activePlan.periodProduced), color: 'text-blue-600' },
-                    { label: 'إجمالي منتظژج', value: formatNumber(activePlan.globalProduced), color: 'text-emerald-600' },
-                    { label: 'المتبقي', value: formatNumber(activePlan.globalRemaining), color: 'text-amber-600' },
+                    { label: `منتظژج (${periodLabel})`, value: formatNumber(activePlan.periodProduced), color: 'text-[rgb(var(--color-primary))]' },
+                    { label: 'إجمالي منتظژج', value: formatNumber(activePlan.globalProduced), color: 'text-[rgb(var(--color-success))]' },
+                    { label: 'المتبقي', value: formatNumber(activePlan.globalRemaining), color: 'text-[rgb(var(--color-warning))]' },
                   ].map((stat) => (
-                    <div key={stat.label} className="bg-[#f8f9fa]/60 rounded-[var(--border-radius-lg)] p-3 text-center">
+                    <div key={stat.label} className="bg-[var(--color-bg)]/60 rounded-[var(--border-radius-lg)] p-3 text-center">
                       <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{stat.label}</p>
                       <p className={`text-base font-bold ${stat.color}`}>{stat.value}</p>
                     </div>
@@ -1036,7 +1036,7 @@ export const EmployeeDashboard: React.FC = () => {
               </OpsDashPanel>
             ) : (
               <OpsDashPanel title="ملخص الخطة الحالية" accent="plans">
-                <div className="text-center py-8 text-slate-400">
+                <div className="text-center py-8 text-[var(--color-text-muted)]">
                   <span className="material-icons-round text-5xl mb-3 block opacity-20">event_note</span>
                   <p className="font-bold text-sm">لا توجد خطط إنتاج نشطة حالياً</p>
                   <p className="text-xs mt-1 opacity-70">تواصل مع مشرف الصالة لإنشاء خطة جديدة</p>
@@ -1082,17 +1082,17 @@ export const EmployeeDashboard: React.FC = () => {
                           <div key={wo.id} className="px-6 py-4 space-y-3">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
-                                <span className="font-mono text-xs font-bold text-amber-600">#{wo.workOrderNumber}</span>
+                                <span className="font-mono text-xs font-bold text-[rgb(var(--color-warning))]">#{wo.workOrderNumber}</span>
                                 <StatusBadge label={STATUS_LABELS[effectiveStatus] || STATUS_LABELS.pending} />
                                 {isSupervisor && (
-                                  <span className="text-[10px] font-bold text-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 px-2 py-0.5 rounded-full">مشرف</span>
+                                  <span className="text-[10px] font-bold text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] px-2 py-0.5 rounded-full">مشرف</span>
                                 )}
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 {can('print') && (
                                   <button
                                     onClick={() => triggerWOPrint(wo)}
-                                    className="p-2 rounded-[var(--border-radius-base)] bg-[#f8f9fa] text-[var(--color-text-muted)] hover:text-primary hover:bg-[#f0f2f5] transition-colors"
+                                    className="p-2 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] text-[var(--color-text-muted)] hover:text-primary hover:bg-[var(--color-surface-hover)] transition-colors"
                                     title="طباعة"
                                   >
                                     <span className="material-icons-round text-base">print</span>
@@ -1136,37 +1136,37 @@ export const EmployeeDashboard: React.FC = () => {
                             <div className="flex items-center gap-2">
                               <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
                               <p className="text-xs font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
-                              <span className="text-[var(--color-text-muted)] dark:text-slate-600">آ·</span>
+                              <span className="text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)]">آ·</span>
                               <span className="material-icons-round text-[var(--color-text-muted)] text-sm">precision_manufacturing</span>
-                              <span className="text-xs font-bold text-slate-500">{line?.name ?? '—'}</span>
+                              <span className="text-xs font-bold text-[var(--color-text-muted)]">{line?.name ?? '—'}</span>
                             </div>
 
                             <div className="grid grid-cols-3 gap-3 text-center">
-                              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
+                              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-base)] p-2.5">
                                 <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">ملاحظات</p>
                                 <p className="text-sm font-bold text-[var(--color-text)]">{formatNumber(wo.quantity)}</p>
                               </div>
-                              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
+                              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-base)] p-2.5">
                                 <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">تم إنتاجه</p>
-                                <p className="text-sm font-bold text-emerald-600">{formatNumber(producedNow)}</p>
+                                <p className="text-sm font-bold text-[rgb(var(--color-success))]">{formatNumber(producedNow)}</p>
                               </div>
-                              <div className="bg-[#f8f9fa] rounded-[var(--border-radius-base)] p-2.5">
+                              <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-base)] p-2.5">
                                 <p className="text-[10px] text-[var(--color-text-muted)] font-medium mb-0.5">المتبقي</p>
-                                <p className="text-sm font-bold text-rose-500">{formatNumber(remaining)}</p>
+                                <p className="text-sm font-bold text-[rgb(var(--color-danger))]">{formatNumber(remaining)}</p>
                               </div>
                             </div>
 
                             <div className="space-y-1.5">
                               <div className="flex justify-between text-xs font-bold">
                                 <span className="text-[var(--color-text-muted)]">التقدم</span>
-                                <span className={prog >= 80 ? 'text-emerald-600' : prog >= 50 ? 'text-amber-600' : 'text-slate-500'}>{prog.toFixed(0)}%</span>
+                                <span className={prog >= 80 ? 'text-[rgb(var(--color-success))]' : prog >= 50 ? 'text-[rgb(var(--color-warning))]' : 'text-[var(--color-text-muted)]'}>{prog.toFixed(0)}%</span>
                               </div>
-                              <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full transition-all duration-1000 ${prog >= 80 ? 'bg-emerald-500' : prog >= 50 ? 'bg-amber-500' : 'bg-primary'}`} style={{ width: `${Math.min(prog, 100)}%` }} />
+                              <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full transition-all duration-1000 ${prog >= 80 ? 'bg-[rgb(var(--color-success)/0.1)]0' : prog >= 50 ? 'bg-[rgb(var(--color-warning)/0.1)]0' : 'bg-primary'}`} style={{ width: `${Math.min(prog, 100)}%` }} />
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-4 text-xs text-slate-400">
+                            <div className="flex items-center gap-4 text-xs text-[var(--color-text-muted)]">
                               <div className="flex items-center gap-1">
                                 <span className="material-icons-round text-sm">groups</span>
                                 <span className="font-bold">متوسط العمالة: {avgWorkersLabel}</span>
@@ -1178,8 +1178,8 @@ export const EmployeeDashboard: React.FC = () => {
                               {can('workOrders.viewCost') && (
                                 <div className="flex items-center gap-2 mr-auto">
                                   <div className="flex items-center gap-1">
-                                    <span className="material-icons-round text-sm text-emerald-500">payments</span>
-                                    <span className="font-bold text-emerald-600">
+                                    <span className="material-icons-round text-sm text-[rgb(var(--color-success))]">payments</span>
+                                    <span className="font-bold text-[rgb(var(--color-success))]">
                                       مقدرة: {metrics.estimatedUnitCost !== null ? `${formatCurrency(metrics.estimatedUnitCost)} /وحدة` : '—'}
                                     </span>
                                   </div>
@@ -1192,7 +1192,7 @@ export const EmployeeDashboard: React.FC = () => {
                                 </div>
                               )}
                             </div>
-                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--color-text-muted)]">
                               <div className="flex items-center gap-1">
                                 <span className="material-icons-round text-sm">calendar_month</span>
                                 <span className="font-bold">

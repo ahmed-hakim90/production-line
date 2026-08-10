@@ -566,7 +566,7 @@ export const ProductionWorkers: React.FC = () => {
     {
       header: 'أيام حضور',
       render: (row) => (
-        <span className="inline-flex min-w-10 justify-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700 tabular-nums">
+        <span className="inline-flex min-w-10 justify-center rounded-full bg-[rgb(var(--color-success)/0.1)] px-2 py-1 text-xs font-bold text-[rgb(var(--color-success))] tabular-nums">
           {formatNumber(row.presentDays)}
         </span>
       ),
@@ -575,7 +575,7 @@ export const ProductionWorkers: React.FC = () => {
     {
       header: 'أيام غياب',
       render: (row) => (
-        <span className="inline-flex min-w-10 justify-center rounded-full bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700 tabular-nums">
+        <span className="inline-flex min-w-10 justify-center rounded-full bg-[rgb(var(--color-danger)/0.1)] px-2 py-1 text-xs font-bold text-[rgb(var(--color-danger))] tabular-nums">
           {formatNumber(row.absentDays)}
         </span>
       ),
@@ -785,7 +785,7 @@ export const ProductionWorkers: React.FC = () => {
 
       {lineTransfer && canManage && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={closeLineTransfer}>
+        <div className="fixed inset-0 z-[10050] bg-black/40 flex items-center justify-center p-4" onClick={closeLineTransfer}>
           <div
             className="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
@@ -860,7 +860,7 @@ export const ProductionWorkers: React.FC = () => {
               </p>
             </div>
             {lineTransfer.error || lineTransferValidationError ? (
-              <p className="text-sm font-medium text-rose-600">{lineTransfer.error ?? lineTransferValidationError}</p>
+              <p className="text-sm font-medium text-[rgb(var(--color-danger))]">{lineTransfer.error ?? lineTransferValidationError}</p>
             ) : null}
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={closeLineTransfer} disabled={lineTransferSaving}>إلغاء</Button>

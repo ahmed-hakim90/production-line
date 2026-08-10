@@ -1234,8 +1234,8 @@ export const StockMovementForm: React.FC = () => {
   const recentFeed = useMemo(() => flattenRecentVoucherFeed(recentTxs), [recentTxs]);
 
   /* ── ERPNext field helpers ── */
-  const fieldClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f8f9fa] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-white focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
-  const fieldDisabledClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f0f2f5] text-[var(--color-text)] font-medium select-none cursor-default';
+  const fieldClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
+  const fieldDisabledClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[var(--color-surface-hover)] text-[var(--color-text)] font-medium select-none cursor-default';
   const labelClass = 'block text-[11.5px] font-semibold text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wide';
 
   return (
@@ -1299,7 +1299,7 @@ export const StockMovementForm: React.FC = () => {
               {isSparePartsContext && movementType === 'IN' ? 'تسجيل إذن الإضافة' : 'تسجيل الحركة'}
             </span>
             {isSparePartsContext && selectedWarehouseRole?.warehouseRole ? (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]">
                 {WAREHOUSE_ROLE_LABELS[selectedWarehouseRole.warehouseRole] || 'قطع غيار'}
               </span>
             ) : null}
@@ -1609,7 +1609,7 @@ export const StockMovementForm: React.FC = () => {
                       ? (usesLineLocations ? '1fr 140px 180px 120px 40px' : '1fr 160px 140px 40px')
                       : (usesLineLocations ? '1fr 180px 120px 40px' : '1fr 140px 40px'),
                     borderBottom: '1px solid var(--color-border)',
-                    background: '#f8f9fa',
+                    background: 'var(--color-bg)',
                   }}
                 >
                   <span>الصنف</span>
@@ -1662,7 +1662,7 @@ export const StockMovementForm: React.FC = () => {
                             placeholder="ابحث واختر الصنف"
                           />
                           {line.itemId && showAvailability && (
-                            <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
+                            <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
                               متاح: {available} · متبقي: {remaining}
                             </p>
                           )}
@@ -1711,7 +1711,7 @@ export const StockMovementForm: React.FC = () => {
 
                         <div className="flex items-center justify-center pt-0.5">
                           <button type="button" onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
-                            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
+                            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30 transition-all"
                             disabled={transferItems.length <= 1} title="حذف الصف">
                             <span className="material-icons-round" style={{ fontSize: 16 }}>delete_outline</span>
                           </button>
@@ -1724,7 +1724,7 @@ export const StockMovementForm: React.FC = () => {
                           <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الصنف #{idx + 1}</span>
                           <button type="button"
                             onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
-                            className="w-7 h-7 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
+                            className="w-7 h-7 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30 transition-all"
                             disabled={transferItems.length <= 1} title="حذف الصف">
                             <span className="material-icons-round" style={{ fontSize: 15 }}>delete_outline</span>
                           </button>
@@ -1750,7 +1750,7 @@ export const StockMovementForm: React.FC = () => {
                             placeholder="ابحث واختر الصنف"
                           />
                           {line.itemId && showAvailability && (
-                            <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
+                            <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
                               متاح: {available} · متبقي: {remaining}
                             </p>
                           )}
@@ -1817,7 +1817,7 @@ export const StockMovementForm: React.FC = () => {
         {/* Form actions */}
         <div
           className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end items-center"
-          style={{ background: '#f8f9fa', borderRadius: '0 0 var(--border-radius-lg) var(--border-radius-lg)' }}
+          style={{ background: 'var(--color-bg)', borderRadius: '0 0 var(--border-radius-lg) var(--border-radius-lg)' }}
         >
           {(movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER') && (
             <Button
@@ -1900,14 +1900,14 @@ export const StockMovementForm: React.FC = () => {
               <tbody className="divide-y divide-[var(--color-border)]">
                 {recentLoading && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-400">
+                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
                       جاري التحميل...
                     </td>
                   </tr>
                 )}
                 {!recentLoading && recentFeed.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       لا توجد حركات حديثة لهذا المخزن.
                     </td>
                   </tr>
@@ -1918,8 +1918,8 @@ export const StockMovementForm: React.FC = () => {
                       const group = entry.group;
                       const qtySum = group.lines.reduce((s, l) => s + Math.abs(Number(l.quantity || 0)), 0);
                       return (
-                        <tr key={`recent-voucher-${group.movementType}-${group.referenceNo}`} className="bg-sky-50/30">
-                          <td className="px-4 py-2.5 text-xs text-slate-500 tabular-nums">
+                        <tr key={`recent-voucher-${group.movementType}-${group.referenceNo}`} className="bg-[rgb(var(--color-primary)/0.1)]/30">
+                          <td className="px-4 py-2.5 text-xs text-[var(--color-text-muted)] tabular-nums">
                             {new Date(group.createdAt).toLocaleString('ar-EG')}
                           </td>
                           <td className="px-4 py-2.5">
@@ -1937,14 +1937,14 @@ export const StockMovementForm: React.FC = () => {
                           <td className="px-4 py-2.5 text-center">
                             <span
                               className={`font-black tabular-nums ${
-                                group.movementType === 'IN' ? 'text-emerald-600' : 'text-rose-500'
+                                group.movementType === 'IN' ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'
                               }`}
                             >
                               {group.movementType === 'IN' ? '+' : '−'}
                               {formatNumber(qtySum)}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 text-xs font-mono text-slate-500">
+                          <td className="px-4 py-2.5 text-xs font-mono text-[var(--color-text-muted)]">
                             {group.referenceNo}
                           </td>
                         </tr>
@@ -1953,7 +1953,7 @@ export const StockMovementForm: React.FC = () => {
                     const tx = entry.tx;
                     return (
                       <tr key={tx.id || `${tx.itemId}-${tx.createdAt}`}>
-                        <td className="px-4 py-2.5 text-xs text-slate-500 tabular-nums">
+                        <td className="px-4 py-2.5 text-xs text-[var(--color-text-muted)] tabular-nums">
                           {new Date(tx.createdAt).toLocaleString('ar-EG')}
                         </td>
                         <td className="px-4 py-2.5">
@@ -1966,14 +1966,14 @@ export const StockMovementForm: React.FC = () => {
                         <td className="px-4 py-2.5 text-center">
                           <span
                             className={`font-black tabular-nums ${
-                              Number(tx.quantity) >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                              Number(tx.quantity) >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'
                             }`}
                           >
                             {Number(tx.quantity) >= 0 ? '+' : ''}
                             {formatNumber(tx.quantity)}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-slate-500">
+                        <td className="px-4 py-2.5 text-xs font-mono text-[var(--color-text-muted)]">
                           {tx.referenceNo || '—'}
                         </td>
                       </tr>
@@ -2002,7 +2002,7 @@ export const StockMovementForm: React.FC = () => {
       {showPrintPreview && previewData && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-center justify-center p-3 sm:p-4"
           onClick={() => setShowPrintPreview(false)}
         >
           <div
@@ -2018,19 +2018,19 @@ export const StockMovementForm: React.FC = () => {
               </div>
               <button
                 onClick={() => setShowPrintPreview(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
               >
                 <span className="material-icons-round" style={{ fontSize: 18 }}>close</span>
               </button>
             </div>
-            <div className="p-3 sm:p-5 overflow-auto flex-1" style={{ background: '#f8f9fa' }}>
+            <div className="p-3 sm:p-5 overflow-auto flex-1" style={{ background: 'var(--color-bg)' }}>
               <div className="mx-auto w-fit">
                 <StockTransferPrint data={previewData} printSettings={printTemplate} />
               </div>
             </div>
             <div
               className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2"
-              style={{ background: '#f8f9fa' }}
+              style={{ background: 'var(--color-bg)' }}
             >
               <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setShowPrintPreview(false)}>
                 إغلاق

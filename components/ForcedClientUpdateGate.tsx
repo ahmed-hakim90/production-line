@@ -57,8 +57,8 @@ export const ForcedClientUpdateGate: React.FC = () => {
       aria-describedby="forced-update-desc"
     >
       <div className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-xl p-6 space-y-4 text-center">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-          <span className="material-icons-round text-amber-700 dark:text-amber-400 text-3xl">system_update</span>
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning))]/30">
+          <span className="material-icons-round text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))] text-3xl">system_update</span>
         </div>
         <h2 id="forced-update-title" className="text-lg font-bold text-[var(--color-text)]">
           {t('forcedUpdate.title')}

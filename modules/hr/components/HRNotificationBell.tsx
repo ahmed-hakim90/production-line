@@ -47,7 +47,7 @@ export const HRNotificationBell: React.FC<HRNotificationBellProps> = ({ employee
       >
         <span className="material-icons-round text-[var(--color-text-muted)]">notifications</span>
         {hasUnread && (
-          <span className="absolute -top-1 -left-1 min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">
+          <span className="absolute -top-1 -left-1 min-w-5 h-5 px-1 rounded-full bg-[rgb(var(--color-danger)/0.1)]0 text-white text-[10px] font-bold flex items-center justify-center">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -74,7 +74,7 @@ export const HRNotificationBell: React.FC<HRNotificationBellProps> = ({ employee
               sorted.map((n) => (
                 <button
                   key={n.id}
-                  className="w-full text-right px-3 py-2 border-b border-[var(--color-border)] hover:bg-[#f8f9fa]"
+                  className="w-full text-right px-3 py-2 border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]"
                   onClick={async () => {
                     if (n.id) await hrNotificationService.markRead(n.id);
                     setOpen(false);

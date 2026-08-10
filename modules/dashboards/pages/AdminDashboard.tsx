@@ -214,7 +214,7 @@ const getComplianceDefaultDate = (nowMs: number): string => {
   return formatDateISO(d);
 };
 
-const PIE_COLORS = ['#1392ec', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const PIE_COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--chart-7)'];
 
 const PRESET_LABELS: Record<PeriodPreset, string> = {
   today: 'اليوم',
@@ -338,10 +338,10 @@ const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }
   const angle = (clampedValue / 100) * 180;
 
   const getColor = (v: number) => {
-    if (v >= 80) return '#10b981';
-    if (v >= 60) return '#f59e0b';
-    if (v >= 40) return '#f97316';
-    return '#ef4444';
+    if (v >= 80) return 'var(--chart-2)';
+    if (v >= 60) return 'var(--chart-3)';
+    if (v >= 40) return 'var(--chart-3)';
+    return 'var(--chart-4)';
   };
 
   const getLabel = (v: number) => {
@@ -376,7 +376,7 @@ const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }
         <path
           d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
           fill="none"
-          stroke="#e8eaed"
+          stroke="var(--color-border)"
           strokeWidth="14"
           strokeLinecap="round"
         />
@@ -409,14 +409,14 @@ const GaugeChart: React.FC<{ value: number; label: string }> = ({ value, label }
           y={cy + 16}
           textAnchor="middle"
           className="text-xs"
-          fill="#94a3b8"
+          fill="var(--color-text-muted)"
           style={{ fontSize: '13px', fontWeight: 700 }}
         >
           {statusLabel}
         </text>
         {/* Min/Max labels */}
-        <text x={cx - r - 5} y={cy + 18} textAnchor="middle" fill="#94a3b8" style={{ fontSize: '10px', fontWeight: 600 }}>0</text>
-        <text x={cx + r + 5} y={cy + 18} textAnchor="middle" fill="#94a3b8" style={{ fontSize: '10px', fontWeight: 600 }}>100</text>
+        <text x={cx - r - 5} y={cy + 18} textAnchor="middle" fill="var(--color-text-muted)" style={{ fontSize: '10px', fontWeight: 600 }}>0</text>
+        <text x={cx + r + 5} y={cy + 18} textAnchor="middle" fill="var(--color-text-muted)" style={{ fontSize: '10px', fontWeight: 600 }}>100</text>
       </svg>
       <p className="text-sm font-bold text-[var(--color-text-muted)] -mt-2">{label}</p>
     </div>
@@ -1845,7 +1845,7 @@ export const AdminDashboard: React.FC = () => {
 
   const complianceColumns: Column<(typeof complianceRows)[number]>[] = useMemo(
     () => [
-      { key: 'name', header: 'المشرف', cell: (row) => <span className="font-medium text-[#0F172A]">{row.name}</span>, sortable: true },
+      { key: 'name', header: 'المشرف', cell: (row) => <span className="font-medium text-[var(--color-text)]">{row.name}</span>, sortable: true },
       { key: 'reports', header: 'التقارير', cell: (row) => `${row.submittedReports} / ${row.expectedReports}` },
       { key: 'submittedLines', header: 'تم الإرسال', cell: (row) => (row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—') },
       { key: 'missingLines', header: 'غير مرسل', cell: (row) => (row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—') },
@@ -2137,12 +2137,12 @@ export const AdminDashboard: React.FC = () => {
             <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
               {reportAnalysis.insights.map((insight) => {
                 const toneClass = insight.tone === 'danger'
-                  ? 'border-rose-200 bg-rose-50/70 text-rose-600'
+                  ? 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/70 text-[rgb(var(--color-danger))]'
                   : insight.tone === 'warning'
-                    ? 'border-amber-200 bg-amber-50/70 text-amber-600'
+                    ? 'border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/70 text-[rgb(var(--color-warning))]'
                     : insight.tone === 'success'
-                      ? 'border-emerald-200 bg-emerald-50/70 text-emerald-600'
-                      : 'border-blue-200 bg-blue-50/70 text-blue-600';
+                      ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/70 text-[rgb(var(--color-success))]'
+                      : 'border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/70 text-[rgb(var(--color-primary))]';
                 return (
                   <div key={insight.title} className={`rounded-[var(--border-radius-lg)] border p-3 ${toneClass}`}>
                     <div className="flex items-center gap-2 mb-2">
@@ -2188,13 +2188,13 @@ export const AdminDashboard: React.FC = () => {
 
           <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
             <div className="flex items-center gap-2 mb-3">
-              {renderDashboardIcon('calculate', 'text-amber-600 text-[16px]')}
+              {renderDashboardIcon('calculate', 'text-[rgb(var(--color-warning))] text-[16px]')}
               <p className="text-sm font-bold text-[var(--color-text)]">توصيات إدارية</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               {reportAnalysis.recommendations.map((recommendation, index) => (
                 <div key={`${recommendation}-${index}`} className="flex items-start gap-2 text-xs leading-6 text-[var(--color-text-muted)]">
-                  {renderDashboardIcon('check_circle', 'text-emerald-500 text-[14px] shrink-0 mt-1')}
+                  {renderDashboardIcon('check_circle', 'text-[rgb(var(--color-success))] text-[14px] shrink-0 mt-1')}
                   <span>{recommendation}</span>
                 </div>
               ))}
@@ -2241,8 +2241,8 @@ export const AdminDashboard: React.FC = () => {
               const trendClass = period.deltaPercent === null || period.deltaPercent === 0
                 ? 'text-[var(--color-text-muted)]'
                 : period.deltaPercent > 0
-                  ? 'text-emerald-600'
-                  : 'text-rose-600';
+                  ? 'text-[rgb(var(--color-success))]'
+                  : 'text-[rgb(var(--color-danger))]';
               return (
                 <div key={period.key} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
@@ -2272,9 +2272,9 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="h-2.5 rounded-full bg-white dark:bg-slate-900 overflow-hidden border border-[var(--color-border)]">
+                  <div className="h-2.5 rounded-full bg-[var(--color-card)] dark:bg-[var(--color-card)] overflow-hidden border border-[var(--color-border)]">
                     <div
-                      className={`h-full rounded-full ${period.achievement >= 100 ? 'bg-emerald-500' : period.achievement >= 85 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                      className={`h-full rounded-full ${period.achievement >= 100 ? 'bg-[rgb(var(--color-success)/0.1)]0' : period.achievement >= 85 ? 'bg-[rgb(var(--color-warning)/0.1)]0' : 'bg-[rgb(var(--color-danger)/0.1)]0'}`}
                       style={{ width: `${progressWidth}%` }}
                     />
                   </div>
@@ -2296,11 +2296,11 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                     <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
                       <p className="font-bold text-[var(--color-text-muted)]">أيام حضور</p>
-                      <p className="font-bold text-emerald-700">{formatNumber(period.presentAssignments)}</p>
+                      <p className="font-bold text-[rgb(var(--color-success))]">{formatNumber(period.presentAssignments)}</p>
                     </div>
                     <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
                       <p className="font-bold text-[var(--color-text-muted)]">أيام غياب</p>
-                      <p className="font-bold text-rose-700">{formatNumber(period.absentAssignments)}</p>
+                      <p className="font-bold text-[rgb(var(--color-danger))]">{formatNumber(period.absentAssignments)}</p>
                     </div>
                   </div>
 
@@ -2316,7 +2316,7 @@ export const AdminDashboard: React.FC = () => {
             })}
           </div>
 
-          <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/70 p-3 text-sm leading-7 text-emerald-700">
+          <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/70 p-3 text-sm leading-7 text-[rgb(var(--color-success))]">
             {renderDashboardIcon('info', 'text-[16px] inline-block ml-1 align-middle')}
             <span>{laborGoalsAnalysis.summary}</span>
           </div>
@@ -2326,10 +2326,10 @@ export const AdminDashboard: React.FC = () => {
       {(liveScanKpis.completedUnits > 0 || liveScanKpis.inProgressUnits > 0) && (
       <OpsDashPanel title="الإنتاج اللحظي (الباركود)" accent="production">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <KPIBox label="وحدات مكتملة الآن" value={liveScanKpis.completedUnits} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600" />
-          <KPIBox label="وحدات قيد التشغيل" value={liveScanKpis.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 text-amber-600" />
-          <KPIBox label="عمالة فعالة" value={liveScanKpis.activeWorkers} icon="groups" colorClass="bg-blue-100 text-blue-600" />
-          <KPIBox label="متوسط سيكل تايم" value={liveScanKpis.avgCycleSeconds} unit="ث" icon="timer" colorClass="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400" />
+          <KPIBox label="وحدات مكتملة الآن" value={liveScanKpis.completedUnits} icon="check_circle" colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]" />
+          <KPIBox label="وحدات قيد التشغيل" value={liveScanKpis.inProgressUnits} icon="hourglass_top" colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]" />
+          <KPIBox label="عمالة فعالة" value={liveScanKpis.activeWorkers} icon="groups" colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]" />
+          <KPIBox label="متوسط سيكل تايم" value={liveScanKpis.avgCycleSeconds} unit="ث" icon="timer" colorClass="bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary))]/30 text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]" />
         </div>
         <p className="text-xs text-[var(--color-text-muted)] mt-4">
           أعلى نشاط حالي: <span className="font-bold text-[var(--color-text)]">{liveScanKpis.hotLineProduct}</span>
@@ -2422,9 +2422,9 @@ export const AdminDashboard: React.FC = () => {
                             <span className="text-[var(--color-text-muted)] font-bold">الاتجاه</span>
                             <span className={`font-bold ${
                               trend.direction === 'up'
-                                ? 'text-rose-500'
+                                ? 'text-[rgb(var(--color-danger))]'
                                 : trend.direction === 'down'
-                                  ? 'text-emerald-600'
+                                  ? 'text-[rgb(var(--color-success))]'
                                   : 'text-[var(--color-text-muted)]'
                             }`}>
                               {trend.label}
@@ -2474,7 +2474,7 @@ export const AdminDashboard: React.FC = () => {
                             className="text-primary hover:underline cursor-pointer transition-colors"
                           >{p.name}</button>
                         </td>
-                        <td className="py-3 px-4 font-mono text-xs text-slate-500">{p.code}</td>
+                        <td className="py-3 px-4 font-mono text-xs text-[var(--color-text-muted)]">{p.code}</td>
                         <td className="py-3 px-4 font-mono font-bold text-primary">{formatNumber(p.qty)}</td>
                         {canViewCosts && (
                           <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">{formatCost(p.avgCost)} ج.م</td>
@@ -2485,9 +2485,9 @@ export const AdminDashboard: React.FC = () => {
                             <td className="py-3 px-4">
                               <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] text-[11px] font-bold ${
                                 trend.direction === 'up'
-                                  ? 'bg-rose-50 text-rose-600'
+                                  ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
                                   : trend.direction === 'down'
-                                    ? 'bg-emerald-50 text-emerald-600'
+                                    ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
                                     : 'bg-[var(--color-bg)] text-[var(--color-text-muted)]'
                               }`}>
                                 {renderDashboardIcon(
@@ -2564,7 +2564,7 @@ export const AdminDashboard: React.FC = () => {
                   <p className="text-sm font-bold text-[var(--color-text)]">{row.productName}</p>
                   <p className="mt-1 text-xs text-[var(--color-text-muted)]">{row.componentName}</p>
                   <div className="mt-2 flex flex-wrap gap-3 text-xs">
-                    <span className="font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</span>
+                    <span className="font-mono font-bold text-[rgb(var(--color-danger))]">{formatNumber(row.shortageQty)}</span>
                     {row.note ? <span className="text-[var(--color-text-muted)]">{row.note}</span> : null}
                   </div>
                 </div>
@@ -2585,7 +2585,7 @@ export const AdminDashboard: React.FC = () => {
                     <tr key={row.id} className="border-b border-[var(--color-border)]">
                       <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.productName}</td>
                       <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.componentName}</td>
-                      <td className="py-2.5 px-3 font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-[rgb(var(--color-danger))]">{formatNumber(row.shortageQty)}</td>
                       <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.note || '—'}</td>
                     </tr>
                   ))}
@@ -2622,7 +2622,7 @@ export const AdminDashboard: React.FC = () => {
         {yesterdayComplianceLoading ? (
           <DataTable columns={complianceColumns} data={[]} isLoading emptyMessage="جاري تحميل الحالة..." />
         ) : yesterdayComplianceError ? (
-          <p className="text-xs text-rose-600 font-medium">{yesterdayComplianceError}</p>
+          <p className="text-xs text-[rgb(var(--color-danger))] font-medium">{yesterdayComplianceError}</p>
         ) : yesterdayCompliance?.isFactoryHoliday ? (
           <div className="erp-alert erp-alert-info">
             {renderDashboardIcon('weekend', 'text-[18px] shrink-0')}
@@ -2631,18 +2631,18 @@ export const AdminDashboard: React.FC = () => {
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              <div className="rounded-[var(--border-radius-lg)] border border-slate-200 bg-[#f8f9fa] p-3">
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1"> إجمالي المشرفين المطلوب منهم</p>
               
                 <p className="text-2xl font-medium text-[var(--color-text)]">{yesterdayCompliance?.assignedSupervisorsCount ?? 0}</p>
               </div>
-              <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 p-3">
-                <p className="text-xs text-emerald-700 font-bold mb-1">تم ارسال تقرير</p>
-                <p className="text-2xl font-medium text-emerald-600">{yesterdayCompliance?.submittedCount ?? 0}</p>
+              <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] p-3">
+                <p className="text-xs text-[rgb(var(--color-success))] font-bold mb-1">تم ارسال تقرير</p>
+                <p className="text-2xl font-medium text-[rgb(var(--color-success))]">{yesterdayCompliance?.submittedCount ?? 0}</p>
               </div>
-              <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 dark:bg-rose-900/10 p-3">
-                <p className="text-xs text-rose-700 font-bold mb-1">لم يرسل تقرير</p>
-                <p className="text-2xl font-medium text-rose-600">{yesterdayCompliance?.missingCount ?? 0}</p>
+              <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] p-3">
+                <p className="text-xs text-[rgb(var(--color-danger))] font-bold mb-1">لم يرسل تقرير</p>
+                <p className="text-2xl font-medium text-[rgb(var(--color-danger))]">{yesterdayCompliance?.missingCount ?? 0}</p>
               </div>
             </div>
             {(yesterdayCompliance?.assignedSupervisorsCount ?? 0) === 0 ? (
@@ -2690,13 +2690,13 @@ export const AdminDashboard: React.FC = () => {
       </OpsDashPanel>
       <OpsDashPanel title="مؤشرات الجودة" accent="quality">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600" />
-          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600" />
-          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600" />
-          <KPIBox label="نسبة الفشل" value={qualityKpis.failRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
-          <KPIBox label="نسبة إعادة التشغيل" value={qualityKpis.reworkRate} unit="%" icon="build_circle" colorClass="bg-amber-100 text-amber-700" />
-          <KPIBox label="أول مرة صحيحة (FPY)" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600" />
-          <KPIBox label="جودة بانتظار الاعتماد" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
+          <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]" />
+          <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]" />
+          <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]" />
+          <KPIBox label="نسبة الفشل" value={qualityKpis.failRate} unit="%" icon="priority_high" colorClass="bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary))]/30 dark:text-[rgb(var(--color-secondary))]" />
+          <KPIBox label="نسبة إعادة التشغيل" value={qualityKpis.reworkRate} unit="%" icon="build_circle" colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]" />
+          <KPIBox label="أول مرة صحيحة (FPY)" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]" />
+          <KPIBox label="جودة بانتظار الاعتماد" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]" />
         </div>
       </OpsDashPanel>
 {(() => {
@@ -2714,13 +2714,13 @@ export const AdminDashboard: React.FC = () => {
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                {renderDashboardIcon('assignment', 'text-amber-500')}
+                {renderDashboardIcon('assignment', 'text-[rgb(var(--color-warning))]')}
                 <h3 className="text-base font-bold text-[var(--color-text)]">أوامر الشغل النشطة</h3>
-                <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
+                <span className="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] text-xs font-bold px-2 py-0.5 rounded-full">{activeWOs.length}</span>
               </div>
-              <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--color-text-muted)]">
                 <span className="font-bold">الإجمالي: {formatNumber(totalProduced)} / {formatNumber(totalQty)}</span>
-                <span className={`font-medium ${overallProgress >= 80 ? 'text-emerald-600' : overallProgress >= 50 ? 'text-amber-600' : 'text-slate-500'}`}>{overallProgress}%</span>
+                <span className={`font-medium ${overallProgress >= 80 ? 'text-[rgb(var(--color-success))]' : overallProgress >= 50 ? 'text-[rgb(var(--color-warning))]' : 'text-[var(--color-text-muted)]'}`}>{overallProgress}%</span>
               </div>
             </div>
 
@@ -2754,16 +2754,16 @@ export const AdminDashboard: React.FC = () => {
                   <div
                     key={wo.id}
                     onClick={() => navigate('/work-orders')}
-                    className={`min-w-[280px] max-w-[85vw] sm:min-w-0 sm:max-w-none rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800 ${
+                    className={`min-w-[280px] max-w-[85vw] sm:min-w-0 sm:max-w-none rounded-[var(--border-radius-xl)] border p-5 space-y-4 transition-all cursor-pointer hover:ring-2 hover:ring-[rgb(var(--color-warning))] dark:hover:ring-[rgb(var(--color-warning))] ${
                       effectiveStatus === 'in_progress'
-                        ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200/40'
-                        : 'bg-[#f8f9fa]/50 border-[var(--color-border)]'
+                        ? 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border-[rgb(var(--color-warning)/0.25)]/40'
+                        : 'bg-[var(--color-bg)]/50 border-[var(--color-border)]'
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        {renderDashboardIcon('assignment', 'text-amber-500 text-lg')}
-                        <span className="text-sm font-bold text-amber-700">أمر شغل #{wo.workOrderNumber}</span>
+                        {renderDashboardIcon('assignment', 'text-[rgb(var(--color-warning))] text-lg')}
+                        <span className="text-sm font-bold text-[rgb(var(--color-warning))]">أمر شغل #{wo.workOrderNumber}</span>
                       </div>
                       <Badge variant={effectiveStatus === 'in_progress' ? 'warning' : 'neutral'}>
                         {effectiveStatus === 'in_progress' ? 'قيد التنفيذ' : 'في الانتظار'}
@@ -2777,26 +2777,26 @@ export const AdminDashboard: React.FC = () => {
 
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5">
-                        {renderDashboardIcon('person', 'text-indigo-400 text-base')}
+                        {renderDashboardIcon('person', 'text-[rgb(var(--color-primary))] text-base')}
                         <span className="text-sm font-bold text-[var(--color-text-muted)]">{supervisor?.name ?? '—'}</span>
                       </div>
                       {canViewCosts && (
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
-                            {renderDashboardIcon('payments', 'text-emerald-500 text-sm')}
-                            <span className="text-[10px] text-slate-400">التكلفة المقدرة</span>
-                            <span className="text-sm font-bold text-emerald-600">
+                            {renderDashboardIcon('payments', 'text-[rgb(var(--color-success))] text-sm')}
+                            <span className="text-[10px] text-[var(--color-text-muted)]">التكلفة المقدرة</span>
+                            <span className="text-sm font-bold text-[rgb(var(--color-success))]">
                               {metrics.estimatedUnitCost !== null ? formatCost(metrics.estimatedUnitCost) : '—'}
                             </span>
-                            <span className="text-[10px] text-slate-400">/وحدة</span>
+                            <span className="text-[10px] text-[var(--color-text-muted)]">/وحدة</span>
                           </div>
                           <div className="flex items-center gap-1.5 bg-[var(--color-card)] rounded-[var(--border-radius-base)] px-3 py-1">
                             {renderDashboardIcon('calculate', 'text-primary text-sm')}
-                            <span className="text-[10px] text-slate-400">التكلفة الفعلية</span>
+                            <span className="text-[10px] text-[var(--color-text-muted)]">التكلفة الفعلية</span>
                             <span className="text-sm font-bold text-primary">
                               {metrics.actualUnitCostToDate !== null ? formatCost(metrics.actualUnitCostToDate) : '—'}
                             </span>
-                            <span className="text-[10px] text-slate-400">/وحدة</span>
+                            <span className="text-[10px] text-[var(--color-text-muted)]">/وحدة</span>
                           </div>
                         </div>
                       )}
@@ -2809,22 +2809,22 @@ export const AdminDashboard: React.FC = () => {
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
                         <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">تم إنتاجه</p>
-                        <p className="text-lg font-bold text-emerald-600">{formatNumber(producedNow)}</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-success))]">{formatNumber(producedNow)}</p>
                       </div>
                       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] p-3">
                         <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المتبقي</p>
-                        <p className="text-lg font-bold text-rose-500">{formatNumber(remaining)}</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-danger))]">{formatNumber(remaining)}</p>
                       </div>
                     </div>
 
                     <div className="space-y-2">
                       <div className="flex justify-between text-xs font-bold">
                         <span className="text-[var(--color-text-muted)]">التقدم</span>
-                        <span className={progress >= 80 ? 'text-emerald-600' : progress >= 50 ? 'text-amber-600' : 'text-slate-500'}>{progress}%</span>
+                        <span className={progress >= 80 ? 'text-[rgb(var(--color-success))]' : progress >= 50 ? 'text-[rgb(var(--color-warning))]' : 'text-[var(--color-text-muted)]'}>{progress}%</span>
                       </div>
                       <div className="w-full h-2.5 bg-[var(--color-card)] rounded-full overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-1000 ${progress >= 80 ? 'bg-emerald-500' : progress >= 50 ? 'bg-amber-500' : 'bg-primary'}`}
+                          className={`h-full rounded-full transition-all duration-1000 ${progress >= 80 ? 'bg-[rgb(var(--color-success)/0.1)]0' : progress >= 50 ? 'bg-[rgb(var(--color-warning)/0.1)]0' : 'bg-primary'}`}
                           style={{ width: `${Math.min(progress, 100)}%` }}
                         ></div>
                       </div>
@@ -2895,25 +2895,25 @@ export const AdminDashboard: React.FC = () => {
             label="إجمالي المستخدمين"
             value={systemUsers.total}
             icon="group"
-            colorClass="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
+            colorClass="bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary))]/30 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]"
           />
           <KPIBox
             label="مستخدمون نشطون"
             value={systemUsers.active}
             icon="person"
-            colorClass="bg-emerald-100 text-emerald-600"
+            colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]"
           />
           <KPIBox
             label="حسابات معطلة"
             value={systemUsers.disabled}
             icon="person_off"
-            colorClass={systemUsers.disabled > 0 ? 'bg-rose-100 text-rose-600' : 'bg-[#f0f2f5] text-slate-500'}
+            colorClass={systemUsers.disabled > 0 ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'}
           />
           <KPIBox
             label="خطط إنتاج نشطة"
             value={productionPlans.filter((p) => p.status === 'in_progress' || p.status === 'planned').length}
             icon="event_note"
-            colorClass="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
+            colorClass="bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary))]/30 text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]"
           />
           {canViewCosts && (() => {
             const caColor = getKPIColor(costAllocationCompletion, getKPIThreshold(systemSettings, 'costAllocation'), false);
@@ -2958,7 +2958,7 @@ export const AdminDashboard: React.FC = () => {
                     className={`erp-progress-bar${metric.value >= 75 ? ' success' : metric.value < 50 ? ' error' : ''}`}
                     style={{
                       width: `${Math.min(metric.value, 100)}%`,
-                      background: metric.value >= 75 ? '#16a34a' : metric.value >= 50 ? '#d97706' : '#dc2626',
+                      background: metric.value >= 75 ? 'var(--color-success-hex)' : metric.value >= 50 ? 'var(--color-warning-hex)' : 'var(--color-danger-hex)',
                     }}
                   />
                 </div>
@@ -3003,7 +3003,7 @@ export const AdminDashboard: React.FC = () => {
               {rolesChartData.map((d, i) => (
                 <div key={i} className="flex items-center gap-1.5">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}></span>
-                  <span className="text-slate-600 font-bold">{d.name}: {d.value}</span>
+                  <span className="text-[var(--color-text-muted)] font-bold">{d.name}: {d.value}</span>
                 </div>
               ))}
             </div>
@@ -3027,8 +3027,8 @@ export const AdminDashboard: React.FC = () => {
                     formatter={(val: string) => val === 'production' ? 'الإنتاج' : 'تكلفة الوحدة'}
                     wrapperStyle={{ fontSize: 12, fontFamily: 'Cairo' }}
                   />
-                  <Bar yAxisId="left" dataKey="production" name="production" fill="var(--chart-1,#1392ec)" radius={[3, 3, 0, 0]} barSize={18} />
-                  <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="var(--chart-3,#f59e0b)" strokeWidth={2} dot={{ r: 3, fill: 'var(--chart-3,#f59e0b)' }} />
+                  <Bar yAxisId="left" dataKey="production" name="production" fill="var(--chart-1)" radius={[3, 3, 0, 0]} barSize={18} />
+                  <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="var(--chart-3)" strokeWidth={2} dot={{ r: 3, fill: 'var(--chart-3)' }} />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -3055,17 +3055,17 @@ export const AdminDashboard: React.FC = () => {
                 <div
                   key={log.id || i}
                   onClick={() => navigate('/activity-log')}
-                  className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--border-radius-base)] hover:bg-[#f8f9fa] transition-colors group cursor-pointer"
+                  className="flex items-start gap-3 px-3 py-2.5 rounded-[var(--border-radius-base)] hover:bg-[var(--color-bg)] transition-colors group cursor-pointer"
                 >
-                  <div className="w-8 h-8 rounded-[var(--border-radius-base)] bg-[#f0f2f5] flex items-center justify-center shrink-0 mt-0.5">
-                    {renderDashboardIcon(ACTION_ICONS[log.action] || 'info', 'text-sm text-slate-500')}
+                  <div className="w-8 h-8 rounded-[var(--border-radius-base)] bg-[var(--color-surface-hover)] flex items-center justify-center shrink-0 mt-0.5">
+                    {renderDashboardIcon(ACTION_ICONS[log.action] || 'info', 'text-sm text-[var(--color-text-muted)]')}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <span className="text-xs font-bold text-[var(--color-text)] truncate">
                         {log.userEmail}
                       </span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#f0f2f5] text-[var(--color-text-muted)] font-bold shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] font-bold shrink-0">
                         {ACTION_LABELS[log.action] || log.action}
                       </span>
                     </div>
@@ -3105,8 +3105,8 @@ export const AdminDashboard: React.FC = () => {
                         <p className="text-sm font-bold text-[var(--color-text)]">{cc.name}</p>
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
                           cc.type === 'indirect'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-blue-100 dark:bg-blue-900/20 text-blue-700'
+                            ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+                            : 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] text-[rgb(var(--color-primary))]'
                         }`}>
                           {cc.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
                         </span>
@@ -3130,13 +3130,13 @@ export const AdminDashboard: React.FC = () => {
                   </thead>
                   <tbody>
                     {costCentersSummary.map((cc, i) => (
-                      <tr key={i} onClick={() => navigate('/accounting/cost-centers')} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
+                      <tr key={i} onClick={() => navigate('/accounting/cost-centers')} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors cursor-pointer">
                         <td className="py-2.5 px-3 font-bold text-sm">{cc.name}</td>
                         <td className="py-2.5 px-3">
                           <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                             cc.type === 'indirect'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-blue-100 dark:bg-blue-900/20 text-blue-700'
+                              ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+                              : 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] text-[rgb(var(--color-primary))]'
                           }`}>
                             {cc.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
                           </span>
@@ -3146,9 +3146,9 @@ export const AdminDashboard: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           {cc.allocated ? (
-                            renderDashboardIcon('check_circle', 'text-emerald-500 text-sm')
+                            renderDashboardIcon('check_circle', 'text-[rgb(var(--color-success))] text-sm')
                           ) : (
-                            renderDashboardIcon('radio_button_unchecked', 'text-[var(--color-text-muted)] dark:text-slate-600 text-sm')
+                            renderDashboardIcon('radio_button_unchecked', 'text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] text-sm')
                           )}
                         </td>
                       </tr>
@@ -3183,13 +3183,13 @@ export const AdminDashboard: React.FC = () => {
                       <p className="text-sm font-bold text-[var(--color-text)]">{row.centerName}</p>
                       <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--color-text-muted)]">
                         <span>أصول {formatNumber(row.assetsCount)}</span>
-                        <span className="font-bold text-violet-600">{formatCost(row.amount)} ج.م</span>
+                        <span className="font-bold text-[rgb(var(--color-secondary))]">{formatCost(row.amount)} ج.م</span>
                       </div>
                     </div>
                   ))}
                   <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-xs">
                     <span className="font-bold text-[var(--color-text-muted)]">الإجمالي: </span>
-                    <span className="font-bold text-violet-600">{formatCost(monthlyDepreciationSummary.total)} ج.م</span>
+                    <span className="font-bold text-[rgb(var(--color-secondary))]">{formatCost(monthlyDepreciationSummary.total)} ج.م</span>
                   </div>
                 </div>
                 <div className="erp-desktop-table hidden overflow-x-auto md:block">
@@ -3203,20 +3203,20 @@ export const AdminDashboard: React.FC = () => {
                   </thead>
                   <tbody>
                     {monthlyDepreciationSummary.rows.map((row) => (
-                      <tr key={row.centerId} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                      <tr key={row.centerId} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                         <td className="py-2.5 px-3 font-bold text-sm text-[var(--color-text)]">{row.centerName}</td>
                         <td className="py-2.5 px-3 text-sm font-bold text-[var(--color-text-muted)]">{formatNumber(row.assetsCount)}</td>
-                        <td className="py-2.5 px-3 text-sm font-bold text-violet-600">{formatCost(row.amount)} ج.م</td>
+                        <td className="py-2.5 px-3 text-sm font-bold text-[rgb(var(--color-secondary))]">{formatCost(row.amount)} ج.م</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr className="border-t border-[var(--color-border)] bg-[#f8f9fa]/60">
+                    <tr className="border-t border-[var(--color-border)] bg-[var(--color-bg)]/60">
                       <td className="py-2.5 px-3 font-bold text-[var(--color-text-muted)]">الإجمالي</td>
                       <td className="py-2.5 px-3 text-sm font-bold text-[var(--color-text-muted)]">
                         {formatNumber(monthlyDepreciationSummary.rows.reduce((sum, row) => sum + row.assetsCount, 0))}
                       </td>
-                      <td className="py-2.5 px-3 text-sm font-bold text-violet-600">{formatCost(monthlyDepreciationSummary.total)} ج.م</td>
+                      <td className="py-2.5 px-3 text-sm font-bold text-[rgb(var(--color-secondary))]">{formatCost(monthlyDepreciationSummary.total)} ج.م</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -3240,11 +3240,11 @@ export const AdminDashboard: React.FC = () => {
             <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topLines} layout="vertical" margin={{ left: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="production" name="الإنتاج" fill="#10b981" radius={[0, 4, 4, 0]} barSize={18} />
+                  <Bar dataKey="production" name="الإنتاج" fill="var(--chart-2)" radius={[0, 4, 4, 0]} barSize={18} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -3261,11 +3261,11 @@ export const AdminDashboard: React.FC = () => {
             <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topProducts} layout="vertical" margin={{ left: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={80} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="production" name="الإنتاج" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={18} />
+                  <Bar dataKey="production" name="الإنتاج" fill="var(--chart-5)" radius={[0, 4, 4, 0]} barSize={18} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -3282,11 +3282,11 @@ export const AdminDashboard: React.FC = () => {
             <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topSupervisors} layout="vertical" margin={{ left: 70 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis type="number" tick={{ fontSize: 11 }} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={90} />
                   <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="production" name="الإنتاج" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={18} />
+                  <Bar dataKey="production" name="الإنتاج" fill="var(--chart-3)" radius={[0, 4, 4, 0]} barSize={18} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -3330,14 +3330,14 @@ export const AdminDashboard: React.FC = () => {
               </thead>
               <tbody>
                 {topProducts.map((p, i) => (
-                  <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors cursor-pointer">
+                  <tr key={i} onClick={() => navigate(`/products/${p.id}`)} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors cursor-pointer">
                     <td className="py-3 px-4 font-bold text-primary">{p.name}</td>
                     <td className="py-3 px-4">{formatNumber(p.production)}</td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
-                        <div className="flex-1 max-w-[120px] h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                        <div className="flex-1 max-w-[120px] h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-violet-500 rounded-full transition-all"
+                            className="h-full bg-[rgb(var(--color-secondary)/0.1)]0 rounded-full transition-all"
                             style={{ width: `${kpis.totalProduction > 0 ? (p.production / kpis.totalProduction) * 100 : 0}%` }}
                           ></div>
                         </div>

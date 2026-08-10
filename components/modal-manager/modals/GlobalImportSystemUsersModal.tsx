@@ -150,14 +150,14 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[96vw] max-w-5xl max-h-[90dvh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold">{t('modalManager.importSystemUsers.title')}</h3>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{t('modalManager.importSystemUsers.subtitle')}</p>
           </div>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors" disabled={creating}>
+          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors" disabled={creating}>
             <X size={20} />
           </button>
         </div>
@@ -179,19 +179,19 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
               {t('modalManager.importSystemUsers.filterAll')}
             </button>
             <button
-              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'pending' ? 'bg-amber-500 text-white border-amber-500' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
+              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'pending' ? 'bg-[rgb(var(--color-warning)/0.1)]0 text-white border-[rgb(var(--color-warning))]' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('pending')}
             >
               {t('modalManager.importSystemUsers.filterPending')}
             </button>
             <button
-              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'created' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
+              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'created' ? 'bg-[rgb(var(--color-success))] text-white border-[rgb(var(--color-success))]' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('created')}
             >
               {t('modalManager.importSystemUsers.filterCreated')}
             </button>
             <button
-              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'error' ? 'bg-rose-600 text-white border-rose-600' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
+              className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'error' ? 'bg-[rgb(var(--color-danger))] text-white border-[rgb(var(--color-danger))]' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('error')}
             >
               {t('modalManager.importSystemUsers.filterErrors')}
@@ -199,7 +199,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
           </div>
 
           {message && (
-            <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs font-bold text-amber-700">
+            <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/80 px-3 py-2 text-xs font-bold text-[rgb(var(--color-warning))]">
               {message}
             </div>
           )}
@@ -215,7 +215,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
 
           <div className="erp-table-scroll">
             <table className="erp-table w-full text-sm">
-              <thead className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
+              <thead className="sticky top-0 z-10" style={{ background: 'var(--color-bg)' }}>
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)]">
                   <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.select')}</th>
                   <th className="text-right py-2.5 px-3">{t('modalManager.importSystemUsers.table.name')}</th>

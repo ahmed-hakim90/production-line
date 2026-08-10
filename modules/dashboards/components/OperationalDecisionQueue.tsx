@@ -44,10 +44,10 @@ type QueueItem = {
 };
 
 function toneClass(tone: QueueItem['tone']): string {
-  if (tone === 'danger') return 'border-rose-200 bg-rose-50/80 text-rose-800 dark:bg-rose-900/15 dark:border-rose-800 dark:text-rose-200';
-  if (tone === 'warning') return 'border-amber-200 bg-amber-50/80 text-amber-800 dark:bg-amber-900/15 dark:border-amber-800 dark:text-amber-200';
-  if (tone === 'ok') return 'border-emerald-200 bg-emerald-50/70 text-emerald-800 dark:bg-emerald-900/15 dark:border-emerald-800 dark:text-emerald-200';
-  return 'border-slate-200 bg-slate-50/80 text-slate-700 dark:bg-slate-900/30 dark:border-slate-700 dark:text-slate-200';
+  if (tone === 'danger') return 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/80 text-[rgb(var(--color-danger))] dark:bg-[rgb(var(--color-danger))]/15 dark:border-[rgb(var(--color-danger)/0.25)] dark:text-[rgb(var(--color-danger))]';
+  if (tone === 'warning') return 'border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/80 text-[rgb(var(--color-warning))] dark:bg-[rgb(var(--color-warning))]/15 dark:border-[rgb(var(--color-warning)/0.25)] dark:text-[rgb(var(--color-warning))]';
+  if (tone === 'ok') return 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/70 text-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success))]/15 dark:border-[rgb(var(--color-success)/0.25)] dark:text-[rgb(var(--color-success))]';
+  return 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] dark:bg-[var(--color-surface-hover)] dark:border-[var(--color-border)] dark:text-[var(--color-text-muted)]';
 }
 
 export const OperationalDecisionQueue: React.FC<Props> = ({
@@ -373,8 +373,8 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
             ))}
           </div>
         ) : compactItems.length === 0 ? (
-          <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/80 px-3 py-6 text-center">
-            <p className="text-xs font-bold text-emerald-700">لا يوجد ما يحتاج متابعة الآن</p>
+          <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/80 px-3 py-6 text-center">
+            <p className="text-xs font-bold text-[rgb(var(--color-success))]">لا يوجد ما يحتاج متابعة الآن</p>
           </div>
         ) : (
           <div className="space-y-1.5">

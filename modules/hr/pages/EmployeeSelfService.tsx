@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Button, Badge } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
+import { useManagedPrint } from '@/utils/printManager';
 import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
 import { createLeaveRequest } from '../usecases/createLeaveRequest';
@@ -14,7 +15,8 @@ import { loanService } from '../loanService';
 import { createRequest, getPendingApprovals, type ApprovalEmployeeInfo, type FirestoreApprovalRequest } from '../approval';
 import { formatPenaltyRequestSummary } from '../approval/penaltyApproval';
 import { getEmployeeLockedPayslip } from '../payroll';
-import { printPayslip } from '../utils/payslipGenerator';
+import { PayslipPrint } from '../components/PayslipPrint';
+import type { PayslipData } from '../utils/payslipGenerator';
 import type { FirestorePayrollRecord } from '../payroll';
 import type {
   FirestoreLeaveRequest,
@@ -107,6 +109,16 @@ export const EmployeeSelfService: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const printTemplate = useAppStore((s) => s.systemSettings?.printTemplate);
+  const printRef = useRef<HTMLDivElement>(null);
+  const [payslipPrintData, setPayslipPrintData] = useState<PayslipData | null>(null);
+  const handleManagedPayslipPrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: payslipPrintData?.record.employeeName
+      ? `كشف-راتب-${payslipPrintData.record.employeeName}`
+      : 'كشف-راتب',
+  });
   const uid = useAppStore((s) => s.uid);
   const permissions = useAppStore((s) => s.userPermissions);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -290,10 +302,13 @@ export const EmployeeSelfService: React.FC = () => {
   const canAccessPayroll = can('payroll.view');
   const handlePrintLockedPayslip = () => {
     if (!lockedPayslip) return;
-    printPayslip({
+    setPayslipPrintData({
       record: lockedPayslip.record,
       month: lockedPayslip.month,
     });
+    window.setTimeout(() => {
+      void handleManagedPayslipPrint();
+    }, 50);
   };
 
   if (!currentEmployee || !currentEmployee.hasSystemAccess) {
@@ -519,7 +534,7 @@ export const EmployeeSelfService: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm transition-all ${
               activeTab === tab.id
                 ? 'bg-primary text-white shadow-primary/20'
-                : 'bg-[#f0f2f5] text-[var(--color-text)] hover:bg-[#e8eaed]'
+                : 'bg-[var(--color-surface-hover)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
@@ -531,9 +546,9 @@ export const EmployeeSelfService: React.FC = () => {
       <OpsDashPanel accent="hr">
       {loading && (
         <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-8 animate-pulse">
-          <div className="h-6 bg-slate-200 rounded w-1/3 mb-4" />
-          <div className="h-4 bg-[#f0f2f5] rounded w-full mb-2" />
-          <div className="h-4 bg-[#f0f2f5] rounded w-4/5" />
+          <div className="h-6 bg-[var(--color-border)] rounded w-1/3 mb-4" />
+          <div className="h-4 bg-[var(--color-surface-hover)] rounded w-full mb-2" />
+          <div className="h-4 bg-[var(--color-surface-hover)] rounded w-4/5" />
         </div>
       )}
 
@@ -546,15 +561,15 @@ export const EmployeeSelfService: React.FC = () => {
             </OpsDashPanel>
             <OpsDashPanel className="p-4">
               <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">حاضر</p>
-              <p className="text-xl font-bold text-emerald-600">{formatNumber(attendanceStats.present)}</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-success))]">{formatNumber(attendanceStats.present)}</p>
             </OpsDashPanel>
             <OpsDashPanel className="p-4">
               <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">غائب</p>
-              <p className="text-xl font-bold text-rose-600">{formatNumber(attendanceStats.absent)}</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-danger))]">{formatNumber(attendanceStats.absent)}</p>
             </OpsDashPanel>
             <OpsDashPanel className="p-4">
               <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">متأخر</p>
-              <p className="text-xl font-bold text-amber-600">{formatNumber(attendanceStats.late)}</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-warning))]">{formatNumber(attendanceStats.late)}</p>
             </OpsDashPanel>
           </div>
           <OpsDashPanel title="سجل الحضور الأخير">
@@ -606,7 +621,7 @@ export const EmployeeSelfService: React.FC = () => {
       {!loading && activeTab === 'approvals' && canViewApprovals && (
         <OpsDashPanel title="طلبات تتطلب إجراءك">
           <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8fafc] p-4">
+            <div className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
               <div>
                 <p className="text-sm font-bold text-[var(--color-text)]">
                   لديك {formatNumber(managerPendingApprovals.length)} طلب يتطلب اعتمادك
@@ -685,8 +700,8 @@ export const EmployeeSelfService: React.FC = () => {
                       <tr key={row.leaveType} className="border-t border-[var(--color-border)]">
                         <td className="p-3 font-bold">{row.label}</td>
                         <td className="p-3">{row.defaultDays == null ? 'غير محدود' : `${formatNumber(row.defaultDays)} يوم`}</td>
-                        <td className="p-3 text-amber-600 font-bold">{formatNumber(row.usedDays)} يوم</td>
-                        <td className="p-3 text-emerald-600 font-bold">
+                        <td className="p-3 text-[rgb(var(--color-warning))] font-bold">{formatNumber(row.usedDays)} يوم</td>
+                        <td className="p-3 text-[rgb(var(--color-success))] font-bold">
                           {row.leaveType === 'unpaid' ? 'غير محدود' : `${formatNumber(row.availableDays)} يوم`}
                         </td>
                         <td className="p-3">{row.lastUsedDate ? formatDateAr(row.lastUsedDate) : '—'}</td>
@@ -727,7 +742,7 @@ export const EmployeeSelfService: React.FC = () => {
                   ))}
                 </select>
               </div>
-              <p className={`text-xs ${selectedLeaveType?.isPaid === false ? 'text-rose-600' : 'text-emerald-600'}`}>
+              <p className={`text-xs ${selectedLeaveType?.isPaid === false ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
                 {selectedLeaveType?.isPaid === false ? 'هذه الإجازة غير مدفوعة وسيتم خصمها من الراتب.' : 'هذه الإجازة مدفوعة ولا ينتج عنها خصم راتب.'}
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -764,10 +779,10 @@ export const EmployeeSelfService: React.FC = () => {
                 />
               </div>
               {leaveSubmitError && (
-                <p className="text-sm text-rose-600">{leaveSubmitError}</p>
+                <p className="text-sm text-[rgb(var(--color-danger))]">{leaveSubmitError}</p>
               )}
               {leaveSubmitSuccess && (
-                <p className="text-sm text-emerald-600">تم إرسال طلب الإجازة بنجاح.</p>
+                <p className="text-sm text-[rgb(var(--color-success))]">تم إرسال طلب الإجازة بنجاح.</p>
               )}
               <Button
                 onClick={handleLeaveSubmit}
@@ -799,7 +814,7 @@ export const EmployeeSelfService: React.FC = () => {
                   </thead>
                   <tbody>
                     {loans.map((loan) => (
-                      <tr key={loan.id} className={`border-t border-[var(--color-border)] ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
+                      <tr key={loan.id} className={`border-t border-[var(--color-border)] ${loan.disbursed ? 'bg-[rgb(var(--color-success)/0.1)]/30 dark:bg-[rgb(var(--color-success))]/5' : ''}`}>
                         <td className="p-3 text-xs font-bold">
                           {(loan.loanType || 'installment') === 'monthly_advance' ? 'شهرية' : 'مقسطة'}
                         </td>
@@ -880,10 +895,10 @@ export const EmployeeSelfService: React.FC = () => {
                 />
               </div>
               {loanSubmitError && (
-                <p className="text-sm text-rose-600">{loanSubmitError}</p>
+                <p className="text-sm text-[rgb(var(--color-danger))]">{loanSubmitError}</p>
               )}
               {loanSubmitSuccess && (
-                <p className="text-sm text-emerald-600">تم إرسال طلب السلفة بنجاح.</p>
+                <p className="text-sm text-[rgb(var(--color-success))]">تم إرسال طلب السلفة بنجاح.</p>
               )}
               <Button
                 onClick={handleLoanSubmit}
@@ -914,11 +929,11 @@ export const EmployeeSelfService: React.FC = () => {
               </div>
             </div>
             {lockedPayslip ? (
-              <div className="rounded-[var(--border-radius-base)] border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+              <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] p-4 space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold text-emerald-800">كشف الراتب المتاح</p>
-                    <p className="text-xs text-emerald-700">
+                    <p className="text-sm font-bold text-[rgb(var(--color-success))]">كشف الراتب المتاح</p>
+                    <p className="text-xs text-[rgb(var(--color-success))]">
                       {formatPayrollMonthLabel(lockedPayslip.month)} (شهر مقفول)
                     </p>
                   </div>
@@ -948,7 +963,7 @@ export const EmployeeSelfService: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-base)] p-3">
+              <p className="text-sm text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-base)] p-3">
                 لا يتوفر كشف راتب الآن. سيظهر بعد قفل كشف الرواتب.
               </p>
             )}
@@ -1013,7 +1028,7 @@ export const EmployeeSelfService: React.FC = () => {
                           {(req.approvalChain as ApprovalChainItem[]).map((item, idx) => (
                             <span
                               key={idx}
-                              className="text-xs px-2 py-0.5 rounded bg-[#f0f2f5] text-[var(--color-text-muted)]"
+                              className="text-xs px-2 py-0.5 rounded bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]"
                               title={item.notes || undefined}
                             >
                               مستوى {item.level}: {APPROVAL_STATUS_LABELS[item.status] ?? item.status}
@@ -1031,6 +1046,9 @@ export const EmployeeSelfService: React.FC = () => {
         </OpsDashPanel>
       )}
       </OpsDashPanel>
+      <div className="hidden" aria-hidden>
+        <PayslipPrint ref={printRef} data={payslipPrintData} printSettings={printTemplate} />
+      </div>
     </ModuleOpsPageShell>
   );
 };

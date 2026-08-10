@@ -304,7 +304,7 @@ const RepairOperationalDashboard: React.FC = () => {
       secondary={(
         <div className="flex flex-wrap gap-2">
           {jobsTruncated ? (
-            <p className="w-full text-xs text-amber-700">
+            <p className="w-full text-xs text-[rgb(var(--color-warning))]">
               المؤشرات من أحدث {num(REPAIR_JOB_DASHBOARD_LIMIT)} طلباً — قد تكون الأرقام ناقصة للمستأجرين الكبار.
             </p>
           ) : null}
@@ -372,7 +372,7 @@ const RepairOperationalDashboard: React.FC = () => {
                 <XAxis type="number" allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" width={88} tick={CHART_TICK} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v: number) => num(v)} />
-                <Bar dataKey="count" name="العدد" fill="#0ea5e9" radius={[0, 8, 8, 0]} barSize={12} />
+                <Bar dataKey="count" name="العدد" fill="var(--chart-1)" radius={[0, 8, 8, 0]} barSize={12} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -385,7 +385,7 @@ const RepairOperationalDashboard: React.FC = () => {
                 <XAxis dataKey="name" interval={0} angle={-18} textAnchor="end" height={56} tick={CHART_TICK} axisLine={false} tickLine={false} />
                 <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
                 <Tooltip formatter={(v: number) => num(v)} />
-                <Bar dataKey="count" name="العدد" fill="#6366f1" radius={[8, 8, 0, 0]} barSize={16} />
+                <Bar dataKey="count" name="العدد" fill="var(--chart-5)" radius={[8, 8, 0, 0]} barSize={16} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -399,7 +399,7 @@ const RepairOperationalDashboard: React.FC = () => {
               <PieChart>
                 <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={44} outerRadius={78} paddingAngle={2}>
                   {statusChartData.map((entry) => (
-                    <Cell key={entry.key} fill={repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b'} />
+                    <Cell key={entry.key} fill={repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || 'var(--color-text-muted)'} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -414,7 +414,7 @@ const RepairOperationalDashboard: React.FC = () => {
           <div className="mt-2 flex flex-wrap gap-1.5">
             {statusChartData.map((entry) => (
               <Badge key={entry.key} variant="outline" className="gap-1 text-[10px]">
-                <span className="inline-block h-2 w-2 rounded-full" style={{ background: repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b' }} />
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || 'var(--color-text-muted)' }} />
                 {entry.name}: {num(entry.value)}
               </Badge>
             ))}
@@ -428,8 +428,8 @@ const RepairOperationalDashboard: React.FC = () => {
                 <XAxis dataKey="day" tick={CHART_TICK} axisLine={false} tickLine={false} />
                 <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
                 <Tooltip formatter={(value: number) => num(value)} />
-                <Line type="monotone" dataKey="created" name="وارد" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 2 }} />
-                <Line type="monotone" dataKey="delivered" name="تسليم" stroke="#059669" strokeWidth={2.5} dot={{ r: 2 }} />
+                <Line type="monotone" dataKey="created" name="وارد" stroke="var(--chart-1)" strokeWidth={2.5} dot={{ r: 2 }} />
+                <Line type="monotone" dataKey="delivered" name="تسليم" stroke="var(--color-success-hex)" strokeWidth={2.5} dot={{ r: 2 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -444,7 +444,7 @@ const RepairOperationalDashboard: React.FC = () => {
               <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
               <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
               <Tooltip formatter={(v: number) => num(v)} />
-              <Bar dataKey="value" name="العدد" fill="#d97706" radius={[8, 8, 0, 0]} barSize={22} />
+              <Bar dataKey="value" name="العدد" fill="var(--color-warning-hex)" radius={[8, 8, 0, 0]} barSize={22} />
             </BarChart>
           </ResponsiveContainer>
         </div>

@@ -442,10 +442,10 @@ export const ProductionWorkerDetails: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KPIBox label="أيام حضور" value={formatNumber(periodPresence.present)} icon="check_circle" colorClass="bg-emerald-50 text-emerald-600" />
-        <KPIBox label="أيام غياب" value={formatNumber(periodPresence.absent)} icon="cancel" colorClass="bg-rose-50 text-rose-600" />
-        <KPIBox label="نسبة الحضور" value={`${periodPresence.percentage}%`} icon="groups" colorClass="bg-blue-50 text-blue-600" />
-        <KPIBox label="أيام بدون هدف" value={formatNumber(periodPresence.noTarget)} icon="flag" colorClass="bg-amber-50 text-amber-600" />
+        <KPIBox label="أيام حضور" value={formatNumber(periodPresence.present)} icon="check_circle" colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]" />
+        <KPIBox label="أيام غياب" value={formatNumber(periodPresence.absent)} icon="cancel" colorClass="bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]" />
+        <KPIBox label="نسبة الحضور" value={`${periodPresence.percentage}%`} icon="groups" colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]" />
+        <KPIBox label="أيام بدون هدف" value={formatNumber(periodPresence.noTarget)} icon="flag" colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]" />
       </div>
 
       <OpsDashPanel title="الملف الشخصي" accent="production">

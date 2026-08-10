@@ -65,7 +65,7 @@ function getMonthKey(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-const inputCls = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2.5 text-sm font-medium bg-[#f8f9fa] outline-none focus:border-primary focus:ring-2 focus:ring-primary/12';
+const inputCls = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2.5 text-sm font-medium bg-[var(--color-bg)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/12';
 const labelCls = 'block text-xs font-bold text-[var(--color-text-muted)] mb-1';
 
 // ─── Multi-Employee Selector ────────────────────────────────────────────────
@@ -99,11 +99,11 @@ const EmployeePicker: React.FC<EmployeePickerProps> = ({ employees, selected, on
 
   return (
     <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
-      <div className="p-3 bg-[#f8f9fa] border-b border-[var(--color-border)] flex items-center gap-3">
+      <div className="p-3 bg-[var(--color-bg)] border-b border-[var(--color-border)] flex items-center gap-3">
         <span className="material-icons-round text-[var(--color-text-muted)] text-lg">search</span>
         <input
           type="text"
-          className="flex-1 bg-transparent text-sm outline-none placeholder-slate-400"
+          className="flex-1 bg-transparent text-sm outline-none placeholder:text-[var(--color-text-muted)]"
           placeholder="بحث بالاسم أو الكود..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -121,7 +121,7 @@ const EmployeePicker: React.FC<EmployeePickerProps> = ({ employees, selected, on
         {filtered.map((e) => (
           <label
             key={e.id}
-            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-[#f8f9fa] ${
+            className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors hover:bg-[var(--color-bg)] ${
               selected.includes(e.id!) ? 'bg-primary/5' : ''
             }`}
           >
@@ -132,12 +132,12 @@ const EmployeePicker: React.FC<EmployeePickerProps> = ({ employees, selected, on
               className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary shrink-0"
             />
             <span className="text-sm font-bold flex-1">{e.name}</span>
-            {e.code && <span className="text-xs font-mono text-slate-400">{e.code}</span>}
-            <span className="text-xs text-slate-400">{formatCurrency(e.baseSalary)}</span>
+            {e.code && <span className="text-xs font-mono text-[var(--color-text-muted)]">{e.code}</span>}
+            <span className="text-xs text-[var(--color-text-muted)]">{formatCurrency(e.baseSalary)}</span>
           </label>
         ))}
         {filtered.length === 0 && (
-          <div className="p-6 text-center text-sm text-slate-400">لا توجد نتائج</div>
+          <div className="p-6 text-center text-sm text-[var(--color-text-muted)]">لا توجد نتائج</div>
         )}
       </div>
     </div>
@@ -544,7 +544,7 @@ export const EmployeeFinancials: React.FC = () => {
     >
       <OpsDashPanel title="التبويبات والفلاتر" accent="hr">
         <div className="flex flex-col gap-3">
-          <div className="flex gap-1 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] overflow-x-auto">
+          <div className="flex gap-1 bg-[var(--color-surface-hover)] p-1 rounded-[var(--border-radius-lg)] overflow-x-auto">
             {TAB_CONFIG.map((tab) => (
               <button
                 key={tab.key}
@@ -552,7 +552,7 @@ export const EmployeeFinancials: React.FC = () => {
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all whitespace-nowrap ${
                   activeTab === tab.key
                     ? 'bg-[var(--color-card)] text-primary'
-                    : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
                 }`}
               >
                 <span className="material-icons-round text-sm">{tab.icon}</span>
@@ -586,7 +586,7 @@ export const EmployeeFinancials: React.FC = () => {
             <button
               type="button"
               onClick={() => setShowBulkForm(false)}
-              className="p-1 text-[var(--color-text-muted)] hover:text-slate-600 rounded-[var(--border-radius-base)]"
+              className="p-1 text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] rounded-[var(--border-radius-base)]"
               aria-label="إغلاق"
             >
               <span className="material-icons-round">close</span>
@@ -665,7 +665,7 @@ export const EmployeeFinancials: React.FC = () => {
                 </div>
                 <div>
                   <label className={labelCls}>عدد الأقساط</label>
-                  <input type="text" readOnly className={inputCls + ' !bg-[#f0f2f5] dark:!bg-slate-900'} value={bLoanAmount > 0 && bLoanInstallment > 0 ? Math.max(1, Math.round(bLoanAmount / bLoanInstallment)) : '—'} />
+                  <input type="text" readOnly className={inputCls + ' !bg-[var(--color-surface-hover)] dark:!bg-[var(--color-card)]'} value={bLoanAmount > 0 && bLoanInstallment > 0 ? Math.max(1, Math.round(bLoanAmount / bLoanInstallment)) : '—'} />
                 </div>
               </div>
             )}
@@ -752,8 +752,8 @@ export const EmployeeFinancials: React.FC = () => {
                       return (
                         <tr key={empId} className="border-t border-[var(--color-border)]">
                           <td className="py-2.5 px-3 font-bold">{emp.name}</td>
-                          <td className="py-2.5 px-3 font-mono text-xs text-slate-400">{emp.code || '—'}</td>
-                          <td className="py-2.5 px-3 text-slate-600">{formatCurrency(emp.baseSalary)}</td>
+                          <td className="py-2.5 px-3 font-mono text-xs text-[var(--color-text-muted)]">{emp.code || '—'}</td>
+                          <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{formatCurrency(emp.baseSalary)}</td>
                           {activeTab !== 'leaves' && (
                             <td className="py-2.5 px-3">
                               <input
@@ -769,7 +769,7 @@ export const EmployeeFinancials: React.FC = () => {
                           <td className="py-2.5 px-3 text-center">
                             <button
                               onClick={() => setSelectedEmps((prev) => prev.filter((x) => x !== empId))}
-                              className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded"
+                              className="p-1 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] rounded"
                             >
                               <span className="material-icons-round text-lg">close</span>
                             </button>
@@ -785,13 +785,13 @@ export const EmployeeFinancials: React.FC = () => {
 
           {/* Messages */}
           {bulkError && (
-            <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] text-sm text-rose-700 font-medium flex items-center gap-2">
+            <div className="mb-4 p-3 bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] text-sm text-[rgb(var(--color-danger))] font-medium flex items-center gap-2">
               <span className="material-icons-round text-sm">error</span>
               {bulkError}
             </div>
           )}
           {bulkSuccess && (
-            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] text-sm text-emerald-700 font-medium flex items-center gap-2">
+            <div className="mb-4 p-3 bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] text-sm text-[rgb(var(--color-success))] font-medium flex items-center gap-2">
               <span className="material-icons-round text-sm">check_circle</span>
               {bulkSuccess}
             </div>
@@ -815,8 +815,8 @@ export const EmployeeFinancials: React.FC = () => {
         <OpsDashPanel title="البدلات" accent="hr">
           {filteredAllowances.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">card_giftcard</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد بدلات</p>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">card_giftcard</span>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد بدلات</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -833,16 +833,16 @@ export const EmployeeFinancials: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredAllowances.map((a) => (
-                    <tr key={a.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                    <tr key={a.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(a.employeeId)}</td>
                       <td className="py-3 px-3">{a.allowanceTypeName}</td>
-                      <td className="py-3 px-3 font-mono font-bold text-emerald-600">+{formatCurrency(a.amount)}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-[rgb(var(--color-success))]">+{formatCurrency(a.amount)}</td>
                       <td className="py-3 px-3"><Badge variant={a.isRecurring ? 'info' : 'neutral'}>{a.isRecurring ? 'متكرر' : 'مرة واحدة'}</Badge></td>
                       <td className="py-3 px-3 font-mono text-xs">{a.startMonth}</td>
                       <td className="py-3 px-3">
                         <div className="flex gap-1">
-                          {a.isRecurring && <button onClick={() => handleStopAllowance(a.id!)} className="p-1 text-amber-500 hover:text-amber-700 rounded" title="إيقاف"><span className="material-icons-round text-lg">pause_circle</span></button>}
-                          <button onClick={() => handleDeleteAllowance(a.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
+                          {a.isRecurring && <button onClick={() => handleStopAllowance(a.id!)} className="p-1 text-[rgb(var(--color-warning))] hover:text-[rgb(var(--color-warning))] rounded" title="إيقاف"><span className="material-icons-round text-lg">pause_circle</span></button>}
+                          <button onClick={() => handleDeleteAllowance(a.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
                         </div>
                       </td>
                     </tr>
@@ -859,8 +859,8 @@ export const EmployeeFinancials: React.FC = () => {
         <OpsDashPanel title="الخصومات" accent="hr">
           {filteredDeductions.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">money_off</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد خصومات</p>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">money_off</span>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد خصومات</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -878,17 +878,17 @@ export const EmployeeFinancials: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredDeductions.map((d) => (
-                    <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                    <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(d.employeeId)}</td>
                       <td className="py-3 px-3">{d.deductionTypeName}</td>
-                      <td className="py-3 px-3 font-mono font-bold text-rose-600">-{formatCurrency(d.amount)}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-[rgb(var(--color-danger))]">-{formatCurrency(d.amount)}</td>
                       <td className="py-3 px-3"><Badge variant="neutral">{DEDUCTION_CATEGORIES[d.category] || d.category}</Badge></td>
                       <td className="py-3 px-3"><Badge variant={d.isRecurring ? 'info' : 'neutral'}>{d.isRecurring ? 'متكرر' : 'مرة واحدة'}</Badge></td>
                       <td className="py-3 px-3 text-xs text-[var(--color-text-muted)] max-w-[200px] truncate">{d.reason || '—'}</td>
                       <td className="py-3 px-3">
                         <div className="flex gap-1">
-                          {d.isRecurring && <button onClick={() => handleStopDeduction(d.id!)} className="p-1 text-amber-500 hover:text-amber-700 rounded" title="إيقاف"><span className="material-icons-round text-lg">pause_circle</span></button>}
-                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
+                          {d.isRecurring && <button onClick={() => handleStopDeduction(d.id!)} className="p-1 text-[rgb(var(--color-warning))] hover:text-[rgb(var(--color-warning))] rounded" title="إيقاف"><span className="material-icons-round text-lg">pause_circle</span></button>}
+                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
                         </div>
                       </td>
                     </tr>
@@ -905,8 +905,8 @@ export const EmployeeFinancials: React.FC = () => {
         <OpsDashPanel title="السُلف" accent="hr">
           {filteredLoans.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">payments</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد سُلف</p>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">payments</span>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد سُلف</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -925,10 +925,10 @@ export const EmployeeFinancials: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredLoans.map((l) => (
-                    <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                    <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(l.employeeId)}</td>
                       <td className="py-3 px-3 text-xs">{l.loanType === 'monthly_advance' ? 'شهرية' : 'مقسطة'}</td>
-                      <td className="py-3 px-3 font-mono font-bold text-amber-600">{formatCurrency(l.loanAmount)}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-[rgb(var(--color-warning))]">{formatCurrency(l.loanAmount)}</td>
                       <td className="py-3 px-3">{formatCurrency(l.installmentAmount)}</td>
                       <td className="py-3 px-3">{l.remainingInstallments}/{l.totalInstallments}</td>
                       <td className="py-3 px-3 font-mono text-xs">{l.month || l.startMonth}</td>
@@ -954,8 +954,8 @@ export const EmployeeFinancials: React.FC = () => {
         <OpsDashPanel title="الإجازات" accent="hr">
           {filteredLeaves.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">beach_access</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد إجازات</p>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">beach_access</span>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد إجازات</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -973,7 +973,7 @@ export const EmployeeFinancials: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredLeaves.map((l) => (
-                    <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                    <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(l.employeeId)}</td>
                       <td className="py-3 px-3">{leaveTypeByKey[l.leaveType]?.label || l.leaveTypeLabel || LEAVE_TYPE_LABELS[l.leaveType] || l.leaveType}</td>
                       <td className="py-3 px-3 font-mono text-xs">{l.startDate}</td>
@@ -999,8 +999,8 @@ export const EmployeeFinancials: React.FC = () => {
         <OpsDashPanel title="الجزاءات" accent="hr">
           {filteredDeductions.length === 0 ? (
             <div className="text-center py-12">
-              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">gavel</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد جزاءات تأديبية</p>
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">gavel</span>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد جزاءات تأديبية</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1018,16 +1018,16 @@ export const EmployeeFinancials: React.FC = () => {
                 </thead>
                 <tbody>
                   {filteredDeductions.map((d) => (
-                    <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                    <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                       <td className="py-3 px-3 font-bold">{getEmpName(d.employeeId)}</td>
                       <td className="py-3 px-3">{d.deductionTypeName}</td>
-                      <td className="py-3 px-3 font-mono font-bold text-rose-600">-{formatCurrency(d.amount)}</td>
+                      <td className="py-3 px-3 font-mono font-bold text-[rgb(var(--color-danger))]">-{formatCurrency(d.amount)}</td>
                       <td className="py-3 px-3 font-mono text-xs">{d.startMonth}</td>
                       <td className="py-3 px-3 text-xs text-[var(--color-text-muted)] max-w-[200px] truncate">{d.reason || '—'}</td>
                       <td className="py-3 px-3"><Badge variant={d.status === 'active' ? 'success' : 'neutral'}>{d.status === 'active' ? 'نشط' : 'متوقف'}</Badge></td>
                       <td className="py-3 px-3">
                         <div className="flex gap-1">
-                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-rose-500 rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
+                          <button onClick={() => handleDeleteDeduction(d.id!)} className="p-1 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] rounded" title="حذف"><span className="material-icons-round text-lg">delete</span></button>
                         </div>
                       </td>
                     </tr>

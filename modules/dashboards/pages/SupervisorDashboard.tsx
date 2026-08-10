@@ -572,7 +572,7 @@ export const SupervisorDashboard: React.FC = () => {
                 <Bar
                   dataKey="value"
                   name="الإنتاج"
-                  fill="var(--color-primary, #2563eb)"
+                  fill="var(--color-primary-hex)"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
@@ -614,10 +614,10 @@ export const SupervisorDashboard: React.FC = () => {
             <span
               className={
                 activePlan.progress >= 80
-                  ? 'text-emerald-600'
+                  ? 'text-[rgb(var(--color-success))]'
                   : activePlan.progress >= 50
-                    ? 'text-blue-600'
-                    : 'text-amber-600'
+                    ? 'text-[rgb(var(--color-primary))]'
+                    : 'text-[rgb(var(--color-warning))]'
               }
             >
               {activePlan.progress}%
@@ -627,10 +627,10 @@ export const SupervisorDashboard: React.FC = () => {
             <div
               className={`h-full rounded-full ${
                 activePlan.progress >= 80
-                  ? 'bg-emerald-500'
+                  ? 'bg-[rgb(var(--color-success)/0.1)]0'
                   : activePlan.progress >= 50
-                    ? 'bg-blue-500'
-                    : 'bg-amber-500'
+                    ? 'bg-[rgb(var(--color-primary)/0.1)]0'
+                    : 'bg-[rgb(var(--color-warning)/0.1)]0'
               }`}
               style={{ width: `${Math.min(activePlan.progress, 100)}%` }}
             />
@@ -642,13 +642,13 @@ export const SupervisorDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-[10px] font-bold text-[var(--color-text-muted)]">منتَج ({periodLabel})</p>
-              <p className="text-sm font-bold tabular-nums text-blue-600">
+              <p className="text-sm font-bold tabular-nums text-[rgb(var(--color-primary))]">
                 {formatNumber(activePlan.periodProduced)}
               </p>
             </div>
             <div>
               <p className="text-[10px] font-bold text-[var(--color-text-muted)]">المتبقي</p>
-              <p className="text-sm font-bold tabular-nums text-amber-600">
+              <p className="text-sm font-bold tabular-nums text-[rgb(var(--color-warning))]">
                 {formatNumber(activePlan.globalRemaining)}
               </p>
             </div>
@@ -692,7 +692,7 @@ export const SupervisorDashboard: React.FC = () => {
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-amber-600">
+                        <span className="font-mono text-xs font-bold text-[rgb(var(--color-warning))]">
                           #{wo.workOrderNumber}
                         </span>
                         <StatusBadge label={STATUS_LABELS[wo.status] || wo.status} />

@@ -48,19 +48,20 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
     _defaultRoles = [
       {
         name: 'مدير النظام',
-        color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+        color: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] dark:bg-[rgb(var(--color-danger)/0.2)] dark:text-[rgb(var(--color-danger))]',
         permissions: allPerms(true),
         roleKey: 'admin',
       },
       {
         name: 'مدير المصنع',
-        color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+        color: 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.2)] dark:text-[rgb(var(--color-primary))]',
         permissions: permsFrom([
           'dashboard.view',
           'employeeDashboard.view',
           'products.view',
           'products.create',
           'products.edit',
+          'products.sellingPrice.view',
           'lines.view',
           'employees.view',
           'employees.viewDetails',
@@ -117,7 +118,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'مشرف الصالة',
-        color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+        color: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] dark:bg-[rgb(var(--color-warning)/0.2)] dark:text-[rgb(var(--color-warning))]',
         permissions: permsFrom([
           'dashboard.view',
           'employeeDashboard.view',
@@ -165,7 +166,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'مشرف',
-        color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+        color: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success)/0.2)] dark:text-[rgb(var(--color-success))]',
         permissions: permsFrom([
           'dashboard.view',
           'employeeDashboard.view',
@@ -188,7 +189,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'مدير الموارد البشرية',
-        color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+        color: 'bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary)/0.2)] dark:text-[rgb(var(--color-secondary))]',
         permissions: permsFrom([
           'dashboard.view',
           'hrDashboard.view',
@@ -231,7 +232,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'محاسب',
-        color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+        color: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success)/0.2)] dark:text-[rgb(var(--color-success))]',
         permissions: permsFrom([
           'dashboard.view',
           'hrDashboard.view',
@@ -257,7 +258,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'مسؤول مخزن المستلزمات',
-        color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+        color: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] dark:bg-[rgb(var(--color-warning)/0.2)] dark:text-[rgb(var(--color-warning))]',
         permissions: permsFrom([
           'dashboard.view',
           'inventory.view',
@@ -309,7 +310,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'مسؤول مخزن قطع الغيار المركزي',
-        color: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300',
+        color: 'bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary)/0.2)] dark:text-[rgb(var(--color-secondary))]',
         permissions: permsFrom([
           'dashboard.view',
           'inventory.view',
@@ -338,7 +339,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'مسؤول مخزن مركز صيانة',
-        color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+        color: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success)/0.2)] dark:text-[rgb(var(--color-success))]',
         permissions: permsFrom([
           'dashboard.view',
           'inventory.view',
@@ -365,7 +366,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
       },
       {
         name: 'عرض مخزون فقط',
-        color: 'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300',
+        color: 'bg-[var(--color-surface-hover)] text-[var(--color-text)] dark:bg-[var(--color-card)] dark:text-[var(--color-text-muted)]',
         permissions: permsFrom([
           'dashboard.view',
           'inventory.view',
@@ -444,6 +445,10 @@ const FACTORY_MANAGER_PRODUCTION_WORKER_PERMS: Permission[] = [
   'reports.componentInjection.manage',
   'products.create',
   'products.edit',
+  'products.sellingPrice.view',
+  'bom.view',
+  'bom.manage',
+  'costs.view',
 ];
 
 const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [
@@ -451,6 +456,7 @@ const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [
   'production.workers.view',
   'production.workerReports.view',
   'production.workerRatings.view',
+  'bom.view',
 ];
 
 const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permission[]> = {
@@ -462,6 +468,7 @@ const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permis
   ],
   hall_supervisor: HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS,
   materials_warehouse: [
+    'bom.view',
     'departmentConsumables.view',
     'departmentConsumables.create',
     'departmentConsumables.approve',

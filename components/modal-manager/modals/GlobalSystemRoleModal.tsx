@@ -21,14 +21,14 @@ import { ManagedModalPortal } from '../ManagedModalPortal';
 import { useTranslation } from 'react-i18next';
 
 const COLOR_OPTIONS = [
-  { key: 'red', value: 'bg-rose-100 text-rose-700' },
-  { key: 'blue', value: 'bg-blue-100 text-blue-700' },
-  { key: 'orange', value: 'bg-amber-100 text-amber-700' },
-  { key: 'green', value: 'bg-emerald-100 text-emerald-700' },
-  { key: 'purple', value: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
-  { key: 'pink', value: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400' },
-  { key: 'cyan', value: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400' },
-  { key: 'gray', value: 'bg-[#f0f2f5] text-[var(--color-text)]/30' },
+  { key: 'red', value: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' },
+  { key: 'blue', value: 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]' },
+  { key: 'orange', value: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' },
+  { key: 'green', value: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' },
+  { key: 'purple', value: 'bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary))]/30 dark:text-[rgb(var(--color-secondary))]' },
+  { key: 'pink', value: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] dark:bg-[rgb(var(--color-danger))]/30 dark:text-[rgb(var(--color-danger))]' },
+  { key: 'cyan', value: 'bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary))]/30 dark:text-[rgb(var(--color-secondary))]' },
+  { key: 'gray', value: 'bg-[var(--color-surface-hover)] text-[var(--color-text)]/30' },
 ];
 
 type RoleModalPayload = {
@@ -55,7 +55,7 @@ function CrudCell({
   label: string;
 }) {
   if (disabled || !onToggle) {
-    return <span className="text-[10px] text-slate-300">—</span>;
+    return <span className="text-[10px] text-[var(--color-text-muted)]">—</span>;
   }
   return (
     <label className="inline-flex items-center justify-center gap-1 cursor-pointer" title={label}>
@@ -175,7 +175,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-start justify-center p-4 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-start justify-center p-4 sm:p-6 overflow-y-auto"
       onClick={handleClose}
     >
       <div
@@ -199,7 +199,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
           <button
             type="button"
             onClick={handleClose}
-            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] transition-all"
+            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-all"
           >
             <X size={18} />
           </button>
@@ -237,7 +237,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
           </div>
 
           {saveMsg && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
               {saveMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <p className="flex-1">{saveMsg.text}</p>
               <button type="button" onClick={() => setSaveMsg(null)}>
@@ -252,8 +252,8 @@ export const GlobalSystemRoleModal: React.FC = () => {
               const someEnabled = group.permissions.some((p) => editPerms[p.key]);
               const groupCount = group.permissions.filter((p) => editPerms[p.key]).length;
               return (
-                <div key={group.key} className="bg-[#f8f9fa]/60 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
-                  <label className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[#f0f2f5]/50 transition-colors">
+                <div key={group.key} className="bg-[var(--color-bg)]/60 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
+                  <label className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--color-surface-hover)]/50 transition-colors">
                     <input
                       type="checkbox"
                       checked={allEnabled}
@@ -264,7 +264,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                       className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                     />
                     <span className="flex-1 text-sm font-bold text-[var(--color-text)]">{group.label}</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${groupCount > 0 ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-400'}`}>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${groupCount > 0 ? 'bg-primary/10 text-primary' : 'bg-[var(--color-border)] text-[var(--color-text-muted)]'}`}>
                       {groupCount}/{group.permissions.length}
                     </span>
                   </label>
@@ -313,7 +313,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                               })}
                               <td className="py-2 px-2">
                                 {resource.actions.length === 0 ? (
-                                  <span className="text-[10px] text-slate-300">—</span>
+                                  <span className="text-[10px] text-[var(--color-text-muted)]">—</span>
                                 ) : (
                                   <div className="flex flex-wrap gap-1.5">
                                     {resource.actions.map((action) => (
@@ -322,7 +322,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                                         className={`inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer transition-all ${
                                           editPerms[action.key]
                                             ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'
+                                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
                                         }`}
                                       >
                                         <input
@@ -349,7 +349,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-t border-[var(--color-border)] bg-[#f8f9fa] shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-t border-[var(--color-border)] bg-[var(--color-bg)] shrink-0">
           <span className="text-xs text-[var(--color-text-muted)] font-bold">
             {t('modalManager.systemRole.enabledPermissionsCount', { enabled: enabledCount, total: ALL_PERMISSIONS.length })}
           </span>

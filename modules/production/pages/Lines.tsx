@@ -306,7 +306,7 @@ export const Lines: React.FC = () => {
     >
       {productionLines.length === 0 ? (
         <OpsDashPanel title="لا توجد خطوط" accent="production">
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
             <p className="font-bold text-lg">لا توجد خطوط إنتاج بعد</p>
             <p className="text-sm mt-1">
@@ -333,8 +333,8 @@ export const Lines: React.FC = () => {
             quickFilterValues={{ status: statusFilter }}
             onQuickFilterChange={(_, value) => setStatusFilter(value as 'all' | ProductionLineStatus)}
             extra={(
-              <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
-                إجمالي الخطوط: <span className="mx-1 font-semibold text-slate-700">{formatNumber(filteredLines.length)}</span>
+              <div className="inline-flex h-[34px] items-center rounded-lg border border-[var(--color-border)] px-2.5 text-xs text-[var(--color-text-muted)]">
+                إجمالي الخطوط: <span className="mx-1 font-semibold text-[var(--color-text)]">{formatNumber(filteredLines.length)}</span>
               </div>
             )}
             className="mb-3"
@@ -370,7 +370,7 @@ export const Lines: React.FC = () => {
                         <div className="font-bold text-[var(--color-text)] flex flex-wrap items-center gap-2">
                           {line.name}
                           {raw?.isPackagingLine ? (
-                            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md bg-violet-100 text-violet-800 border border-violet-200">
+                            <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-md bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] border border-[rgb(var(--color-secondary)/0.25)]">
                               تغليف
                             </span>
                           ) : null}
@@ -393,7 +393,7 @@ export const Lines: React.FC = () => {
                           <div className="erp-progress-wrap flex-1">
                             <div className={`erp-progress-bar ${efficiency >= 80 ? 'success' : ''}`} style={{ width: `${efficiency}%` }} />
                           </div>
-                          <span className={`text-xs font-bold ${efficiency >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          <span className={`text-xs font-bold ${efficiency >= 80 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-warning))]'}`}>
                             {efficiency}%
                           </span>
                         </div>
@@ -416,7 +416,7 @@ export const Lines: React.FC = () => {
                           {linePerms.canDelete && (
                             <button
                               onClick={() => setDeleteConfirmId(line.id)}
-                              className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all"
+                              className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/10 rounded-[var(--border-radius-base)] transition-all"
                               title="حذف"
                             >
                               <span className="material-icons-round text-lg">delete</span>
@@ -444,17 +444,17 @@ export const Lines: React.FC = () => {
       {/* â”€â”€ Add / Edit Modal â”€â”€ */}
       {showModal && (linePerms.canCreate || linePerms.canEdit) && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">{editId ? 'تعديل خط الإنتاج' : 'إضافة خط إنتاج جديد'}</h3>
-              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
             <div className="p-6 space-y-5">
               {saveMsg && (
-                <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+                <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
                   <span className="material-icons-round text-base">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
                   <p className="flex-1">{saveMsg.text}</p>
                   <button onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
@@ -472,12 +472,12 @@ export const Lines: React.FC = () => {
                   placeholder={suggestedCode || buildGenericLineCode()}
                 />
                 {!form.code?.trim() && suggestedCode && (
-                  <p className="text-[11px] font-bold text-slate-500">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)]">
                     سيتم توليد الكود تلقائيًا: <span className="text-primary">{suggestedCode}</span>
                   </p>
                 )}
                 {!form.code?.trim() && !suggestedCode && (
-                  <p className="text-[11px] font-bold text-slate-500">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)]">
                     سيتم توليد كود تلقائيًا: <span className="text-primary">{buildGenericLineCode()}</span>
                   </p>
                 )}
@@ -538,7 +538,7 @@ export const Lines: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/80 px-4 py-3 cursor-pointer">
+              <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/80 px-4 py-3 cursor-pointer">
                 <input
                   type="checkbox"
                   className="mt-0.5 size-4 rounded border-[var(--color-border)]"
@@ -569,10 +569,10 @@ export const Lines: React.FC = () => {
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && linePerms.canDelete && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
+            <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="material-icons-round text-[rgb(var(--color-danger))] text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد الحذف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا الخط؟ لا يمكن التراجع عن هذا الإجراء.</p>
@@ -590,14 +590,14 @@ export const Lines: React.FC = () => {
       {/* â”€â”€ Set Target Modal â”€â”€ */}
       {targetModal && lineStatusPerms.canEdit && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold">تعيين هدف اليوم</h3>
                 <p className="text-xs text-[var(--color-text-muted)] font-medium mt-0.5">{targetModal.lineName}</p>
               </div>
-              <button onClick={() => setTargetModal(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+              <button onClick={() => setTargetModal(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -626,7 +626,7 @@ export const Lines: React.FC = () => {
                   onChange={(e) => setTargetForm({ ...targetForm, targetTodayQty: Number(e.target.value) })}
                   placeholder="مثال: 500 (إجمالي الخط — ليس لكل عامل)"
                 />
-                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                <p className="text-xs text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))] leading-relaxed">
                   هذا الحقل <strong>إجمالي إنتاج الخط</strong> لمتابعة الخط على اللوحة — وليس هدف العامل.
                   لضبط <strong>كمية كل عامل</strong> (مثلاً 50 قطعة/عامل) وقياس الإنجاز في تقرير الإنتاج،
                   افتح <strong>تفاصيل الخط</strong> ← «كمية إنتاج العامل (منتج × خط)».

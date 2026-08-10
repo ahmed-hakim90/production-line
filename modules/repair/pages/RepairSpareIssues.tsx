@@ -387,21 +387,21 @@ export const RepairSpareIssues: React.FC = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b bg-slate-50/60">
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">الحالة</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b bg-[var(--color-bg)]">
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">الحالة</p>
                   <p className="mt-1 text-sm font-black">{REPAIR_SPARE_ISSUE_STATUS_LABELS[selected.status]}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">وضع الاعتماد</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">وضع الاعتماد</p>
                   <p className="mt-1 text-sm font-black">{REPAIR_SPARE_APPROVAL_MODE_LABELS[selected.approvalMode]}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">الفرع</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">الفرع</p>
                   <p className="mt-1 text-sm font-black">{selected.branchName}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">المخزن</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">المخزن</p>
                   <p className="mt-1 text-sm font-black">{selected.warehouseName}</p>
                 </div>
               </div>
@@ -440,7 +440,7 @@ export const RepairSpareIssues: React.FC = () => {
                               ))
                               : 'بدون رفوف'}
                             {line.shortageQty && line.shortageQty > 0 ? (
-                              <p className="text-rose-600 mt-1">نقص: {fmt(line.shortageQty)}</p>
+                              <p className="text-[rgb(var(--color-danger))] mt-1">نقص: {fmt(line.shortageQty)}</p>
                             ) : null}
                           </td>
                         </tr>
@@ -472,7 +472,7 @@ export const RepairSpareIssues: React.FC = () => {
                 className={`min-h-9 flex-1 rounded-lg border px-2 py-1.5 text-xs font-bold sm:flex-none sm:px-3 ${
                   listTab === key
                     ? 'border-primary bg-primary text-white'
-                    : 'border-slate-200 bg-white text-slate-600'
+                    : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)]'
                 }`}
               >
                 {label}

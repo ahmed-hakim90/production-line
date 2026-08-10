@@ -60,7 +60,7 @@ export const ProductBomCountCardPreviewModal: React.FC<ProductBomCountCardPrevie
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5] transition-colors"
+            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
             title="إغلاق"
           >
             <X className="size-4" />
@@ -68,12 +68,12 @@ export const ProductBomCountCardPreviewModal: React.FC<ProductBomCountCardPrevie
         </div>
 
         {warningText && (
-          <div className="px-5 py-2.5 border-b border-amber-200 bg-amber-50 text-amber-900 text-xs font-bold">
+          <div className="px-5 py-2.5 border-b border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] text-xs font-bold">
             {warningText}
           </div>
         )}
 
-        <div className="p-3 sm:p-5 overflow-auto flex-1" style={{ background: '#f8f9fa' }}>
+        <div className="p-3 sm:p-5 overflow-auto flex-1" style={{ background: 'var(--color-bg)' }}>
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-16 text-[var(--color-text-muted)]">
               <Loader2 className="size-5 animate-spin" />
@@ -97,7 +97,7 @@ export const ProductBomCountCardPreviewModal: React.FC<ProductBomCountCardPrevie
 
         <div
           className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 shrink-0"
-          style={{ background: '#f8f9fa' }}
+          style={{ background: 'var(--color-bg)' }}
         >
           <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose}>
             إغلاق

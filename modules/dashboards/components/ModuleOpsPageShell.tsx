@@ -58,7 +58,7 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
   return (
     <div
       className={cn(
-        'erp-ds-clean erp-dashboard-theme ops-dash-board ops-dash-board--data-first p-3 sm:p-4 md:p-6',
+        'erp-ds-clean erp-dashboard-theme ops-dash-board ops-dash-board--data-first w-full min-w-0 p-3 sm:p-4 md:p-6',
         className,
       )}
       dir={dir}

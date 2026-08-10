@@ -12,6 +12,7 @@ const LAZY_GLOBAL_MODALS = [
   lazyNamed(() => import('./modals/GlobalImportReportsModal'), 'GlobalImportReportsModal'),
   lazyNamed(() => import('./modals/GlobalCreateWorkOrderModal'), 'GlobalCreateWorkOrderModal'),
   lazyNamed(() => import('./modals/GlobalCreateProductModal'), 'GlobalCreateProductModal'),
+  lazyNamed(() => import('./modals/GlobalProductBomModal'), 'GlobalProductBomModal'),
   lazyNamed(() => import('./modals/GlobalCreateLineModal'), 'GlobalCreateLineModal'),
   lazyNamed(() => import('./modals/GlobalImportInventoryInByCodeModal'), 'GlobalImportInventoryInByCodeModal'),
   lazyNamed(() => import('./modals/GlobalImportProductionPlansModal'), 'GlobalImportProductionPlansModal'),

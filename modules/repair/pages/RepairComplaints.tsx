@@ -27,6 +27,8 @@ import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewTo
 import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -59,6 +61,7 @@ const PAGE_SIZE = 20;
 type LocationState = {
   complaintPrefill?: RepairComplaintPrefill;
   openCreate?: boolean;
+  openComplaintId?: string;
 };
 
 export const RepairComplaints: React.FC = () => {
@@ -112,6 +115,7 @@ export const RepairComplaints: React.FC = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selected, setSelected] = useState<RepairComplaint | null>(null);
+  const [skipComplaintDraft, setSkipComplaintDraft] = useState(false);
 
   const [createForm, setCreateForm] = useState({
     branchId: '',
@@ -144,6 +148,52 @@ export const RepairComplaints: React.FC = () => {
     const allowed = new Set(resolveVisibleRepairBranchIdsForUser(repairCtx, branches.map((b) => b.id || '').filter(Boolean)));
     return branches.filter((b) => b.id && allowed.has(b.id));
   }, [branches, canViewAllBranches, repairCtx]);
+
+  const isComplaintFormEmpty = useCallback((draft: typeof createForm) => (
+    !draft.customerId
+    && !draft.customerName.trim()
+    && !draft.customerPhone.trim()
+    && !draft.jobId
+    && !draft.receiptNo.trim()
+    && !draft.subject.trim()
+    && !draft.notes.trim()
+  ), []);
+
+  const { hasDraft: hasComplaintDraft, clearDraft: clearComplaintDraft } = useLocalFormDraft({
+    formKey: 'repair:complaintCreate',
+    tenantId: getCurrentTenantIdOrNull() || userProfile?.tenantId,
+    userId: userProfile?.id,
+    value: createForm,
+    enabled: createOpen && !skipComplaintDraft,
+    isEmpty: isComplaintFormEmpty,
+    onRestore: (draft) => {
+      setCreateForm({
+        branchId: String(draft.branchId || ''),
+        customerId: String(draft.customerId || ''),
+        customerName: String(draft.customerName || ''),
+        customerPhone: String(draft.customerPhone || ''),
+        jobId: String(draft.jobId || ''),
+        receiptNo: String(draft.receiptNo || ''),
+        subject: String(draft.subject || ''),
+        notes: String(draft.notes || ''),
+      });
+    },
+  });
+
+  const resetComplaintCreateForm = useCallback(() => {
+    clearComplaintDraft();
+    setCreateForm({
+      branchId: userBranchIds[0] || visibleBranches[0]?.id || '',
+      customerId: '',
+      customerName: '',
+      customerPhone: '',
+      jobId: '',
+      receiptNo: '',
+      subject: '',
+      notes: '',
+    });
+    setJobSearch('');
+  }, [clearComplaintDraft, userBranchIds, visibleBranches]);
 
   const queryBranchIds = useMemo(() => {
     if (canViewAllBranches) {
@@ -225,6 +275,7 @@ export const RepairComplaints: React.FC = () => {
 
   const applyPrefill = useCallback(
     (prefill: RepairComplaintPrefill) => {
+      setSkipComplaintDraft(true);
       setCreateForm((prev) => ({
         ...prev,
         branchId: prefill.branchId || prev.branchId || userBranchIds[0] || visibleBranches[0]?.id || '',
@@ -314,6 +365,16 @@ export const RepairComplaints: React.FC = () => {
     setDetailOpen(true);
   };
 
+  useEffect(() => {
+    const state = (location.state || {}) as LocationState;
+    const openId = String(state.openComplaintId || '').trim();
+    if (!openId || loading || rows.length === 0) return;
+    const found = rows.find((row) => row.id === openId);
+    if (!found) return;
+    openDetail(found);
+    window.history.replaceState({}, document.title);
+  }, [location.state, loading, rows]);
+
   const refreshSelected = async (id: string) => {
     const fresh = await repairComplaintService.getById(id);
     if (fresh) {
@@ -345,17 +406,8 @@ export const RepairComplaints: React.FC = () => {
       });
       toast.success('تم تسجيل الشكوى.');
       setCreateOpen(false);
-      setCreateForm({
-        branchId: userBranchIds[0] || visibleBranches[0]?.id || '',
-        customerId: '',
-        customerName: '',
-        customerPhone: '',
-        jobId: '',
-        receiptNo: '',
-        subject: '',
-        notes: '',
-      });
-      setJobSearch('');
+      setSkipComplaintDraft(false);
+      resetComplaintCreateForm();
       const created = await repairComplaintService.getById(id);
       if (created) {
         setRows((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
@@ -652,7 +704,13 @@ export const RepairComplaints: React.FC = () => {
         </div>
       </OpsDashPanel>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(next) => {
+          setCreateOpen(next);
+          if (!next) setSkipComplaintDraft(false);
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>تسجيل شكوى على طلب صيانة</DialogTitle>
@@ -799,6 +857,11 @@ export const RepairComplaints: React.FC = () => {
             </div>
           </div>
           <DialogFooter>
+            {hasComplaintDraft && !skipComplaintDraft ? (
+              <Button type="button" variant="ghost" onClick={resetComplaintCreateForm} disabled={busy}>
+                مسح المسودة
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={busy}>
               إلغاء
             </Button>

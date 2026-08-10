@@ -290,7 +290,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
               {empAllowances.map((a) => (
                 <tr key={a.id} className="border-t border-[var(--color-border)]">
                   <td className="p-3 font-medium">{a.allowanceTypeName}</td>
-                  <td className="p-3 font-bold text-emerald-600">{formatNumber(a.amount)} ج.م</td>
+                  <td className="p-3 font-bold text-[rgb(var(--color-success))]">{formatNumber(a.amount)} ج.م</td>
                   <td className="p-3">
                     <Badge variant={a.isRecurring ? 'info' : 'warning'}>
                       {a.isRecurring ? 'متكرر' : 'لمرة واحدة'}
@@ -308,7 +308,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                         {a.status === 'active' && a.isRecurring && (
                           <button
                             onClick={() => a.id && handleStopAllowance(a.id)}
-                            className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-[var(--border-radius-base)]"
+                            className="p-1.5 text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.1)] dark:hover:bg-[rgb(var(--color-warning))]/20 rounded-[var(--border-radius-base)]"
                             title="إيقاف"
                             disabled={financialSaving}
                           >
@@ -317,7 +317,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                         )}
                         <button
                           onClick={() => a.id && handleDeleteAllowance(a.id)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)]"
+                          className="p-1.5 text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/20 rounded-[var(--border-radius-base)]"
                           title="حذف"
                           disabled={financialSaving}
                         >
@@ -330,7 +330,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
               ))}
               {empAllowances.length === 0 && (
                 <tr>
-                  <td colSpan={canEdit ? 6 : 5} className="p-6 text-center text-slate-500">
+                  <td colSpan={canEdit ? 6 : 5} className="p-6 text-center text-[var(--color-text-muted)]">
                     لا توجد بدلات مخصصة
                   </td>
                 </tr>
@@ -389,7 +389,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
               {empDeductions.map((d) => (
                 <tr key={d.id} className="border-t border-[var(--color-border)]">
                   <td className="p-3 font-medium">{d.deductionTypeName}</td>
-                  <td className="p-3 font-bold text-rose-600">{formatNumber(d.amount)} ج.م</td>
+                  <td className="p-3 font-bold text-[rgb(var(--color-danger))]">{formatNumber(d.amount)} ج.م</td>
                   <td className="p-3">
                     <Badge variant={d.isRecurring ? 'info' : 'warning'}>
                       {d.isRecurring ? 'متكرر' : 'لمرة واحدة'}
@@ -406,14 +406,14 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                       {d.status === 'active' ? 'نشط' : 'متوقف'}
                     </Badge>
                   </td>
-                  <td className="p-3 max-w-[150px] truncate text-slate-500">{d.reason || '—'}</td>
+                  <td className="p-3 max-w-[150px] truncate text-[var(--color-text-muted)]">{d.reason || '—'}</td>
                   {canEdit && (
                     <td className="p-3">
                       <div className="flex items-center gap-1">
                         {d.status === 'active' && d.isRecurring && (
                           <button
                             onClick={() => d.id && handleStopDeduction(d.id)}
-                            className="p-1.5 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-[var(--border-radius-base)]"
+                            className="p-1.5 text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.1)] dark:hover:bg-[rgb(var(--color-warning))]/20 rounded-[var(--border-radius-base)]"
                             title="إيقاف"
                             disabled={financialSaving}
                           >
@@ -422,7 +422,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                         )}
                         <button
                           onClick={() => d.id && handleDeleteDeduction(d.id)}
-                          className="p-1.5 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)]"
+                          className="p-1.5 text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/20 rounded-[var(--border-radius-base)]"
                           title="حذف"
                           disabled={financialSaving}
                         >
@@ -435,7 +435,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
               ))}
               {empDeductions.length === 0 && (
                 <tr>
-                  <td colSpan={canEdit ? 8 : 7} className="p-6 text-center text-slate-500">
+                  <td colSpan={canEdit ? 8 : 7} className="p-6 text-center text-[var(--color-text-muted)]">
                     لا توجد خصومات مخصصة
                   </td>
                 </tr>
@@ -448,14 +448,14 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Allowance Modal */}
       {showAllowanceModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
-                <span className="material-icons-round text-emerald-500">add_circle</span>
+                <span className="material-icons-round text-[rgb(var(--color-success))]">add_circle</span>
                 إضافة بدل جديد
               </h3>
-              <button onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)]">
+              <button onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] rounded-[var(--border-radius-base)]">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -492,8 +492,8 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                   <input type="month" value={alMonth} onChange={(e) => setAlMonth(e.target.value)} className={inputCls} />
                 </div>
               )}
-              {alSuccess && <p className="text-sm text-emerald-600 font-bold">{alSuccess}</p>}
-              {alError && <p className="text-sm text-rose-600">{alError}</p>}
+              {alSuccess && <p className="text-sm text-[rgb(var(--color-success))] font-bold">{alSuccess}</p>}
+              {alError && <p className="text-sm text-[rgb(var(--color-danger))]">{alError}</p>}
               <div className="flex items-center gap-2 pt-2">
                 <Button onClick={handleAddAllowance} disabled={financialSaving}>
                   {financialSaving ? 'جاري الحفظ...' : 'حفظ'}
@@ -509,14 +509,14 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Deduction Modal */}
       {showDeductionModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
-                <span className="material-icons-round text-rose-500">remove_circle</span>
+                <span className="material-icons-round text-[rgb(var(--color-danger))]">remove_circle</span>
                 إضافة خصم جديد
               </h3>
-              <button onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)]">
+              <button onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] rounded-[var(--border-radius-base)]">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -560,8 +560,8 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                 <label className={labelCls}>السبب (اختياري)</label>
                 <textarea value={dedReason} onChange={(e) => setDedReason(e.target.value)} rows={2} className={`${inputCls} resize-none`} placeholder="سبب الخصم" />
               </div>
-              {dedSuccess && <p className="text-sm text-emerald-600 font-bold">{dedSuccess}</p>}
-              {dedError && <p className="text-sm text-rose-600">{dedError}</p>}
+              {dedSuccess && <p className="text-sm text-[rgb(var(--color-success))] font-bold">{dedSuccess}</p>}
+              {dedError && <p className="text-sm text-[rgb(var(--color-danger))]">{dedError}</p>}
               <div className="flex items-center gap-2 pt-2">
                 <Button onClick={handleAddDeduction} disabled={financialSaving}>
                   {financialSaving ? 'جاري الحفظ...' : 'حفظ'}
@@ -857,7 +857,7 @@ export const EmployeeProfile: React.FC = () => {
 
   if (loading) {
     return (
-      <ModuleOpsPageShell className="max-w-5xl mx-auto" eyebrow="ملف الموظف" actions={shellBackAction}>
+      <ModuleOpsPageShell className="w-full min-w-0" eyebrow="ملف الموظف" actions={shellBackAction}>
         <PageContentSkeleton variant="detail" />
       </ModuleOpsPageShell>
     );
@@ -865,10 +865,10 @@ export const EmployeeProfile: React.FC = () => {
 
   if (!employee) {
     return (
-      <ModuleOpsPageShell className="max-w-5xl mx-auto" eyebrow="ملف الموظف" actions={shellBackAction}>
+      <ModuleOpsPageShell className="w-full min-w-0" eyebrow="ملف الموظف" actions={shellBackAction}>
         <OpsDashPanel title="موظف غير موجود" accent="hr">
           <div className="text-center py-8">
-            <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-slate-600">person_off</span>
+            <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)]">person_off</span>
             <h2 className="text-xl font-bold mt-4">موظف غير موجود</h2>
             <p className="text-[var(--color-text-muted)] mt-2">لم يتم العثور على الموظف المطلوب.</p>
             <Button className="mt-6" onClick={() => navigate('/hr/employees')}>
@@ -902,7 +902,7 @@ export const EmployeeProfile: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      className="max-w-5xl mx-auto"
+      className="w-full min-w-0"
       eyebrow="ملف الموظف"
       rangeLabel={employee.name}
       actions={(
@@ -915,7 +915,7 @@ export const EmployeeProfile: React.FC = () => {
       <OpsDashPanel title={employee.name} accent="hr">
         <div className="flex flex-wrap items-center gap-3">
           {employee.code && (
-            <span className="font-mono text-sm bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+            <span className="font-mono text-sm bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] px-2.5 py-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               {employee.code}
             </span>
           )}
@@ -930,33 +930,33 @@ export const EmployeeProfile: React.FC = () => {
 
       {/* Net Salary Preview */}
       {salaryPreview && (
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[var(--border-radius-xl)] p-6 text-white shadow-blue-600/20 mb-6">
+        <div className="bg-gradient-to-br from-[rgb(var(--color-primary))] to-[rgb(var(--color-primary))] rounded-[var(--border-radius-xl)] p-6 text-white shadow-blue-600/20 mb-6">
           <div className="flex items-center gap-3 mb-5">
             <span className="material-icons-round text-2xl opacity-90">calculate</span>
             <div>
               <h3 className="text-lg font-bold">صافي الراتب التقديري — {currentMonth}</h3>
-              <p className="text-blue-200 text-xs">معاينة مباشرة (لا تُحفظ في قاعدة البيانات)</p>
+              <p className="text-[rgb(var(--color-primary))] text-xs">معاينة مباشرة (لا تُحفظ في قاعدة البيانات)</p>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
             <div className="bg-[var(--color-card)]/10 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm">
-              <p className="text-blue-200 text-xs font-medium mb-1">الراتب الأساسي</p>
+              <p className="text-[rgb(var(--color-primary))] text-xs font-medium mb-1">الراتب الأساسي</p>
               <p className="text-xl font-black">{formatNumber(salaryPreview.baseSalary)}</p>
             </div>
             <div className="bg-[var(--color-card)]/10 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm">
-              <p className="text-blue-200 text-xs font-medium mb-1">+ البدلات</p>
-              <p className="text-xl font-bold text-emerald-300">+{formatNumber(salaryPreview.totalAllowances)}</p>
+              <p className="text-[rgb(var(--color-primary))] text-xs font-medium mb-1">+ البدلات</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-success))]">+{formatNumber(salaryPreview.totalAllowances)}</p>
             </div>
             <div className="bg-[var(--color-card)]/10 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm">
-              <p className="text-blue-200 text-xs font-medium mb-1">– الخصومات</p>
-              <p className="text-xl font-bold text-rose-300">–{formatNumber(salaryPreview.totalDeductions)}</p>
+              <p className="text-[rgb(var(--color-primary))] text-xs font-medium mb-1">– الخصومات</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-danger))]">–{formatNumber(salaryPreview.totalDeductions)}</p>
             </div>
-            <div className="bg-[var(--color-card)]/20 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm border border-white/20">
-              <p className="text-blue-100 text-xs font-medium mb-1">صافي تقديري</p>
+            <div className="bg-[var(--color-card)]/20 rounded-[var(--border-radius-lg)] p-3 backdrop-blur-sm border border-[var(--color-card)]/20">
+              <p className="text-[rgb(var(--color-primary))] text-xs font-medium mb-1">صافي تقديري</p>
               <p className="text-2xl font-black">{formatNumber(salaryPreview.estimatedNet)}</p>
             </div>
           </div>
-          <div className="text-xs text-blue-200 space-y-1">
+          <div className="text-xs text-[rgb(var(--color-primary))] space-y-1">
             <p>الإجمالي = {formatNumber(salaryPreview.baseSalary + salaryPreview.totalAllowances)} | الخصومات = خصومات مخصصة ({formatNumber(salaryPreview.totalCustomDeductions)}) + أقساط سلف ({formatNumber(salaryPreview.totalLoanInstallments)})</p>
             <p className="opacity-70">* لا تشمل: خصم الغياب، التأخير، التأمين، الضريبة — تُحسب في كشف الرواتب الفعلي</p>
           </div>
@@ -973,7 +973,7 @@ export const EmployeeProfile: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm transition-all ${
               activeTab === tab.id
                 ? 'bg-primary text-white shadow-primary/20'
-                : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa]'
+                : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
@@ -1022,7 +1022,7 @@ export const EmployeeProfile: React.FC = () => {
           <div className="space-y-0">
             {[...managerChain].reverse().map((m) => (
               <div key={m.id} className="flex items-center gap-3 py-2 border-r-2 border-[var(--color-border)] pr-4 ml-4">
-                <span className="material-icons-round text-slate-400">person</span>
+                <span className="material-icons-round text-[var(--color-text-muted)]">person</span>
                 <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/hr/employees/${m.id}`)}>{m.name}</span>
                 <Badge variant="neutral">{getDepartmentName(m.departmentId)}</Badge>
               </div>
@@ -1034,7 +1034,7 @@ export const EmployeeProfile: React.FC = () => {
             </div>
             {directReports.map((r) => (
               <div key={r.id} className="flex items-center gap-3 py-2 border-r-2 border-[var(--color-border)] pr-4 ml-4">
-                <span className="material-icons-round text-slate-400">person</span>
+                <span className="material-icons-round text-[var(--color-text-muted)]">person</span>
                 <span className="cursor-pointer text-primary hover:underline" onClick={() => navigate(`/hr/employees/${r.id}`)}>{r.name}</span>
                 <Badge variant="neutral">{getDepartmentName(r.departmentId)}</Badge>
               </div>
@@ -1056,15 +1056,15 @@ export const EmployeeProfile: React.FC = () => {
               </div>
               <div>
                 <p className="text-[var(--color-text-muted)] text-sm">حاضر</p>
-                <p className="text-xl font-bold text-emerald-600">{formatNumber(attendanceSummary.present)}</p>
+                <p className="text-xl font-bold text-[rgb(var(--color-success))]">{formatNumber(attendanceSummary.present)}</p>
               </div>
               <div>
                 <p className="text-[var(--color-text-muted)] text-sm">غائب</p>
-                <p className="text-xl font-bold text-rose-600">{formatNumber(attendanceSummary.absent)}</p>
+                <p className="text-xl font-bold text-[rgb(var(--color-danger))]">{formatNumber(attendanceSummary.absent)}</p>
               </div>
               <div>
                 <p className="text-[var(--color-text-muted)] text-sm">متأخر</p>
-                <p className="text-xl font-bold text-amber-600">{formatNumber(attendanceSummary.late)}</p>
+                <p className="text-xl font-bold text-[rgb(var(--color-warning))]">{formatNumber(attendanceSummary.late)}</p>
               </div>
               <div>
                 <p className="text-[var(--color-text-muted)] text-sm">إجمالي الساعات</p>
@@ -1105,7 +1105,7 @@ export const EmployeeProfile: React.FC = () => {
                   })}
                   {attendanceLogs.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-6 text-center text-slate-500">
+                      <td colSpan={6} className="p-6 text-center text-[var(--color-text-muted)]">
                         لا توجد سجلات حضور
                       </td>
                     </tr>
@@ -1187,8 +1187,8 @@ export const EmployeeProfile: React.FC = () => {
                     <tr key={row.leaveType} className="border-t border-[var(--color-border)]">
                       <td className="p-3 font-bold">{row.label}</td>
                       <td className="p-3">{row.defaultDays == null ? 'غير محدود' : `${formatNumber(row.defaultDays)} يوم`}</td>
-                      <td className="p-3 text-amber-600 font-bold">{formatNumber(row.usedDays)} يوم</td>
-                      <td className="p-3 text-emerald-600 font-bold">
+                      <td className="p-3 text-[rgb(var(--color-warning))] font-bold">{formatNumber(row.usedDays)} يوم</td>
+                      <td className="p-3 text-[rgb(var(--color-success))] font-bold">
                         {row.leaveType === 'unpaid' ? 'غير محدود' : `${formatNumber(row.availableDays)} يوم`}
                       </td>
                       <td className="p-3">{row.lastUsedDate ? formatDateAr(row.lastUsedDate) : '—'}</td>
@@ -1196,7 +1196,7 @@ export const EmployeeProfile: React.FC = () => {
                   ))}
                   {(leaveUsageSummary?.perType ?? []).length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-6 text-center text-slate-500">
+                      <td colSpan={5} className="p-6 text-center text-[var(--color-text-muted)]">
                         لا توجد بيانات إجازات
                       </td>
                     </tr>
@@ -1241,7 +1241,7 @@ export const EmployeeProfile: React.FC = () => {
                   ))}
                   {leaveRequests.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="p-6 text-center text-slate-500">
+                      <td colSpan={6} className="p-6 text-center text-[var(--color-text-muted)]">
                         لا توجد طلبات إجازة
                       </td>
                     </tr>
@@ -1258,19 +1258,19 @@ export const EmployeeProfile: React.FC = () => {
           {activeLoans.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-                <span className="material-icons-round text-blue-500 text-2xl mb-1 block">receipt_long</span>
+                <span className="material-icons-round text-[rgb(var(--color-primary))] text-2xl mb-1 block">receipt_long</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي السلف</p>
                 <p className="text-xl font-black">{loans.length}</p>
               </div>
               <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-                <span className="material-icons-round text-emerald-500 text-2xl mb-1 block">trending_up</span>
+                <span className="material-icons-round text-[rgb(var(--color-success))] text-2xl mb-1 block">trending_up</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نشط</p>
-                <p className="text-xl font-bold text-emerald-600">{activeLoans.length}</p>
+                <p className="text-xl font-bold text-[rgb(var(--color-success))]">{activeLoans.length}</p>
               </div>
               <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-                <span className="material-icons-round text-amber-500 text-2xl mb-1 block">account_balance</span>
+                <span className="material-icons-round text-[rgb(var(--color-warning))] text-2xl mb-1 block">account_balance</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">المتبقي</p>
-                <p className="text-xl font-bold text-amber-600">
+                <p className="text-xl font-bold text-[rgb(var(--color-warning))]">
                   {formatNumber(activeLoans.reduce((s, l) => s + l.installmentAmount * l.remainingInstallments, 0))} ج.م
                 </p>
               </div>
@@ -1292,7 +1292,7 @@ export const EmployeeProfile: React.FC = () => {
                 </thead>
                 <tbody>
                   {loans.map((loan) => (
-                    <tr key={loan.id} className={`border-t border-[var(--color-border)] ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
+                    <tr key={loan.id} className={`border-t border-[var(--color-border)] ${loan.disbursed ? 'bg-[rgb(var(--color-success)/0.1)]/30 dark:bg-[rgb(var(--color-success))]/5' : ''}`}>
                       <td className="p-3">
                         <span className="inline-flex items-center gap-1 text-xs font-bold">
                           <span className="material-icons-round text-sm text-primary">
@@ -1323,7 +1323,7 @@ export const EmployeeProfile: React.FC = () => {
                   ))}
                   {loans.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="p-6 text-center text-slate-500">
+                      <td colSpan={7} className="p-6 text-center text-[var(--color-text-muted)]">
                         لا توجد سُلف
                       </td>
                     </tr>

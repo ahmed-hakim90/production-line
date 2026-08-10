@@ -695,7 +695,7 @@ export const ProductionIssueRequests: React.FC = () => {
   }, [orders, sourceId, sourceKind]);
 
   if (!canRequest && !can('inventory.view') && !canCreatePlan) {
-    return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية طلب صرف الإنتاج.</p>;
+    return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية طلب صرف الإنتاج.</p>;
   }
 
   const planProductName = productNameById.get(planProductId) || planProductId;
@@ -762,11 +762,11 @@ export const ProductionIssueRequests: React.FC = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">جاري التحميل…</td>
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">جاري التحميل…</td>
                   </tr>
                 ) : assemblableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       لا يوجد متاح للتجميع حالياً — راجع أرصدة المستلزمات.
                     </td>
                   </tr>
@@ -786,7 +786,7 @@ export const ProductionIssueRequests: React.FC = () => {
                           <td className="px-2 py-3 text-center">
                             <button
                               type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
                               aria-label={expanded ? 'إخفاء المكونات' : 'عرض المكونات'}
                               onClick={() =>
                                 setExpandedProductId((prev) => (prev === row.productId ? null : row.productId))
@@ -799,24 +799,24 @@ export const ProductionIssueRequests: React.FC = () => {
                           </td>
                           <td className="px-4 py-3 text-sm">
                             <p className="font-medium">{row.productName}</p>
-                            <p className="text-xs text-slate-400 font-mono">{row.productCode || '—'}</p>
+                            <p className="text-xs text-[var(--color-text-muted)] font-mono">{row.productCode || '—'}</p>
                           </td>
-                          <td className="px-4 py-3 text-center text-sm font-bold tabular-nums text-emerald-700">
+                          <td className="px-4 py-3 text-center text-sm font-bold tabular-nums text-[rgb(var(--color-success))]">
                             {formatNumber(row.maxAssemblable)}
                           </td>
                           <td className="px-4 py-3 text-sm">
                             {bn ? (
                               <>
-                                <p className="font-medium text-amber-800">{bn.materialName}</p>
-                                <p className="text-xs text-slate-400 font-mono">{bn.materialCode || '—'}</p>
+                                <p className="font-medium text-[rgb(var(--color-warning))]">{bn.materialName}</p>
+                                <p className="text-xs text-[var(--color-text-muted)] font-mono">{bn.materialCode || '—'}</p>
                               </>
                             ) : '—'}
                           </td>
                           <td className="px-4 py-3 text-center text-sm">
                             {openPlan ? (
-                              <span className="text-slate-700">متبقي {formatNumber(rem)}</span>
+                              <span className="text-[var(--color-text)]">متبقي {formatNumber(rem)}</span>
                             ) : (
-                              <span className="text-amber-700 font-semibold">لا توجد خطة</span>
+                              <span className="text-[rgb(var(--color-warning))] font-semibold">لا توجد خطة</span>
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
@@ -831,31 +831,31 @@ export const ProductionIssueRequests: React.FC = () => {
                                     طلب صرف
                                   </PrimaryButton>
                                 ) : (
-                                  <span className="text-xs text-slate-400">يلزم صلاحية طلب الصرف</span>
+                                  <span className="text-xs text-[var(--color-text-muted)]">يلزم صلاحية طلب الصرف</span>
                                 )
                               ) : canCreatePlan ? (
                                 <PrimaryButton iconName="add_circle" tone="submit" onClick={() => openCreatePlan(row)}>
                                   إنشاء خطة
                                 </PrimaryButton>
                               ) : (
-                                <span className="text-xs text-slate-400">يلزم صلاحية إنشاء خطة</span>
+                                <span className="text-xs text-[var(--color-text-muted)]">يلزم صلاحية إنشاء خطة</span>
                               )}
                             </div>
                           </td>
                         </tr>
                         {expanded && (
-                          <tr className="border-b border-[var(--color-border)] bg-slate-50/80">
+                          <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg)]">
                             <td colSpan={6} className="px-4 py-3">
-                              <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-white">
+                              <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
                                 <table className="w-full text-sm">
                                   <thead>
-                                    <tr className="border-b bg-slate-50">
+                                    <tr className="border-b bg-[var(--color-bg)]">
                                       <th className="px-3 py-2 text-start font-medium">المكوّن</th>
                                       <th className="px-3 py-2 text-center font-medium">مطلوب/وحدة</th>
                                       <th className="px-3 py-2 text-center font-medium">متاح</th>
                                       <th className="px-3 py-2 text-center font-medium">حد التجميع</th>
                                       {rem > 0 && (
-                                        <th className="px-3 py-2 text-center font-medium text-rose-700">
+                                        <th className="px-3 py-2 text-center font-medium text-[rgb(var(--color-danger))]">
                                           ناقص لكمية الخطة
                                         </th>
                                       )}
@@ -872,9 +872,9 @@ export const ProductionIssueRequests: React.FC = () => {
                                           key={`${row.productId}-${component.materialId}`}
                                           className={
                                             shortage > 0
-                                              ? 'bg-rose-50/70'
+                                              ? 'bg-[rgb(var(--color-danger)/0.1)]/70'
                                               : isBottleneck
-                                                ? 'bg-amber-50/80'
+                                                ? 'bg-[rgb(var(--color-warning)/0.1)]/80'
                                                 : ''
                                           }
                                         >
@@ -886,7 +886,7 @@ export const ProductionIssueRequests: React.FC = () => {
                                             {shortage > 0 && (
                                               <StatusBadge label="ناقص" type="danger" className="ms-2" />
                                             )}
-                                            <p className="text-xs text-slate-400 font-mono">{component.materialCode || '—'}</p>
+                                            <p className="text-xs text-[var(--color-text-muted)] font-mono">{component.materialCode || '—'}</p>
                                           </td>
                                           <td className="px-3 py-2 text-center tabular-nums">
                                             {formatNumber(component.requiredPerUnit)}
@@ -898,7 +898,7 @@ export const ProductionIssueRequests: React.FC = () => {
                                             {formatNumber(component.maxAssemblable)}
                                           </td>
                                           {rem > 0 && (
-                                            <td className="px-3 py-2 text-center font-bold tabular-nums text-rose-700">
+                                            <td className="px-3 py-2 text-center font-bold tabular-nums text-[rgb(var(--color-danger))]">
                                               {shortage > 0 ? formatNumber(shortage) : '—'}
                                             </td>
                                           )}
@@ -909,13 +909,13 @@ export const ProductionIssueRequests: React.FC = () => {
                                 </table>
                               </div>
                               {missingForPlan.length > 0 && (
-                                <p className="mt-2 text-xs font-semibold text-rose-700">
+                                <p className="mt-2 text-xs font-semibold text-[rgb(var(--color-danger))]">
                                   لتغطية متبقي الخطة ({formatNumber(rem)}) ينقص {missingForPlan.length} مكوّن
                                   — أبرزها: {missingForPlan[0].materialName} ({formatNumber(missingForPlan[0].shortageQty)}).
                                 </p>
                               )}
                               {!(rem > 0) && targetForMissing && (
-                                <p className="mt-2 text-xs text-slate-500">
+                                <p className="mt-2 text-xs text-[var(--color-text-muted)]">
                                   المكوّن عنق الزجاجة يحدد أقصى كمية يمكن صرفها الآن.
                                 </p>
                               )}
@@ -937,10 +937,10 @@ export const ProductionIssueRequests: React.FC = () => {
             <OpsDashPanel
               title="خطط مفتوحة بدون مكونات — الناقص"
               accent="production"
-              className="border-rose-200 bg-rose-50/60 shadow-none h-full min-w-0"
+              className="border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/60 shadow-none h-full min-w-0"
               action={(
                 <div className="flex flex-wrap items-start justify-between gap-2 w-full">
-                  <p className="text-xs text-rose-700">
+                  <p className="text-xs text-[rgb(var(--color-danger))]">
                     المتاح للتجميع = 0. اعرض المكونات الناقصة أو اطبع تقريراً للمستلزم.
                   </p>
                   <GhostButton
@@ -963,11 +963,11 @@ export const ProductionIssueRequests: React.FC = () => {
                     (item) => item.productId === row.productId && item.kind === 'none',
                   );
                   return (
-                    <div key={row.productId} className="rounded-lg border border-rose-100 bg-white overflow-hidden">
+                    <div key={row.productId} className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[var(--color-card)] overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-                        <span className="font-medium text-slate-800">{row.productName}</span>
+                        <span className="font-medium text-[var(--color-text)]">{row.productName}</span>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-bold text-rose-700 tabular-nums">
+                          <span className="text-xs font-bold text-[rgb(var(--color-danger))] tabular-nums">
                             متبقي خطط {formatNumber(row.remaining)} · متاح تجميع 0
                           </span>
                           <GhostButton
@@ -994,9 +994,9 @@ export const ProductionIssueRequests: React.FC = () => {
                         </div>
                       </div>
                       {expanded && (
-                        <div className="border-t border-rose-100 px-3 py-2">
+                        <div className="border-t border-[rgb(var(--color-danger)/0.25)] px-3 py-2">
                           {missing.length === 0 ? (
-                            <p className="text-xs text-slate-500">
+                            <p className="text-xs text-[var(--color-text-muted)]">
                               {row.capacity
                                 ? 'لا توجد تفاصيل مكوّنات — راجع تعريف BOM للمنتج.'
                                 : 'لا توجد بيانات تجميع لهذا المنتج — تأكد من BOM والأرصدة.'}
@@ -1005,23 +1005,23 @@ export const ProductionIssueRequests: React.FC = () => {
                             <div className="overflow-x-auto">
                               <table className="w-full text-sm">
                                 <thead>
-                                  <tr className="border-b text-xs text-slate-500">
+                                  <tr className="border-b text-xs text-[var(--color-text-muted)]">
                                     <th className="py-1 text-start font-medium">المكوّن</th>
                                     <th className="py-1 text-center font-medium">مطلوب للخطة</th>
                                     <th className="py-1 text-center font-medium">متاح</th>
-                                    <th className="py-1 text-center font-medium text-rose-700">ناقص</th>
+                                    <th className="py-1 text-center font-medium text-[rgb(var(--color-danger))]">ناقص</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {missing.map((component) => (
-                                    <tr key={component.materialId} className="border-b border-rose-50">
+                                    <tr key={component.materialId} className="border-b border-[rgb(var(--color-danger)/0.1)]">
                                       <td className="py-1.5">
                                         <span className="font-medium">{component.materialName}</span>
-                                        <p className="text-xs text-slate-400 font-mono">{component.materialCode || '—'}</p>
+                                        <p className="text-xs text-[var(--color-text-muted)] font-mono">{component.materialCode || '—'}</p>
                                       </td>
                                       <td className="py-1.5 text-center tabular-nums">{formatNumber(component.requiredForTarget)}</td>
                                       <td className="py-1.5 text-center tabular-nums">{formatNumber(component.availableQty)}</td>
-                                      <td className="py-1.5 text-center font-bold tabular-nums text-rose-700">
+                                      <td className="py-1.5 text-center font-bold tabular-nums text-[rgb(var(--color-danger))]">
                                         {formatNumber(component.shortageQty)}
                                       </td>
                                     </tr>
@@ -1042,10 +1042,10 @@ export const ProductionIssueRequests: React.FC = () => {
             <OpsDashPanel
               title="تغطية جزئية — مكونات ناقصة لباقي الخطة"
               accent="production"
-              className="border-amber-200 bg-amber-50/50 shadow-none h-full min-w-0"
+              className="border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/50 shadow-none h-full min-w-0"
               action={(
                 <div className="flex flex-wrap items-start justify-between gap-2 w-full">
-                  <p className="text-xs text-amber-800">
+                  <p className="text-xs text-[rgb(var(--color-warning))]">
                     فيه متاح للتجميع، لكنه أقل من متبقي الخطة. تقدر تطلب المتاح، والناقص يظهر بالتفصيل أو يُطبع.
                   </p>
                   <GhostButton
@@ -1068,11 +1068,11 @@ export const ProductionIssueRequests: React.FC = () => {
                     (item) => item.productId === row.productId && item.kind === 'partial',
                   );
                   return (
-                    <div key={row.productId} className="rounded-lg border border-amber-100 bg-white overflow-hidden">
+                    <div key={row.productId} className="rounded-lg border border-[rgb(var(--color-warning)/0.25)] bg-[var(--color-card)] overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-                        <span className="font-medium text-slate-800">{row.productName}</span>
+                        <span className="font-medium text-[var(--color-text)]">{row.productName}</span>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-bold text-amber-800 tabular-nums">
+                          <span className="text-xs font-bold text-[rgb(var(--color-warning))] tabular-nums">
                             متاح {formatNumber(row.maxAssemblable)} / متبقي {formatNumber(row.remaining)}
                           </span>
                           <GhostButton
@@ -1101,26 +1101,26 @@ export const ProductionIssueRequests: React.FC = () => {
                         </div>
                       </div>
                       {expanded && missing.length > 0 && (
-                        <div className="border-t border-amber-100 px-3 py-2 overflow-x-auto">
+                        <div className="border-t border-[rgb(var(--color-warning)/0.25)] px-3 py-2 overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="border-b text-xs text-slate-500">
+                              <tr className="border-b text-xs text-[var(--color-text-muted)]">
                                 <th className="py-1 text-start font-medium">المكوّن</th>
                                 <th className="py-1 text-center font-medium">مطلوب للخطة</th>
                                 <th className="py-1 text-center font-medium">متاح</th>
-                                <th className="py-1 text-center font-medium text-rose-700">ناقص</th>
+                                <th className="py-1 text-center font-medium text-[rgb(var(--color-danger))]">ناقص</th>
                               </tr>
                             </thead>
                             <tbody>
                               {missing.map((component) => (
-                                <tr key={component.materialId} className="border-b border-amber-50">
+                                <tr key={component.materialId} className="border-b border-[rgb(var(--color-warning)/0.1)]">
                                   <td className="py-1.5">
                                     <span className="font-medium">{component.materialName}</span>
-                                    <p className="text-xs text-slate-400 font-mono">{component.materialCode || '—'}</p>
+                                    <p className="text-xs text-[var(--color-text-muted)] font-mono">{component.materialCode || '—'}</p>
                                   </td>
                                   <td className="py-1.5 text-center tabular-nums">{formatNumber(component.requiredForTarget)}</td>
                                   <td className="py-1.5 text-center tabular-nums">{formatNumber(component.availableQty)}</td>
-                                  <td className="py-1.5 text-center font-bold tabular-nums text-rose-700">
+                                  <td className="py-1.5 text-center font-bold tabular-nums text-[rgb(var(--color-danger))]">
                                     {formatNumber(component.shortageQty)}
                                   </td>
                                 </tr>
@@ -1162,7 +1162,7 @@ export const ProductionIssueRequests: React.FC = () => {
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <p className="font-medium">{row.line?.itemName}</p>
-                          <p className="text-xs text-slate-400">{row.line?.itemCode || '—'}</p>
+                          <p className="text-xs text-[var(--color-text-muted)]">{row.line?.itemCode || '—'}</p>
                         </td>
                         <td className="px-4 py-3 text-center tabular-nums text-sm">{formatNumber(row.quantity)}</td>
                         <td className="px-4 py-3 text-center text-sm">
@@ -1198,11 +1198,11 @@ export const ProductionIssueRequests: React.FC = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">جاري التحميل…</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">جاري التحميل…</td>
                   </tr>
                 ) : orders.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">لا توجد طلبات بعد.</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد طلبات بعد.</td>
                   </tr>
                 ) : (
                   orders.map((order) => {
@@ -1215,7 +1215,7 @@ export const ProductionIssueRequests: React.FC = () => {
                         <td className="px-4 py-3 text-sm font-bold">{order.referenceNo}</td>
                         <td className="px-4 py-3 text-sm">
                           <p className="font-medium">{order.productName}</p>
-                          <p className="text-xs text-slate-400">{order.productCode || '—'}</p>
+                          <p className="text-xs text-[var(--color-text-muted)]">{order.productCode || '—'}</p>
                         </td>
                         <td className="px-4 py-3 text-center tabular-nums text-sm">{formatNumber(requested)}</td>
                         <td className="px-4 py-3 text-center tabular-nums text-sm">{formatNumber(issued)}</td>
@@ -1240,11 +1240,11 @@ export const ProductionIssueRequests: React.FC = () => {
         <DialogContent className="sm:max-w-md">
           <DialogTitle>إنشاء خطة على المتاح للتجميع</DialogTitle>
           <div className="space-y-3 py-2">
-            <p className="text-sm text-slate-600">
-              المنتج: <span className="font-bold text-slate-900">{planProductName}</span>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              المنتج: <span className="font-bold text-[var(--color-text)]">{planProductName}</span>
             </p>
             <label className="block space-y-1">
-              <span className="text-xs font-bold text-slate-500">خط الإنتاج</span>
+              <span className="text-xs font-bold text-[var(--color-text-muted)]">خط الإنتاج</span>
               <select
                 className="w-full rounded-lg border px-3 py-2 text-sm"
                 value={planLineId}
@@ -1257,7 +1257,7 @@ export const ProductionIssueRequests: React.FC = () => {
               </select>
             </label>
             <label className="block space-y-1">
-              <span className="text-xs font-bold text-slate-500">كمية الخطة</span>
+              <span className="text-xs font-bold text-[var(--color-text-muted)]">كمية الخطة</span>
               <input
                 type="number"
                 min="1"
@@ -1266,7 +1266,7 @@ export const ProductionIssueRequests: React.FC = () => {
                 value={planQuantity}
                 onChange={(e) => setPlanQuantity(e.target.value)}
               />
-              <span className="text-[11px] text-slate-400">مقترح حسب المتاح للتجميع — عدّلها إن لزم.</span>
+              <span className="text-[11px] text-[var(--color-text-muted)]">مقترح حسب المتاح للتجميع — عدّلها إن لزم.</span>
             </label>
           </div>
           <DialogFooter className="gap-2">
@@ -1282,7 +1282,7 @@ export const ProductionIssueRequests: React.FC = () => {
         <DialogContent className="sm:max-w-lg">
           <DialogTitle>إرسال طلب صرف للمستلزم</DialogTitle>
           <div className="space-y-3 py-2">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[var(--color-text-muted)]">
               اختر الخطة أو أمر الشغل، راجع الكمية المقترحة، ثم أرسل الطلب لمخزن المستلزمات.
             </p>
             {message && requestModalOpen && (
@@ -1292,7 +1292,7 @@ export const ProductionIssueRequests: React.FC = () => {
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-500">نوع المصدر</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">نوع المصدر</span>
                 <select
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                   value={sourceKind}
@@ -1307,7 +1307,7 @@ export const ProductionIssueRequests: React.FC = () => {
                 </select>
               </label>
               <label className="space-y-1 sm:col-span-2">
-                <span className="text-xs font-bold text-slate-500">المصدر</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">المصدر</span>
                 <select
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                   value={sourceId}
@@ -1338,7 +1338,7 @@ export const ProductionIssueRequests: React.FC = () => {
                 </select>
               </label>
               <label className="space-y-1 sm:col-span-2">
-                <span className="text-xs font-bold text-slate-500">كمية الطلب</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">كمية الطلب</span>
                 <input
                   type="number"
                   min="0"
@@ -1351,7 +1351,7 @@ export const ProductionIssueRequests: React.FC = () => {
               </label>
             </div>
             {sourceId && (
-              <p className="text-xs font-semibold text-slate-600">
+              <p className="text-xs font-semibold text-[var(--color-text-muted)]">
                 متبقي المصدر: {formatNumber(sourceRemaining)}
                 {' · '}
                 متاح للتجميع: {formatNumber(maxAssemblable)}
@@ -1360,7 +1360,7 @@ export const ProductionIssueRequests: React.FC = () => {
               </p>
             )}
             {sourceSummary && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--color-text-muted)]">
                 لهذا المصدر — مصروف: {formatNumber(sourceSummary.issuedQty)}
                 {' · '}
                 طلبات معلّقة: {formatNumber(sourceSummary.openRequestedQty)}
@@ -1385,7 +1385,7 @@ export const ProductionIssueRequests: React.FC = () => {
         <DialogContent className="sm:max-w-lg">
           <DialogTitle>طلب صرف تعويضي</DialogTitle>
           <div className="space-y-3 py-2">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[var(--color-text-muted)]">
               اختر إذن صرف تم ترحيله، وحدد المكوّن والكمية. الطلب يروح للمستلزم للاعتماد قبل أي خصم مخزون.
             </p>
             {message && compensationModalOpen && (
@@ -1395,7 +1395,7 @@ export const ProductionIssueRequests: React.FC = () => {
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="space-y-1 sm:col-span-2">
-                <span className="text-xs font-bold text-slate-500">إذن الصرف المصروف</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">إذن الصرف المصروف</span>
                 <select
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                   value={compIssueId}
@@ -1414,7 +1414,7 @@ export const ProductionIssueRequests: React.FC = () => {
                 </select>
               </label>
               <label className="space-y-1 sm:col-span-2">
-                <span className="text-xs font-bold text-slate-500">المكوّن</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">المكوّن</span>
                 <select
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                   value={compLineKey}
@@ -1430,7 +1430,7 @@ export const ProductionIssueRequests: React.FC = () => {
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-500">سبب التعويض</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">سبب التعويض</span>
                 <select
                   className="w-full rounded-lg border px-3 py-2 text-sm"
                   value={compReason}
@@ -1442,7 +1442,7 @@ export const ProductionIssueRequests: React.FC = () => {
                 </select>
               </label>
               <label className="space-y-1">
-                <span className="text-xs font-bold text-slate-500">كمية التعويض</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">كمية التعويض</span>
                 <input
                   type="number"
                   min="0"
@@ -1455,7 +1455,7 @@ export const ProductionIssueRequests: React.FC = () => {
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs font-bold text-slate-500">ملاحظة (اختياري)</span>
+              <span className="text-xs font-bold text-[var(--color-text-muted)]">ملاحظة (اختياري)</span>
               <input
                 className="w-full rounded-lg border px-3 py-2 text-sm"
                 value={compNote}
@@ -1464,7 +1464,7 @@ export const ProductionIssueRequests: React.FC = () => {
               />
             </label>
             {selectedCompLine && (
-              <p className="text-xs text-slate-600">
+              <p className="text-xs text-[var(--color-text-muted)]">
                 مصروف أصلي: {formatNumber(selectedCompLine.issuedQty)}
                 {' · '}
                 تعويض سابق: {formatNumber(selectedCompLine.compensatedQty)}
@@ -1473,7 +1473,7 @@ export const ProductionIssueRequests: React.FC = () => {
               </p>
             )}
             {issuedOrders.length === 0 && (
-              <p className="text-xs text-amber-700">لا يوجد إذن صرف مُرحّل بعد لطلب التعويض عليه.</p>
+              <p className="text-xs text-[rgb(var(--color-warning))]">لا يوجد إذن صرف مُرحّل بعد لطلب التعويض عليه.</p>
             )}
           </div>
           <DialogFooter className="gap-2">

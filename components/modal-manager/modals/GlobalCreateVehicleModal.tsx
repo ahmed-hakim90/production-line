@@ -121,11 +121,11 @@ export const GlobalCreateVehicleModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold">{editingId ? t('modalManager.createVehicle.editTitle') : t('modalManager.createVehicle.createTitle')}</h3>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -133,37 +133,37 @@ export const GlobalCreateVehicleModal: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.vehicleNameRequired')}</label>
-              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.plateNumberRequired')}</label>
-              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.plateNumber} onChange={(e) => setForm({ ...form, plateNumber: e.target.value })} />
+              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.plateNumber} onChange={(e) => setForm({ ...form, plateNumber: e.target.value })} />
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.capacityPassengers')}</label>
-              <input type="number" min={1} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) || 1 })} />
+              <input type="number" min={1} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: Number(e.target.value) || 1 })} />
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.dailyRateEgp')}</label>
-              <input type="number" min={0} step={0.01} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.dailyRate} onChange={(e) => setForm({ ...form, dailyRate: Number(e.target.value) || 0 })} />
+              <input type="number" min={0} step={0.01} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.dailyRate} onChange={(e) => setForm({ ...form, dailyRate: Number(e.target.value) || 0 })} />
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.workingDaysPerMonth')}</label>
-              <input type="number" min={1} max={31} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.workingDaysPerMonth} onChange={(e) => setForm({ ...form, workingDaysPerMonth: Math.min(31, Number(e.target.value) || 1) })} />
+              <input type="number" min={1} max={31} className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.workingDaysPerMonth} onChange={(e) => setForm({ ...form, workingDaysPerMonth: Math.min(31, Number(e.target.value) || 1) })} />
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.monthlyCost')}</label>
-              <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold bg-emerald-50 text-emerald-700">
+              <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]">
                 {formatCurrency(form.dailyRate * form.workingDaysPerMonth)}
               </div>
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.driverName')}</label>
-              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.driverName} onChange={(e) => setForm({ ...form, driverName: e.target.value })} />
+              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.driverName} onChange={(e) => setForm({ ...form, driverName: e.target.value })} />
             </div>
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.driverPhone')}</label>
-              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.driverPhone} onChange={(e) => setForm({ ...form, driverPhone: e.target.value })} dir="ltr" />
+              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none" value={form.driverPhone} onChange={(e) => setForm({ ...form, driverPhone: e.target.value })} dir="ltr" />
             </div>
             <div className="flex items-end">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -179,7 +179,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
                 {t('modalManager.createVehicle.linkEmployeesCount', { count: form.assignedEmployees.length, capacity: form.capacity })}
               </label>
               {form.assignedEmployees.length >= form.capacity && (
-                <span className="text-xs text-amber-600 font-bold">{t('modalManager.createVehicle.vehicleFull')}</span>
+                <span className="text-xs text-[rgb(var(--color-warning))] font-bold">{t('modalManager.createVehicle.vehicleFull')}</span>
               )}
             </div>
             <SearchableSelect
@@ -194,9 +194,9 @@ export const GlobalCreateVehicleModal: React.FC = () => {
             {form.assignedEmployees.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {form.assignedEmployees.map((empId) => (
-                  <span key={empId} className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium px-3 py-1.5 rounded-[var(--border-radius-base)] border border-indigo-200 dark:border-indigo-800">
+                  <span key={empId} className="inline-flex items-center gap-1.5 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))] text-sm font-medium px-3 py-1.5 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)]">
                     {employeeNameMap.get(empId) || empId}
-                    <button onClick={() => toggleEmployee(empId)} className="text-indigo-400 hover:text-rose-500 transition-colors">
+                    <button onClick={() => toggleEmployee(empId)} className="text-[rgb(var(--color-primary))] hover:text-[rgb(var(--color-danger))] transition-colors">
                       <X size={14} />
                     </button>
                   </span>
@@ -207,7 +207,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
 
           <div>
             <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.notes')}</label>
-            <textarea className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            <textarea className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">

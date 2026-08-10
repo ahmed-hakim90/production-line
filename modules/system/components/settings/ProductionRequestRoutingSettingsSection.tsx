@@ -130,7 +130,7 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
           )}
         </div>
         {approverOptions.length === 0 && (
-          <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          <p className="text-xs font-bold text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-3 py-2">
             لا يوجد موظفون نشطون للاختيار. اربط المستخدم بسجل موظف حتى تظهر الطلبات في مركز الموافقات.
           </p>
         )}

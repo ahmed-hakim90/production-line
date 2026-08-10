@@ -94,7 +94,7 @@ export const PurchaseGapReport: React.FC = () => {
                     <td className="px-3 py-2">{r.materialName}</td>
                     <td className="px-3 py-2 tabular-nums">{r.requiredQty}</td>
                     <td className="px-3 py-2 tabular-nums">{r.availableQty}</td>
-                    <td className="px-3 py-2 tabular-nums font-bold text-rose-600">{r.gapQty}</td>
+                    <td className="px-3 py-2 tabular-nums font-bold text-[rgb(var(--color-danger))]">{r.gapQty}</td>
                   </tr>
                 ))}
               </tbody>

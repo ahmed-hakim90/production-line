@@ -47,7 +47,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
 
             <div
               className="rounded-[var(--border-radius-lg)] border p-4 mb-5 text-right"
-              style={{ background: '#f8f9fa', borderColor: 'var(--color-border)' }}
+              style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}
             >
               <p className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wide mb-2">
                 معرّف الشركة في الرابط
@@ -56,7 +56,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
                 {tenantSlug}
               </p>
               <p className="text-[11.5px] text-[var(--color-text-muted)] mt-2">
-                الحالة الحالية: <span className="font-semibold text-amber-700">{statusLabel}</span>
+                الحالة الحالية: <span className="font-semibold text-[rgb(var(--color-warning))]">{statusLabel}</span>
               </p>
             </div>
 

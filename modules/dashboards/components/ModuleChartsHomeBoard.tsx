@@ -297,7 +297,7 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
                         type="monotone"
                         dataKey="costPerUnit"
                         name="تكلفة الوحدة"
-                        stroke="#d97706"
+                        stroke="var(--color-warning-hex)"
                         strokeWidth={2.5}
                         dot={false}
                       />
@@ -414,7 +414,7 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
                 <ModuleBarChart
                   data={data.qualityBars}
                   layout="horizontal"
-                  fill="#0d9488"
+                  fill="var(--chart-7)"
                   onBarClick={() => drill('quality')}
                 />
               </div>
@@ -433,7 +433,7 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
             {data.repairBars.length > 0 ? (
               <ModuleBarChart
                 data={data.repairBars}
-                fill="#ea580c"
+                fill="var(--chart-3)"
                 categoryWidth={72}
                 onBarClick={(name) => drill('repair', name)}
               />
@@ -449,7 +449,7 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
               <ModuleBarChart
                 data={data.customersBars}
                 layout="horizontal"
-                fill="#0891b2"
+                fill="var(--chart-1)"
                 onBarClick={(name) => drill('customers', name)}
               />
             ) : (

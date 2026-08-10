@@ -22,7 +22,11 @@ export function writeUiDensity(mode: UiDensityMode): void {
   }
 }
 
-/** Applies --density-scale, --page-shell-gap, and base font size on the document root. */
+/**
+ * Applies spacing / density-scale only.
+ * Font sizes and control heights stay owned by ThemeSettings via `buildThemeSettingsCssVars`
+ * — do not hardcode `--font-size-*` here (that previously overwrote محرك المظهر).
+ */
 export function applyUiDensity(mode: UiDensityMode): void {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
@@ -30,17 +34,11 @@ export function applyUiDensity(mode: UiDensityMode): void {
     root.style.setProperty('--density-scale', '0.92');
     root.style.setProperty('--page-shell-gap', '0.75rem');
     root.style.setProperty('--layout-main-padding-y', '0.75rem');
-    root.style.setProperty('--font-size-base', '12px');
-    root.style.setProperty('--font-size-sm', '11px');
-    root.style.setProperty('--font-size-xs', '10px');
     root.dataset.uiDensity = 'compact';
   } else {
     root.style.setProperty('--density-scale', '1');
     root.style.setProperty('--page-shell-gap', '1rem');
     root.style.setProperty('--layout-main-padding-y', '1rem');
-    root.style.setProperty('--font-size-base', '13px');
-    root.style.setProperty('--font-size-sm', '12px');
-    root.style.setProperty('--font-size-xs', '11px');
     root.dataset.uiDensity = 'comfortable';
   }
 }

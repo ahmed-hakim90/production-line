@@ -232,7 +232,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
             لا توجد تفاصيل إنتاج عمال محفوظة لهذا التقرير.
           </p>
           {hasReportQtyWithoutWorkerRows ? (
-            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+            <p className="rounded-md border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-3 py-2 text-sm font-semibold text-[rgb(var(--color-warning))]">
               كمية التقرير ({formatNumber(reportQty)}) محفوظة كإجمالي على التقرير، وليست موزعة على العمال بعد.
               اضغط «تحديث العمال» أو سجّل عمال الإنتاج ثم أدخل إنتاج كل عامل.
             </p>
@@ -268,7 +268,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
                       <input
                         type="number"
                         min={0}
-                        className="w-24 border border-[var(--color-border)] rounded-md text-center py-1 disabled:bg-[#f0f2f5]/70 disabled:text-[var(--color-text-muted)]"
+                        className="w-24 border border-[var(--color-border)] rounded-md text-center py-1 disabled:bg-[var(--color-surface-hover)]/70 disabled:text-[var(--color-text-muted)]"
                         value={row.outputQty || ''}
                         disabled={disabled}
                         onChange={(e) => updateRow(row.workerId, { outputQty: Number(e.target.value) || 0 })}
@@ -291,7 +291,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
         </span>
       </div>
       {mismatch && (
-        <p className="text-sm font-bold text-red-600">
+        <p className="text-sm font-bold text-[rgb(var(--color-danger))]">
           مجموع إنتاج العمال ({formatNumber(totalWorkerOutput)}) لا يطابق كمية التقرير ({formatNumber(reportQty)})
         </p>
       )}

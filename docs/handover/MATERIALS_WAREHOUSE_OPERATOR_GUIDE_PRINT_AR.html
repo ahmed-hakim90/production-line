@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>دليل مسؤول مخزن مستلزمات الإنتاج — للطباعة</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #152033;
+      --muted: #5b6575;
+      --line: #d7dde6;
+      --soft: #f4f7fb;
+      --navy: #1e3a5f;
+      --accent: #c45c26;
+      --ok: #1f6b4a;
+      --warn-bg: #fff7ed;
+      --warn-border: #f0a05a;
+      --card: #ffffff;
+    }
+
+    @page {
+      size: A4;
+      margin: 14mm 12mm 16mm;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: 'Cairo', system-ui, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.7;
+      color: var(--ink);
+      background: #e8edf3;
+    }
+
+    .toolbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      padding: 12px 16px;
+      background: rgba(30, 58, 95, 0.96);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(0,0,0,.15);
+    }
+
+    .toolbar button {
+      font-family: inherit;
+      font-weight: 700;
+      font-size: 12pt;
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 18px;
+      cursor: pointer;
+      background: #fff;
+      color: var(--navy);
+    }
+
+    .toolbar button.secondary {
+      background: transparent;
+      color: #fff;
+      border: 1px solid rgba(255,255,255,.45);
+    }
+
+    .toolbar span {
+      font-size: 10pt;
+      opacity: .9;
+    }
+
+    .sheet {
+      max-width: 210mm;
+      margin: 18px auto 40px;
+      background: var(--card);
+      box-shadow: 0 8px 30px rgba(21, 32, 51, .12);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .cover {
+      min-height: 260mm;
+      padding: 42px 36px;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(196, 92, 38, .18), transparent 42%),
+        linear-gradient(160deg, #132942 0%, #1e3a5f 48%, #243b55 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      page-break-after: always;
+    }
+
+    .cover .badge {
+      display: inline-block;
+      align-self: flex-start;
+      background: rgba(255,255,255,.12);
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 10pt;
+      font-weight: 700;
+      margin-bottom: 22px;
+    }
+
+    .cover h1 {
+      font-size: 28pt;
+      line-height: 1.35;
+      margin: 0 0 14px;
+      font-weight: 800;
+      max-width: 14ch;
+    }
+
+    .cover .lead {
+      font-size: 13pt;
+      opacity: .92;
+      max-width: 34ch;
+      margin: 0 0 28px;
+    }
+
+    .cover .meta {
+      margin-top: auto;
+      display: grid;
+      gap: 8px;
+      font-size: 10.5pt;
+      opacity: .88;
+      border-top: 1px solid rgba(255,255,255,.22);
+      padding-top: 18px;
+    }
+
+    .cover .meta strong { color: #ffd7bf; font-weight: 700; }
+
+    .content {
+      padding: 8px 22px 28px;
+    }
+
+    .toc {
+      page-break-after: always;
+      padding-top: 18px;
+    }
+
+    .toc ol {
+      columns: 1;
+      padding-right: 22px;
+      margin: 0;
+    }
+
+    .toc li {
+      margin: 8px 0;
+      font-weight: 600;
+    }
+
+    .toc a {
+      color: var(--navy);
+      text-decoration: none;
+    }
+
+    h2 {
+      color: var(--navy);
+      font-size: 15pt;
+      margin: 26px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 2.5px solid var(--accent);
+      page-break-after: avoid;
+    }
+
+    h3 {
+      color: #243447;
+      font-size: 12pt;
+      margin: 18px 0 8px;
+      page-break-after: avoid;
+    }
+
+    p { margin: 8px 0; }
+
+    .kicker {
+      display: inline-block;
+      background: #fff1e8;
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 9pt;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 6px;
+    }
+
+    .callout {
+      background: var(--warn-bg);
+      border-right: 4px solid var(--warn-border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin: 12px 0;
+    }
+
+    .callout.ok {
+      background: #edf8f2;
+      border-right-color: var(--ok);
+    }
+
+    .callout.navy {
+      background: #eef3f9;
+      border-right-color: var(--navy);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 12px 0;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      background: var(--soft);
+      page-break-inside: avoid;
+    }
+
+    .card h4 {
+      margin: 0 0 8px;
+      font-size: 11pt;
+      color: var(--navy);
+    }
+
+    .card.do h4 { color: var(--ok); }
+    .card.dont h4 { color: #9b2c2c; }
+
+    .card ul {
+      margin: 0;
+      padding-right: 18px;
+    }
+
+    .card li { margin: 4px 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px;
+      font-size: 9.5pt;
+      page-break-inside: auto;
+    }
+
+    thead { display: table-header-group; }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 7px 8px;
+      text-align: right;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eaf0f7;
+      color: var(--navy);
+      font-weight: 700;
+    }
+
+    tr { page-break-inside: avoid; }
+
+    tbody tr:nth-child(even) td { background: #fafbfd; }
+
+    ol.steps, ul.plain {
+      padding-right: 22px;
+      margin: 8px 0 14px;
+    }
+
+    ol.steps li, ul.plain li { margin: 5px 0; }
+
+    .checklist {
+      list-style: none;
+      padding: 0;
+      margin: 8px 0 14px;
+    }
+
+    .checklist li {
+      position: relative;
+      padding: 6px 34px 6px 8px;
+      border-bottom: 1px dashed var(--line);
+      page-break-inside: avoid;
+    }
+
+    .checklist li::before {
+      content: '';
+      position: absolute;
+      right: 6px;
+      top: 10px;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid #7a8699;
+      border-radius: 3px;
+      background: #fff;
+    }
+
+    code, .path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 8.5pt;
+      background: #f0f3f7;
+      border: 1px solid #e1e6ee;
+      border-radius: 4px;
+      padding: 1px 5px;
+      direction: ltr;
+      display: inline-block;
+      unicode-bidi: isolate;
+    }
+
+    .paths {
+      background: #f7f9fc;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      direction: ltr;
+      text-align: left;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 8.5pt;
+      line-height: 1.8;
+      white-space: pre-wrap;
+    }
+
+    .sign-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .sign-box {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      min-height: 88px;
+      padding: 10px 12px;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+
+    .sign-box .label {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 28px;
+    }
+
+    .sign-box .line {
+      border-top: 1px solid #b8c0cc;
+      padding-top: 6px;
+      font-size: 8.5pt;
+      color: var(--muted);
+    }
+
+    .footer-note {
+      margin-top: 28px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 9pt;
+      text-align: center;
+    }
+
+    .summary-banner {
+      background: linear-gradient(90deg, #1e3a5f, #2a4d73);
+      color: #fff;
+      border-radius: 12px;
+      padding: 16px 18px;
+      margin: 18px 0 8px;
+      page-break-inside: avoid;
+    }
+
+    .summary-banner strong {
+      display: block;
+      font-size: 11pt;
+      margin-bottom: 6px;
+      color: #ffd7bf;
+    }
+
+    @media print {
+      body { background: #fff; }
+      .toolbar { display: none !important; }
+      .sheet {
+        margin: 0;
+        max-width: none;
+        box-shadow: none;
+        border-radius: 0;
+      }
+      .cover { min-height: auto; padding: 28px 8px; }
+      a { color: inherit; text-decoration: none; }
+    }
+
+    @media screen and (max-width: 720px) {
+      .grid-2, .sign-grid { grid-template-columns: 1fr; }
+      .content { padding: 8px 14px 24px; }
+      .cover { min-height: auto; padding: 28px 20px; }
+      .cover h1 { font-size: 22pt; max-width: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button type="button" onclick="window.print()">طباعة / حفظ PDF</button>
+    <button type="button" class="secondary" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">أعلى الصفحة</button>
+    <span>A4 · اضغط الطباعة واختر «حفظ كـ PDF» إن حابب ملف</span>
+  </div>
+
+  <article class="sheet">
+    <header class="cover">
+      <div class="badge">تدريب تشغيل · مخازن</div>
+      <h1>دليل مسؤول مخزن مستلزمات الإنتاج</h1>
+      <p class="lead">مرجع واضح بعد الشرح: الصفحات، الروتين اليومي، وأهم القواعد اللي تخلّيك تشتغل صح من أول يوم.</p>
+      <div class="meta">
+        <div>الدور في النظام: <strong>مسؤول مخزن المستلزمات</strong></div>
+        <div>الجمهور: موظف مخزن المكونات / المستلزمات</div>
+        <div>تاريخ الإصدار: <strong>10 أغسطس 2026</strong></div>
+        <div>نقطة البداية بعد الدخول: <strong>مساحة مستلزمات الإنتاج</strong></div>
+      </div>
+    </header>
+
+    <div class="content">
+      <nav class="toc" aria-label="فهرس">
+        <h2>فهرس المحتويات</h2>
+        <ol>
+          <li><a href="#s1">شغلك باختصار</a></li>
+          <li><a href="#s2">خريطة الصفحات</a></li>
+          <li><a href="#s3">مسار العمل اليومي</a></li>
+          <li><a href="#s4">أهم شاشتين بالتفصيل</a></li>
+          <li><a href="#s5">مفاهيم لازم تفهمها</a></li>
+          <li><a href="#s6">صلاحياتك</a></li>
+          <li><a href="#s7">أخطاء شائعة</a></li>
+          <li><a href="#s8">قائمة تحقق التدريب والتوقيع</a></li>
+          <li><a href="#s9">لمن تلجأ عند المشكلة</a></li>
+          <li><a href="#s10">روابط سريعة</a></li>
+        </ol>
+      </nav>
+
+      <section id="s1">
+        <div class="kicker">القسم 1</div>
+        <h2>1) شغلك باختصار</h2>
+        <p>أنت مسؤول عن <strong>مخزن المستلزمات (المكونات)</strong> من الاستلام حتى الصرف للإنتاج، مع متابعة الأرصدة والتنبيهات والجرد.</p>
+
+        <div class="grid-2">
+          <div class="card do">
+            <h4>تفعل أنت</h4>
+            <ul>
+              <li>استلام مكونات واردة</li>
+              <li>صرف للإنتاج واعتماد طلبات الصرف</li>
+              <li>تحويلات من/إلى مخزن المستلزمات</li>
+              <li>جرد ومطابقة المستلزمات</li>
+              <li>صرف مستهلكات الأقسام</li>
+              <li>متابعة نقص المكونات</li>
+            </ul>
+          </div>
+          <div class="card dont">
+            <h4>لا تفعل أنت (عادة)</h4>
+            <ul>
+              <li>تقارير إنتاج الخطوط</li>
+              <li>تحكم التغليف</li>
+              <li>اعتماد وارد الإنتاج النهائي</li>
+              <li>إدارة قطع غيار مراكز الصيانة (إلا لو طُلب منك)</li>
+              <li>إنشاء خطط الإنتاج</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="callout ok">
+          <strong>أول صفحة بعد الدخول:</strong>
+          مساحة مستلزمات الإنتاج
+          <span class="path">/inventory/raw-materials/control</span>
+        </div>
+        <div class="callout">
+          لو الصفحة قالت إن المخزن غير محدّد: اطلب من الإدارة تعيين مخزن المستلزمات من
+          <strong>الإعدادات ← توجيه المخزون</strong>.
+        </div>
+      </section>
+
+      <section id="s2">
+        <div class="kicker">القسم 2</div>
+        <h2>2) خريطة الصفحات الخاصة بك</h2>
+
+        <h3>أ) نقطة الانطلاق (يومية)</h3>
+        <table>
+          <thead>
+            <tr><th>الصفحة</th><th>المسار</th><th>ماذا تعمل فيها</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>مساحة مستلزمات الإنتاج</td>
+              <td><span class="path">/inventory/raw-materials/control</span></td>
+              <td>لوحة شغلك: أرصدة، استلام، صرف، تحويل، جرد، حركات</td>
+            </tr>
+            <tr>
+              <td>تنبيهات المستلزمات</td>
+              <td><span class="path">/inventory/raw-materials/alerts</span></td>
+              <td>نقص / نفاد / أرصدة تحتاج متابعة</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>ب) العمليات الأساسية</h3>
+        <table>
+          <thead>
+            <tr><th>الصفحة</th><th>المسار</th><th>متى تستخدمها</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>استلام مستلزمات</td>
+              <td><span class="path">/inventory/raw-materials/receive</span></td>
+              <td>وارد مكونات للمخزن</td>
+            </tr>
+            <tr>
+              <td>صرف للإنتاج</td>
+              <td><span class="path">/inventory/production-issues</span></td>
+              <td>طلبات صرف → اعتماد → صرف → طباعة</td>
+            </tr>
+            <tr>
+              <td>وارد يدوي</td>
+              <td><span class="path">/inventory/movements … IN</span></td>
+              <td>إدخال وارد بسيط</td>
+            </tr>
+            <tr>
+              <td>صرف يدوي</td>
+              <td><span class="path">/inventory/movements … OUT</span></td>
+              <td>صرف غير مرتبط بأمر إنتاج</td>
+            </tr>
+            <tr>
+              <td>تحويل مكونات</td>
+              <td><span class="path">TRANSFER</span> أو تحويل سريع</td>
+              <td>نقل بين مخازن/مواقع</td>
+            </tr>
+            <tr>
+              <td>اعتماد تحويلات المخازن</td>
+              <td><span class="path">/inventory/transfer-approvals</span></td>
+              <td>التحويلات المعلّقة عندك</td>
+            </tr>
+            <tr>
+              <td>جرد المخازن</td>
+              <td><span class="path">/inventory/counts</span></td>
+              <td>جرد ومطابقة فروقات</td>
+            </tr>
+            <tr>
+              <td>مستهلكات الأقسام</td>
+              <td><span class="path">/inventory/department-consumables</span></td>
+              <td>صرف مستهلكات لأقسام المصنع</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>ج) الاستعلام والمتابعة</h3>
+        <table>
+          <thead>
+            <tr><th>الصفحة</th><th>المسار</th><th>الفائدة</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>أرصدة كل المخازن</td><td><span class="path">/inventory/balances</span></td><td>رصيد صنف/مخزن</td></tr>
+            <tr><td>كارت الصنف</td><td><span class="path">/inventory/item-card</span></td><td>تاريخ حركة صنف واحد</td></tr>
+            <tr><td>حركات كل المخازن</td><td><span class="path">/inventory/transactions</span></td><td>دفتر الحركات</td></tr>
+            <tr><td>مواقع الأرفف</td><td><span class="path">/inventory/locations</span></td><td>مواقع التخزين</td></tr>
+            <tr><td>مساحة صالة الإنتاج</td><td><span class="path">/inventory/production-floor</span></td><td>متابعة رصيد الصالة</td></tr>
+            <tr><td>سجلات مكونات الإنتاج</td><td><span class="path">/inventory/production-component-records</span></td><td>سجل ما صُرف للإنتاج</td></tr>
+            <tr><td>تفكيك عكسي</td><td><span class="path">/inventory/disassembly</span></td><td>إرجاع منتج لمكونات</td></tr>
+            <tr><td>تحليلات / استثناءات</td><td><span class="path">/inventory/analytics</span> · <span class="path">/exceptions</span></td><td>نظرة وتحليل حالات شاذة</td></tr>
+          </tbody>
+        </table>
+
+        <h3>د) دعم التخطيط</h3>
+        <table>
+          <thead>
+            <tr><th>الصفحة</th><th>المسار</th><th>الفائدة</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>المواد التصنيعية</td><td><span class="path">/manufacturing/materials</span></td><td>بيانات الأصناف</td></tr>
+            <tr><td>دورات التوريد</td><td><span class="path">/supply-cycles</span></td><td>متابعة التوريد</td></tr>
+            <tr><td>تخطيط احتياجات المواد</td><td><span class="path">/manufacturing/planning-run</span></td><td>ماذا تحتاج الخطط</td></tr>
+            <tr><td>فجوة الشراء</td><td><span class="path">/manufacturing/purchase-gap</span></td><td>ما ينقص للشراء</td></tr>
+          </tbody>
+        </table>
+
+        <div class="callout navy">
+          <strong>مش شغلك الأساسي:</strong> تموين قطع الغيار / فواتير قطع / أرصدة وسحب المراكز.
+          استخدمها فقط لو الإدارة طلبت منك.
+        </div>
+        <div class="callout">
+          <strong>مخفي عن دورك عمدًا:</strong> تحكم التغليف · اعتمادات وارد الإنتاج · تحليل استهلاك الإنتاج.
+          لو احتجتها ارفع الطلب لمدير المصنع.
+        </div>
+      </section>
+
+      <section id="s3">
+        <div class="kicker">القسم 3</div>
+        <h2>3) مسار العمل اليومي</h2>
+
+        <h3>صباحًا (10–15 دقيقة)</h3>
+        <ol class="steps">
+          <li>افتح <strong>مساحة مستلزمات الإنتاج</strong>.</li>
+          <li>راجع أرقام اللوحة: أصناف، كمية، تنبيهات، معلّقات.</li>
+          <li>افتح <strong>تنبيهات المستلزمات</strong> — عالج الناقص أو بلّغ المشتريات.</li>
+          <li>راجع <strong>اعتماد تحويلات</strong> و<strong>صرف للإنتاج</strong> لأي طلب معلّق.</li>
+        </ol>
+
+        <h3>خلال اليوم</h3>
+        <table>
+          <thead>
+            <tr><th>الحالة</th><th>ماذا تفعل</th><th>أين</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>وصلت بضاعة مكونات</td><td>استلام مستلزمات (أو وارد يدوي)</td><td>استلام / حركات وارد</td></tr>
+            <tr><td>الإنتاج يطلب مكونات</td><td>راجع الطلب → اعتمد/صرّف → اطبع</td><td>صرف للإنتاج</td></tr>
+            <tr><td>نقل لمخزن أو موقع</td><td>تحويل ثم تابع الاعتماد إن لزم</td><td>تحويل + اعتماد تحويلات</td></tr>
+            <tr><td>قسم يطلب مستهلكات</td><td>أنشئ/صرف مستهلكات</td><td>مستهلكات الأقسام</td></tr>
+            <tr><td>شك في الرصيد</td><td>كارت الصنف + الحركات</td><td>كارت الصنف / الحركات</td></tr>
+          </tbody>
+        </table>
+
+        <h3>نهاية اليوم (5 دقائق)</h3>
+        <ul class="checklist">
+          <li>لا طلبات صرف معلّقة بدون قرار</li>
+          <li>لا تحويلات معلّقة بدون اعتماد/رفض</li>
+          <li>لا رصيد سالب جديد بدون سبب معروف</li>
+          <li>الاستلامات المنفّذة اليوم ظاهرة في الحركات</li>
+        </ul>
+      </section>
+
+      <section id="s4">
+        <div class="kicker">القسم 4</div>
+        <h2>4) أهم شاشتين بالتفصيل</h2>
+
+        <h3>4.1 مساحة مستلزمات الإنتاج</h3>
+        <p>هذه <strong>لوحة التشغيل</strong>. منها أزرار مباشرة:</p>
+        <ol class="steps">
+          <li><strong>الأرصدة</strong> — ماذا عندك الآن</li>
+          <li><strong>استلام مكونات</strong> — وارد</li>
+          <li><strong>صرف</strong> — طلبات الإنتاج + صرف يدوي</li>
+          <li><strong>تحويل</strong> — نقل + اعتماد</li>
+          <li><strong>جرد ومطابقة</strong></li>
+          <li><strong>الحركات</strong> — آخر ما تم</li>
+        </ol>
+        <p>أسفل الصفحة: <strong>المتاح للتجميع حسب المنتج</strong> — مساعد تخطيط، مش بديل للجرد.</p>
+
+        <h3>4.2 صرف للإنتاج</h3>
+        <ol class="steps">
+          <li>يظهر طلب صرف من الإنتاج (خطة/أمر شغل)</li>
+          <li>تراجع الكميات والمخزن</li>
+          <li>تعتمد / تجهّز حسب صلاحيتك</li>
+          <li>تنفّذ الصرف</li>
+          <li>تطبع إذن الصرف عند الحاجة</li>
+        </ol>
+        <div class="callout ok">
+          <strong>قاعدة ذهبية:</strong>
+          الصرف المرتبط بالإنتاج يكون من شاشة <strong>صرف للإنتاج</strong> وليس صرفًا يدويًا عشوائيًا —
+          عشان الربط مع الخطة/الأمر يفضل واضح.
+        </div>
+      </section>
+
+      <section id="s5">
+        <div class="kicker">القسم 5</div>
+        <h2>5) مفاهيم لازم تفهمها</h2>
+        <table>
+          <thead>
+            <tr><th>المصطلح</th><th>المعنى البسيط</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>مخزن المستلزمات</td><td>مخزن المكونات المستخدمة في التصنيع</td></tr>
+            <tr><td>رصيد</td><td>الكمية الحالية لصنف في مخزن</td></tr>
+            <tr><td>حركة وارد (IN)</td><td>دخول كمية للمخزن</td></tr>
+            <tr><td>حركة صرف (OUT)</td><td>خروج كمية من المخزن</td></tr>
+            <tr><td>تحويل (TRANSFER)</td><td>نقل بين مخزنين/مواقع</td></tr>
+            <tr><td>جرد</td><td>عدّ فعلي ومقارنة بالنظام وتسوية الفرق</td></tr>
+            <tr><td>تنبيه نقص</td><td>الرصيد وصل للحد الأدنى أو أقل</td></tr>
+            <tr><td>رصيد سالب</td><td>خطأ تشغيلي — راجعه فورًا</td></tr>
+            <tr><td>كارت الصنف</td><td>سجل حياة الصنف (كل حركاته)</td></tr>
+            <tr><td>مستهلكات أقسام</td><td>أصناف تُصرف للإدارات</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s6">
+        <div class="kicker">القسم 6</div>
+        <h2>6) صلاحياتك باختصار</h2>
+        <ul class="plain">
+          <li>عرض المخازن والأرصدة والحركات</li>
+          <li>إنشاء / تعديل / طباعة / تصدير حركات</li>
+          <li>جرد ومواقع وأصناف ضمن نطاقك</li>
+          <li>اعتماد تحويلات وتفكيك عكسي</li>
+          <li>صرف إنتاج (إنشاء / اعتماد / طباعة / مرتجع / تعويض حسب المنح)</li>
+          <li>مستهلكات الأقسام كامل الدورة</li>
+          <li>عرض المواد والتخطيط وفجوة الشراء ودورات التوريد</li>
+        </ul>
+        <div class="callout">
+          ما يظهر في القائمة يعتمد على صلاحيات حسابك.
+          لو زر ناقص — اطلب من مدير النظام مراجعة الدور، ومتحاولش تتجاوز الشاشة.
+        </div>
+      </section>
+
+      <section id="s7">
+        <div class="kicker">القسم 7</div>
+        <h2>7) أخطاء شائعة وتجنّبها</h2>
+        <table>
+          <thead>
+            <tr><th>الخطأ</th><th>الصحيح</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>صرف يدوي بدل صرف الإنتاج</td><td>استخدم <strong>صرف للإنتاج</strong> للطلبات الرسمية</td></tr>
+            <tr><td>نسيان اعتماد التحويل</td><td>راقب اعتماد التحويلات يوميًا</td></tr>
+            <tr><td>إدخال وارد بدون مراجعة الصنف/الكمية</td><td>راجع الكود والوحدة قبل الحفظ</td></tr>
+            <tr><td>تجاهل التنبيهات</td><td>النقص اليوم يصبح توقف خط غدًا</td></tr>
+            <tr><td>جرد بدون مطابقة واضحة</td><td>نفّذ الجرد من شاشته واتبع فروقات التسوية</td></tr>
+            <tr><td>الاعتماد على الذاكرة</td><td>افتح كارت الصنف عند أي خلاف</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s8">
+        <div class="kicker">القسم 8</div>
+        <h2>8) قائمة تحقق التدريب والتوقيع</h2>
+
+        <h3>اليوم الأول — فهم ومشاهدة</h3>
+        <ul class="checklist">
+          <li>فتح مساحة مستلزمات الإنتاج وشرح أرقام اللوحة</li>
+          <li>فتح تنبيهات المستلزمات</li>
+          <li>فتح أرصدة + كارت صنف + حركات</li>
+          <li>مشاهدة طلب صرف إنتاج من الألف للياء</li>
+        </ul>
+
+        <h3>اليوم الثاني — تنفيذ تحت إشراف</h3>
+        <ul class="checklist">
+          <li>تنفيذ استلام مستلزمات حقيقي أو تجريبي</li>
+          <li>اعتماد/صرف طلب إنتاج وطباعة</li>
+          <li>عمل تحويل ومتابعة الاعتماد</li>
+          <li>فتح جرد وفهم خطوات المطابقة</li>
+          <li>صرف مستهلكات قسم (إن مستخدمة في المصنع)</li>
+        </ul>
+
+        <h3>جاهزية العمل منفردًا</h3>
+        <ul class="checklist">
+          <li>يعرف نقطة البداية كل صباح</li>
+          <li>يعرف فرق صرف الإنتاج عن الصرف اليدوي</li>
+          <li>يعرف لمن يبلّغ عند نقص حاد أو رصيد سالب</li>
+          <li>استلم هذا الدليل مطبوعًا</li>
+        </ul>
+
+        <div class="sign-grid">
+          <div class="sign-box">
+            <div class="label">توقيع المتدرّب</div>
+            <div class="line">الاسم / التاريخ</div>
+          </div>
+          <div class="sign-box">
+            <div class="label">توقيع المدرّب</div>
+            <div class="line">الاسم / التاريخ</div>
+          </div>
+          <div class="sign-box">
+            <div class="label">بدء العمل منفردًا</div>
+            <div class="line">التاريخ</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="s9">
+        <div class="kicker">القسم 9</div>
+        <h2>9) لمن تلجأ عند المشكلة</h2>
+        <table>
+          <thead>
+            <tr><th>المشكلة</th><th>لمن</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>صلاحية ناقصة / صفحة لا تظهر</td><td>مدير النظام</td></tr>
+            <tr><td>مخزن المستلزمات غير مضبوط</td><td>مدير النظام / إعدادات التوجيه</td></tr>
+            <tr><td>طلب صرف غير منطقي من الإنتاج</td><td>مشرف الإنتاج / مدير المصنع</td></tr>
+            <tr><td>نقص مكونات للشراء</td><td>المشتريات / التخطيط</td></tr>
+            <tr><td>خطأ رصيد أو حركة قديمة</td><td>مدير المخازن + كارت الصنف</td></tr>
+            <tr><td>عطل تقني في النظام</td><td>الدعم الفني / مطوّر النظام</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="s10">
+        <div class="kicker">القسم 10</div>
+        <h2>10) روابط سريعة</h2>
+        <p>بعد تسجيل الدخول (مع بادئة المستأجر إن وُجدت مثل <span class="path">/t/اسم-الشركة/...</span>):</p>
+        <div class="paths">/inventory/raw-materials/control
+/inventory/raw-materials/alerts
+/inventory/raw-materials/receive
+/inventory/production-issues
+/inventory/transfer-approvals
+/inventory/counts
+/inventory/balances
+/inventory/transactions
+/inventory/item-card
+/inventory/department-consumables
+/inventory/locations
+/inventory/production-floor
+/manufacturing/planning-run
+/manufacturing/purchase-gap
+/supply-cycles
+/manufacturing/materials</div>
+
+        <div class="summary-banner">
+          <strong>خلاصة سطر واحد</strong>
+          افتح مساحة مستلزمات الإنتاج كل يوم ← عالج التنبيهات والمعلّقات ← استلم الوارد ← اصرف للإنتاج من شاشته ← حوّل/اجرد عند الحاجة ← راجع الحركات قبل ما تقفل يومك.
+        </div>
+
+        <p class="footer-note">
+          Factory ERP · دليل مسؤول مخزن مستلزمات الإنتاج · أغسطس 2026<br />
+          المصدر النصي: docs/handover/MATERIALS_WAREHOUSE_OPERATOR_GUIDE_AR.md
+        </p>
+      </section>
+    </div>
+  </article>
+</body>
+</html>

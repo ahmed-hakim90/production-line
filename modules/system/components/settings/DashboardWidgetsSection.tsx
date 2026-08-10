@@ -102,10 +102,10 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
                 className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border transition-all cursor-grab active:cursor-grabbing group ${
                   widget.visible
                     ? 'bg-[var(--color-card)] border-[var(--color-border)] hover:border-primary/30'
-                    : 'bg-[#f8f9fa]/50 border-[var(--color-border)] opacity-60'
+                    : 'bg-[var(--color-bg)]/50 border-[var(--color-border)] opacity-60'
                 }`}
               >
-                <span className="material-icons-round text-[var(--color-text-muted)] dark:text-slate-600 text-lg group-hover:text-primary transition-colors">
+                <span className="material-icons-round text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] text-lg group-hover:text-primary transition-colors">
                   drag_indicator
                 </span>
                 <span className="w-8 h-8 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -116,17 +116,17 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
                   <p className="text-[10px] text-[var(--color-text-muted)] font-mono">{widget.id}</p>
                 </div>
                 {isCustom && (
-                  <span className="text-[10px] font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] font-bold text-[rgb(var(--color-secondary))] bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary)/0.15)] px-2 py-0.5 rounded-full">
                     مخصص
                   </span>
                 )}
-                <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] px-2 py-0.5 rounded-full">
                   #{index + 1}
                 </span>
                 {isCustom && (
                   <button
                     onClick={() => removeCustomWidget(selectedDashboardKey, widget.id)}
-                    className="w-8 h-8 rounded-[var(--border-radius-base)] border border-rose-200 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-all"
+                    className="w-8 h-8 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/10 transition-all"
                     title="حذف الـ Widget"
                   >
                     <span className="material-icons-round text-sm">delete</span>
@@ -154,8 +154,8 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
                   onClick={() => toggleWidget(selectedDashboardKey, widget.id)}
                   className={`w-10 h-6 rounded-full transition-all relative shrink-0 ${
                     widget.visible
-                      ? 'bg-emerald-500'
-                      : 'bg-slate-300 dark:bg-slate-600'
+                      ? 'bg-[rgb(var(--color-success)/0.1)]0'
+                      : 'bg-[var(--color-border)]'
                   }`}
                 >
                   <span
@@ -173,7 +173,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
         <p className="page-subtitle mb-3">Builder بسيط لعنصر Dashboard جديد</p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500">اللوحة المستهدفة</label>
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">اللوحة المستهدفة</label>
             <select
               value={widgetForm.dashboardKey}
               onChange={(e) => setWidgetForm((prev) => ({ ...prev, dashboardKey: e.target.value }))}
@@ -185,7 +185,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500">نوع الـ Widget</label>
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">نوع الـ Widget</label>
             <select
               value={widgetForm.type}
               onChange={(e) => setWidgetForm((prev) => ({ ...prev, type: e.target.value as CustomWidgetType }))}
@@ -197,7 +197,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             </select>
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500">الاسم</label>
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">الاسم</label>
             <input
               type="text"
               value={widgetForm.label}
@@ -207,7 +207,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500">الأيقونة</label>
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">الأيقونة</label>
             <input
               type="text"
               value={widgetForm.icon}
@@ -217,7 +217,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500">الصلاحية (اختياري)</label>
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">الصلاحية (اختياري)</label>
             <input
               type="text"
               value={widgetForm.permission}
@@ -227,7 +227,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-bold text-slate-500">الوصف/النص</label>
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">الوصف/النص</label>
             <input
               type="text"
               value={widgetForm.description}
@@ -239,7 +239,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
           {widgetForm.type === 'kpi' && (
             <>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">القيمة</label>
+                <label className="text-xs font-bold text-[var(--color-text-muted)]">القيمة</label>
                 <input
                   type="text"
                   value={widgetForm.value}
@@ -249,7 +249,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500">الوحدة</label>
+                <label className="text-xs font-bold text-[var(--color-text-muted)]">الوحدة</label>
                 <input
                   type="text"
                   value={widgetForm.unit}
@@ -262,7 +262,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
           )}
           {widgetForm.type === 'quick_link' && (
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500">المسار</label>
+              <label className="text-xs font-bold text-[var(--color-text-muted)]">المسار</label>
               <input
                 type="text"
                 value={widgetForm.target}

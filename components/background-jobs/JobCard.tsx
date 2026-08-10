@@ -12,11 +12,11 @@ interface JobCardProps {
 }
 
 const STATUS_BADGE: Record<BackgroundJob['status'], string> = {
-  pending:    'bg-[#f0f2f5] text-[var(--color-text-muted)] border border-[var(--color-border)]',
-  uploading:  'bg-blue-50 text-blue-700 border border-blue-200',
-  processing: 'bg-amber-50 text-amber-700 border border-amber-200',
-  completed:  'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  failed:     'bg-rose-50 text-rose-700 border border-rose-200',
+  pending:    'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border border-[var(--color-border)]',
+  uploading:  'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary)/0.25)]',
+  processing: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]',
+  completed:  'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]',
+  failed:     'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]',
 };
 
 export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onViewReport, onRemove }) => {
@@ -54,9 +54,9 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
         </div>
         <div className="shrink-0 mt-0.5">
           {job.status === 'completed' ? (
-            <CheckCircle2 size={20} className="text-emerald-500" />
+            <CheckCircle2 size={20} className="text-[rgb(var(--color-success))]" />
           ) : job.status === 'failed' ? (
-            <AlertCircle size={20} className="text-rose-500" />
+            <AlertCircle size={20} className="text-[rgb(var(--color-danger))]" />
           ) : (
             <Loader2 size={20} className="text-[rgb(var(--color-primary))] animate-spin" />
           )}
@@ -98,16 +98,16 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
         <>
           {/* Completion summary */}
           {job.status === 'completed' && (
-            <div className="mt-3 rounded-[var(--border-radius-sm)] bg-emerald-50 border border-emerald-200 p-2.5 space-y-0.5">
-              <p className="text-[11.5px] font-semibold text-emerald-700">✔ {t('jobs.addedRows', { count: job.addedRows.toLocaleString('ar-EG') })}</p>
-              <p className="text-[11.5px] font-semibold text-slate-600">→ {t('jobs.skippedRows', { count: (job.skippedRows ?? 0).toLocaleString('ar-EG') })}</p>
-              <p className="text-[11.5px] font-semibold text-amber-700">⚠ {t('jobs.failedRows', { count: job.failedRows.toLocaleString('ar-EG') })}</p>
+            <div className="mt-3 rounded-[var(--border-radius-sm)] bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] p-2.5 space-y-0.5">
+              <p className="text-[11.5px] font-semibold text-[rgb(var(--color-success))]">✔ {t('jobs.addedRows', { count: job.addedRows.toLocaleString('ar-EG') })}</p>
+              <p className="text-[11.5px] font-semibold text-[var(--color-text-muted)]">→ {t('jobs.skippedRows', { count: (job.skippedRows ?? 0).toLocaleString('ar-EG') })}</p>
+              <p className="text-[11.5px] font-semibold text-[rgb(var(--color-warning))]">⚠ {t('jobs.failedRows', { count: job.failedRows.toLocaleString('ar-EG') })}</p>
             </div>
           )}
 
           {/* Error message */}
           {job.status === 'failed' && job.errorMessage && (
-            <p className="mt-2.5 text-[11.5px] text-rose-600">{job.errorMessage}</p>
+            <p className="mt-2.5 text-[11.5px] text-[rgb(var(--color-danger))]">{job.errorMessage}</p>
           )}
 
           {/* Action buttons */}
@@ -115,7 +115,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
             {isProcessing && (
               <button
                 onClick={() => onCancel(job.id)}
-                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
+                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[var(--color-surface-hover)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors border border-[var(--color-border)]"
               >
                 {t('ui.cancel')}
               </button>
@@ -131,7 +131,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
             {job.status === 'failed' && (
               <button
                 onClick={() => onRetry(job.id)}
-                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors border border-rose-200"
+                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.15)] transition-colors border border-[rgb(var(--color-danger)/0.25)]"
               >
                 {t('jobs.retry')}
               </button>
@@ -139,7 +139,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
             {isDone && (
               <button
                 onClick={() => onRemove(job.id)}
-                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed] transition-colors border border-[var(--color-border)]"
+                className="px-3 py-1.5 rounded-[var(--border-radius-sm)] text-[12px] font-medium bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors border border-[var(--color-border)]"
               >
                 {t('jobs.remove')}
               </button>

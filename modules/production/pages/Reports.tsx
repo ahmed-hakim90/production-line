@@ -308,12 +308,12 @@ function ReportCostBreakdownPanel({
   return (
     <div className="space-y-3 text-sm">
       {report?.manufacturingCostPostingState === 'pending' ? (
-        <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-700">
+        <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] p-3 text-xs font-bold text-[rgb(var(--color-warning))]">
           جاري تجهيز تكلفة التصنيع الكاملة لهذا التقرير.
         </div>
       ) : null}
       {report?.manufacturingCostPostingState === 'failed' ? (
-        <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+        <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] p-3 text-xs text-[rgb(var(--color-danger))]">
           <strong className="block mb-1">فشل تجهيز تكلفة التصنيع الكاملة</strong>
           {report.manufacturingCostPostingError || 'أعد حفظ التقرير أو راجع إعدادات التكلفة.'}
         </div>
@@ -327,7 +327,7 @@ function ReportCostBreakdownPanel({
                 إصدار {report.manufacturingCostRevision || 1} · {report.manufacturingCostVersion || 'full-manufacturing-v1'}
               </p>
             </div>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${report.manufacturingCostStatus === 'actual' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${report.manufacturingCostStatus === 'actual' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'}`}>
               {report.manufacturingCostStatus === 'actual' ? 'فعلية' : 'مبدئية'}
             </span>
           </div>
@@ -360,7 +360,7 @@ function ReportCostBreakdownPanel({
             </div>
             <div className="text-left">
               <span className="block text-[11px] text-[var(--color-text-muted)]">تكلفة الوحدة</span>
-              <strong className="text-lg tabular-nums text-violet-600">{formatCost(report.fullManufacturingUnitCostSnapshot || 0)} ج.م</strong>
+              <strong className="text-lg tabular-nums text-[rgb(var(--color-secondary))]">{formatCost(report.fullManufacturingUnitCostSnapshot || 0)} ج.م</strong>
             </div>
           </div>
           {report.manufacturingCostSourceQualitySnapshot ? (
@@ -383,17 +383,17 @@ function ReportCostBreakdownPanel({
           <span className="text-[var(--color-text-muted)] font-medium">تكلفة العمالة</span>
           <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.laborCostTotal)} ج.م</span>
         </div>
-        <p className="px-3 py-2 text-[11px] text-[var(--color-text-muted)] bg-[#f8f9fa]/80 dark:bg-slate-900/20 leading-relaxed">
+        <p className="px-3 py-2 text-[11px] text-[var(--color-text-muted)] bg-[var(--color-bg)]/80 dark:bg-[var(--color-surface-hover)] leading-relaxed">
           {breakdown.workersCount} عامل × {formatNumber(breakdown.workHours)} ساعة × {formatCost(breakdown.hourlyRate)} ج.م/ساعة
         </p>
         <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[var(--color-text-muted)] font-medium">نصيب التكاليف غير المباشرة (الخط)</span>
           <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.indirectShareTotal)} ج.م</span>
         </div>
-        <p className="px-3 py-2 text-[11px] text-[var(--color-text-muted)] bg-[#f8f9fa]/80 dark:bg-slate-900/20 leading-relaxed">
+        <p className="px-3 py-2 text-[11px] text-[var(--color-text-muted)] bg-[var(--color-bg)]/80 dark:bg-[var(--color-surface-hover)] leading-relaxed">
           التكلفة اليومية للخط: {formatCost(breakdown.lineDailyIndirect)} ج.م | إجمالي إنتاج الخط في نفس اليوم: {formatNumber(breakdown.lineDateTotalQty)} | {indirectFormula}
         </p>
-        <div className="px-3 py-2 border-t border-[var(--color-border)] bg-slate-50/50 dark:bg-slate-900/10">
+        <div className="px-3 py-2 border-t border-[var(--color-border)] bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)]">
           <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">
             مراكز التكلفة غير المباشرة (موزّعة على الخط ثم على التقرير بنسبة الإنتاج اليومي)
           </p>
@@ -405,7 +405,7 @@ function ReportCostBreakdownPanel({
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="w-full text-xs text-right border-collapse min-w-[280px]">
                 <thead>
-                  <tr className="bg-[#f8f9fa] dark:bg-slate-900/30 border-b border-[var(--color-border)]">
+                  <tr className="bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)] border-b border-[var(--color-border)]">
                     <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)]">مركز التكلفة</th>
                     <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">نسبة الخط</th>
                     <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">يومي للخط</th>
@@ -414,7 +414,7 @@ function ReportCostBreakdownPanel({
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {breakdown.indirectCenters.map((row) => (
-                    <tr key={row.costCenterId} className="hover:bg-[#f8f9fa]/60">
+                    <tr key={row.costCenterId} className="hover:bg-[var(--color-bg)]/60">
                       <td className="px-2 py-1.5 font-medium max-w-[140px] truncate" title={row.costCenterName}>
                         {row.costCenterName}
                       </td>
@@ -439,7 +439,7 @@ function ReportCostBreakdownPanel({
           <span className="text-[var(--color-text-muted)] font-medium">نصيب التكاليف غير المباشرة (حسب كمية الإنتاج)</span>
           <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.byQtyShareTotal)} ج.م</span>
         </div>
-        <div className="px-3 py-2 border-t border-[var(--color-border)] bg-slate-50/50 dark:bg-slate-900/10">
+        <div className="px-3 py-2 border-t border-[var(--color-border)] bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)]">
           <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">
             مراكز التكلفة غير المباشرة (أساس التوزيع: الكمية — all / فئة / منتجات محددة)
           </p>
@@ -451,7 +451,7 @@ function ReportCostBreakdownPanel({
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="w-full text-xs text-right border-collapse min-w-[300px]">
                 <thead>
-                  <tr className="bg-[#f8f9fa] dark:bg-slate-900/30 border-b border-[var(--color-border)]">
+                  <tr className="bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)] border-b border-[var(--color-border)]">
                     <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)]">مركز التكلفة</th>
                     <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">نطاق التوزيع</th>
                     <th className="px-2 py-1.5 font-bold text-[var(--color-text-muted)] text-center">الدفعة الشهرية (النطاق)</th>
@@ -461,7 +461,7 @@ function ReportCostBreakdownPanel({
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {breakdown.byQtyCenters.map((row) => (
-                    <tr key={row.costCenterId} className="hover:bg-[#f8f9fa]/60">
+                    <tr key={row.costCenterId} className="hover:bg-[var(--color-bg)]/60">
                       <td className="px-2 py-1.5 font-medium max-w-[120px] truncate" title={row.costCenterName}>
                         {row.costCenterName}
                       </td>
@@ -498,7 +498,7 @@ function ReportCostBreakdownPanel({
         </div>
         <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 border-t-2 border-primary/20">
           <span className="font-bold text-[var(--color-text)]">تكلفة التحويل للوحدة</span>
-          <span className="font-black tabular-nums text-violet-600 text-base">{formatCost(breakdown.costPerUnit)} ج.م</span>
+          <span className="font-black tabular-nums text-[rgb(var(--color-secondary))] text-base">{formatCost(breakdown.costPerUnit)} ج.م</span>
         </div>
       </div>
     </div>
@@ -1896,10 +1896,10 @@ export const Reports: React.FC = () => {
   const qualityStatusMeta = useCallback((status?: QualityStatus) => {
     const normalized = status ?? 'pending';
     const map: Record<QualityStatus, { label: string; className: string }> = {
-      pending: { label: 'قيد المراجعة', className: 'bg-amber-50 text-amber-700' },
-      approved: { label: 'معتمد', className: 'bg-emerald-50 text-emerald-700' },
-      rejected: { label: 'مرفوض', className: 'bg-rose-50 text-rose-700' },
-      not_required: { label: 'غير مطلوب', className: 'bg-[#f0f2f5] text-[var(--color-text)]' },
+      pending: { label: 'قيد المراجعة', className: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' },
+      approved: { label: 'معتمد', className: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' },
+      rejected: { label: 'مرفوض', className: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' },
+      not_required: { label: 'غير مطلوب', className: 'bg-[var(--color-surface-hover)] text-[var(--color-text)]' },
     };
     return map[normalized];
   }, []);
@@ -3411,7 +3411,7 @@ export const Reports: React.FC = () => {
         render: (r) => (
           resolveReportType(r.reportType) === 'component_injection'
             ? (
-              <span className="px-2 py-0.5 rounded-[var(--border-radius-base)] bg-sky-50 text-sky-700 text-xs font-bold ring-1 ring-sky-500/20">
+              <span className="px-2 py-0.5 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] text-xs font-bold ring-1 ring-[rgb(var(--color-primary))]/20">
                 {getInjectionShiftLabel(r.shift)}
               </span>
             )
@@ -3456,7 +3456,7 @@ export const Reports: React.FC = () => {
         headerClassName: 'text-center',
         className: 'text-center',
         render: (r) => (
-          <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 text-sm font-bold ring-1 ring-emerald-500/20">
+          <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] text-sm font-bold ring-1 ring-[rgb(var(--color-success))]/20">
             {formatNumber(r.quantityProduced)}
           </span>
         ),
@@ -3464,7 +3464,7 @@ export const Reports: React.FC = () => {
       {
         header: 'هالك المكونات',
         headerClassName: 'text-center',
-        className: 'text-center text-rose-500 font-bold',
+        className: 'text-center text-[rgb(var(--color-danger))] font-bold',
         render: (r) => <>{formatNumber(deriveReportWaste(r))}</>,
       },
       {
@@ -3493,7 +3493,7 @@ export const Reports: React.FC = () => {
                   return next;
                 });
               }}
-              className={`text-sm text-right block max-w-[220px] ${isExpanded ? 'whitespace-normal' : 'truncate whitespace-nowrap'} ${shouldTruncate ? 'text-primary hover:underline cursor-pointer' : 'text-slate-600 cursor-default'}`}
+              className={`text-sm text-right block max-w-[220px] ${isExpanded ? 'whitespace-normal' : 'truncate whitespace-nowrap'} ${shouldTruncate ? 'text-primary hover:underline cursor-pointer' : 'text-[var(--color-text-muted)] cursor-default'}`}
               title={shouldTruncate ? (isExpanded ? 'اضغط للإخفاء' : 'اضغط للعرض') : note}
             >
               {isExpanded ? note : preview}
@@ -3558,20 +3558,20 @@ export const Reports: React.FC = () => {
           const tip = `متوقع ≈ ${v.expectedQty} — فعلي ${v.actualQty} — ${v.sourceLabel}`;
           if (v.direction === 'on') {
             return (
-              <span className="text-xs font-bold text-slate-600 tabular-nums" title={tip}>
+              <span className="text-xs font-bold text-[var(--color-text-muted)] tabular-nums" title={tip}>
                 متوازن
               </span>
             );
           }
           if (v.direction === 'above') {
             return (
-              <span className="text-xs font-black text-emerald-700 tabular-nums" title={tip}>
+              <span className="text-xs font-black text-[rgb(var(--color-success))] tabular-nums" title={tip}>
                 +{v.diff}
               </span>
             );
           }
           return (
-            <span className="text-xs font-black text-rose-700 tabular-nums" title={tip}>
+            <span className="text-xs font-black text-[rgb(var(--color-danger))] tabular-nums" title={tip}>
               {v.diff}
             </span>
           );
@@ -3665,7 +3665,7 @@ export const Reports: React.FC = () => {
               title="تفاصيل التكلفة"
             >
               <span className="block">{formatCost(uc)} ج.م</span>
-              <small className={`block font-sans text-[9px] no-underline ${r.fullManufacturingUnitCostSnapshot ? (r.manufacturingCostStatus === 'actual' ? 'text-emerald-600' : 'text-amber-600') : 'text-[var(--color-text-muted)]'}`}>
+              <small className={`block font-sans text-[9px] no-underline ${r.fullManufacturingUnitCostSnapshot ? (r.manufacturingCostStatus === 'actual' ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-warning))]') : 'text-[var(--color-text-muted)]'}`}>
                 {r.fullManufacturingUnitCostSnapshot
                   ? (r.manufacturingCostStatus === 'actual' ? 'كاملة فعلية' : 'كاملة مبدئية')
                   : 'تكلفة تحويل'}
@@ -3828,7 +3828,7 @@ export const Reports: React.FC = () => {
     <div className="flex min-w-[170px] flex-nowrap items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
       {can("print") && (
         <>
-          <button onClick={() => triggerSingleShare(report)} className="inline-flex min-h-9 items-center justify-center gap-1.5 px-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all disabled:opacity-60" title={isPreparingShareImage ? 'جاري تجهيز الصورة...' : 'مشاركة عبر واتساب'} disabled={exporting || Boolean(sharingReportId)}>
+          <button onClick={() => triggerSingleShare(report)} className="inline-flex min-h-9 items-center justify-center gap-1.5 px-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.1)] dark:hover:bg-[rgb(var(--color-success))]/10 rounded-[var(--border-radius-base)] transition-all disabled:opacity-60" title={isPreparingShareImage ? 'جاري تجهيز الصورة...' : 'مشاركة عبر واتساب'} disabled={exporting || Boolean(sharingReportId)}>
             {isPreparingShareImage ? (
               <span className="whitespace-nowrap text-xs font-bold">جاري تجهيز الصورة...</span>
             ) : (
@@ -3846,7 +3846,7 @@ export const Reports: React.FC = () => {
         </button>
       )}
       {reportsDeleteEnabled && can("reports.delete") && (
-        <button type="button" onClick={() => requestDeleteReport(report)} className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف التقرير">
+        <button type="button" onClick={() => requestDeleteReport(report)} className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/10 rounded-[var(--border-radius-base)] transition-all" title="حذف التقرير">
           <ReportIcon name="delete" className="text-lg" />
         </button>
       )}
@@ -3908,7 +3908,7 @@ export const Reports: React.FC = () => {
   ]);
 
   const reportTableFooter = (
-    <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex flex-wrap items-center justify-between gap-2">
+    <div className="px-6 py-4 bg-[var(--color-bg)]/50 border-t border-[var(--color-border)] flex flex-wrap items-center justify-between gap-2">
       <span className="text-sm text-[var(--color-text-muted)] font-bold">
         إجمالي <span className="text-primary">{searchFilteredReports.length}</span> تقرير
         {factorySearch.trim() && displayedReports.length !== searchFilteredReports.length ? (
@@ -3919,7 +3919,7 @@ export const Reports: React.FC = () => {
       </span>
       {searchFilteredReports.length > 0 && (
         <div className="flex flex-wrap items-center gap-4 text-xs font-bold">
-          <span className="text-emerald-600">
+          <span className="text-[rgb(var(--color-success))]">
             إنتاج (بدون تغليف):{' '}
             {formatNumber(
               searchFilteredReports
@@ -3927,7 +3927,7 @@ export const Reports: React.FC = () => {
                 .reduce((s, r) => s + r.quantityProduced, 0),
             )}
           </span>
-          <span className="text-violet-700">
+          <span className="text-[rgb(var(--color-secondary))]">
             تغليف:{' '}
             {formatNumber(
               searchFilteredReports
@@ -3935,7 +3935,7 @@ export const Reports: React.FC = () => {
                 .reduce((s, r) => s + r.quantityProduced, 0),
             )}
           </span>
-          <span className="text-rose-500">هالك: {formatNumber(searchFilteredReports.reduce((s, r) => s + deriveReportWaste(r), 0))}</span>
+          <span className="text-[rgb(var(--color-danger))]">هالك: {formatNumber(searchFilteredReports.reduce((s, r) => s + deriveReportWaste(r), 0))}</span>
         </div>
       )}
     </div>
@@ -4199,7 +4199,7 @@ export const Reports: React.FC = () => {
       )}
       {viewMode === 'general' ? (
         <OpsDashPanel accent="production" bodyClassName="p-0 overflow-hidden">
-          <div className="p-4 border-b border-[var(--color-border)] bg-[#f8f9fa]/40 flex flex-col gap-3">
+          <div className="p-4 border-b border-[var(--color-border)] bg-[var(--color-bg)]/40 flex flex-col gap-3">
             <div className="flex flex-col md:flex-row md:items-center gap-3">
               <Button variant="secondary" onClick={handleBackToReports}>
                 <ReportIcon name="arrow_forward" className="text-sm" />
@@ -4297,7 +4297,7 @@ export const Reports: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {factoryGeneralSortedRows.map((row) => (
-                    <tr key={row.key} className="hover:bg-[#f8f9fa]/70/40">
+                    <tr key={row.key} className="hover:bg-[var(--color-bg)]/70/40">
                       <td className="px-4 py-3 text-sm font-bold">{row.lineName}</td>
                       <td className="px-4 py-3 text-sm">{row.supervisorName}</td>
                       <td className="px-4 py-3 text-sm">{row.productName}</td>
@@ -4316,7 +4316,7 @@ export const Reports: React.FC = () => {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="bg-[#f8f9fa] font-bold">
+                  <tr className="bg-[var(--color-bg)] font-bold">
                     <td className="px-4 py-3 text-sm" colSpan={3}>الإجمالي</td>
                     <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(factoryGeneralSummary.produced)}</td>
                     <td className="px-4 py-3 text-sm text-center tabular-nums">{formatNumber(factoryGeneralSummary.productionWorkers)}</td>
@@ -4348,11 +4348,11 @@ export const Reports: React.FC = () => {
                 </OpsDashPanel>
               ) : groupedReports.map((group) => (
                 <OpsDashPanel key={group.key} accent="production" bodyClassName="p-0 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60 flex flex-wrap items-center gap-3">
+                  <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]/60 flex flex-wrap items-center gap-3">
                     <span className="text-sm font-black text-[var(--color-text)]">{group.label || 'غير محدد'}</span>
                     <span className="text-xs font-bold text-[var(--color-text-muted)]">{group.reports.length} تقرير</span>
-                    <span className="text-xs font-bold text-emerald-600">إنتاج: {formatNumber(group.produced)}</span>
-                    <span className="text-xs font-bold text-rose-500">هالك: {formatNumber(group.waste)}</span>
+                    <span className="text-xs font-bold text-[rgb(var(--color-success))]">إنتاج: {formatNumber(group.produced)}</span>
+                    <span className="text-xs font-bold text-[rgb(var(--color-danger))]">هالك: {formatNumber(group.waste)}</span>
                   </div>
                   <SelectableTable<ProductionReport>
                     tableId={`production-reports-${reportGroupBy}-${group.key}`}
@@ -4460,7 +4460,7 @@ export const Reports: React.FC = () => {
       {costDetailReport && canViewCosts && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[62] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
           onClick={() => setCostDetailReport(null)}
         >
           <div
@@ -4527,7 +4527,7 @@ export const Reports: React.FC = () => {
           <ManagedModalPortal>
           <>
             <div
-              className="fixed inset-0 bg-black/35 z-[60]"
+              className="fixed inset-0 bg-black/35 z-[10050]"
               onClick={() => setSelectedReportDrawer(null)}
             />
             <aside
@@ -4579,7 +4579,7 @@ export const Reports: React.FC = () => {
                         return (
                           <li
                             key={`${line.productId}-${line.quantityPieces}`}
-                            className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-2.5 bg-[#f8f9fa]/50"
+                            className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-2.5 bg-[var(--color-bg)]/50"
                           >
                             <div className="font-bold text-sm">{getProductName(line.productId, row.reportType)}</div>
                             <div className="text-xs text-[var(--color-text-muted)] mt-1 font-semibold">
@@ -4631,7 +4631,7 @@ export const Reports: React.FC = () => {
                         <span className="text-xs text-[var(--color-text-muted)] block mb-1">
                           {row.reportType === 'packaging' ? 'الكمية المغلفة (قطع)' : 'الكمية المنتجة'}
                         </span>
-                        <span className="font-black text-emerald-600">{formatNumber(row.quantityProduced)}</span>
+                        <span className="font-black text-[rgb(var(--color-success))]">{formatNumber(row.quantityProduced)}</span>
                         {row.reportType === 'packaging' && isMultiPackaging ? (
                           <p className="text-[11px] text-[var(--color-text-muted)] mt-1 font-semibold leading-relaxed">
                             مجموع القطع عبر المنتجات المسجّلة في التقرير.
@@ -4641,7 +4641,7 @@ export const Reports: React.FC = () => {
                       {row.reportType !== 'packaging' && (
                         <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                           <span className="text-xs text-[var(--color-text-muted)] block mb-1">هالك</span>
-                          <span className="font-black text-rose-600">{formatNumber(deriveReportWaste(row))}</span>
+                          <span className="font-black text-[rgb(var(--color-danger))]">{formatNumber(deriveReportWaste(row))}</span>
                         </div>
                       )}
                     </div>
@@ -4775,7 +4775,7 @@ export const Reports: React.FC = () => {
       {/* Create / Edit Report Modal */}
       {showModal && (canCreateFinishedReports || can('reports.packaging.create') || can('reports.edit') || canManageComponentInjectionReports) && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4">
           <div
             className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
@@ -4794,7 +4794,7 @@ export const Reports: React.FC = () => {
                       ? 'إنشاء تقرير تغليف'
                       : 'إنشاء تقرير إنتاج')}
               </h3>
-              <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+              <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
                 <ReportIcon name="close" />
               </button>
             </div>
@@ -4940,7 +4940,7 @@ export const Reports: React.FC = () => {
                       type="text"
                       readOnly
                       value={currentEmployee.name}
-                      className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
+                      className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                     />
                   ) : (
                     <SearchableSelect
@@ -4961,7 +4961,7 @@ export const Reports: React.FC = () => {
                       type="text"
                       readOnly
                       value={currentEmployee.name}
-                      className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
+                      className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                     />
                   ) : (
                     <SearchableSelect
@@ -5005,7 +5005,7 @@ export const Reports: React.FC = () => {
                 )}
               </div>
               {form.reportType === 'packaging' && (
-                <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/50 p-4">
+                <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/50 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 space-y-1">
                       <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة *</label>
@@ -5134,7 +5134,7 @@ export const Reports: React.FC = () => {
                           <Button
                             type="button"
                             disabled={(form.packagingLines || []).length <= 1}
-                            className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-2"
+                            className="text-sm font-bold text-[rgb(var(--color-danger))] disabled:opacity-40 disabled:cursor-not-allowed px-2 py-2"
                             onClick={() => setForm((prev) => ({
                               ...prev,
                               packagingLines: (prev.packagingLines || []).filter((_, i) => i !== idx),
@@ -5177,7 +5177,7 @@ export const Reports: React.FC = () => {
                     readOnly={formQuantityDerivedFromWorkerOutputs}
                     className={cn(
                       'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none transition-all',
-                      formQuantityDerivedFromWorkerOutputs ? 'bg-[#f0f2f5]/70 font-black text-primary' : 'font-medium',
+                      formQuantityDerivedFromWorkerOutputs ? 'bg-[var(--color-surface-hover)]/70 font-black text-primary' : 'font-medium',
                     )}
                     placeholder="0"
                   />
@@ -5311,7 +5311,7 @@ export const Reports: React.FC = () => {
                       <input
                         type="number"
                         readOnly
-                        className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-black text-primary"
+                        className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-black text-primary"
                         value={formWorkersTotal || ''}
                         placeholder="0"
                       />
@@ -5426,9 +5426,9 @@ export const Reports: React.FC = () => {
               ) : form.reportType === 'finished_product'
                 && form.lineId && form.productId && form.date
                 && formWorkerOutputsEnabled ? (
-                <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 p-4 space-y-2">
-                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300">إنتاج العمال غير مفعّل</p>
-                  <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] dark:border-[rgb(var(--color-warning)/0.25)] p-4 space-y-2">
+                  <p className="text-sm font-bold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">إنتاج العمال غير مفعّل</p>
+                  <p className="text-xs text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))] leading-relaxed">
                     لإظهار قائمة العمال وإدخال إنتاج كل عامل وقياس الإنجاز على الهدف، فعّل
                     {' '}
                     <strong>«تفعيل إدخال إنتاج العمال في تقرير الإنتاج»</strong>
@@ -5486,7 +5486,7 @@ export const Reports: React.FC = () => {
                   <div className="mx-4 sm:mx-6 mb-2 bg-primary/5 border border-primary/10 rounded-[var(--border-radius-lg)] p-4 flex flex-wrap items-center gap-4 sm:gap-6">
                     <div className="flex items-center gap-2">
                       <ReportIcon name="price_check" className="text-primary text-lg" />
-                      <span className="text-xs font-bold text-slate-500">تكلفة تقديرية:</span>
+                      <span className="text-xs font-bold text-[var(--color-text-muted)]">تكلفة تقديرية:</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs font-bold">
                       <span className="text-[var(--color-text-muted)]">عمالة: <span className="text-[var(--color-text)]">{formatCost(est.laborCost)} ج.م</span></span>
@@ -5510,11 +5510,11 @@ export const Reports: React.FC = () => {
               return (
                 <>
                   {linked && (
-                    <div className="mx-4 sm:mx-6 mb-2 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
-                      <ReportIcon name="event_available" className="text-emerald-600 text-lg" />
+                    <div className="mx-4 sm:mx-6 mb-2 bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
+                      <ReportIcon name="event_available" className="text-[rgb(var(--color-success))] text-lg" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-bold text-emerald-700">خطة إنتاج نشطة</p>
-                        <p className="text-[11px] text-emerald-600 dark:text-emerald-500">
+                        <p className="text-xs font-bold text-[rgb(var(--color-success))]">خطة إنتاج نشطة</p>
+                        <p className="text-[11px] text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">
                           {formatNumber(linked.producedQuantity ?? 0)} / {formatNumber(linked.plannedQuantity)} —
                           {' '}{Math.min(Math.round(((linked.producedQuantity ?? 0) / linked.plannedQuantity) * 100), 100)}%
                         </p>
@@ -5522,21 +5522,21 @@ export const Reports: React.FC = () => {
                     </div>
                   )}
                   {linked && !linkedPlanAcceptsDirectReports && form.reportType !== 'packaging' && !form.workOrderId && (
-                    <div className="mx-4 sm:mx-6 mb-2 bg-slate-50 dark:bg-slate-900/10 border border-slate-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
-                      <ReportIcon name="info" className="text-slate-500 text-lg" />
-                      <p className="text-xs font-bold text-slate-600">هذه الخطة لا تستقبل إنتاجًا مباشرًا من التقارير غير المرتبطة.</p>
+                    <div className="mx-4 sm:mx-6 mb-2 bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
+                      <ReportIcon name="info" className="text-[var(--color-text-muted)] text-lg" />
+                      <p className="text-xs font-bold text-[var(--color-text-muted)]">هذه الخطة لا تستقبل إنتاجًا مباشرًا من التقارير غير المرتبطة.</p>
                     </div>
                   )}
                   {blockWithoutPlan && (
-                    <div className="mx-4 sm:mx-6 mb-2 bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
-                      <ReportIcon name="block" className="text-rose-500 text-lg" />
-                      <p className="text-xs font-bold text-rose-600">لا يوجد خطة إنتاج نشطة لهذا الخط والمنتج — التقارير بدون خطة غير مسموحة</p>
+                    <div className="mx-4 sm:mx-6 mb-2 bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
+                      <ReportIcon name="block" className="text-[rgb(var(--color-danger))] text-lg" />
+                      <p className="text-xs font-bold text-[rgb(var(--color-danger))]">لا يوجد خطة إنتاج نشطة لهذا الخط والمنتج — التقارير بدون خطة غير مسموحة</p>
                     </div>
                   )}
                   {overProduced && (
-                    <div className="mx-4 sm:mx-6 mb-2 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
-                      <ReportIcon name="warning" className="text-amber-500 text-lg" />
-                      <p className="text-xs font-bold text-amber-600">تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح</p>
+                    <div className="mx-4 sm:mx-6 mb-2 bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
+                      <ReportIcon name="warning" className="text-[rgb(var(--color-warning))] text-lg" />
+                      <p className="text-xs font-bold text-[rgb(var(--color-warning))]">تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح</p>
                     </div>
                   )}
                 </>
@@ -5591,15 +5591,15 @@ export const Reports: React.FC = () => {
       {/* Delete Confirmation */}
       {deleteConfirmId && can("reports.delete") && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <ReportIcon name="delete_forever" className="text-rose-500 text-3xl" />
+            <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <ReportIcon name="delete_forever" className="text-[rgb(var(--color-danger))] text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف التقرير</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا التقرير؟</p>
             {deleteError && (
-              <div className="mb-4 rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold px-3 py-2">
+              <div className="mb-4 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] text-xs font-semibold px-3 py-2">
                 {deleteError}
               </div>
             )}
@@ -5622,10 +5622,10 @@ export const Reports: React.FC = () => {
       {/* Bulk Delete Confirmation */}
       {bulkDeleteItems && can("reports.delete") && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <ReportIcon name="delete_sweep" className="text-rose-500 text-3xl" />
+            <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <ReportIcon name="delete_sweep" className="text-[rgb(var(--color-danger))] text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">حذف {bulkDeleteItems.length} تقرير</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف التقارير المحددة؟ لا يمكن التراجع عن هذا الإجراء.</p>
@@ -5653,13 +5653,13 @@ export const Reports: React.FC = () => {
       {/* Import from Excel Modal */}
       {showImportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
             <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                  <ReportIcon name="upload_file" className="text-emerald-600" />
+                <div className="w-10 h-10 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+                  <ReportIcon name="upload_file" className="text-[rgb(var(--color-success))]" />
                 </div>
                 <div>
                   <div className="flex items-center gap-3">
@@ -5690,7 +5690,7 @@ export const Reports: React.FC = () => {
               </div>
                 <button
                   onClick={() => { setShowImportModal(false); resetImportState(); }}
-                  className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors"
                 >
                 <ReportIcon name="close" />
               </button>
@@ -5729,16 +5729,16 @@ export const Reports: React.FC = () => {
               ) : importMode === 'updateDate' && importDateUpdateResult ? (
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-blue-600">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-primary))]">
                       <ReportIcon name="description" className="text-sm" />
                       {importDateUpdateResult.totalRows} صف
                     </div>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-[var(--border-radius-base)] text-xs font-bold text-emerald-600">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-success))]">
                       <ReportIcon name="check_circle" className="text-sm" />
                       {importDateUpdateResult.validCount} صالح
                     </div>
                     {importDateUpdateResult.errorCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-danger)/0.1)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-danger))]">
                         <ReportIcon name="error" className="text-sm" />
                         {importDateUpdateResult.errorCount} أخطاء
                       </div>
@@ -5752,31 +5752,31 @@ export const Reports: React.FC = () => {
                         <div
                           key={row.rowIndex}
                           className={`rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 ${
-                            isValid ? 'bg-[var(--color-card)]' : 'bg-rose-50/50 dark:bg-rose-900/5'
+                            isValid ? 'bg-[var(--color-card)]' : 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger))]/5'
                           }`}
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <p className="text-xs text-[var(--color-text-muted)]">صف #{row.rowIndex}</p>
-                              <p className={`font-mono text-xs mt-1 ${row.reportCode ? '' : 'text-rose-500'}`}>
+                              <p className={`font-mono text-xs mt-1 ${row.reportCode ? '' : 'text-[rgb(var(--color-danger))]'}`}>
                                 كود التقرير: {row.reportCode || '—'}
                               </p>
                             </div>
                             {isValid ? (
-                              <ReportIcon name="check_circle" className="text-emerald-500 text-sm shrink-0" />
+                              <ReportIcon name="check_circle" className="text-[rgb(var(--color-success))] text-sm shrink-0" />
                             ) : (
                               <span title={row.errors.join('\n')}>
-                                <ReportIcon name="error" className="text-rose-500 text-sm shrink-0" />
+                                <ReportIcon name="error" className="text-[rgb(var(--color-danger))] text-sm shrink-0" />
                               </span>
                             )}
                           </div>
-                          <div className={`mt-2 text-sm ${row.updatedFieldsCount > 0 ? '' : 'text-rose-500'}`}>
+                          <div className={`mt-2 text-sm ${row.updatedFieldsCount > 0 ? '' : 'text-[rgb(var(--color-danger))]'}`}>
                             {row.updatedFieldsCount > 0 ? (
                               <div className="flex flex-wrap gap-1.5">
-                                {row.date && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 text-xs">تاريخ: {row.date}</span>}
-                                {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs">إنتاج: {row.quantityProduced}</span>}
-                                {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 text-xs">عمال: {row.workersCount}</span>}
-                                {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-xs">ساعات: {row.workHours}</span>}
+                                {row.date && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))] text-xs">تاريخ: {row.date}</span>}
+                                {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] text-xs">إنتاج: {row.quantityProduced}</span>}
+                                {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary)/0.15)] dark:text-[rgb(var(--color-secondary))] text-xs">عمال: {row.workersCount}</span>}
+                                {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] text-xs">ساعات: {row.workHours}</span>}
                               </div>
                             ) : (
                               '—'
@@ -5801,25 +5801,25 @@ export const Reports: React.FC = () => {
                         {importDateUpdateResult.rows.map((row) => {
                           const isValid = row.errors.length === 0;
                           return (
-                            <tr key={row.rowIndex} className={isValid ? '' : 'bg-rose-50/50 dark:bg-rose-900/5'}>
+                            <tr key={row.rowIndex} className={isValid ? '' : 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger))]/5'}>
                               <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.rowIndex}</td>
                               <td className="px-3 py-2">
                                 {isValid ? (
-                                  <ReportIcon name="check_circle" className="text-emerald-500 text-sm" />
+                                  <ReportIcon name="check_circle" className="text-[rgb(var(--color-success))] text-sm" />
                                 ) : (
                                   <span title={row.errors.join('\n')}>
-                                    <ReportIcon name="error" className="text-rose-500 text-sm" />
+                                    <ReportIcon name="error" className="text-[rgb(var(--color-danger))] text-sm" />
                                   </span>
                                 )}
                               </td>
-                              <td className={`px-3 py-2 font-mono text-xs ${row.reportCode ? '' : 'text-rose-500'}`}>{row.reportCode || '—'}</td>
-                              <td className={`px-3 py-2 text-sm ${row.updatedFieldsCount > 0 ? '' : 'text-rose-500'}`}>
+                              <td className={`px-3 py-2 font-mono text-xs ${row.reportCode ? '' : 'text-[rgb(var(--color-danger))]'}`}>{row.reportCode || '—'}</td>
+                              <td className={`px-3 py-2 text-sm ${row.updatedFieldsCount > 0 ? '' : 'text-[rgb(var(--color-danger))]'}`}>
                                 {row.updatedFieldsCount > 0 ? (
                                   <div className="flex flex-wrap gap-1.5">
-                                    {row.date && <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300 text-xs">تاريخ: {row.date}</span>}
-                                    {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-xs">إنتاج: {row.quantityProduced}</span>}
-                                    {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-violet-50 text-violet-700 dark:bg-violet-900/20 dark:text-violet-300 text-xs">عمال: {row.workersCount}</span>}
-                                    {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 text-xs">ساعات: {row.workHours}</span>}
+                                    {row.date && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))] text-xs">تاريخ: {row.date}</span>}
+                                    {row.quantityProduced !== undefined && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] text-xs">إنتاج: {row.quantityProduced}</span>}
+                                    {row.workersCount !== undefined && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary)/0.15)] dark:text-[rgb(var(--color-secondary))] text-xs">عمال: {row.workersCount}</span>}
+                                    {row.workHours !== undefined && <span className="px-2 py-0.5 rounded bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] text-xs">ساعات: {row.workHours}</span>}
                                   </div>
                                 ) : (
                                   '—'
@@ -5833,14 +5833,14 @@ export const Reports: React.FC = () => {
                   </div>
 
                   {importDateUpdateResult.errorCount > 0 && (
-                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-4">
-                      <p className="text-sm font-bold text-rose-600 mb-2">
+                    <div className="bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-4">
+                      <p className="text-sm font-bold text-[rgb(var(--color-danger))] mb-2">
                         <ReportIcon name="error" className="text-sm align-middle ml-1 inline" />
                         الصفوف التالية تحتاج تعديل ولن يتم تحديثها:
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importDateUpdateResult.rows.filter((r) => r.errors.length > 0).map((row) => (
-                          <p key={row.rowIndex} className="text-xs text-rose-600">
+                          <p key={row.rowIndex} className="text-xs text-[rgb(var(--color-danger))]">
                             صف {row.rowIndex}: {row.errors.join(' ؛ ')}
                           </p>
                         ))}
@@ -5852,28 +5852,28 @@ export const Reports: React.FC = () => {
                 <div className="space-y-4">
                   {/* Summary Badges */}
                   <div className="flex flex-wrap gap-2">
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-blue-600">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-primary))]">
                       <ReportIcon name="description" className="text-sm" />
                       {importResult.totalRows} صف
                     </div>
-                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 rounded-[var(--border-radius-base)] text-xs font-bold text-emerald-600">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-success))]">
                       <ReportIcon name="check_circle" className="text-sm" />
                       {importResult.validCount} صالح
                     </div>
                     {importResult.errorCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-500">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-danger)/0.1)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-danger))]">
                         <ReportIcon name="error" className="text-sm" />
                         {importResult.errorCount} أخطاء
                       </div>
                     )}
                     {importResult.warningCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-50 rounded-[var(--border-radius-base)] text-xs font-bold text-amber-600">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-warning))]">
                         <ReportIcon name="warning" className="text-sm" />
                         {importResult.warningCount} تحذير
                       </div>
                     )}
                     {importResult.duplicateCount > 0 && (
-                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-orange-50 dark:bg-orange-900/20 rounded-[var(--border-radius-base)] text-xs font-bold text-orange-600 dark:text-orange-400">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] rounded-[var(--border-radius-base)] text-xs font-bold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
                         <ReportIcon name="content_copy" className="text-sm" />
                         {importResult.duplicateCount} مكرر
                       </div>
@@ -5886,11 +5886,11 @@ export const Reports: React.FC = () => {
                       const isValid = row.errors.length === 0;
                       const hasWarnings = row.warnings.length > 0;
                       const cardBg = !isValid
-                        ? 'bg-rose-50/50 dark:bg-rose-900/5'
+                        ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger))]/5'
                         : row.isDuplicate
-                          ? 'bg-orange-50/50 dark:bg-orange-900/5'
+                          ? 'bg-[rgb(var(--color-warning)/0.1)]/50 dark:bg-[rgb(var(--color-warning))]/5'
                           : hasWarnings
-                            ? 'bg-amber-50/30 dark:bg-amber-900/5'
+                            ? 'bg-[rgb(var(--color-warning)/0.1)]/30 dark:bg-[rgb(var(--color-warning))]/5'
                             : 'bg-[var(--color-card)]';
 
                       return (
@@ -5902,38 +5902,38 @@ export const Reports: React.FC = () => {
                             </div>
                             {!isValid ? (
                               <span title={row.errors.join('\n')}>
-                                <ReportIcon name="error" className="text-rose-500 text-sm shrink-0" />
+                                <ReportIcon name="error" className="text-[rgb(var(--color-danger))] text-sm shrink-0" />
                               </span>
                             ) : row.isDuplicate ? (
                               <span title="تقرير مكرر">
-                                <ReportIcon name="content_copy" className="text-orange-500 text-sm shrink-0" />
+                                <ReportIcon name="content_copy" className="text-[rgb(var(--color-warning))] text-sm shrink-0" />
                               </span>
                             ) : hasWarnings ? (
                               <span title={row.warnings.join('\n')}>
-                                <ReportIcon name="warning" className="text-amber-500 text-sm shrink-0" />
+                                <ReportIcon name="warning" className="text-[rgb(var(--color-warning))] text-sm shrink-0" />
                               </span>
                             ) : (
-                              <ReportIcon name="check_circle" className="text-emerald-500 text-sm shrink-0" />
+                              <ReportIcon name="check_circle" className="text-[rgb(var(--color-success))] text-sm shrink-0" />
                             )}
                           </div>
 
                           <div className="mt-2 space-y-1 text-xs">
-                            <p className={row.lineId ? '' : 'text-rose-500'}>خط الإنتاج: {row.lineName || '—'}</p>
-                            <p className={row.productId ? '' : 'text-rose-500'}>المنتج: {row.productName || '—'}</p>
-                            <p className={row.employeeId ? '' : 'text-rose-500'}>المشرف: {row.employeeName || '—'}</p>
+                            <p className={row.lineId ? '' : 'text-[rgb(var(--color-danger))]'}>خط الإنتاج: {row.lineName || '—'}</p>
+                            <p className={row.productId ? '' : 'text-[rgb(var(--color-danger))]'}>المنتج: {row.productName || '—'}</p>
+                            <p className={row.employeeId ? '' : 'text-[rgb(var(--color-danger))]'}>المشرف: {row.employeeName || '—'}</p>
                             <p className="text-[var(--color-text-muted)] font-mono">الكود: {row.employeeCode || '—'}</p>
                           </div>
 
                           <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-                            <div className="rounded bg-emerald-50/80 px-2 py-1">
+                            <div className="rounded bg-[rgb(var(--color-success)/0.1)]/80 px-2 py-1">
                               <span className="text-[var(--color-text-muted)]">الكمية: </span>
                               <span className="font-bold">{row.quantityProduced}</span>
                             </div>
-                            <div className="rounded bg-slate-50 px-2 py-1">
+                            <div className="rounded bg-[var(--color-bg)] px-2 py-1">
                               <span className="text-[var(--color-text-muted)]">عمال: </span>
                               <span className="font-bold">{row.workersCount}</span>
                             </div>
-                            <div className="rounded bg-amber-50/80 px-2 py-1">
+                            <div className="rounded bg-[rgb(var(--color-warning)/0.1)]/80 px-2 py-1">
                               <span className="text-[var(--color-text-muted)]">ساعات: </span>
                               <span className="font-bold">{row.workHours}</span>
                             </div>
@@ -5964,11 +5964,11 @@ export const Reports: React.FC = () => {
                           const isValid = row.errors.length === 0;
                           const hasWarnings = row.warnings.length > 0;
                           const rowBg = !isValid
-                            ? 'bg-rose-50/50 dark:bg-rose-900/5'
+                            ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger))]/5'
                             : row.isDuplicate
-                              ? 'bg-orange-50/50 dark:bg-orange-900/5'
+                              ? 'bg-[rgb(var(--color-warning)/0.1)]/50 dark:bg-[rgb(var(--color-warning))]/5'
                               : hasWarnings
-                                ? 'bg-amber-50/30 dark:bg-amber-900/5'
+                                ? 'bg-[rgb(var(--color-warning)/0.1)]/30 dark:bg-[rgb(var(--color-warning))]/5'
                                 : '';
                           return (
                             <tr key={row.rowIndex} className={rowBg}>
@@ -5976,24 +5976,24 @@ export const Reports: React.FC = () => {
                               <td className="px-3 py-2">
                                 {!isValid ? (
                                   <span title={row.errors.join('\n')}>
-                                    <ReportIcon name="error" className="text-rose-500 text-sm" />
+                                    <ReportIcon name="error" className="text-[rgb(var(--color-danger))] text-sm" />
                                   </span>
                                 ) : row.isDuplicate ? (
                                   <span title="تقرير مكرر">
-                                    <ReportIcon name="content_copy" className="text-orange-500 text-sm" />
+                                    <ReportIcon name="content_copy" className="text-[rgb(var(--color-warning))] text-sm" />
                                   </span>
                                 ) : hasWarnings ? (
                                   <span title={row.warnings.join('\n')}>
-                                    <ReportIcon name="warning" className="text-amber-500 text-sm" />
+                                    <ReportIcon name="warning" className="text-[rgb(var(--color-warning))] text-sm" />
                                   </span>
                                 ) : (
-                                  <ReportIcon name="check_circle" className="text-emerald-500 text-sm" />
+                                  <ReportIcon name="check_circle" className="text-[rgb(var(--color-success))] text-sm" />
                                 )}
                               </td>
                               <td className="px-3 py-2 font-medium">{row.date}</td>
-                              <td className={`px-3 py-2 ${row.lineId ? '' : 'text-rose-500'}`}>{row.lineName || '—'}</td>
-                              <td className={`px-3 py-2 ${row.productId ? '' : 'text-rose-500'}`}>{row.productName || '—'}</td>
-                              <td className={`px-3 py-2 ${row.employeeId ? '' : 'text-rose-500'}`}>{row.employeeName || '—'}</td>
+                              <td className={`px-3 py-2 ${row.lineId ? '' : 'text-[rgb(var(--color-danger))]'}`}>{row.lineName || '—'}</td>
+                              <td className={`px-3 py-2 ${row.productId ? '' : 'text-[rgb(var(--color-danger))]'}`}>{row.productName || '—'}</td>
+                              <td className={`px-3 py-2 ${row.employeeId ? '' : 'text-[rgb(var(--color-danger))]'}`}>{row.employeeName || '—'}</td>
                               <td className="px-3 py-2 text-[var(--color-text-muted)] font-mono text-xs">{row.employeeCode || '—'}</td>
                               <td className="px-3 py-2 text-center font-bold">{row.quantityProduced}</td>
                               <td className="px-3 py-2 text-center">{row.workersCount}</td>
@@ -6007,14 +6007,14 @@ export const Reports: React.FC = () => {
 
                   {/* Error details */}
                   {importResult.errorCount > 0 && (
-                    <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-4">
-                      <p className="text-sm font-bold text-rose-600 mb-2">
+                    <div className="bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-4">
+                      <p className="text-sm font-bold text-[rgb(var(--color-danger))] mb-2">
                         <ReportIcon name="error" className="text-sm align-middle ml-1 inline" />
                         الصفوف التالية تحتاج تعديل ولن يتم حفظها:
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importResult.rows.filter((r) => r.errors.length > 0).map((row) => (
-                          <p key={row.rowIndex} className="text-xs text-rose-600">
+                          <p key={row.rowIndex} className="text-xs text-[rgb(var(--color-danger))]">
                             صف {row.rowIndex}: {row.errors.join(' ؛ ')}
                           </p>
                         ))}
@@ -6024,14 +6024,14 @@ export const Reports: React.FC = () => {
 
                   {/* Warning details */}
                   {importResult.warningCount > 0 && (
-                    <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
-                      <p className="text-sm font-bold text-amber-600 mb-2">
+                    <div className="bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4">
+                      <p className="text-sm font-bold text-[rgb(var(--color-warning))] mb-2">
                         <ReportIcon name="warning" className="text-sm align-middle ml-1 inline" />
                         تنبيهات (سيتم الحفظ لكن يرجى المراجعة):
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
                         {importResult.rows.filter((r) => r.warnings.length > 0).map((row) => (
-                          <p key={row.rowIndex} className="text-xs text-amber-600">
+                          <p key={row.rowIndex} className="text-xs text-[rgb(var(--color-warning))]">
                             صف {row.rowIndex}: {row.warnings.join(' ؛ ')}
                           </p>
                         ))}
@@ -6047,7 +6047,7 @@ export const Reports: React.FC = () => {
               <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between gap-3 shrink-0">
                 {importSaving ? (
                   <div className="flex items-center gap-3 flex-1">
-                    <div className="flex-1 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${importProgress.total > 0 ? (importProgress.done / importProgress.total) * 100 : 0}%` }}
@@ -6078,10 +6078,10 @@ export const Reports: React.FC = () => {
         const wo = woMap.get(viewWOReport.workOrderId!);
         if (!wo) return null;
         const statusLabels: Record<string, { label: string; color: string }> = {
-          pending: { label: 'قيد الانتظار', color: 'text-amber-600 bg-amber-50' },
-          in_progress: { label: 'قيد التنفيذ', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20' },
-          completed: { label: 'مكتمل', color: 'text-emerald-600 bg-emerald-50' },
-          cancelled: { label: 'ملغي', color: 'text-rose-600 bg-rose-50' },
+          pending: { label: 'قيد الانتظار', color: 'text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)]' },
+          in_progress: { label: 'قيد التنفيذ', color: 'text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)]' },
+          completed: { label: 'مكتمل', color: 'text-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)]' },
+          cancelled: { label: 'ملغي', color: 'text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)]' },
         };
         const st = statusLabels[wo.status] || statusLabels.pending;
         const rows = [
@@ -6096,7 +6096,7 @@ export const Reports: React.FC = () => {
         ];
         return (
           <ManagedModalPortal>
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewWOReport(null)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewWOReport(null)}>
             <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
@@ -6104,7 +6104,7 @@ export const Reports: React.FC = () => {
                   <h3 className="font-bold">{wo.workOrderNumber}</h3>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${st.color}`}>{st.label}</span>
                 </div>
-                <button onClick={() => setViewWOReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+                <button onClick={() => setViewWOReport(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                   <ReportIcon name="close" />
                 </button>
               </div>
@@ -6121,7 +6121,7 @@ export const Reports: React.FC = () => {
                   <h4 className="text-sm font-bold text-[var(--color-text-muted)] mb-3">المخطط vs الفعلي</h4>
                   <div className="space-y-3">
                     {compareRows.map((cr) => (
-                      <div key={cr.label} className="flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/50">
+                      <div key={cr.label} className="flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/50">
                         <ReportIcon name={cr.icon} className="text-primary text-lg" />
                         <span className="text-sm font-bold text-[var(--color-text-muted)] w-16">{cr.label}</span>
                         <div className="flex-1 flex items-center gap-2">
@@ -6142,7 +6142,7 @@ export const Reports: React.FC = () => {
                 {wo.notes && (
                   <div className="text-sm">
                     <span className="text-[var(--color-text-muted)] block text-xs mb-1">ملاحظات</span>
-                    <p className="text-slate-600 font-medium">{wo.notes}</p>
+                    <p className="text-[var(--color-text-muted)] font-medium">{wo.notes}</p>
                   </div>
                 )}
               </div>
@@ -6159,15 +6159,15 @@ export const Reports: React.FC = () => {
         if (!wo || (!wo.qualitySummary && !wo.qualityStatus && !wo.qualityReportCode)) {
           return (
             <ManagedModalPortal>
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
+            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
               <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold">تقرير الجودة المرتبط</h3>
-                  <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+                  <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                     <ReportIcon name="close" />
                   </button>
                 </div>
-                <p className="text-sm text-slate-500">لا يوجد تقرير جودة مرتبط بهذا التقرير حتى الآن.</p>
+                <p className="text-sm text-[var(--color-text-muted)]">لا يوجد تقرير جودة مرتبط بهذا التقرير حتى الآن.</p>
               </div>
             </div>
             </ManagedModalPortal>
@@ -6177,7 +6177,7 @@ export const Reports: React.FC = () => {
         const qs = wo.qualitySummary;
         return (
           <ManagedModalPortal>
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
             <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
                 <div>
@@ -6189,7 +6189,7 @@ export const Reports: React.FC = () => {
                     كود تقرير الجودة: {qualityCode || '—'}
                   </p>
                 </div>
-                <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+                <button onClick={() => setViewQualityReport(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                   <ReportIcon name="close" />
                 </button>
               </div>
@@ -6202,29 +6202,29 @@ export const Reports: React.FC = () => {
                 {qs ? (
                   <>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
-                        <p className="text-xs text-slate-500">تم الفحص</p>
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/60">
+                        <p className="text-xs text-[var(--color-text-muted)]">تم الفحص</p>
                         <p className="text-lg font-bold text-[var(--color-text)]">{formatNumber(qs.inspectedUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
-                        <p className="text-xs text-slate-500">ناجح</p>
-                        <p className="text-lg font-bold text-emerald-600">{formatNumber(qs.passedUnits)}</p>
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/60">
+                        <p className="text-xs text-[var(--color-text-muted)]">ناجح</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-success))]">{formatNumber(qs.passedUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
-                        <p className="text-xs text-slate-500">فاشل</p>
-                        <p className="text-lg font-bold text-rose-600">{formatNumber(qs.failedUnits)}</p>
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/60">
+                        <p className="text-xs text-[var(--color-text-muted)]">فاشل</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-danger))]">{formatNumber(qs.failedUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
-                        <p className="text-xs text-slate-500">Rework</p>
-                        <p className="text-lg font-bold text-amber-600">{formatNumber(qs.reworkUnits)}</p>
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/60">
+                        <p className="text-xs text-[var(--color-text-muted)]">Rework</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-warning))]">{formatNumber(qs.reworkUnits)}</p>
                       </div>
-                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
-                        <p className="text-xs text-slate-500">FPY</p>
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/60">
+                        <p className="text-xs text-[var(--color-text-muted)]">FPY</p>
                         <p className="text-lg font-bold text-primary">{qs.firstPassYield}%</p>
                       </div>
-                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/60">
-                        <p className="text-xs text-slate-500">Defect Rate</p>
-                        <p className="text-lg font-bold text-violet-600">{qs.defectRate}%</p>
+                      <div className="p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/60">
+                        <p className="text-xs text-[var(--color-text-muted)]">Defect Rate</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-secondary))]">{qs.defectRate}%</p>
                       </div>
                     </div>
                     <div className="text-sm">
@@ -6233,7 +6233,7 @@ export const Reports: React.FC = () => {
                     </div>
                   </>
                 ) : (
-                  <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:border-amber-900/40 px-3 py-2 text-sm font-semibold text-amber-700">
+                  <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] dark:border-[rgb(var(--color-warning))]/40 px-3 py-2 text-sm font-semibold text-[rgb(var(--color-warning))]">
                     تم حفظ حالة تقرير الجودة، سيظهر الملخص التفصيلي بعد اكتمال مزامنة البيانات/الفهارس.
                   </div>
                 )}
@@ -6259,7 +6259,7 @@ export const Reports: React.FC = () => {
       {/* View Workers Modal */}
       {viewWorkersData && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg max-h-[85vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 min-w-0">
@@ -6267,7 +6267,7 @@ export const Reports: React.FC = () => {
                 <h3 className="font-bold truncate">حضور عمالة {getLineName(viewWorkersData.lineId)}</h3>
                 <span className="text-xs text-[var(--color-text-muted)] font-medium shrink-0">{viewWorkersData.date}</span>
               </div>
-              <button onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600">
+              <button onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                 <ReportIcon name="close" />
               </button>
             </div>
@@ -6298,7 +6298,7 @@ export const Reports: React.FC = () => {
                 </Button>
               </div>
               {viewWorkersError && (
-                <p className="text-xs font-bold text-rose-500">{viewWorkersError}</p>
+                <p className="text-xs font-bold text-[rgb(var(--color-danger))]">{viewWorkersError}</p>
               )}
             </div>
             {viewWorkersData.report && (
@@ -6308,27 +6308,27 @@ export const Reports: React.FC = () => {
                     <p className="text-[var(--color-text-muted)] font-bold">إجمالي العمالة</p>
                     <p className="text-primary font-black text-sm">{viewWorkersData.report.workersCount}</p>
                   </div>
-                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                  <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2 text-center">
                     <p className="text-[var(--color-text-muted)] font-bold">ساعات العمل</p>
                     <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workHours}</p>
                   </div>
-                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                  <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2 text-center">
                     <p className="text-[var(--color-text-muted)] font-bold">إنتاج</p>
                     <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersProductionCount || 0}</p>
                   </div>
-                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                  <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2 text-center">
                     <p className="text-[var(--color-text-muted)] font-bold">تغليف</p>
                     <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersPackagingCount || 0}</p>
                   </div>
-                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                  <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2 text-center">
                     <p className="text-[var(--color-text-muted)] font-bold">جودة</p>
                     <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersQualityCount || 0}</p>
                   </div>
-                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center">
+                  <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2 text-center">
                     <p className="text-[var(--color-text-muted)] font-bold">صيانة</p>
                     <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersMaintenanceCount || 0}</p>
                   </div>
-                  <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 text-center col-span-2">
+                  <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2 text-center col-span-2">
                     <p className="text-[var(--color-text-muted)] font-bold">خارجية</p>
                     <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersExternalCount || 0}</p>
                   </div>
@@ -6336,13 +6336,13 @@ export const Reports: React.FC = () => {
                     const presence = summarizeWorkerPresenceRows(viewWorkersData.workers);
                     return (
                       <>
-                        <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-2.5 py-2 text-center">
-                          <p className="font-bold text-emerald-700">حاضر</p>
-                          <p className="text-sm font-black text-emerald-700">{presence.present}</p>
+                        <div className="rounded-[var(--border-radius-base)] bg-[rgb(var(--color-success)/0.1)] px-2.5 py-2 text-center">
+                          <p className="font-bold text-[rgb(var(--color-success))]">حاضر</p>
+                          <p className="text-sm font-black text-[rgb(var(--color-success))]">{presence.present}</p>
                         </div>
-                        <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-2.5 py-2 text-center">
-                          <p className="font-bold text-rose-700">غائب</p>
-                          <p className="text-sm font-black text-rose-700">{presence.absent}</p>
+                        <div className="rounded-[var(--border-radius-base)] bg-[rgb(var(--color-danger)/0.1)] px-2.5 py-2 text-center">
+                          <p className="font-bold text-[rgb(var(--color-danger))]">غائب</p>
+                          <p className="text-sm font-black text-[rgb(var(--color-danger))]">{presence.absent}</p>
                         </div>
                       </>
                     );
@@ -6354,7 +6354,7 @@ export const Reports: React.FC = () => {
               {viewWorkersLoading ? (
                 <div className="text-center py-8">
                   <ReportIcon name="refresh" className="text-3xl text-primary animate-spin block mb-2" />
-                  <p className="text-sm text-slate-500">جاري التحميل...</p>
+                  <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل...</p>
                 </div>
               ) : viewWorkersData.workers.length === 0 ? (
                 <div className="text-center py-8">
@@ -6381,14 +6381,14 @@ export const Reports: React.FC = () => {
                         className={cn(
                           'rounded-[var(--border-radius-lg)] border p-3 transition-colors',
                           isPresent
-                            ? 'border-emerald-100 bg-white dark:bg-transparent dark:border-emerald-900/30'
-                            : 'border-rose-100 bg-rose-50/40 dark:bg-rose-900/10 dark:border-rose-900/30',
+                            ? 'border-[rgb(var(--color-success)/0.25)] bg-[var(--color-card)] dark:bg-transparent dark:border-[rgb(var(--color-success))]/30'
+                            : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/40 dark:bg-[rgb(var(--color-danger)/0.15)] dark:border-[rgb(var(--color-danger))]/30',
                         )}
                       >
                         <div className="flex items-start gap-3">
                           <div className={cn(
                             'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-                            isPresent ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500',
+                            isPresent ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]',
                           )}>
                             <ReportIcon name="person" className="text-base" />
                           </div>
@@ -6397,7 +6397,7 @@ export const Reports: React.FC = () => {
                               <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
                               <span className={cn(
                                 'rounded-full px-2 py-0.5 text-[11px] font-black',
-                                isPresent ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600',
+                                isPresent ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]',
                               )}>
                                 {getPresenceLabel(isPresent)}
                               </span>
@@ -6408,14 +6408,14 @@ export const Reports: React.FC = () => {
                             type="button"
                             onClick={() => removeWorkerFromLineDate(w.id)}
                             disabled={viewWorkersBusy || !w.id}
-                            className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50 shrink-0"
+                            className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50 shrink-0"
                             title={w.id ? 'حذف العامل من هذا الخط' : 'عامل موروث من آخر توزيع؛ عدّل التوزيع من صفحة ربط العمالة'}
                           >
                             <ReportIcon name="delete" className="text-base" />
                           </button>
                         </div>
                         <div className="mt-2.5 grid grid-cols-2 gap-2">
-                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-3 py-2 text-center">
+                          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-3 py-2 text-center">
                             <p className="text-[10px] font-bold text-[var(--color-text-muted)]">المحفوظ</p>
                             <p className="text-sm font-black text-[var(--color-text)] tabular-nums">
                               {savedQty === null ? '—' : formatNumber(savedQty)}

@@ -158,11 +158,11 @@ export const components = {
     heightSm: '4rem',
   },
   input: {
-    /** Matches CSS `--control-height` (36px) */
-    height:   '2.25rem',
-    heightSm: '2rem',
-    /** Matches CSS `--control-height-lg` / shadcn h-10 */
-    heightLg: '2.5rem',
+    /** Matches CSS `--control-height` (theme-scaled, ~38px at 14px base) */
+    height:   '2.375rem',
+    heightSm: '2.125rem',
+    /** Matches CSS `--control-height-lg` / default Button (~42px at 14px base) */
+    heightLg: '2.625rem',
   },
   card: {
     padding:    '1rem',

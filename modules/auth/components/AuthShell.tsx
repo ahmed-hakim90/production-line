@@ -12,7 +12,7 @@ export const AuthShell: React.FC<{ children: React.ReactNode; panelClassName?: s
   <div className="erp-auth-page" dir={dir}>
     <div className={['erp-auth-panel', panelClassName].filter(Boolean).join(' ')}>
       <div className="erp-auth-panel-logo">
-        <span className="material-icons-round" style={{ fontSize: 26, color: '#fff' }}>
+        <span className="material-icons-round" style={{ fontSize: 26 }}>
           factory
         </span>
       </div>

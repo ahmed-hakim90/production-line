@@ -30,13 +30,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
           toast:
             "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg group-[.toaster]:rounded-xl",
           success:
-            "group-[.toaster]:border-emerald-300 group-[.toaster]:bg-emerald-50/95 group-[.toaster]:text-emerald-900",
+            "group-[.toaster]:border-[rgb(var(--color-success)/0.35)] group-[.toaster]:bg-[rgb(var(--color-success)/0.1)]/95 group-[.toaster]:text-[rgb(var(--color-success))]",
           error:
-            "group-[.toaster]:border-rose-300 group-[.toaster]:bg-rose-50/95 group-[.toaster]:text-rose-900",
+            "group-[.toaster]:border-[rgb(var(--color-danger)/0.35)] group-[.toaster]:bg-[rgb(var(--color-danger)/0.1)]/95 group-[.toaster]:text-[rgb(var(--color-danger))]",
           warning:
-            "group-[.toaster]:border-amber-300 group-[.toaster]:bg-amber-50/95 group-[.toaster]:text-amber-900",
+            "group-[.toaster]:border-[rgb(var(--color-warning)/0.35)] group-[.toaster]:bg-[rgb(var(--color-warning)/0.1)]/95 group-[.toaster]:text-[rgb(var(--color-warning))]",
           info:
-            "group-[.toaster]:border-sky-300 group-[.toaster]:bg-sky-50/95 group-[.toaster]:text-sky-900",
+            "group-[.toaster]:border-[rgb(var(--color-primary)/0.35)] group-[.toaster]:bg-[rgb(var(--color-primary)/0.1)]/95 group-[.toaster]:text-[rgb(var(--color-primary))]",
           description: "group-[.toast]:text-muted-foreground",
           actionButton:
             "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",

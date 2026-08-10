@@ -28,6 +28,7 @@ Defined in `src/index.css` `:root` and `DEFAULT_THEME` (`utils/dashboardConfig.t
 - **Panels:** `OpsDashPanel` with module `accent`
 - **Action strip:** page CTAs go in shell `actions` (separate toolbar row). Compact pill buttons via `.ops-dash-toolbar__actions`. Use `OpsMoreActionsMenu` when overflow > ~4 secondary actions. Segmented toggles use `.ops-toolbar-seg`.
 - **Modals:** mount via `ManagedModalPortal` / `#erp-modal-root` (or Radix `getRootPortalContainer`). Never put `z-index` on `.ops-dash-toolbar` / `.ops-dash-domain-body` — it traps page-local fixed overlays under the toolbar border.
+- **Content width:** AppLayout applies theme `contentMaxWidth` (+ optional `pageLayoutOverrides`). Authenticated pages must use `w-full min-w-0` — do not nest `max-w-6xl mx-auto` (or similar) on `ModuleOpsPageShell` / detail pages. Keep hard max-width only for modals, public portals, or intentional phone-operator flows (e.g. routing execution).
 
 ## Module apps
 

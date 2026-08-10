@@ -199,14 +199,14 @@ export const MaterialPlanningRun: React.FC = () => {
               {lines.map((line) => (
                 <tr
                   key={line.materialId}
-                  className={line.shortageQty > 0 ? 'bg-rose-50 dark:bg-rose-950/30' : ''}
+                  className={line.shortageQty > 0 ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.2)]' : ''}
                 >
                   <td className="px-2 py-1">{line.materialName}</td>
                   <td className="px-2 py-1">
                     {arNum(line.requiredQty)} {line.unit}
                   </td>
                   <td className="px-2 py-1">{arNum(line.availableQty)}</td>
-                  <td className="px-2 py-1 font-medium text-rose-600">{arNum(line.shortageQty)}</td>
+                  <td className="px-2 py-1 font-medium text-[rgb(var(--color-danger))]">{arNum(line.shortageQty)}</td>
                   <td className="px-2 py-1">{arNum(line.estimatedCost)}</td>
                 </tr>
               ))}

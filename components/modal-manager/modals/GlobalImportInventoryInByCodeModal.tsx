@@ -281,7 +281,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
       onClick={handleClose}
     >
       <div
@@ -356,10 +356,10 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
           </div>
 
           {importParsing ? (
-            <p className="text-sm text-slate-500">{t('modalManager.importInventoryInByCode.analyzingFile')}</p>
+            <p className="text-sm text-[var(--color-text-muted)]">{t('modalManager.importInventoryInByCode.analyzingFile')}</p>
           ) : !importResult ? (
             <div className="space-y-3">
-              <p className="text-sm text-slate-500">{t('modalManager.importInventoryInByCode.chooseExcelToStart', { itemType: itemTypeLabel })}</p>
+              <p className="text-sm text-[var(--color-text-muted)]">{t('modalManager.importInventoryInByCode.chooseExcelToStart', { itemType: itemTypeLabel })}</p>
               <Button variant="primary" onClick={openImportFilePicker} disabled={importSaving || importParsing}>
                 <FileUp size={14} />
                 {t('modalManager.importInventoryInByCode.selectImportFile')}
@@ -369,16 +369,16 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                  <p className="text-xs text-slate-500">{t('modalManager.importInventoryInByCode.totalRows')}</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">{t('modalManager.importInventoryInByCode.totalRows')}</p>
                   <p className="text-lg font-black">{importResult.totalRows}</p>
                 </div>
-                <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-900/10 p-3">
-                  <p className="text-xs text-emerald-700">{t('modalManager.importInventoryInByCode.validRows')}</p>
-                  <p className="text-lg font-bold text-emerald-700">{importResult.validCount}</p>
+                <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/60 dark:bg-[rgb(var(--color-success)/0.15)] p-3">
+                  <p className="text-xs text-[rgb(var(--color-success))]">{t('modalManager.importInventoryInByCode.validRows')}</p>
+                  <p className="text-lg font-bold text-[rgb(var(--color-success))]">{importResult.validCount}</p>
                 </div>
-                <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50/60 dark:bg-rose-900/10 p-3">
-                  <p className="text-xs text-rose-700">{t('modalManager.importInventoryInByCode.rowsWithErrors')}</p>
-                  <p className="text-lg font-bold text-rose-700">{importResult.errorCount}</p>
+                <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/60 dark:bg-[rgb(var(--color-danger)/0.15)] p-3">
+                  <p className="text-xs text-[rgb(var(--color-danger))]">{t('modalManager.importInventoryInByCode.rowsWithErrors')}</p>
+                  <p className="text-lg font-bold text-[rgb(var(--color-danger))]">{importResult.errorCount}</p>
                 </div>
               </div>
               <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
@@ -403,9 +403,9 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
                         <td className="px-3 py-2 text-sm font-mono">{row.locationCode || '—'}</td>
                         <td className="px-3 py-2 text-sm">
                           {row.errors.length === 0 ? (
-                            <span className="text-emerald-600 font-bold">{t('modalManager.importInventoryInByCode.valid')}</span>
+                            <span className="text-[rgb(var(--color-success))] font-bold">{t('modalManager.importInventoryInByCode.valid')}</span>
                           ) : (
-                            <span className="text-rose-600 font-bold">{row.errors.join(' | ')}</span>
+                            <span className="text-[rgb(var(--color-danger))] font-bold">{row.errors.join(' | ')}</span>
                           )}
                         </td>
                       </tr>
@@ -420,8 +420,8 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             <div
               className={`rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold ${
                 message.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+                  ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]'
+                  : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'
               }`}
             >
               {message.text}

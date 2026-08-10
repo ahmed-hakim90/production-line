@@ -182,7 +182,7 @@ export const QualityWorkers: React.FC = () => {
                 value={form.employeeId}
                 onChange={(e) => setForm((prev) => ({ ...prev, employeeId: e.target.value }))}
                 disabled={!canManage}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
               >
                 <option value="">اختر موظفاً</option>
                 {rawEmployees
@@ -201,7 +201,7 @@ export const QualityWorkers: React.FC = () => {
                 value={form.qualityRole}
                 onChange={(e) => setForm((prev) => ({ ...prev, qualityRole: e.target.value as QualityRole }))}
                 disabled={!canManage}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
               >
                 {ROLE_OPTIONS.map((role) => (
                   <option key={role.value} value={role.value}>{role.label}</option>
@@ -216,7 +216,7 @@ export const QualityWorkers: React.FC = () => {
                 onChange={(e) => setForm((prev) => ({ ...prev, activeLines: e.target.value }))}
                 disabled={!canManage}
                 placeholder="line-a, line-b"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
               />
             </div>
 
@@ -227,7 +227,7 @@ export const QualityWorkers: React.FC = () => {
                 onChange={(e) => setForm((prev) => ({ ...prev, activeProducts: e.target.value }))}
                 disabled={!canManage}
                 placeholder="prod-1, prod-2"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
               />
             </div>
 

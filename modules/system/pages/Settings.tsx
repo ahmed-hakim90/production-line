@@ -21,6 +21,7 @@ import {
   readCachedTenantTheme,
   resolveTheme,
 } from '../../../core/ui-engine/theme/tenantTheme';
+import { THEME_PRESETS } from '../../../core/ui-engine/theme/themePresets';
 import { employeeService } from '../../hr/employeeService';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { userService } from '../../../services/userService';
@@ -29,7 +30,7 @@ import type {
   QuickActionItem, QuickActionColor, CustomWidgetConfig, FirestoreEmployee, FirestoreUser,
 } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
-import { PRINT_PREVIEW_SAMPLE_ROWS } from '../../production/lib/printPreviewSample';
+import { PRINT_PREVIEW_SAMPLE_ROWS } from '../lib/printPreviewSamples';
 import { GeneralSettingsHeader } from '../components/settings/GeneralSettingsHeader';
 import { GeneralBrandingSection } from '../components/settings/GeneralBrandingSection';
 import { GeneralThemeSection } from '../components/settings/GeneralThemeSection';
@@ -103,11 +104,11 @@ const QUICK_ACTION_ICONS = Array.from(new Set([
 
 const QUICK_ACTION_COLORS: { value: QuickActionColor; label: string; classes: string }[] = [
   { value: 'primary', label: 'أزرق رئيسي', classes: 'bg-primary/10 text-primary border-primary/20' },
-  { value: 'emerald', label: 'أخضر', classes: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200' },
-  { value: 'amber', label: 'أصفر', classes: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200' },
-  { value: 'rose', label: 'وردي', classes: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200' },
-  { value: 'violet', label: 'بنفسجي', classes: 'bg-violet-50 dark:bg-violet-900/10 text-violet-600 border-violet-200 dark:border-violet-800' },
-  { value: 'slate', label: 'رمادي', classes: 'bg-[#f0f2f5] text-[var(--color-text-muted)] border-[var(--color-border)]' },
+  { value: 'emerald', label: 'أخضر', classes: 'bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] text-[rgb(var(--color-success))] border-[rgb(var(--color-success)/0.25)]' },
+  { value: 'amber', label: 'أصفر', classes: 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] text-[rgb(var(--color-warning))] border-[rgb(var(--color-warning)/0.25)]' },
+  { value: 'rose', label: 'وردي', classes: 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] text-[rgb(var(--color-danger))] border-[rgb(var(--color-danger)/0.25)]' },
+  { value: 'violet', label: 'بنفسجي', classes: 'bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary)/0.15)] text-[rgb(var(--color-secondary))] border-[rgb(var(--color-secondary)/0.25)] dark:border-[rgb(var(--color-secondary)/0.25)]' },
+  { value: 'slate', label: 'رمادي', classes: 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] border-[var(--color-border)]' },
 ];
 
 const FONT_FAMILIES = [
@@ -117,141 +118,6 @@ const FONT_FAMILIES = [
   { value: 'Rubik', label: 'Rubik' },
   { value: 'IBM Plex Sans Arabic', label: 'IBM Plex Sans Arabic' },
   { value: 'Noto Sans Arabic', label: 'Noto Sans Arabic' },
-];
-
-// ── Ready-made theme presets ─────────────────────────────────────────────────
-interface ThemePreset {
-  id: string;
-  name: string;
-  description: string;
-  colors: { primary: string; bg: string; card: string };
-  swatches?: [string, string, string];
-  partialTheme: Partial<ThemeSettings>;
-}
-
-const THEME_PRESETS: ThemePreset[] = [
-  /* ── Indigo Pro (default) ─────────────────────────────────────────────── */
-  {
-    id: 'indigo-pro',
-    name: 'Indigo Pro ⭐',
-    description: 'الثيم الافتراضي الرسمي',
-    colors: { primary: '#4F46E5', bg: '#F8FAFC', card: '#C7D2FE' },
-    swatches: ['#F1F5F9', '#C7D2FE', '#4F46E5'],
-    partialTheme: {
-      primaryColor: '#4F46E5',
-      secondaryColor: '#6366F1',
-      successColor: '#059669',
-      warningColor: '#D97706',
-      dangerColor: '#DC2626',
-      backgroundColor: '#F8FAFC',
-      cssVars: {
-        '--primary': '239 84% 60%',
-        '--primary-foreground': '0 0% 100%',
-        '--secondary': '240 5% 96%',
-        '--secondary-foreground': '240 6% 10%',
-        '--background': '210 40% 98%',
-        '--foreground': '222 84% 5%',
-        '--muted': '210 40% 96%',
-        '--muted-foreground': '215 16% 47%',
-        '--accent': '239 84% 97%',
-        '--accent-foreground': '239 84% 30%',
-        '--border': '214 32% 91%',
-        '--input': '214 32% 91%',
-        '--ring': '239 84% 60%',
-        '--card': '0 0% 100%',
-        '--card-foreground': '222 84% 5%',
-        '--radius': '0.5rem',
-      },
-      darkMode: 'light',
-      sidebarIconStyle: 'primary',
-    },
-  },
-  {
-    id: 'erpnext_espresso',
-    name: 'ERPNext Espresso',
-    description: 'أزرق نقي — نمط بديل',
-    colors: { primary: '#2490EF', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#2490EF', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
-  },
-  {
-    id: 'erpnext_indigo',
-    name: 'Indigo Pro',
-    description: 'نيلي داكن محترف',
-    colors: { primary: '#4361ee', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#4361ee', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
-  },
-  /* ── ثيمات مخصصة (خلفية Espresso موحدة) ── */
-  {
-    id: 'classic_red',
-    name: 'كلاسيك أحمر',
-    description: 'هوية المؤسسة',
-    colors: { primary: '#a80008', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#a80008', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
-  },
-  {
-    id: 'royal_blue',
-    name: 'أزرق ملكي',
-    description: 'أنيق ومحترف',
-    colors: { primary: '#1e40af', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#1e40af', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
-  },
-  {
-    id: 'emerald_pro',
-    name: 'أخضر زمردي',
-    description: 'مناسب للمصانع',
-    colors: { primary: '#047857', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#047857', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
-  },
-  {
-    id: 'violet_modern',
-    name: 'بنفسجي عصري',
-    description: 'تصميم حديث',
-    colors: { primary: '#6d28d9', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#6d28d9', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
-  },
-  {
-    id: 'amber_gold',
-    name: 'ذهبي احترافي',
-    description: 'دافئ ومميز',
-    colors: { primary: '#b45309', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#b45309', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
-  },
-  {
-    id: 'sky_blue',
-    name: 'سماوي نقي',
-    description: 'هادئ ومريح',
-    colors: { primary: '#0284c7', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#0284c7', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
-  },
-  {
-    id: 'teal_factory',
-    name: 'تيل صناعي',
-    description: 'ثيم المصنع',
-    colors: { primary: '#0f766e', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#0f766e', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'colorful' },
-  },
-  {
-    id: 'rose_elegant',
-    name: 'وردي أنيق',
-    description: 'راقٍ وعصري',
-    colors: { primary: '#be185d', bg: '#f0f2f5', card: '#ffffff' },
-    partialTheme: { primaryColor: '#be185d', darkMode: 'light', backgroundColor: '#f0f2f5', sidebarIconStyle: 'primary' },
-  },
-  /* ── داكن ── */
-  {
-    id: 'dark_navy',
-    name: 'داكن ليلي',
-    description: 'للعمل الليلي',
-    colors: { primary: '#60a5fa', bg: '#020617', card: '#0f172a' },
-    partialTheme: { primaryColor: '#60a5fa', darkMode: 'dark', backgroundColor: '#020617', sidebarIconStyle: 'primary' },
-  },
-  {
-    id: 'dark_emerald',
-    name: 'داكن أخضر',
-    description: 'داكن مميز',
-    colors: { primary: '#34d399', bg: '#020617', card: '#0f172a' },
-    partialTheme: { primaryColor: '#34d399', darkMode: 'dark', backgroundColor: '#020617', sidebarIconStyle: 'muted' },
-  },
 ];
 
 const resolveProductionWorkerSettings = (

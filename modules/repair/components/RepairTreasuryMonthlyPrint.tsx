@@ -2,11 +2,14 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { Factory_REPAIR_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
 import type { RepairTreasuryMonthlyReportData } from '../types';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(Number(n || 0));
 
@@ -21,7 +24,9 @@ export const RepairTreasuryMonthlyPrint = React.forwardRef<HTMLDivElement, Repai
     if (!report) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-    const accent = ps.primaryColor || undefined;
+    const doc = resolvePrintDocumentConfig(ps, 'repairTreasuryMonthly');
+    const accent = resolvePrintAccentHex(ps.primaryColor);
+    const font = resolvePrintFont(ps);
     const printedAt = new Date().toLocaleString('ar-EG');
     const summaries = report.summaries || [];
     const totals = summaries.reduce(
@@ -40,32 +45,47 @@ export const RepairTreasuryMonthlyPrint = React.forwardRef<HTMLDivElement, Repai
     return (
       <FactoryPrintShell
         ref={ref}
-        companyName={ps.headerText || 'مركز الصيانة'}
+        companyName={doc.headerText || 'مركز الصيانة'}
         documentType="تقرير الخزائن الشهري"
         printDate={printedAt}
         logoUrl={ps.logoUrl}
         brandAccent={accent}
-        footerTagline={ps.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        footerTagline={doc.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        extraLines={doc.customLines}
         paperWidth="210mm"
         minHeight="297mm"
         padding="10mm 12mm"
-        metaCards={[
-          { label: 'الشهر', value: report.month || '—' },
-          { label: 'النطاق', value: branchLabel || 'كل الفروع المصرح بها' },
-          { label: 'عدد الفروع', value: String(summaries.length) },
-          { label: 'تاريخ الطباعة', value: printedAt },
-        ]}
-        kpis={[
-          { label: 'عدد الجلسات', value: totals.sessions, tone: 'default' },
-          { label: 'إجمالي الافتتاح', value: `${fmt(totals.opening)} ج.م`, tone: 'indigo' },
-          {
-            label: 'صافي الحركة',
-            value: `${fmt(totals.net)} ج.م`,
-            tone: totals.net < 0 ? 'red' : 'green',
-          },
-          { label: 'إجمالي الإقفال', value: `${fmt(totals.closing)} ج.م`, tone: 'green' },
-        ]}
-        signatures={[{ title: 'محاسب الصيانة' }, { title: 'اعتماد الإدارة' }]}
+        fontFamily={font.fontFamily}
+        fontSize={font.fontSize}
+        metaCards={
+          doc.isFieldVisible('meta')
+            ? [
+                { label: 'الشهر', value: report.month || '—' },
+                { label: 'النطاق', value: branchLabel || 'كل الفروع المصرح بها' },
+                { label: 'عدد الفروع', value: String(summaries.length) },
+                { label: 'تاريخ الطباعة', value: printedAt },
+              ]
+            : undefined
+        }
+        kpis={
+          doc.isFieldVisible('kpis')
+            ? [
+                { label: 'عدد الجلسات', value: totals.sessions, tone: 'default' },
+                { label: 'إجمالي الافتتاح', value: `${fmt(totals.opening)} ج.م`, tone: 'indigo' },
+                {
+                  label: 'صافي الحركة',
+                  value: `${fmt(totals.net)} ج.م`,
+                  tone: totals.net < 0 ? 'red' : 'green',
+                },
+                { label: 'إجمالي الإقفال', value: `${fmt(totals.closing)} ج.م`, tone: 'green' },
+              ]
+            : undefined
+        }
+        signatures={
+          doc.isFieldVisible('signatures')
+            ? [{ title: 'محاسب الصيانة' }, { title: 'اعتماد الإدارة' }]
+            : undefined
+        }
       >
         <section className="mb-4">
           <FactoryPrintSectionTitle title="ملخص الفروع" accent={accent} />

@@ -37,7 +37,7 @@ export const AlertRulesSection: React.FC<AlertRulesSectionProps> = ({
       <OpsDashPanel>
         <div className="space-y-6">
           {alertFields.map((field) => (
-            <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+            <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
                   <span className="material-icons-round text-primary">{field.icon}</span>
@@ -67,7 +67,7 @@ export const AlertRulesSection: React.FC<AlertRulesSectionProps> = ({
       <OpsDashPanel title="القيم الافتراضية">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
           {alertFields.map((field) => (
-            <div key={field.key} className="text-center p-3 bg-[#f8f9fa] rounded-[var(--border-radius-lg)]">
+            <div key={field.key} className="text-center p-3 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)]">
               <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">{field.label}</p>
               <p className="text-lg font-bold text-[var(--color-text-muted)]">
                 {DEFAULT_ALERT_SETTINGS[field.key]} {field.unit}

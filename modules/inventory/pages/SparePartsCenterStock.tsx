@@ -201,7 +201,7 @@ export const SparePartsCenterStock: React.FC = () => {
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={`sk-${i}`}>
                     <td className="py-3 px-2" colSpan={canCreateRecall ? 5 : 4}>
-                      <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                      <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface-hover)]" />
                     </td>
                   </tr>
                 ))

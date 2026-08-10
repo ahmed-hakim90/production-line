@@ -79,7 +79,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
           </div>
         ))}
       {!loading && combinedRows.length === 0 && (
-        <p className="py-8 text-center text-sm text-slate-400">لا توجد حركات مطابقة.</p>
+        <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد حركات مطابقة.</p>
       )}
       {!loading &&
         combinedRows.map((entry) => {
@@ -87,14 +87,14 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
             const tx = entry.tx;
             const qtyNode =
               tx.movementType === 'TRANSFER' ? (
-                <span className="font-bold tabular-nums text-emerald-600">
+                <span className="font-bold tabular-nums text-[rgb(var(--color-success))]">
                   {(() => {
                     const display = getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit);
                     return `${formatNumber(display.quantity)} ${display.unitLabel}`;
                   })()}
                 </span>
               ) : (
-                <span className={`font-black tabular-nums ${tx.quantity >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                <span className={`font-black tabular-nums ${tx.quantity >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`}>
                   {tx.quantity >= 0 ? '+' : ''}
                   {formatNumber(tx.quantity)}
                 </span>
@@ -157,20 +157,20 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
             return (
               <div
                 key={`m-voucher-${group.movementType}-${group.referenceNo}`}
-                className="rounded-xl border border-sky-200 bg-sky-50/40 p-3 shadow-sm dark:bg-sky-900/10"
+                className="rounded-xl border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/40 p-3 shadow-sm dark:bg-[rgb(var(--color-primary)/0.15)]"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-bold">{title} #{group.referenceNo}</p>
-                    <p className="text-xs text-slate-500">{group.lines.length} أصناف · {names}{group.lines.length > 2 ? '…' : ''}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">{group.lines.length} أصناف · {names}{group.lines.length > 2 ? '…' : ''}</p>
                   </div>
                   <Badge variant="info">{movementLabel[group.movementType]}</Badge>
                 </div>
-                <p className="mt-2 text-sm font-bold tabular-nums text-sky-700">
+                <p className="mt-2 text-sm font-bold tabular-nums text-[rgb(var(--color-primary))]">
                   {group.movementType === 'IN' ? '+' : '−'}
                   {formatNumber(Math.abs(qtySum))}
                 </p>
-                <p className="text-xs text-slate-500">{warehouseMap.get(group.warehouseId) ?? group.warehouseId}</p>
+                <p className="text-xs text-[var(--color-text-muted)]">{warehouseMap.get(group.warehouseId) ?? group.warehouseId}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   <TableIconAction action="view" onClick={() => onOpenVoucher(group)} disabled={processing} title="عرض الأصناف" aria-label={`عرض ${title} ${group.referenceNo}`} />
                   {perm.print && (
@@ -201,17 +201,17 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
             return (
               <div
                 key={`m-approved-${group.referenceNo}`}
-                className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 shadow-sm dark:bg-emerald-900/10"
+                className="rounded-xl border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/40 p-3 shadow-sm dark:bg-[rgb(var(--color-success)/0.15)]"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-bold">تحويلة #{group.referenceNo}</p>
-                    <p className="text-xs text-slate-500">{group.lines.length} صنف</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">{group.lines.length} صنف</p>
                   </div>
                   <Badge variant="success">معتمدة</Badge>
                 </div>
                 <p className="mt-2 text-sm">{fromName} ← {toName}</p>
-                <p className="text-sm font-bold tabular-nums text-emerald-700">
+                <p className="text-sm font-bold tabular-nums text-[rgb(var(--color-success))]">
                   {qtySummary}{group.lines.length > 2 ? ' ...' : ''}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -246,17 +246,17 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
           return (
             <div
               key={`m-pending-${row.id}`}
-              className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 shadow-sm dark:bg-amber-900/10"
+              className="rounded-xl border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/40 p-3 shadow-sm dark:bg-[rgb(var(--color-warning)/0.15)]"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-sm font-bold">تحويلة معلقة #{row.referenceNo}</p>
-                  <p className="text-xs text-slate-500">{row.lines.length} صنف</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">{row.lines.length} صنف</p>
                 </div>
                 <Badge variant="warning">معلقة</Badge>
               </div>
               <p className="mt-2 text-sm">{fromName} ← {toName}</p>
-              <p className="text-sm font-bold tabular-nums text-amber-700">
+              <p className="text-sm font-bold tabular-nums text-[rgb(var(--color-warning))]">
                 {qtySummary}{row.lines.length > 2 ? ' ...' : ''}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -307,7 +307,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
           ))}
         {!loading && combinedRows.length === 0 && (
           <tr>
-            <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+            <td colSpan={10} className="px-4 py-10 text-center text-[var(--color-text-muted)]">
               لا توجد حركات مطابقة.
             </td>
           </tr>
@@ -326,7 +326,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                       aria-label={`تحديد حركة ${tx.itemName}`}
                     />
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{new Date(tx.createdAt).toLocaleString('ar-EG')}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">{new Date(tx.createdAt).toLocaleString('ar-EG')}</td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-bold text-[var(--color-text)]">{tx.itemName}</p>
                     <p className="text-xs text-[var(--color-text-muted)] font-mono">{tx.itemCode}</p>
@@ -337,21 +337,21 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <td className="px-4 py-3 text-xs">{sourceModuleLabel(tx.sourceModule)}</td>
                   <td className="px-4 py-3 text-center">
                     {tx.movementType === 'TRANSFER' ? (
-                      <span className="font-bold tabular-nums text-emerald-600">
+                      <span className="font-bold tabular-nums text-[rgb(var(--color-success))]">
                         {(() => {
                           const display = getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit);
                           return `${formatNumber(display.quantity)} ${display.unitLabel}`;
                         })()}
                       </span>
                     ) : (
-                      <span className={`font-black tabular-nums ${tx.quantity >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                      <span className={`font-black tabular-nums ${tx.quantity >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`}>
                         {tx.quantity >= 0 ? '+' : ''}
                         {formatNumber(tx.quantity)}
                       </span>
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm">{warehouseMap.get(tx.warehouseId) ?? tx.warehouseId}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
+                  <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
                     {tx.locationCode || '—'}
                     {tx.toLocationCode ? ` → ${tx.toLocationCode}` : ''}
                   </td>
@@ -410,12 +410,12 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
               const title = voucherMovementTitle(group.movementType, spareContext);
               const qtySum = group.lines.reduce((s, l) => s + Number(l.quantity || 0), 0);
               return (
-                <tr key={`voucher-${group.movementType}-${group.referenceNo}`} className="bg-sky-50/40 dark:bg-sky-900/10">
+                <tr key={`voucher-${group.movementType}-${group.referenceNo}`} className="bg-[rgb(var(--color-primary)/0.1)]/40 dark:bg-[rgb(var(--color-primary)/0.15)]">
                   <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">—</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{new Date(group.createdAt).toLocaleString('ar-EG')}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">{new Date(group.createdAt).toLocaleString('ar-EG')}</td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-bold text-[var(--color-text)]">{title} #{group.referenceNo}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-[var(--color-text-muted)]">
                       {group.lines.length} أصناف
                       {group.note ? ` · ${group.note}` : ''}
                     </p>
@@ -425,13 +425,13 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   </td>
                   <td className="px-4 py-3 text-xs">{sourceModuleLabel(group.sourceModule)}</td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`font-black tabular-nums ${group.movementType === 'IN' ? 'text-emerald-600' : 'text-rose-500'}`}>
+                    <span className={`font-black tabular-nums ${group.movementType === 'IN' ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`}>
                       {group.movementType === 'IN' ? '+' : '−'}
                       {formatNumber(Math.abs(qtySum))}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm">{warehouseMap.get(group.warehouseId) ?? group.warehouseId}</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
+                  <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
                     {group.lines.map((l) => l.locationCode).filter(Boolean).slice(0, 2).join('، ') || '—'}
                   </td>
                   <td className="px-4 py-3 text-sm">{group.createdBy}</td>
@@ -486,12 +486,12 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
               const fromName = warehouseMap.get(group.fromWarehouseId) ?? group.fromWarehouseId;
               const toName = warehouseMap.get(group.toWarehouseId) ?? group.toWarehouseId;
               return (
-                <tr key={`approved-transfer-${group.referenceNo}`} className="bg-emerald-50/30 dark:bg-emerald-900/10">
+                <tr key={`approved-transfer-${group.referenceNo}`} className="bg-[rgb(var(--color-success)/0.1)]/30 dark:bg-[rgb(var(--color-success)/0.15)]">
                   <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">—</td>
-                  <td className="px-4 py-3 text-xs text-slate-500">{new Date(group.createdAt).toLocaleString('ar-EG')}</td>
+                  <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">{new Date(group.createdAt).toLocaleString('ar-EG')}</td>
                   <td className="px-4 py-3">
                     <p className="text-sm font-bold text-[var(--color-text)]">تحويلة #{group.referenceNo}</p>
-                    <p className="text-xs text-slate-500">{group.lines.length} صنف</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">{group.lines.length} صنف</p>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -503,7 +503,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                     {sourceModuleLabel(group.lines[0]?.sourceModule ?? 'transfer_request')}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className="font-bold tabular-nums text-emerald-700">
+                    <span className="font-bold tabular-nums text-[rgb(var(--color-success))]">
                       {qtySummary}
                       {group.lines.length > 2 ? ' ...' : ''}
                     </span>
@@ -511,7 +511,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <td className="px-4 py-3 text-sm">
                     {fromName} ← {toName}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
+                  <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
                     {group.lines.map((line) => line.locationCode || line.toLocationCode).filter(Boolean).slice(0, 2).join('، ') || '—'}
                   </td>
                   <td className="px-4 py-3 text-sm">{group.createdBy}</td>
@@ -574,12 +574,12 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
             const fromName = warehouseMap.get(row.fromWarehouseId) ?? row.fromWarehouseId;
             const toName = warehouseMap.get(row.toWarehouseId) ?? row.toWarehouseId;
             return (
-              <tr key={`pending-${row.id}`} className="bg-amber-50/40 dark:bg-amber-900/10">
+              <tr key={`pending-${row.id}`} className="bg-[rgb(var(--color-warning)/0.1)]/40 dark:bg-[rgb(var(--color-warning)/0.15)]">
                 <td className="px-4 py-3 text-center text-[var(--color-text-muted)]">—</td>
-                <td className="px-4 py-3 text-xs text-slate-500">{new Date(row.createdAt).toLocaleString('ar-EG')}</td>
+                <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">{new Date(row.createdAt).toLocaleString('ar-EG')}</td>
                 <td className="px-4 py-3">
                   <p className="text-sm font-bold text-[var(--color-text)]">تحويلة معلقة #{row.referenceNo}</p>
-                  <p className="text-xs text-slate-500">{row.lines.length} صنف</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">{row.lines.length} صنف</p>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -589,7 +589,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                 </td>
                 <td className="px-4 py-3 text-xs">{sourceModuleLabel(row.sourceModule ?? 'transfer_request')}</td>
                 <td className="px-4 py-3 text-center">
-                  <span className="font-bold tabular-nums text-amber-700">
+                  <span className="font-bold tabular-nums text-[rgb(var(--color-warning))]">
                     {qtySummary}
                     {row.lines.length > 2 ? ' ...' : ''}
                   </span>
@@ -597,7 +597,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                 <td className="px-4 py-3 text-sm">
                   {fromName} ← {toName}
                 </td>
-                <td className="px-4 py-3 text-xs text-slate-500">
+                <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
                   {row.lines.map((line) => line.locationCode || line.toLocationCode).filter(Boolean).slice(0, 2).join('، ') || '—'}
                 </td>
                 <td className="px-4 py-3 text-sm">{row.createdBy}</td>

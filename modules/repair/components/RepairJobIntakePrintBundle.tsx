@@ -48,21 +48,28 @@ export const RepairJobIntakePrintBundle = React.forwardRef<HTMLDivElement, Repai
     } as const;
 
     return (
-      <div ref={ref} dir="rtl" className="print-root arabic-export-root">
+      <div
+        ref={ref}
+        dir="rtl"
+        className="print-root print-report arabic-export-root"
+        style={{ width: 'max-content', maxWidth: '148mm', margin: 0 }}
+      >
         <div style={pageBreakStyle}>
           <RepairJobPrint {...receiptProps} copyKind="center" />
         </div>
         <div style={pageBreakStyle}>
           <RepairJobPrint {...receiptProps} copyKind="customer" />
         </div>
-        <RepairJobProductCardPrint
-          job={job}
-          branch={branch}
-          products={products}
-          printSettings={bundleSettings}
-          workUrl={workUrl}
-          statusMap={statusMap}
-        />
+        <div>
+          <RepairJobProductCardPrint
+            job={job}
+            branch={branch}
+            products={products}
+            printSettings={bundleSettings}
+            workUrl={workUrl}
+            statusMap={statusMap}
+          />
+        </div>
       </div>
     );
   },

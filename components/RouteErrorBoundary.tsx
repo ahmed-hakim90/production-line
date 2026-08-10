@@ -70,8 +70,8 @@ export class RouteErrorBoundary extends React.Component<
           aria-live="assertive"
         >
           <div className="w-full max-w-md rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm p-6 text-center space-y-4">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-rose-100 dark:bg-rose-900/30">
-              <span className="material-icons-round text-rose-600 dark:text-rose-400 text-3xl" aria-hidden>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger))]/30">
+              <span className="material-icons-round text-[rgb(var(--color-danger))] dark:text-[rgb(var(--color-danger))] text-3xl" aria-hidden>
                 error_outline
               </span>
             </div>

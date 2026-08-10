@@ -176,7 +176,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({
               </div>
               <div className="flex items-center gap-4 text-[11px] text-[var(--color-text-muted)]">
                 <div className="flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+                  <span className="w-1.5 h-1.5 bg-[rgb(var(--color-success)/0.1)]0 rounded-full" />
                   <span>{t('layout.database')}</span>
                 </div>
                 <div className="flex items-center gap-1">

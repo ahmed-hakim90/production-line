@@ -44,61 +44,61 @@ export type TableIconActionKind =
 
 const TONE_CLASS: Record<TableIconActionTone, string> = {
   approve:
-    'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/70',
+    'border-[rgb(var(--color-success)/0.35)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.15)] dark:border-[rgb(var(--color-success)/0.25)] dark:bg-[rgb(var(--color-success)/0.2)] dark:text-[rgb(var(--color-success))] dark:hover:bg-[rgb(var(--color-success)/0.2)]',
   reject:
-    'border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-300 dark:hover:bg-rose-950/70',
+    'border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.15)] dark:border-[rgb(var(--color-danger)/0.25)] dark:bg-[rgb(var(--color-danger)/0.2)] dark:text-[rgb(var(--color-danger))] dark:hover:bg-[rgb(var(--color-danger)/0.2)]',
   execute:
-    'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/70',
+    'border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.15)] dark:border-[rgb(var(--color-primary)/0.25)] dark:bg-[rgb(var(--color-primary)/0.2)] dark:text-[rgb(var(--color-primary))] dark:hover:bg-[rgb(var(--color-primary)/0.2)]',
   delete:
-    'border-rose-400 bg-rose-100 text-rose-800 hover:bg-rose-200 dark:border-rose-700 dark:bg-rose-950/50 dark:text-rose-200 dark:hover:bg-rose-950/80',
+    'border-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.15)] dark:border-[rgb(var(--color-danger)/0.25)] dark:bg-[rgb(var(--color-danger)/0.2)] dark:text-[rgb(var(--color-danger))] dark:hover:bg-[rgb(var(--color-danger)/0.2)]',
   submit:
-    'border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300 dark:hover:bg-sky-950/70',
+    'border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.15)] dark:border-[rgb(var(--color-primary)/0.25)] dark:bg-[rgb(var(--color-primary)/0.2)] dark:text-[rgb(var(--color-primary))] dark:hover:bg-[rgb(var(--color-primary)/0.2)]',
   print:
-    'border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-200 dark:hover:bg-slate-900/70',
+    'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] dark:border-[var(--color-border)] dark:bg-[var(--color-surface-hover)] dark:text-[var(--color-text-muted)] dark:hover:bg-[var(--color-surface-hover)]',
   view:
-    'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300 dark:hover:bg-blue-950/70',
+    'border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.15)] dark:border-[rgb(var(--color-primary)/0.25)] dark:bg-[rgb(var(--color-primary)/0.2)] dark:text-[rgb(var(--color-primary))] dark:hover:bg-[rgb(var(--color-primary)/0.2)]',
   edit:
-    'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/70',
+    'border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.15)] dark:border-[rgb(var(--color-warning)/0.25)] dark:bg-[rgb(var(--color-warning)/0.2)] dark:text-[rgb(var(--color-warning))] dark:hover:bg-[rgb(var(--color-warning)/0.2)]',
   share:
-    'border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-950/70',
+    'border-[rgb(var(--color-success)/0.35)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.15)] dark:border-[rgb(var(--color-success)/0.25)] dark:bg-[rgb(var(--color-success)/0.2)] dark:text-[rgb(var(--color-success))] dark:hover:bg-[rgb(var(--color-success)/0.2)]',
   export:
-    'border-cyan-300 bg-cyan-50 text-cyan-700 hover:bg-cyan-100 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 dark:hover:bg-cyan-950/70',
+    'border-[rgb(var(--color-secondary)/0.35)] bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] hover:bg-[rgb(var(--color-secondary)/0.15)] dark:border-[rgb(var(--color-secondary)/0.25)] dark:bg-[rgb(var(--color-secondary)/0.2)] dark:text-[rgb(var(--color-secondary))] dark:hover:bg-[rgb(var(--color-secondary)/0.2)]',
   save:
-    'border-violet-300 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-950/70',
+    'border-[rgb(var(--color-secondary)/0.35)] bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] hover:bg-[rgb(var(--color-secondary)/0.15)] dark:border-[rgb(var(--color-secondary)/0.25)] dark:bg-[rgb(var(--color-secondary)/0.2)] dark:text-[rgb(var(--color-secondary))] dark:hover:bg-[rgb(var(--color-secondary)/0.2)]',
   undo:
-    'border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-300 dark:hover:bg-orange-950/70',
+    'border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.15)] dark:border-[rgb(var(--color-warning)/0.25)] dark:bg-[rgb(var(--color-warning)/0.2)] dark:text-[rgb(var(--color-warning))] dark:hover:bg-[rgb(var(--color-warning)/0.2)]',
   neutral:
-    'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] dark:hover:bg-slate-900/50',
+    'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] dark:hover:bg-[var(--color-surface-hover)]',
 };
 
 /** Solid (filled) variants for primary CTAs — same hue family as soft tones. */
 const TONE_SOLID_CLASS: Record<TableIconActionTone, string> = {
   approve:
-    'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700 dark:border-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500',
+    'border-[rgb(var(--color-success))] bg-[rgb(var(--color-success))] text-white hover:bg-[rgb(var(--color-success)/0.9)] dark:border-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success))] dark:hover:bg-[rgb(var(--color-success)/0.1)]0',
   reject:
-    'border-rose-600 bg-rose-600 text-white hover:bg-rose-700 dark:border-rose-500 dark:bg-rose-600 dark:hover:bg-rose-500',
+    'border-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger))] text-white hover:bg-[rgb(var(--color-danger)/0.9)] dark:border-[rgb(var(--color-danger))] dark:bg-[rgb(var(--color-danger))] dark:hover:bg-[rgb(var(--color-danger)/0.1)]0',
   execute:
-    'border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 dark:border-indigo-500 dark:bg-indigo-600 dark:hover:bg-indigo-500',
+    'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)] dark:border-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary))] dark:hover:bg-[rgb(var(--color-primary)/0.1)]0',
   delete:
-    'border-rose-700 bg-rose-700 text-white hover:bg-rose-800 dark:border-rose-600 dark:bg-rose-700 dark:hover:bg-rose-600',
+    'border-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger))] text-white hover:bg-[rgb(var(--color-danger))] dark:border-[rgb(var(--color-danger))] dark:bg-[rgb(var(--color-danger))] dark:hover:bg-[rgb(var(--color-danger)/0.9)]',
   submit:
-    'border-sky-600 bg-sky-600 text-white hover:bg-sky-700 dark:border-sky-500 dark:bg-sky-600 dark:hover:bg-sky-500',
+    'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)] dark:border-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary))] dark:hover:bg-[rgb(var(--color-primary)/0.1)]0',
   print:
-    'border-slate-700 bg-slate-700 text-white hover:bg-slate-800 dark:border-slate-500 dark:bg-slate-600 dark:hover:bg-slate-500',
+    'border-[var(--color-border)] bg-[var(--color-text)] text-white hover:bg-[var(--color-text)] dark:border-[var(--color-border)] dark:bg-[var(--color-border)] dark:hover:bg-[var(--color-text-muted)]',
   view:
-    'border-blue-600 bg-blue-600 text-white hover:bg-blue-700 dark:border-blue-500 dark:bg-blue-600 dark:hover:bg-blue-500',
+    'border-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)] dark:border-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary))] dark:hover:bg-[rgb(var(--color-primary)/0.1)]0',
   edit:
-    'border-amber-600 bg-amber-600 text-white hover:bg-amber-700 dark:border-amber-500 dark:bg-amber-600 dark:hover:bg-amber-500',
+    'border-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))] text-white hover:bg-[rgb(var(--color-warning)/0.9)] dark:border-[rgb(var(--color-warning))] dark:bg-[rgb(var(--color-warning))] dark:hover:bg-[rgb(var(--color-warning)/0.1)]0',
   share:
-    'border-teal-600 bg-teal-600 text-white hover:bg-teal-700 dark:border-teal-500 dark:bg-teal-600 dark:hover:bg-teal-500',
+    'border-[rgb(var(--color-success))] bg-[rgb(var(--color-success))] text-white hover:bg-[rgb(var(--color-success)/0.9)] dark:border-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success))] dark:hover:bg-[rgb(var(--color-success)/0.1)]0',
   export:
-    'border-cyan-600 bg-cyan-600 text-white hover:bg-cyan-700 dark:border-cyan-500 dark:bg-cyan-600 dark:hover:bg-cyan-500',
+    'border-[rgb(var(--color-secondary))] bg-[rgb(var(--color-secondary))] text-white hover:bg-[rgb(var(--color-secondary)/0.9)] dark:border-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary))] dark:hover:bg-[rgb(var(--color-secondary)/0.1)]0',
   save:
-    'border-violet-600 bg-violet-600 text-white hover:bg-violet-700 dark:border-violet-500 dark:bg-violet-600 dark:hover:bg-violet-500',
+    'border-[rgb(var(--color-secondary))] bg-[rgb(var(--color-secondary))] text-white hover:bg-[rgb(var(--color-secondary)/0.9)] dark:border-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary))] dark:hover:bg-[rgb(var(--color-secondary)/0.1)]0',
   undo:
-    'border-orange-600 bg-orange-600 text-white hover:bg-orange-700 dark:border-orange-500 dark:bg-orange-600 dark:hover:bg-orange-500',
+    'border-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning))] text-white hover:bg-[rgb(var(--color-warning)/0.9)] dark:border-[rgb(var(--color-warning))] dark:bg-[rgb(var(--color-warning))] dark:hover:bg-[rgb(var(--color-warning)/0.1)]0',
   neutral:
-    'border-slate-600 bg-slate-600 text-white hover:bg-slate-700 dark:border-slate-500 dark:bg-slate-600 dark:hover:bg-slate-500',
+    'border-[var(--color-border)] bg-[var(--color-text-muted)] text-white hover:bg-[var(--color-text)] dark:border-[var(--color-border)] dark:bg-[var(--color-border)] dark:hover:bg-[var(--color-text-muted)]',
 };
 
 export const ACTION_PRESET: Record<
@@ -131,10 +131,10 @@ export const ACTION_PRESET: Record<
 };
 
 const ICON_ONLY_BASE =
-  'inline-flex items-center justify-center p-2 rounded-[var(--border-radius-base)] border transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  'inline-flex items-center justify-center h-[var(--control-height)] w-[var(--control-height)] rounded-[var(--border-radius-base)] border transition-colors disabled:opacity-50 disabled:cursor-not-allowed [font-size:var(--font-size-sm)]';
 
 const LABELED_BASE =
-  'inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[var(--border-radius-base)] border text-sm font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  'inline-flex items-center justify-center gap-1.5 h-[var(--control-height)] px-3.5 rounded-[var(--border-radius-base)] border [font-size:var(--font-size-sm)] font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
 type Props = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
   action?: TableIconActionKind;

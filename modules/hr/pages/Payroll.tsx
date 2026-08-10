@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Button, Badge, KPIBox } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
@@ -7,6 +7,7 @@ import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
+import { useManagedPrint } from '@/utils/printManager';
 import { hrNotificationService } from '../approval/notifications';
 import { employeeService } from '../employeeService';
 import {
@@ -17,7 +18,9 @@ import {
   lockPayroll,
   payrollAuditService,
 } from '../payroll';
-import { printPayslip, printCombinedPayslips } from '../utils/payslipGenerator';
+import type { PayslipData } from '../utils/payslipGenerator';
+import { PayslipPrint } from '../components/PayslipPrint';
+import { CombinedPayslipsPrint } from '../components/CombinedPayslipsPrint';
 import { getDocs, query, where } from 'firebase/firestore';
 import { departmentsRef, payrollDistributionsRef } from '../collections';
 import { recordPayrollDistribution } from '../usecases/payrollAccounts';
@@ -118,19 +121,20 @@ const RecordModal: React.FC<{
   onClose: () => void;
   month: string;
   canPrintPayslip: boolean;
-}> = ({ record, onClose, month, canPrintPayslip }) => {
+  onPrint: (record: FirestorePayrollRecord) => void;
+}> = ({ record, onClose, month, canPrintPayslip, onPrint }) => {
   if (!record) return null;
 
   const r = record;
 
   const handlePrint = () => {
     if (!canPrintPayslip) return;
-    printPayslip({ record: r, month });
+    onPrint(r);
   };
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10050] p-4" onClick={onClose}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] w-[95vw] max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
@@ -146,8 +150,8 @@ const RecordModal: React.FC<{
               <span className="material-icons-round text-sm">print</span>
               كشف راتب
             </Button>
-            <button onClick={onClose} className="p-2 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)] transition-colors">
-              <span className="material-icons-round text-slate-400">close</span>
+            <button onClick={onClose} className="p-2 hover:bg-[var(--color-surface-hover)] rounded-[var(--border-radius-base)] transition-colors">
+              <span className="material-icons-round text-[var(--color-text-muted)]">close</span>
             </button>
           </div>
         </div>
@@ -155,7 +159,7 @@ const RecordModal: React.FC<{
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
         {!canPrintPayslip && (
-          <div className="mx-6 mt-4 rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+          <div className="mx-6 mt-4 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-3 py-2 text-xs font-medium text-[rgb(var(--color-warning))]">
             الطباعة متاحة فقط بعد قفل الشهر.
           </div>
         )}
@@ -163,12 +167,12 @@ const RecordModal: React.FC<{
         {/* Attendance Summary */}
         <div className="px-6 py-4 grid grid-cols-4 gap-3">
           {[
-            { label: 'أيام العمل', value: r.workingDays, icon: 'calendar_month', color: 'text-blue-500' },
-            { label: 'حضور', value: r.presentDays, icon: 'check_circle', color: 'text-emerald-500' },
-            { label: 'غياب', value: r.absentDays, icon: 'cancel', color: 'text-rose-500' },
-            { label: 'تأخير', value: r.lateDays, icon: 'schedule', color: 'text-amber-500' },
+            { label: 'أيام العمل', value: r.workingDays, icon: 'calendar_month', color: 'text-[rgb(var(--color-primary))]' },
+            { label: 'حضور', value: r.presentDays, icon: 'check_circle', color: 'text-[rgb(var(--color-success))]' },
+            { label: 'غياب', value: r.absentDays, icon: 'cancel', color: 'text-[rgb(var(--color-danger))]' },
+            { label: 'تأخير', value: r.lateDays, icon: 'schedule', color: 'text-[rgb(var(--color-warning))]' },
           ].map((item) => (
-            <div key={item.label} className="text-center p-3 bg-[#f8f9fa] rounded-[var(--border-radius-base)]">
+            <div key={item.label} className="text-center p-3 bg-[var(--color-bg)] rounded-[var(--border-radius-base)]">
               <span className={`material-icons-round ${item.color} text-xl block mb-1`}>{item.icon}</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold">{item.label}</p>
               <p className="text-lg font-black">{item.value}</p>
@@ -178,8 +182,8 @@ const RecordModal: React.FC<{
 
         {/* Earnings */}
         <div className="px-6 py-3">
-          <h4 className="text-sm font-bold text-emerald-600 mb-2 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          <h4 className="text-sm font-bold text-[rgb(var(--color-success))] mb-2 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[rgb(var(--color-success)/0.1)]0" />
             المستحقات
           </h4>
           <div className="space-y-2">
@@ -199,9 +203,9 @@ const RecordModal: React.FC<{
                 <span className="font-bold font-mono">{formatCurrency(a.amount)}</span>
               </div>
             ))}
-            <div className="flex justify-between text-sm font-bold pt-2 border-t border-emerald-200">
+            <div className="flex justify-between text-sm font-bold pt-2 border-t border-[rgb(var(--color-success)/0.25)]">
               <span>إجمالي المستحقات</span>
-              <span className="text-emerald-600 font-mono">{formatCurrency(r.grossSalary)}</span>
+              <span className="text-[rgb(var(--color-success))] font-mono">{formatCurrency(r.grossSalary)}</span>
             </div>
           </div>
         </div>
@@ -209,50 +213,50 @@ const RecordModal: React.FC<{
         {/* Deductions */}
         {r.totalDeductions > 0 && (
           <div className="px-6 py-3">
-            <h4 className="text-sm font-bold text-rose-600 mb-2 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-rose-500" />
+            <h4 className="text-sm font-bold text-[rgb(var(--color-danger))] mb-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[rgb(var(--color-danger)/0.1)]0" />
               الخصومات
             </h4>
             <div className="space-y-2">
               {r.absenceDeduction > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>خصم غياب ({r.absentDays} يوم)</span>
-                  <span className="font-bold font-mono text-rose-500">{formatCurrency(r.absenceDeduction)}</span>
+                  <span className="font-bold font-mono text-[rgb(var(--color-danger))]">{formatCurrency(r.absenceDeduction)}</span>
                 </div>
               )}
               {r.latePenalty > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>خصم تأخير ({r.lateDays} يوم)</span>
-                  <span className="font-bold font-mono text-rose-500">{formatCurrency(r.latePenalty)}</span>
+                  <span className="font-bold font-mono text-[rgb(var(--color-danger))]">{formatCurrency(r.latePenalty)}</span>
                 </div>
               )}
               {r.loanInstallment > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>قسط سلفة</span>
-                  <span className="font-bold font-mono text-rose-500">{formatCurrency(r.loanInstallment)}</span>
+                  <span className="font-bold font-mono text-[rgb(var(--color-danger))]">{formatCurrency(r.loanInstallment)}</span>
                 </div>
               )}
               {r.unpaidLeaveDeduction > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>خصم إجازة بدون راتب ({r.unpaidLeaveDays} يوم)</span>
-                  <span className="font-bold font-mono text-rose-500">{formatCurrency(r.unpaidLeaveDeduction)}</span>
+                  <span className="font-bold font-mono text-[rgb(var(--color-danger))]">{formatCurrency(r.unpaidLeaveDeduction)}</span>
                 </div>
               )}
               {r.transportDeduction > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>خصم نقل</span>
-                  <span className="font-bold font-mono text-rose-500">{formatCurrency(r.transportDeduction)}</span>
+                  <span className="font-bold font-mono text-[rgb(var(--color-danger))]">{formatCurrency(r.transportDeduction)}</span>
                 </div>
               )}
               {r.otherPenalties > 0 && (
                 <div className="flex justify-between text-sm">
                   <span>جزاءات أخرى</span>
-                  <span className="font-bold font-mono text-rose-500">{formatCurrency(r.otherPenalties)}</span>
+                  <span className="font-bold font-mono text-[rgb(var(--color-danger))]">{formatCurrency(r.otherPenalties)}</span>
                 </div>
               )}
-              <div className="flex justify-between text-sm font-bold pt-2 border-t border-rose-200">
+              <div className="flex justify-between text-sm font-bold pt-2 border-t border-[rgb(var(--color-danger)/0.25)]">
                 <span>إجمالي الخصومات</span>
-                <span className="text-rose-600 font-mono">{formatCurrency(r.totalDeductions)}</span>
+                <span className="text-[rgb(var(--color-danger))] font-mono">{formatCurrency(r.totalDeductions)}</span>
               </div>
             </div>
           </div>
@@ -322,11 +326,28 @@ const AuditPanel: React.FC<{ logs: FirestorePayrollAuditLog[] }> = ({ logs }) =>
 export const Payroll: React.FC = () => {
   const { can } = usePermission();
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const printTemplate = useAppStore((s) => s.systemSettings?.printTemplate);
   const uid = useAppStore((s) => s.uid);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   // State
   const [month, setMonth] = useState(getCurrentMonth());
   const PAYROLL_CACHE_KEY = `hr:payroll:${month}`;
+  const printRef = useRef<HTMLDivElement>(null);
+  const combinedPrintRef = useRef<HTMLDivElement>(null);
+  const [singlePayslip, setSinglePayslip] = useState<PayslipData | null>(null);
+  const [combinedPayslips, setCombinedPayslips] = useState<PayslipData[]>([]);
+  const handleSinglePayslipPrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: singlePayslip?.record.employeeName
+      ? `كشف-راتب-${singlePayslip.record.employeeName}`
+      : 'كشف-راتب',
+  });
+  const handleCombinedPayslipPrint = useManagedPrint({
+    contentRef: combinedPrintRef,
+    printSettings: printTemplate,
+    documentTitle: `كشوفات-رواتب-${month}`,
+  });
   const initialPayrollCache = peekPageDataCache<PayrollMonthPageData>(PAYROLL_CACHE_KEY);
   const initialEmployeesCache = peekPageDataCache<PayrollEmployeeData[]>(PAYROLL_EMPLOYEES_CACHE_KEY);
 
@@ -577,8 +598,21 @@ export const Payroll: React.FC = () => {
       setError('تصدير الكشوفات PDF متاح فقط بعد قفل الشهر.');
       return;
     }
-    printCombinedPayslips({ records, month });
-  }, [isLocked, records, month]);
+    setCombinedPayslips(records.map((record) => ({ record, month })));
+    window.setTimeout(() => {
+      void handleCombinedPayslipPrint();
+    }, 50);
+  }, [isLocked, records, month, handleCombinedPayslipPrint]);
+
+  const handlePrintSinglePayslip = useCallback(
+    (record: FirestorePayrollRecord) => {
+      setSinglePayslip({ record, month });
+      window.setTimeout(() => {
+        void handleSinglePayslipPrint();
+      }, 50);
+    },
+    [month, handleSinglePayslipPrint],
+  );
 
   const handleDistributePayroll = useCallback(async () => {
     if (!canDistributePayroll) {
@@ -673,14 +707,14 @@ export const Payroll: React.FC = () => {
       {dataLoaded && payrollMonth && (
         <div className={`rounded-[var(--border-radius-lg)] p-4 flex items-center justify-between border ${
           isLocked
-            ? 'bg-rose-50 border-rose-200'
+            ? 'bg-[rgb(var(--color-danger)/0.1)] border-[rgb(var(--color-danger)/0.25)]'
             : isFinalized
-            ? 'bg-emerald-50 border-emerald-200'
-            : 'bg-amber-50 border-amber-200'
+            ? 'bg-[rgb(var(--color-success)/0.1)] border-[rgb(var(--color-success)/0.25)]'
+            : 'bg-[rgb(var(--color-warning)/0.1)] border-[rgb(var(--color-warning)/0.25)]'
         }`}>
           <div className="flex items-center gap-3">
             <span className={`material-icons-round text-xl ${
-              isLocked ? 'text-rose-500' : isFinalized ? 'text-emerald-500' : 'text-amber-500'
+              isLocked ? 'text-[rgb(var(--color-danger))]' : isFinalized ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-warning))]'
             }`}>
               {isLocked ? 'lock' : isFinalized ? 'verified' : 'edit_note'}
             </span>
@@ -688,7 +722,7 @@ export const Payroll: React.FC = () => {
               <p className="text-sm font-black">
                 {isLocked ? 'هذا الشهر مقفل نهائياً' : isFinalized ? 'هذا الشهر مُعتمد' : 'مسودة — يمكن التعديل وإعادة الاحتساب'}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-[var(--color-text-muted)]">
                 {payrollMonth.totalEmployees} موظف
                 {payrollMonth.snapshotVersion && ` — نسخة: ${payrollMonth.snapshotVersion}`}
               </p>
@@ -702,15 +736,15 @@ export const Payroll: React.FC = () => {
 
       {/* Messages */}
       {error && (
-        <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-rose-500">error</span>
-          <p className="text-sm font-bold text-rose-700">{error}</p>
+        <div className="bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+          <span className="material-icons-round text-[rgb(var(--color-danger))]">error</span>
+          <p className="text-sm font-bold text-[rgb(var(--color-danger))]">{error}</p>
         </div>
       )}
       {success && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-emerald-500">check_circle</span>
-          <p className="text-sm font-bold text-emerald-700">{success}</p>
+        <div className="bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+          <span className="material-icons-round text-[rgb(var(--color-success))]">check_circle</span>
+          <p className="text-sm font-bold text-[rgb(var(--color-success))]">{success}</p>
         </div>
       )}
 
@@ -721,19 +755,19 @@ export const Payroll: React.FC = () => {
             label="عدد الموظفين"
             value={records.length}
             icon="groups"
-            colorClass="bg-blue-100 text-blue-600"
+            colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]"
           />
           <KPIBox
             label="إجمالي المستحقات"
             value={formatCurrency(payrollMonth?.totalGross ?? 0)}
             icon="trending_up"
-            colorClass="bg-emerald-100 text-emerald-600"
+            colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]"
           />
           <KPIBox
             label="إجمالي الخصومات"
             value={formatCurrency(payrollMonth?.totalDeductions ?? 0)}
             icon="trending_down"
-            colorClass="bg-rose-100 text-rose-600"
+            colorClass="bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]"
           />
           <KPIBox
             label="صافي الرواتب"
@@ -779,7 +813,7 @@ export const Payroll: React.FC = () => {
               variant="outline"
               onClick={handleLock}
               disabled={!!actionLoading}
-              className="border-rose-300 text-rose-600 hover:bg-rose-50 dark:border-rose-700 dark:hover:bg-rose-900/20"
+              className="border-[rgb(var(--color-danger)/0.35)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:border-[rgb(var(--color-danger)/0.25)] dark:hover:bg-[rgb(var(--color-danger))]/20"
             >
               {actionLoading === 'lock'
                 ? <span className="material-icons-round animate-spin text-sm">refresh</span>
@@ -860,9 +894,9 @@ export const Payroll: React.FC = () => {
                     <Badge variant="neutral">{EMPLOYMENT_TYPE_LABELS[r.employmentType]}</Badge>
                   </div>
                   {r.isLocked
-                    ? <span className="material-icons-round text-rose-400 text-base">lock</span>
+                    ? <span className="material-icons-round text-[rgb(var(--color-danger))] text-base">lock</span>
                     : r.calculationSnapshotVersion
-                      ? <span className="material-icons-round text-emerald-400 text-base">verified</span>
+                      ? <span className="material-icons-round text-[rgb(var(--color-success))] text-base">verified</span>
                       : <span className="material-icons-round text-[var(--color-text-muted)] text-base">edit_note</span>}
                 </div>
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
@@ -876,11 +910,11 @@ export const Payroll: React.FC = () => {
                   </div>
                   <div>
                     <dt className="text-[10px] text-[var(--color-text-muted)]">المستحقات</dt>
-                    <dd className="font-mono text-xs font-bold text-emerald-600">{formatCurrency(r.grossSalary)}</dd>
+                    <dd className="font-mono text-xs font-bold text-[rgb(var(--color-success))]">{formatCurrency(r.grossSalary)}</dd>
                   </div>
                   <div>
                     <dt className="text-[10px] text-[var(--color-text-muted)]">الخصومات</dt>
-                    <dd className="font-mono text-xs font-bold text-rose-500">
+                    <dd className="font-mono text-xs font-bold text-[rgb(var(--color-danger))]">
                       {r.totalDeductions > 0 ? formatCurrency(r.totalDeductions) : '—'}
                     </dd>
                   </div>
@@ -908,7 +942,7 @@ export const Payroll: React.FC = () => {
                 {paginatedRecords.map((r) => (
                   <tr
                     key={r.id}
-                    className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors cursor-pointer"
+                    className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30 transition-colors cursor-pointer"
                     onClick={() => {
                       if (!isLocked) return;
                       setSelectedRecord(r);
@@ -928,7 +962,7 @@ export const Payroll: React.FC = () => {
                     <td className="py-3 px-2 font-mono text-xs font-bold">{formatCurrency(r.baseSalary)}</td>
                     <td className="py-3 px-2 font-mono text-xs">
                       {r.overtimeAmount > 0
-                        ? <span className="text-blue-500 font-bold">{formatCurrency(r.overtimeAmount)}</span>
+                        ? <span className="text-[rgb(var(--color-primary))] font-bold">{formatCurrency(r.overtimeAmount)}</span>
                         : <span className="text-[var(--color-text-muted)]">—</span>}
                     </td>
                     <td className="py-3 px-2 font-mono text-xs">
@@ -936,10 +970,10 @@ export const Payroll: React.FC = () => {
                         ? <span className="font-bold">{formatCurrency(r.allowancesTotal)}</span>
                         : <span className="text-[var(--color-text-muted)]">—</span>}
                     </td>
-                    <td className="py-3 px-2 font-mono text-xs font-bold text-emerald-600">
+                    <td className="py-3 px-2 font-mono text-xs font-bold text-[rgb(var(--color-success))]">
                       {formatCurrency(r.grossSalary)}
                     </td>
-                    <td className="py-3 px-2 font-mono text-xs font-bold text-rose-500">
+                    <td className="py-3 px-2 font-mono text-xs font-bold text-[rgb(var(--color-danger))]">
                       {r.totalDeductions > 0 ? formatCurrency(r.totalDeductions) : <span className="text-[var(--color-text-muted)]">—</span>}
                     </td>
                     <td className="py-3 px-2 font-mono text-xs font-bold text-primary">
@@ -947,9 +981,9 @@ export const Payroll: React.FC = () => {
                     </td>
                     <td className="py-3 px-2 text-center">
                       {r.isLocked
-                        ? <span className="material-icons-round text-rose-400 text-sm">lock</span>
+                        ? <span className="material-icons-round text-[rgb(var(--color-danger))] text-sm">lock</span>
                         : r.calculationSnapshotVersion
-                        ? <span className="material-icons-round text-emerald-400 text-sm">verified</span>
+                        ? <span className="material-icons-round text-[rgb(var(--color-success))] text-sm">verified</span>
                         : <span className="material-icons-round text-[var(--color-text-muted)] text-sm">edit_note</span>}
                     </td>
                     <td className="py-3 px-2 text-center">
@@ -961,7 +995,7 @@ export const Payroll: React.FC = () => {
                         }}
                         disabled={!isLocked}
                         title={isLocked ? 'عرض السركي' : 'السركي متاح بعد قفل الشهر'}
-                        className="p-1.5 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)] transition-colors"
+                        className="p-1.5 hover:bg-[var(--color-surface-hover)] rounded-[var(--border-radius-base)] transition-colors"
                       >
                         <span className="material-icons-round text-[var(--color-text-muted)] text-sm">visibility</span>
                       </button>
@@ -1025,7 +1059,7 @@ export const Payroll: React.FC = () => {
             <p className="text-sm font-bold text-[var(--color-text-muted)] mb-2">
               اختر الشهر واضغط "تحميل"
             </p>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[var(--color-text-muted)]">
               سيتم عرض كشف الرواتب الخاص بالشهر المحدد.
             </p>
           </div>
@@ -1041,7 +1075,17 @@ export const Payroll: React.FC = () => {
         onClose={() => setSelectedRecord(null)}
         month={month}
         canPrintPayslip={isLocked}
+        onPrint={handlePrintSinglePayslip}
       />
+
+      <div className="hidden" aria-hidden>
+        <PayslipPrint ref={printRef} data={singlePayslip} printSettings={printTemplate} />
+        <CombinedPayslipsPrint
+          ref={combinedPrintRef}
+          items={combinedPayslips}
+          printSettings={printTemplate}
+        />
+      </div>
     </ModuleOpsPageShell>
   );
 };

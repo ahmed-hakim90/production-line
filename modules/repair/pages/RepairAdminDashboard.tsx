@@ -574,7 +574,7 @@ export const RepairAdminDashboard: React.FC = () => {
       label: 'جاهز للتحصيل',
       hint: 'أذونات معتمدة بها رصيد مطلوب',
       count: overview.readyForPayment,
-      tone: 'text-sky-600',
+      tone: 'text-[rgb(var(--color-primary))]',
       to: path('/repair/payments'),
       show: can('repair.payments.view'),
     },
@@ -583,7 +583,7 @@ export const RepairAdminDashboard: React.FC = () => {
       label: 'بانتظار موافقة العميل',
       hint: 'تقديرات بانتظار رد العميل',
       count: overview.waitingApproval,
-      tone: 'text-violet-600',
+      tone: 'text-[rgb(var(--color-secondary))]',
       to: path('/repair/admin-orders'),
       show: true,
     },
@@ -592,7 +592,7 @@ export const RepairAdminDashboard: React.FC = () => {
       label: 'بانتظار قطع / توريد',
       hint: 'طلبات بانتظار توريد أو حالة قطع',
       count: overview.waitingParts,
-      tone: 'text-amber-600',
+      tone: 'text-[rgb(var(--color-warning))]',
       to: path(canViewReplenishment ? '/repair/parts-replenishment' : '/repair/admin-orders'),
       show: true,
     },
@@ -601,7 +601,7 @@ export const RepairAdminDashboard: React.FC = () => {
       label: 'متأخر (+7 أيام)',
       hint: 'طلبات مفتوحة تجاوزت 7 أيام',
       count: overview.overdueJobs,
-      tone: 'text-rose-600',
+      tone: 'text-[rgb(var(--color-danger))]',
       to: path('/repair/admin-orders'),
       show: true,
     },
@@ -610,7 +610,7 @@ export const RepairAdminDashboard: React.FC = () => {
       label: 'جاهز للتسليم',
       hint: 'مكتمل فنياً وينتظر التسليم',
       count: overview.readyJobs,
-      tone: 'text-indigo-600',
+      tone: 'text-[rgb(var(--color-primary))]',
       to: path('/repair/admin-orders'),
       show: true,
     },
@@ -819,7 +819,7 @@ export const RepairAdminDashboard: React.FC = () => {
       secondary={(
         <div className="space-y-3">
           {jobs.length >= REPAIR_JOB_DASHBOARD_LIMIT ? (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-[rgb(var(--color-warning))]">
               المؤشرات من أحدث {fmt(REPAIR_JOB_DASHBOARD_LIMIT)} طلباً — قد تكون الأرقام ناقصة للمستأجرين الكبار.
             </p>
           ) : null}
@@ -888,7 +888,7 @@ export const RepairAdminDashboard: React.FC = () => {
                     <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
                     <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
                     <Tooltip formatter={(v: number) => fmt(v)} />
-                    <Bar dataKey="value" name="مفتوحة" fill="#0ea5e9" radius={[8, 8, 0, 0]} barSize={22} />
+                    <Bar dataKey="value" name="مفتوحة" fill="var(--chart-1)" radius={[8, 8, 0, 0]} barSize={22} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -907,14 +907,14 @@ export const RepairAdminDashboard: React.FC = () => {
                 </div>
                 <div className="ops-module-charts__qty">
                   <p className="ops-module-charts__qty-label">جاهز للصرف</p>
-                  <p className="ops-module-charts__qty-value text-sky-700">{fmt(overview.readyToIssueParts)}</p>
+                  <p className="ops-module-charts__qty-value text-[rgb(var(--color-primary))]">{fmt(overview.readyToIssueParts)}</p>
                 </div>
                 <Link
                   to={path(canViewParts ? '/repair/parts' : '/repair/admin-orders')}
                   className="ops-module-charts__qty block no-underline"
                 >
                   <p className="ops-module-charts__qty-label">تنبيه المخزون</p>
-                  <p className={`ops-module-charts__qty-value ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  <p className={`ops-module-charts__qty-value ${overview.lowStockCount > 0 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>
                     {fmt(overview.lowStockCount)}
                   </p>
                 </Link>
@@ -925,9 +925,9 @@ export const RepairAdminDashboard: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-2 overflow-hidden rounded-full bg-[var(--color-surface-hover)]">
                 <div
-                  className="h-full rounded-full bg-emerald-500"
+                  className="h-full rounded-full bg-[rgb(var(--color-success)/0.1)]0"
                   style={{ width: `${Math.min(100, Math.max(0, overview.successRate))}%` }}
                 />
               </div>
@@ -942,10 +942,10 @@ export const RepairAdminDashboard: React.FC = () => {
               >
                 {[
                   ['الإجمالي', overview.grossAmount, ''],
-                  ['الخصومات', overview.discountAmount, 'text-rose-600'],
-                  ['الصافي', overview.netAmount, 'text-indigo-600'],
-                  ['المحصل', overview.paidAmount, 'text-emerald-600'],
-                  ['المتبقي', overview.balanceDue, 'text-amber-700'],
+                  ['الخصومات', overview.discountAmount, 'text-[rgb(var(--color-danger))]'],
+                  ['الصافي', overview.netAmount, 'text-[rgb(var(--color-primary))]'],
+                  ['المحصل', overview.paidAmount, 'text-[rgb(var(--color-success))]'],
+                  ['المتبقي', overview.balanceDue, 'text-[rgb(var(--color-warning))]'],
                 ].map(([label, value, tone]) => (
                   <div key={String(label)} className="ops-module-charts__qty">
                     <p className="ops-module-charts__qty-label">{label}</p>
@@ -966,15 +966,15 @@ export const RepairAdminDashboard: React.FC = () => {
                 </div>
                 <div className="ops-module-charts__qty">
                   <p className="ops-module-charts__qty-label">إجمالي قرارات الوحدات</p>
-                  <p className="ops-module-charts__qty-value text-rose-600">{fmt(unrepairableAnalytics.decisionQuantity)}</p>
+                  <p className="ops-module-charts__qty-value text-[rgb(var(--color-danger))]">{fmt(unrepairableAnalytics.decisionQuantity)}</p>
                 </div>
                 <div className="ops-module-charts__qty">
                   <p className="ops-module-charts__qty-label">الرصيد الحالي غير القابل</p>
-                  <p className="ops-module-charts__qty-value text-amber-700">{fmt(unrepairableAnalytics.currentStockQuantity)}</p>
+                  <p className="ops-module-charts__qty-value text-[rgb(var(--color-warning))]">{fmt(unrepairableAnalytics.currentStockQuantity)}</p>
                 </div>
                 <div className="ops-module-charts__qty">
                   <p className="ops-module-charts__qty-label">أُعيد فتحها للصيانة</p>
-                  <p className="ops-module-charts__qty-value text-emerald-700">{fmt(unrepairableAnalytics.reopenedQuantity)}</p>
+                  <p className="ops-module-charts__qty-value text-[rgb(var(--color-success))]">{fmt(unrepairableAnalytics.reopenedQuantity)}</p>
                 </div>
               </div>
               {unrepairableAnalytics.reasons.length === 0 ? (
@@ -1001,11 +1001,11 @@ export const RepairAdminDashboard: React.FC = () => {
                           </div>
                           <div>
                             <dt className="text-[10px]">الموجود حاليًا</dt>
-                            <dd className="tabular-nums text-amber-700">{fmt(row.currentStockQuantity)}</dd>
+                            <dd className="tabular-nums text-[rgb(var(--color-warning))]">{fmt(row.currentStockQuantity)}</dd>
                           </div>
                           <div>
                             <dt className="text-[10px]">أُعيد للصيانة</dt>
-                            <dd className="tabular-nums text-emerald-700">{fmt(row.reopenedQuantity)}</dd>
+                            <dd className="tabular-nums text-[rgb(var(--color-success))]">{fmt(row.reopenedQuantity)}</dd>
                           </div>
                         </dl>
                       </div>
@@ -1028,8 +1028,8 @@ export const RepairAdminDashboard: React.FC = () => {
                             <td className="font-medium">{row.label}</td>
                             <td className="tabular-nums">{fmt(row.jobs)}</td>
                             <td className="tabular-nums">{fmt(row.decisionQuantity)}</td>
-                            <td className="tabular-nums text-amber-700">{fmt(row.currentStockQuantity)}</td>
-                            <td className="tabular-nums text-emerald-700">{fmt(row.reopenedQuantity)}</td>
+                            <td className="tabular-nums text-[rgb(var(--color-warning))]">{fmt(row.currentStockQuantity)}</td>
+                            <td className="tabular-nums text-[rgb(var(--color-success))]">{fmt(row.reopenedQuantity)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1054,11 +1054,11 @@ export const RepairAdminDashboard: React.FC = () => {
                   </div>
                   <div className="ops-module-charts__qty">
                     <p className="ops-module-charts__qty-label">سندات معلقة</p>
-                    <p className="ops-module-charts__qty-value text-amber-700">{fmt(rsiPendingCount)}</p>
+                    <p className="ops-module-charts__qty-value text-[rgb(var(--color-warning))]">{fmt(rsiPendingCount)}</p>
                   </div>
                   <div className="ops-module-charts__qty">
                     <p className="ops-module-charts__qty-label">منخفض المخزون</p>
-                    <p className={`ops-module-charts__qty-value ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    <p className={`ops-module-charts__qty-value ${overview.lowStockCount > 0 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>
                       {fmt(overview.lowStockCount)}
                     </p>
                   </div>
@@ -1123,7 +1123,7 @@ export const RepairAdminDashboard: React.FC = () => {
                 <div className="ops-module-charts__qty-row" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                   <div className="ops-module-charts__qty">
                     <p className="ops-module-charts__qty-label">جلسات مفتوحة</p>
-                    <p className={`ops-module-charts__qty-value ${openSessionsCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    <p className={`ops-module-charts__qty-value ${openSessionsCount > 0 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>
                       {fmt(openSessionsCount)}
                     </p>
                   </div>
@@ -1158,7 +1158,7 @@ export const RepairAdminDashboard: React.FC = () => {
                 <div className="ops-module-charts__qty-row" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
                   <div className="ops-module-charts__qty">
                     <p className="ops-module-charts__qty-label">شكاوى مفتوحة</p>
-                    <p className={`ops-module-charts__qty-value ${openComplaintsCount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    <p className={`ops-module-charts__qty-value ${openComplaintsCount > 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
                       {fmt(openComplaintsCount)}
                     </p>
                   </div>
@@ -1211,34 +1211,34 @@ export const RepairAdminDashboard: React.FC = () => {
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">طلبات مفتوحة</p>
-                      <p className="ops-module-charts__qty-value text-amber-700">{fmt(card.openJobs)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-warning))]">{fmt(card.openJobs)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">جاهز للتسليم</p>
-                      <p className="ops-module-charts__qty-value text-indigo-700">{fmt(card.readyJobs)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-primary))]">{fmt(card.readyJobs)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">طلبات منجزة</p>
-                      <p className="ops-module-charts__qty-value text-emerald-700">{fmt(card.deliveredJobs)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-success))]">{fmt(card.deliveredJobs)}</p>
                     </div>
                   </div>
 
                   <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">موافقة عميل</p>
-                      <p className="ops-module-charts__qty-value text-violet-700">{fmt(card.waitingApproval)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-secondary))]">{fmt(card.waitingApproval)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">بانتظار قطع</p>
-                      <p className="ops-module-charts__qty-value text-amber-700">{fmt(card.waitingParts)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-warning))]">{fmt(card.waitingParts)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">جاهز للصرف</p>
-                      <p className="ops-module-charts__qty-value text-sky-700">{fmt(card.readyToIssueParts)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-primary))]">{fmt(card.readyToIssueParts)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">متأخر</p>
-                      <p className={`ops-module-charts__qty-value ${card.overdueJobs > 0 ? 'text-rose-600' : ''}`}>
+                      <p className={`ops-module-charts__qty-value ${card.overdueJobs > 0 ? 'text-[rgb(var(--color-danger))]' : ''}`}>
                         {fmt(card.overdueJobs)}
                       </p>
                     </div>
@@ -1254,19 +1254,19 @@ export const RepairAdminDashboard: React.FC = () => {
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">إيراد الصيانة</p>
-                      <p className="ops-module-charts__qty-value text-emerald-600">{fmt(card.revenue)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-success))]">{fmt(card.revenue)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">مبيعات قطع الغيار</p>
-                      <p className="ops-module-charts__qty-value text-sky-600">{fmt(card.partsRevenue)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-primary))]">{fmt(card.partsRevenue)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">الإجمالي التشغيلي</p>
-                      <p className="ops-module-charts__qty-value text-emerald-700">{fmt(card.totalRevenue)}</p>
+                      <p className="ops-module-charts__qty-value text-[rgb(var(--color-success))]">{fmt(card.totalRevenue)}</p>
                     </div>
                     <div className="ops-module-charts__qty">
                       <p className="ops-module-charts__qty-label">منخفض المخزون</p>
-                      <p className={`ops-module-charts__qty-value ${card.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      <p className={`ops-module-charts__qty-value ${card.lowStockCount > 0 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>
                         {fmt(card.lowStockCount)}
                       </p>
                     </div>
@@ -1283,19 +1283,19 @@ export const RepairAdminDashboard: React.FC = () => {
                       </div>
                       <div className="ops-module-charts__qty">
                         <p className="ops-module-charts__qty-label">الخصم</p>
-                        <p className="ops-module-charts__qty-value text-rose-600">{fmt(card.discountAmount)}</p>
+                        <p className="ops-module-charts__qty-value text-[rgb(var(--color-danger))]">{fmt(card.discountAmount)}</p>
                       </div>
                       <div className="ops-module-charts__qty">
                         <p className="ops-module-charts__qty-label">الصافي</p>
-                        <p className="ops-module-charts__qty-value text-indigo-600">{fmt(card.netAmount)}</p>
+                        <p className="ops-module-charts__qty-value text-[rgb(var(--color-primary))]">{fmt(card.netAmount)}</p>
                       </div>
                       <div className="ops-module-charts__qty">
                         <p className="ops-module-charts__qty-label">المحصل</p>
-                        <p className="ops-module-charts__qty-value text-emerald-600">{fmt(card.paidAmount)}</p>
+                        <p className="ops-module-charts__qty-value text-[rgb(var(--color-success))]">{fmt(card.paidAmount)}</p>
                       </div>
                       <div className="ops-module-charts__qty">
                         <p className="ops-module-charts__qty-label">الرصيد</p>
-                        <p className="ops-module-charts__qty-value text-amber-700">{fmt(card.balanceDue)}</p>
+                        <p className="ops-module-charts__qty-value text-[rgb(var(--color-warning))]">{fmt(card.balanceDue)}</p>
                       </div>
                     </div>
                   ) : null}
@@ -1305,7 +1305,7 @@ export const RepairAdminDashboard: React.FC = () => {
                       <span>نسبة النجاح (من الطلبات المنتهية)</span>
                       <span className="tabular-nums">{card.successRate.toFixed(1)}%</span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--color-surface-hover)]">
                       <div
                         className="h-full rounded-full bg-primary/80"
                         style={{ width: `${Math.min(100, Math.max(0, card.successRate))}%` }}
@@ -1385,7 +1385,7 @@ export const RepairAdminDashboard: React.FC = () => {
                         </div>
                         <div className="col-span-2">
                           <dt className="text-[10px]">الإجمالي التشغيلي</dt>
-                          <dd className="tabular-nums text-emerald-700">{fmt(card.totalRevenue)}</dd>
+                          <dd className="tabular-nums text-[rgb(var(--color-success))]">{fmt(card.totalRevenue)}</dd>
                         </div>
                       </dl>
                     </div>
@@ -1419,11 +1419,11 @@ export const RepairAdminDashboard: React.FC = () => {
                           <td className="px-2 py-2 text-xs tabular-nums">
                             {fmt(card.waitingApproval)} / {fmt(card.waitingParts)} / {fmt(card.overdueJobs)}
                           </td>
-                          <td className="px-2 py-2 text-emerald-600 tabular-nums">{fmt(card.revenue)}</td>
-                          <td className="px-2 py-2 text-emerald-700 tabular-nums">{fmt(card.paidAmount)}</td>
-                          <td className="px-2 py-2 text-amber-700 tabular-nums">{fmt(card.balanceDue)}</td>
-                          <td className="px-2 py-2 text-sky-600 tabular-nums">{fmt(card.partsRevenue)}</td>
-                          <td className="px-2 py-2 text-emerald-700 tabular-nums">{fmt(card.totalRevenue)}</td>
+                          <td className="px-2 py-2 text-[rgb(var(--color-success))] tabular-nums">{fmt(card.revenue)}</td>
+                          <td className="px-2 py-2 text-[rgb(var(--color-success))] tabular-nums">{fmt(card.paidAmount)}</td>
+                          <td className="px-2 py-2 text-[rgb(var(--color-warning))] tabular-nums">{fmt(card.balanceDue)}</td>
+                          <td className="px-2 py-2 text-[rgb(var(--color-primary))] tabular-nums">{fmt(card.partsRevenue)}</td>
+                          <td className="px-2 py-2 text-[rgb(var(--color-success))] tabular-nums">{fmt(card.totalRevenue)}</td>
                         </tr>
                       ))}
                     </tbody>

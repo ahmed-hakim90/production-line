@@ -292,18 +292,18 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
             </div>
             <div className="rounded-lg border border-[var(--color-border)] p-2">
               <div className="text-xs text-[var(--color-text-muted)]">{isCenterMode ? 'جديد للمركز' : 'جديد للمخزن'}</div>
-              <div className="font-bold text-sky-700">{createCount}</div>
+              <div className="font-bold text-[rgb(var(--color-primary))]">{createCount}</div>
             </div>
             <div className="rounded-lg border border-[var(--color-border)] p-2">
               <div className="text-xs text-[var(--color-text-muted)]">أخطاء</div>
-              <div className={`font-bold ${parsed.errors.length ? 'text-rose-700' : ''}`}>
+              <div className={`font-bold ${parsed.errors.length ? 'text-[rgb(var(--color-danger))]' : ''}`}>
                 {parsed.errors.length}
               </div>
             </div>
           </div>
 
           {parsed.warnings.length > 0 ? (
-            <ul className="text-xs text-amber-800 space-y-1 list-disc list-inside">
+            <ul className="text-xs text-[rgb(var(--color-warning))] space-y-1 list-disc list-inside">
               {parsed.warnings.map((warning) => (
                 <li key={warning}>{warning}</li>
               ))}
@@ -311,7 +311,7 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
           ) : null}
 
           {parsed.errors.length > 0 ? (
-            <ul className="text-xs text-rose-700 space-y-1 max-h-28 overflow-y-auto list-disc list-inside">
+            <ul className="text-xs text-[rgb(var(--color-danger))] space-y-1 max-h-28 overflow-y-auto list-disc list-inside">
               {parsed.errors.slice(0, 20).map((error) => (
                 <li key={error}>{error}</li>
               ))}
@@ -341,7 +341,7 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
                         <td className="p-2">{line.itemCode || '—'}</td>
                         <td className="p-2 tabular-nums">{fmt(line.expectedQty)}</td>
                         <td className="p-2 tabular-nums">{fmt(line.countedQty)}</td>
-                        <td className={`p-2 tabular-nums font-bold ${diff < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                        <td className={`p-2 tabular-nums font-bold ${diff < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
                           {fmt(diff)}
                         </td>
                         <td className="p-2">{isNew ? newLabel : '—'}</td>

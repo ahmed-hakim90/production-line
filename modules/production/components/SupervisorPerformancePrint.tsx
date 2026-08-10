@@ -2,6 +2,9 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
 
 export interface SupervisorLinePerformancePrintRow {
   lineName: string;
@@ -79,7 +82,11 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'supervisorPerformance');
     const palette = getPrintThemePalette(ps);
+    const font = resolvePrintFont(ps);
+    const brandName = String(doc.headerText || '').trim() || ps.headerText;
+    const footerText = String(doc.footerText || '').trim();
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
@@ -96,8 +103,9 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
       <div
         ref={ref}
         dir="rtl"
+        className="print-root print-report arabic-export-root"
         style={{
-          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
+          fontFamily: font.fontFamily,
           width: paper.width,
           minHeight: paper.minHeight,
           padding: isThermal ? '3mm 2.5mm' : '6mm 10mm',
@@ -109,7 +117,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
           ['--print-th-bg' as any]: palette.tableHeaderBg,
           ['--print-th-text' as any]: palette.tableHeaderText,
           ['--print-row-alt' as any]: palette.tableRowAltBg,
-          fontSize: isThermal ? '8pt' : '11pt',
+          fontSize: isThermal ? font.denseFontSize : font.fontSize,
           lineHeight: 1.5,
           boxSizing: 'border-box',
         }}
@@ -123,17 +131,14 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
             />
           )}
           <h1 style={{ margin: 0, fontSize: isThermal ? '11pt' : '18pt', fontWeight: 900, color: ps.primaryColor }}>
-            {ps.headerText}
+            {brandName}
           </h1>
           <h2 style={{ margin: 0, fontSize: isThermal ? '9.5pt' : '14pt', fontWeight: 900, color: palette.text }}>
             تقرير تقييم أداء مشرف
           </h2>
         </div>
 
-        <div style={{ marginBottom: isThermal ? '2mm' : '4mm' }}>
-          
-         
-        </div>
+        <PrintExtraLines lines={doc.customLines} dense={isThermal} />
 
         <div style={{ marginBottom: isThermal ? '2mm' : '4mm', borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '1.5mm' : '3mm' }}>
           <h2 style={{ margin: 0, fontSize: isThermal ? '10pt' : '16pt', fontWeight: 900, color: palette.text }}>
@@ -185,6 +190,7 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
           </p>
         </div>
 
+        {doc.isFieldVisible('products') ? (
         <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
           <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تفصيل المنتجات (المخطط مقابل المحقق)</p>
           {data.productRows.length === 0 ? (
@@ -222,7 +228,9 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
             </div>
           )}
         </div>
+        ) : null}
 
+        {doc.isFieldVisible('lines') ? (
         <div style={{ marginBottom: isThermal ? '3mm' : '6mm' }}>
           <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>تقييم تفصيلي لكل خط</p>
           <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '2mm', fontSize: isThermal ? '7pt' : '9.5pt' }}>
@@ -257,8 +265,9 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
             </tbody>
           </table>
         </div>
+        ) : null}
 
-        {data.recommendations.length > 0 && (
+        {doc.isFieldVisible('recommendations') && data.recommendations.length > 0 && (
           <div style={{ border: `1.5px solid ${palette.border}`, borderRadius: '3mm', padding: isThermal ? '2mm' : '4mm', background: PRINT_COLORS.noteBg }}>
             <p style={{ margin: 0, fontWeight: 900, color: palette.text }}>ملخصات وتوصيات</p>
             <ul style={{ margin: '2mm 0 0', paddingInlineStart: '5mm', color: palette.mutedText, fontWeight: 600 }}>
@@ -269,6 +278,11 @@ export const SupervisorPerformancePrint = React.forwardRef<HTMLDivElement, Super
           </div>
         )}
 
+      {footerText ? (
+        <p style={{ marginTop: isThermal ? "4mm" : "8mm", paddingTop: "3mm", borderTop: `1px solid ${palette.border}`, fontSize: isThermal ? "6pt" : "9pt", color: palette.mutedText, textAlign: "center" }}>
+          {footerText}
+        </p>
+      ) : null}
       </div>
     );
   },

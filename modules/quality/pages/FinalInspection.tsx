@@ -319,8 +319,8 @@ export const FinalInspection: React.FC = () => {
         {message && (
           <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
             message.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60'
-              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60'
+              ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] dark:border-[rgb(var(--color-success))]/60'
+              : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] dark:border-[rgb(var(--color-danger))]/60'
           }`}>
             {message.text}
           </div>
@@ -387,7 +387,7 @@ export const FinalInspection: React.FC = () => {
                 }}
                 className="hidden"
               />
-              <div className="w-full border-2 border-dashed border-[var(--color-border)] rounded-[var(--border-radius-xl)] p-4 sm:p-5 bg-[#f8f9fa]/70/40 hover:border-primary/60 hover:bg-primary/5 transition-all">
+              <div className="w-full border-2 border-dashed border-[var(--color-border)] rounded-[var(--border-radius-xl)] p-4 sm:p-5 bg-[var(--color-bg)]/70/40 hover:border-primary/60 hover:bg-primary/5 transition-all">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-[var(--border-radius-lg)] bg-primary/10 text-primary flex items-center justify-center shrink-0">
                     <ImagePlus size={20} />
@@ -404,7 +404,7 @@ export const FinalInspection: React.FC = () => {
             {photoPreviews.length > 0 && (
               <div className="flex flex-wrap items-center gap-3">
                 {photoPreviews.map((url, idx) => (
-                  <div key={url} className="w-20 h-20 rounded-[var(--border-radius-lg)] overflow-hidden border border-[var(--color-border)] bg-[#f8f9fa]">
+                  <div key={url} className="w-20 h-20 rounded-[var(--border-radius-lg)] overflow-hidden border border-[var(--color-border)] bg-[var(--color-bg)]">
                     <img src={url} alt={`qc-${idx}`} className="w-full h-full object-cover" />
                   </div>
                 ))}

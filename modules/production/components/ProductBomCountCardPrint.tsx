@@ -2,6 +2,9 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
 
 export type ProductBomCountCardLine = {
   itemId?: string;
@@ -115,11 +118,16 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
     if (!cards.length) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'productBomCountCard');
     const palette = getPrintThemePalette(ps);
+    const font = resolvePrintFont(ps);
     const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
     const includeStock =
-      showStock ?? cards.some((card) => Boolean(card.warehouseId || card.warehouseName));
+      (showStock ?? cards.some((card) => Boolean(card.warehouseId || card.warehouseName)))
+      && doc.isFieldVisible('stock');
+    const brandName = String(doc.headerText || '').trim() || ps.headerText;
+    const footerText = String(doc.footerText || '').trim() || ps.footerText;
     const printedLabel =
       printedAt ||
       new Date().toLocaleString('ar-EG', {
@@ -149,8 +157,9 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
           <div
             key={card.productId}
             dir="rtl"
+            className="print-root print-report arabic-export-root"
             style={{
-              fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
+              fontFamily: font.fontFamily,
               width: paper.width,
               minHeight: paper.minHeight,
               padding: isThermal ? '4mm 3mm' : '10mm 12mm',
@@ -160,7 +169,7 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
               ['--print-muted-text' as string]: palette.mutedText,
               ['--print-border' as string]: palette.border,
               ['--print-row-alt' as string]: palette.tableRowAltBg,
-              fontSize: isThermal ? '8pt' : '11pt',
+              fontSize: isThermal ? font.denseFontSize : font.fontSize,
               lineHeight: 1.5,
               boxSizing: 'border-box',
               pageBreakAfter: cardIndex < cards.length - 1 ? 'always' : 'auto',
@@ -194,7 +203,7 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
                   color: ps.primaryColor,
                 }}
               >
-                {ps.headerText}
+                {brandName}
               </h1>
               <p
                 style={{
@@ -208,6 +217,8 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
               </p>
             </div>
 
+            <PrintExtraLines lines={doc.customLines} dense={isThermal} />
+
             <table
               className="erp-table"
               style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '4mm' : '6mm' }}
@@ -216,14 +227,14 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
                 {summaryPairRow('المنتج', card.productName, 'الكود', card.productCode || '—')}
                 {summaryPairRow(
                   'التصنيف',
-                  card.category || '—',
+                  doc.isFieldVisible('category') ? (card.category || '—') : '—',
                   'تاريخ الطباعة',
                   printedLabel,
                   true,
                 )}
                 {summaryPairRow(
                   'المخزن',
-                  card.warehouseName || '……………………',
+                  doc.isFieldVisible('warehouse') ? (card.warehouseName || '……………………') : '—',
                   'عدد المنتجات المعدودة',
                   '……………………',
                 )}
@@ -308,6 +319,7 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
               </tbody>
             </table>
 
+            {doc.isFieldVisible('signatures') ? (
             <div
               style={{
                 marginTop: isThermal ? '6mm' : '10mm',
@@ -323,6 +335,12 @@ export const ProductBomCountCardPrint = React.forwardRef<HTMLDivElement, Product
                 </div>
               ))}
             </div>
+            ) : null}
+            {footerText ? (
+              <p style={{ marginTop: '4mm', textAlign: 'center', fontSize: isThermal ? '6pt' : '9pt', color: palette.mutedText, fontWeight: 700 }}>
+                {footerText}
+              </p>
+            ) : null}
           </div>
         ))}
       </div>

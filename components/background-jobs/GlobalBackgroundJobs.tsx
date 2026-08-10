@@ -29,11 +29,11 @@ const resultText = (job: BackgroundJob, t: (key: string, opts?: Record<string, u
 };
 
 const STATUS_BADGE: Record<BackgroundJob['status'], string> = {
-  pending: 'bg-[#f0f2f5] text-[var(--color-text-muted)]',
-  uploading: 'bg-blue-100 text-blue-700',
-  processing: 'bg-amber-100 text-amber-700',
-  completed: 'bg-emerald-100 text-emerald-700',
-  failed: 'bg-rose-100 text-rose-700',
+  pending: 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]',
+  uploading: 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]',
+  processing: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]',
+  completed: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]',
+  failed: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]',
 };
 
 export const GlobalBackgroundJobs: React.FC = () => {
@@ -70,7 +70,7 @@ export const GlobalBackgroundJobs: React.FC = () => {
               </div>
               <button
                 onClick={() => setHistoryOpen(false)}
-                className="p-2 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] transition-colors"
+                className="p-2 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
                 title={t('ui.close')}
               >
                 <X size={18} />
@@ -138,11 +138,11 @@ export const GlobalBackgroundJobs: React.FC = () => {
                           key={job.id}
                           className={`${job.id === selectedJobId ? 'bg-primary/5' : ''}`}
                         >
-                          <td className="px-3 py-2.5 text-xs font-mono text-slate-500">
+                          <td className="px-3 py-2.5 text-xs font-mono text-[var(--color-text-muted)]">
                             {formatDate(job.createdAt, locale)}
                           </td>
                           <td className="px-3 py-2.5 font-bold text-[var(--color-text)]">{job.jobType}</td>
-                          <td className="px-3 py-2.5 text-slate-500">{job.startedBy}</td>
+                          <td className="px-3 py-2.5 text-[var(--color-text-muted)]">{job.startedBy}</td>
                           <td className="px-3 py-2.5">
                             <span
                               className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${STATUS_BADGE[job.status]}`}
@@ -150,7 +150,7 @@ export const GlobalBackgroundJobs: React.FC = () => {
                               {t(`jobs.status.${job.status}`)}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5 text-xs text-slate-500">{resultText(job, t)}</td>
+                          <td className="px-3 py-2.5 text-xs text-[var(--color-text-muted)]">{resultText(job, t)}</td>
                         </tr>
                       ))}
                     </tbody>

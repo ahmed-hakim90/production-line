@@ -76,8 +76,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
       {backupMessage && (
         <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
           backupMessage.type === 'success'
-            ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
-            : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
+            ? 'bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]'
+            : 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'
         }`}>
           <span className="material-icons-round text-lg">
             {backupMessage.type === 'success' ? 'check_circle' : 'error'}
@@ -89,17 +89,17 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
         </div>
       )}
       {backupProgress && (
-        <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4">
+        <div className="bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)] rounded-[var(--border-radius-lg)] p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-bold text-blue-700 flex items-center gap-2">
+            <span className="text-sm font-bold text-[rgb(var(--color-primary))] flex items-center gap-2">
               <span className="material-icons-round animate-spin text-sm">refresh</span>
               {backupProgress.step}
             </span>
-            <span className="text-sm font-bold text-blue-600">{backupProgress.percent}%</span>
+            <span className="text-sm font-bold text-[rgb(var(--color-primary))]">{backupProgress.percent}%</span>
           </div>
-          <div className="w-full bg-blue-200 rounded-full h-2.5">
+          <div className="w-full bg-[rgb(var(--color-primary)/0.25)] rounded-full h-2.5">
             <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              className="bg-[rgb(var(--color-primary))] h-2.5 rounded-full transition-all duration-300"
               style={{ width: `${backupProgress.percent}%` }}
             />
           </div>
@@ -107,14 +107,14 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
       )}
       <OpsDashPanel title="تصدير نسخة احتياطية">
         <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-primary/10 flex items-center justify-center shrink-0">
                 <span className="material-icons-round text-primary text-xl">cloud_download</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">نسخة احتياطية كاملة</p>
-                <p className="text-xs text-slate-400">تصدير جميع البيانات — المنتجات، خطط الإنتاج، التقارير، أوامر الشغل، الإشعارات، التكاليف، الخامات، تعيينات العمال، الموارد البشرية، المركبات، والإعدادات</p>
+                <p className="text-xs text-[var(--color-text-muted)]">تصدير جميع البيانات — المنتجات، خطط الإنتاج، التقارير، أوامر الشغل، الإشعارات، التكاليف، الخامات، تعيينات العمال، الموارد البشرية، المركبات، والإعدادات</p>
               </div>
             </div>
             <Button onClick={handleExportFull} disabled={backupLoading}>
@@ -123,14 +123,14 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               تصدير كامل
             </Button>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-amber-500/10 flex items-center justify-center shrink-0">
-                <span className="material-icons-round text-amber-600 text-xl">date_range</span>
+              <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-warning)/0.1)]0/10 flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-[rgb(var(--color-warning))] text-xl">date_range</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">نسخة شهرية</p>
-                <p className="text-xs text-slate-400">تصدير تقارير الإنتاج، أوامر الشغل، تعيينات العمال، تكاليف الإنتاج الشهرية، الحضور، والإجازات لشهر محدد</p>
+                <p className="text-xs text-[var(--color-text-muted)]">تصدير تقارير الإنتاج، أوامر الشغل، تعيينات العمال، تكاليف الإنتاج الشهرية، الحضور، والإجازات لشهر محدد</p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -147,14 +147,14 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               </Button>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-violet-500/10 flex items-center justify-center shrink-0">
-                <span className="material-icons-round text-violet-600 text-xl">tune</span>
+              <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-secondary)/0.1)]0/10 flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-[rgb(var(--color-secondary))] text-xl">tune</span>
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-bold text-[var(--color-text)]">الإعدادات فقط</p>
-                <p className="text-xs text-slate-400">تصدير إعدادات النظام والأدوار، إعدادات العمالة، خامات المنتجات، وإعدادات الموارد البشرية</p>
+                <p className="text-xs text-[var(--color-text-muted)]">تصدير إعدادات النظام والأدوار، إعدادات العمالة، خامات المنتجات، وإعدادات الموارد البشرية</p>
               </div>
             </div>
             <Button onClick={handleExportSettings} disabled={backupLoading}>
@@ -169,20 +169,20 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
             { title: 'الإنتاج', icon: 'factory', color: 'text-primary', items: ['المنتجات', 'خطوط الإنتاج', 'تقارير الإنتاج', 'خطط الإنتاج', 'حالة الخطط', 'إعدادات خط المنتج'] },
-            { title: 'أوامر الشغل والإشعارات', icon: 'assignment', color: 'text-amber-600', items: ['أوامر الشغل', 'الإشعارات', 'تعيينات العمال على الخطوط', 'أحداث المسح'] },
-            { title: 'المخزون والمستودعات', icon: 'inventory_2', color: 'text-cyan-600', items: ['المستودعات', 'الخامات', 'أرصدة المخزون', 'حركات المخزون', 'جرد المخزون', 'طلبات تحويل المخزون'] },
-            { title: 'التكاليف والخامات', icon: 'payments', color: 'text-emerald-600', items: ['خامات المنتجات', 'تكاليف الإنتاج الشهرية', 'مراكز التكلفة', 'قيم مراكز التكلفة', 'توزيعات التكلفة', 'إعدادات العمالة'] },
-            { title: 'النظام والإعدادات', icon: 'settings', color: 'text-blue-600', items: ['إعدادات النظام', 'الأدوار والصلاحيات', 'المستخدمين', 'سجل النشاط'] },
-            { title: 'الموارد البشرية', icon: 'groups', color: 'text-violet-600', items: ['الموظفين', 'الأقسام', 'المسميات الوظيفية', 'الورديات', 'إعدادات HR', 'الحضور والانصراف', 'الإجازات', 'القروض', 'البدلات', 'التقييمات', 'المركبات', 'قواعد الجزاءات', 'قواعد التأخير', 'أنواع البدلات'] },
-            { title: 'الرواتب والموافقات', icon: 'account_balance', color: 'text-rose-600', items: ['أشهر الرواتب', 'سجلات الرواتب', 'تدقيق الرواتب', 'ملخص تكلفة الرواتب', 'مسارات الموافقة', 'إعدادات الموافقة', 'التفويضات', 'تدقيق الموافقات'] },
-            { title: 'الجودة', icon: 'verified', color: 'text-fuchsia-600', items: ['إعدادات الجودة', 'قاموس أسباب الجودة', 'تعيينات الجودة', 'فحوصات الجودة', 'عيوب الجودة', 'أوامر إعادة العمل', 'إجراءات CAPA', 'سجلات تدقيق الجودة'] },
-            { title: 'التدقيق', icon: 'history', color: 'text-slate-600', items: ['سجل تدقيق النظام'] },
+            { title: 'أوامر الشغل والإشعارات', icon: 'assignment', color: 'text-[rgb(var(--color-warning))]', items: ['أوامر الشغل', 'الإشعارات', 'تعيينات العمال على الخطوط', 'أحداث المسح'] },
+            { title: 'المخزون والمستودعات', icon: 'inventory_2', color: 'text-[rgb(var(--color-secondary))]', items: ['المستودعات', 'الخامات', 'أرصدة المخزون', 'حركات المخزون', 'جرد المخزون', 'طلبات تحويل المخزون'] },
+            { title: 'التكاليف والخامات', icon: 'payments', color: 'text-[rgb(var(--color-success))]', items: ['خامات المنتجات', 'تكاليف الإنتاج الشهرية', 'مراكز التكلفة', 'قيم مراكز التكلفة', 'توزيعات التكلفة', 'إعدادات العمالة'] },
+            { title: 'النظام والإعدادات', icon: 'settings', color: 'text-[rgb(var(--color-primary))]', items: ['إعدادات النظام', 'الأدوار والصلاحيات', 'المستخدمين', 'سجل النشاط'] },
+            { title: 'الموارد البشرية', icon: 'groups', color: 'text-[rgb(var(--color-secondary))]', items: ['الموظفين', 'الأقسام', 'المسميات الوظيفية', 'الورديات', 'إعدادات HR', 'الحضور والانصراف', 'الإجازات', 'القروض', 'البدلات', 'التقييمات', 'المركبات', 'قواعد الجزاءات', 'قواعد التأخير', 'أنواع البدلات'] },
+            { title: 'الرواتب والموافقات', icon: 'account_balance', color: 'text-[rgb(var(--color-danger))]', items: ['أشهر الرواتب', 'سجلات الرواتب', 'تدقيق الرواتب', 'ملخص تكلفة الرواتب', 'مسارات الموافقة', 'إعدادات الموافقة', 'التفويضات', 'تدقيق الموافقات'] },
+            { title: 'الجودة', icon: 'verified', color: 'text-[rgb(var(--color-secondary))]', items: ['إعدادات الجودة', 'قاموس أسباب الجودة', 'تعيينات الجودة', 'فحوصات الجودة', 'عيوب الجودة', 'أوامر إعادة العمل', 'إجراءات CAPA', 'سجلات تدقيق الجودة'] },
+            { title: 'التدقيق', icon: 'history', color: 'text-[var(--color-text-muted)]', items: ['سجل تدقيق النظام'] },
           ].map((group) => (
-            <div key={group.title} className="p-3 bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+            <div key={group.title} className="p-3 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
               <div className="flex items-center gap-2 mb-2">
                 <span className={`material-icons-round text-sm ${group.color}`}>{group.icon}</span>
                 <span className="text-xs font-bold text-[var(--color-text)]">{group.title}</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-[var(--color-text-muted)] mr-auto">{group.items.length}</span>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-[var(--color-border)] text-[var(--color-text-muted)] mr-auto">{group.items.length}</span>
               </div>
               <div className="flex flex-wrap gap-1">
                 {group.items.map((item) => (
@@ -196,16 +196,16 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
       <OpsDashPanel title="استعادة من نسخة احتياطية">
         <div className="space-y-6">
           <div className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-blue-500/10 flex items-center justify-center shrink-0">
-                  <span className="material-icons-round text-blue-600 text-xl">upload_file</span>
+                <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-primary)/0.1)]0/10 flex items-center justify-center shrink-0">
+                  <span className="material-icons-round text-[rgb(var(--color-primary))] text-xl">upload_file</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[var(--color-text)]">
                     {importFileName || 'اختر ملف النسخة الاحتياطية'}
                   </p>
-                  <p className="text-xs text-slate-400">ملف JSON تم تصديره من النظام</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">ملف JSON تم تصديره من النظام</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -219,7 +219,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 <button
                   onClick={() => importInputRef.current?.click()}
                   disabled={backupLoading}
-                  className="px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                  className="px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-[rgb(var(--color-primary)/0.1)]0/10 text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)]0/20 transition-all disabled:opacity-50 flex items-center gap-2"
                 >
                   <span className="material-icons-round text-sm">folder_open</span>
                   اختيار ملف
@@ -227,7 +227,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 {importFileName && (
                   <button
                     onClick={onClearImportSelection}
-                    className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all"
+                    className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.15)] transition-all"
                   >
                     <span className="material-icons-round text-sm">close</span>
                   </button>
@@ -237,8 +237,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
             {importValidation && (
               <div className={`flex items-start gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
                 importValidation.valid
-                  ? 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-700 border border-emerald-200'
-                  : 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
+                  ? 'bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]'
+                  : 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'
               }`}>
                 <span className="material-icons-round text-lg mt-0.5">
                   {importValidation.valid ? 'verified' : 'error'}
@@ -248,27 +248,27 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                     <p className="mb-2">ملف صالح — جاهز للاستعادة</p>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
-                        <p className="text-[10px] text-emerald-600/70 mb-0.5">النوع</p>
+                        <p className="text-[10px] text-[rgb(var(--color-success))]/70 mb-0.5">النوع</p>
                         <p className="text-xs font-black">
                           {importFile.metadata.type === 'full' ? 'كاملة' : importFile.metadata.type === 'monthly' ? 'شهرية' : 'إعدادات'}
                         </p>
                       </div>
                       <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
-                        <p className="text-[10px] text-emerald-600/70 mb-0.5">المستندات</p>
+                        <p className="text-[10px] text-[rgb(var(--color-success))]/70 mb-0.5">المستندات</p>
                         <p className="text-xs font-black">{importFile.metadata.totalDocuments}</p>
                       </div>
                       <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
-                        <p className="text-[10px] text-emerald-600/70 mb-0.5">الإصدار</p>
+                        <p className="text-[10px] text-[rgb(var(--color-success))]/70 mb-0.5">الإصدار</p>
                         <p className="text-xs font-black">{importFile.metadata.version}</p>
                       </div>
                       <div className="bg-[var(--color-card)]/50/50 rounded-[var(--border-radius-base)] p-2 text-center">
-                        <p className="text-[10px] text-emerald-600/70 mb-0.5">التاريخ</p>
+                        <p className="text-[10px] text-[rgb(var(--color-success))]/70 mb-0.5">التاريخ</p>
                         <p className="text-xs font-black">{new Date(importFile.metadata.createdAt).toLocaleDateString('ar-EG')}</p>
                       </div>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-1">
                       {importFile.metadata.collectionsIncluded.map((c) => (
-                        <span key={c} className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/50/50">
+                        <span key={c} className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--color-card)]/50/50">
                           {c}
                         </span>
                       ))}
@@ -287,19 +287,19 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 {restoreModes.map((mode) => {
                   const selected = restoreMode === mode.value;
                   const activeStyles: Record<string, string> = {
-                    emerald: 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/10',
-                    amber: 'border-amber-500 bg-amber-50 dark:bg-amber-900/10',
-                    rose: 'border-rose-500 bg-rose-50 dark:bg-rose-900/10',
+                    emerald: 'border-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)]',
+                    amber: 'border-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)]',
+                    rose: 'border-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)]',
                   };
                   const iconStyles: Record<string, string> = {
-                    emerald: 'text-emerald-600',
-                    amber: 'text-amber-600',
-                    rose: 'text-rose-600',
+                    emerald: 'text-[rgb(var(--color-success))]',
+                    amber: 'text-[rgb(var(--color-warning))]',
+                    rose: 'text-[rgb(var(--color-danger))]',
                   };
                   const labelStyles: Record<string, string> = {
-                    emerald: 'text-emerald-700',
-                    amber: 'text-amber-700',
-                    rose: 'text-rose-700',
+                    emerald: 'text-[rgb(var(--color-success))]',
+                    amber: 'text-[rgb(var(--color-warning))]',
+                    rose: 'text-[rgb(var(--color-danger))]',
                   };
                   return (
                     <button
@@ -313,7 +313,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span className={`material-icons-round ${
-                          selected ? iconStyles[mode.color] : 'text-slate-400'
+                          selected ? iconStyles[mode.color] : 'text-[var(--color-text-muted)]'
                         }`}>
                           {mode.icon}
                         </span>
@@ -326,7 +326,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                           <span className={`material-icons-round ${iconStyles[mode.color]} mr-auto text-lg`}>check_circle</span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500">{mode.description}</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{mode.description}</p>
                     </button>
                   );
                 })}
@@ -334,8 +334,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               {restoreMode !== 'merge' && (
                 <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
                   restoreMode === 'full_reset'
-                    ? 'bg-rose-50 dark:bg-rose-900/10 text-rose-700 border border-rose-200'
-                    : 'bg-amber-50 dark:bg-amber-900/10 text-amber-700 border border-amber-200'
+                    ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'
+                    : 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]'
                 }`}>
                   <span className="material-icons-round text-lg">warning</span>
                   {restoreMode === 'full_reset'
@@ -385,7 +385,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 <Button
                   onClick={() => setShowConfirmRestore(true)}
                   disabled={backupLoading}
-                  className={restoreMode === 'full_reset' ? '!bg-rose-600 hover:!bg-rose-700' : ''}
+                  className={restoreMode === 'full_reset' ? '!bg-[rgb(var(--color-danger))] hover:!bg-[rgb(var(--color-danger))]' : ''}
                 >
                   <span className="material-icons-round text-sm">restore</span>
                   بدء الاستعادة
@@ -397,39 +397,39 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
       </OpsDashPanel>
       <OpsDashPanel title="قواعد الأمان">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] border border-emerald-200">
+          <div className="p-4 bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)]">
             <div className="flex items-center gap-2 mb-2">
-              <span className="material-icons-round text-emerald-600">shield</span>
-              <span className="text-sm font-bold text-emerald-700">نسخ تلقائي</span>
+              <span className="material-icons-round text-[rgb(var(--color-success))]">shield</span>
+              <span className="text-sm font-bold text-[rgb(var(--color-success))]">نسخ تلقائي</span>
             </div>
-            <p className="text-xs text-emerald-600/80">
+            <p className="text-xs text-[rgb(var(--color-success))]/80">
               يُفضّل إنشاء نسخة احتياطية كاملة تلقائياً قبل الاستعادة؛ يمكنك تخطيه من «خيارات الاستعادة» إذا فشل التصدير أو صلاحيات القراءة.
             </p>
           </div>
-          <div className="p-4 bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] border border-blue-200 dark:border-blue-800">
+          <div className="p-4 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)]">
             <div className="flex items-center gap-2 mb-2">
-              <span className="material-icons-round text-blue-600">verified</span>
-              <span className="text-sm font-bold text-blue-700">فحص الملف</span>
+              <span className="material-icons-round text-[rgb(var(--color-primary))]">verified</span>
+              <span className="text-sm font-bold text-[rgb(var(--color-primary))]">فحص الملف</span>
             </div>
-            <p className="text-xs text-blue-600/80">يتم التحقق من صحة الملف والإصدار قبل السماح بالاستعادة</p>
+            <p className="text-xs text-[rgb(var(--color-primary))]/80">يتم التحقق من صحة الملف والإصدار قبل السماح بالاستعادة</p>
           </div>
-          <div className="p-4 bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] border border-violet-200 dark:border-violet-800">
+          <div className="p-4 bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary)/0.15)] rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-secondary)/0.25)] dark:border-[rgb(var(--color-secondary)/0.25)]">
             <div className="flex items-center gap-2 mb-2">
-              <span className="material-icons-round text-violet-600">sync</span>
-              <span className="text-sm font-bold text-violet-700 dark:text-violet-400">إعادة بناء تلقائي</span>
+              <span className="material-icons-round text-[rgb(var(--color-secondary))]">sync</span>
+              <span className="text-sm font-bold text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">إعادة بناء تلقائي</span>
             </div>
-            <p className="text-xs text-violet-600/80">بعد الاستعادة يتم إعادة حساب التكاليف وتحديث لوحات التحكم تلقائياً</p>
+            <p className="text-xs text-[rgb(var(--color-secondary))]/80">بعد الاستعادة يتم إعادة حساب التكاليف وتحديث لوحات التحكم تلقائياً</p>
           </div>
         </div>
       </OpsDashPanel>
       <OpsDashPanel title="سجل النسخ الاحتياطية">
         {historyLoading ? (
-          <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
+          <div className="flex items-center justify-center py-8 gap-2 text-[var(--color-text-muted)]">
             <span className="material-icons-round animate-spin">refresh</span>
             <span className="text-sm font-bold">جاري التحميل...</span>
           </div>
         ) : backupHistory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+          <div className="flex flex-col items-center justify-center py-8 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-4xl mb-2 opacity-30">inventory_2</span>
             <p className="text-sm font-bold">لا يوجد سجل نسخ احتياطية بعد</p>
           </div>
@@ -438,17 +438,17 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
             {backupHistory.map((entry, idx) => (
               <div
                 key={entry.id || idx}
-                className="flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] bg-[#f8f9fa] border border-[var(--color-border)]"
+                className="flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] border border-[var(--color-border)]"
               >
                 <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0 ${
                   entry.action === 'export'
-                    ? 'bg-emerald-100'
-                    : 'bg-blue-100 dark:bg-blue-900/20'
+                    ? 'bg-[rgb(var(--color-success)/0.1)]'
+                    : 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)]'
                 }`}>
                   <span className={`material-icons-round ${
                     entry.action === 'export'
-                      ? 'text-emerald-600'
-                      : 'text-blue-600'
+                      ? 'text-[rgb(var(--color-success))]'
+                      : 'text-[rgb(var(--color-primary))]'
                   }`}>
                     {entry.action === 'export' ? 'cloud_download' : 'cloud_upload'}
                   </span>
@@ -467,8 +467,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 </div>
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                   entry.action === 'export'
-                    ? 'bg-emerald-100 text-emerald-700'
-                    : 'bg-blue-100 text-blue-700'
+                    ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
+                    : 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
                 }`}>
                   {entry.action === 'export' ? 'تصدير' : 'استيراد'}
                 </span>
@@ -479,22 +479,22 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
       </OpsDashPanel>
       {showConfirmRestore && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md">
             <div className="p-6 text-center">
               <div className={`w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center ${
                 restoreMode === 'full_reset'
-                  ? 'bg-rose-100'
+                  ? 'bg-[rgb(var(--color-danger)/0.1)]'
                   : restoreMode === 'replace'
-                  ? 'bg-amber-100'
-                  : 'bg-emerald-100'
+                  ? 'bg-[rgb(var(--color-warning)/0.1)]'
+                  : 'bg-[rgb(var(--color-success)/0.1)]'
               }`}>
                 <span className={`material-icons-round text-3xl ${
                   restoreMode === 'full_reset'
-                    ? 'text-rose-600'
+                    ? 'text-[rgb(var(--color-danger))]'
                     : restoreMode === 'replace'
-                    ? 'text-amber-600'
-                    : 'text-emerald-600'
+                    ? 'text-[rgb(var(--color-warning))]'
+                    : 'text-[rgb(var(--color-success))]'
                 }`}>
                   {restoreMode === 'full_reset' ? 'warning' : 'restore'}
                 </span>
@@ -518,7 +518,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               <div className="flex items-center gap-3 justify-center">
                 <button
                   onClick={() => setShowConfirmRestore(false)}
-                  className="px-5 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed] transition-all"
+                  className="px-5 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-all"
                 >
                   إلغاء
                 </button>
@@ -526,7 +526,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                   onClick={handleRestore}
                   className={`px-5 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold text-white transition-all flex items-center gap-2 ${
                     restoreMode === 'full_reset'
-                      ? 'bg-rose-600 hover:bg-rose-700'
+                      ? 'bg-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.9)]'
                       : 'bg-primary hover:bg-primary/90'
                   }`}
                 >

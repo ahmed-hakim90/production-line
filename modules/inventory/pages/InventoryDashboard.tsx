@@ -178,13 +178,13 @@ export const InventoryDashboard: React.FC = () => {
       )}
     >
       {!data.loading && (data.kpiSummary.truncated || data.balancesTruncated) && (
-        <p className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-4 py-3">
           تم حساب جزء من مؤشرات الأرصدة على حد المسح. راجع صفحة الأرصدة للتفاصيل الكاملة إن لزم.
         </p>
       )}
 
       {!data.loading && !data.routingReady && (
-        <p className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-4 py-3">
           توجيه المخازن غير مكتمل (WIP / تم الصنع). أكمل الإعداد من صفحة الإعدادات ثم شغّل مزامنة V1.
         </p>
       )}
@@ -222,7 +222,7 @@ export const InventoryDashboard: React.FC = () => {
                 <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
                 <YAxis tick={CHART_TICK} width={32} allowDecimals={false} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v: number) => formatNumber(v)} />
-                <Bar dataKey="value" name="العدد" fill="#0d9488" radius={[8, 8, 0, 0]} barSize={20} />
+                <Bar dataKey="value" name="العدد" fill="var(--chart-7)" radius={[8, 8, 0, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -235,7 +235,7 @@ export const InventoryDashboard: React.FC = () => {
                 <XAxis type="number" tick={CHART_TICK} allowDecimals={false} axisLine={false} tickLine={false} />
                 <YAxis type="category" dataKey="name" width={96} tick={CHART_TICK} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v: number) => formatNumber(v)} />
-                <Bar dataKey="value" name="العدد" fill="#d97706" radius={[0, 8, 8, 0]} barSize={12} />
+                <Bar dataKey="value" name="العدد" fill="var(--color-warning-hex)" radius={[0, 8, 8, 0]} barSize={12} />
               </BarChart>
             </ResponsiveContainer>
           </div>

@@ -74,18 +74,18 @@ const STATUS_CONFIG: Record<PlanStatus, { label: string; variant: 'success' | 'w
 };
 
 const SMART_STATUS_CONFIG: Record<SmartStatus, { label: string; color: string }> = {
-  on_track: { label: 'في المسار', color: 'text-emerald-600' },
-  at_risk: { label: 'معرض للخطر', color: 'text-amber-600' },
-  delayed: { label: 'متأخر', color: 'text-orange-600' },
-  critical: { label: 'حرج', color: 'text-rose-600' },
-  completed: { label: 'مكتمل', color: 'text-emerald-600' },
+  on_track: { label: 'في المسار', color: 'text-[rgb(var(--color-success))]' },
+  at_risk: { label: 'معرض للخطر', color: 'text-[rgb(var(--color-warning))]' },
+  delayed: { label: 'متأخر', color: 'text-[rgb(var(--color-warning))]' },
+  critical: { label: 'حرج', color: 'text-[rgb(var(--color-danger))]' },
+  completed: { label: 'مكتمل', color: 'text-[rgb(var(--color-success))]' },
 };
 
 const PRIORITY_CONFIG: Record<PlanPriority, { label: string; color: string; bg: string }> = {
-  low: { label: 'منخفضة', color: 'text-slate-500', bg: 'bg-[#f0f2f5]' },
-  medium: { label: 'متوسطة', color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-  high: { label: 'عالية', color: 'text-amber-600', bg: 'bg-amber-50' },
-  urgent: { label: 'عاجلة', color: 'text-rose-600', bg: 'bg-rose-50' },
+  low: { label: 'منخفضة', color: 'text-[var(--color-text-muted)]', bg: 'bg-[var(--color-surface-hover)]' },
+  medium: { label: 'متوسطة', color: 'text-[rgb(var(--color-primary))]', bg: 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)]' },
+  high: { label: 'عالية', color: 'text-[rgb(var(--color-warning))]', bg: 'bg-[rgb(var(--color-warning)/0.1)]' },
+  urgent: { label: 'عاجلة', color: 'text-[rgb(var(--color-danger))]', bg: 'bg-[rgb(var(--color-danger)/0.1)]' },
 };
 
 type ViewMode = 'table' | 'kanban' | 'timeline';
@@ -842,7 +842,7 @@ export const ProductionPlans: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      className="max-w-[1600px] mx-auto"
+      className="w-full min-w-0"
       eyebrow="خطط الإنتاج"
       rangeLabel="إدارة وتتبع خطط الإنتاج الرسمية"
       hero={planHero}
@@ -1006,15 +1006,15 @@ export const ProductionPlans: React.FC = () => {
             {calculations?.plannedEndDate && (
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">تاريخ الانتهاء المتوقع</label>
-                <input type="date" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium bg-[#f8f9fa]/50 text-slate-500" value={calculations.plannedEndDate} readOnly />
+                <input type="date" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium bg-[var(--color-bg)]/50 text-[var(--color-text-muted)]" value={calculations.plannedEndDate} readOnly />
               </div>
             )}
           </div>
 
           {/* Live calculations */}
-          <div className="mt-6 p-5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div className="mt-6 p-5 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             {reportsLoading ? (
-              <div className="flex items-center justify-center gap-2 py-4 text-slate-400">
+              <div className="flex items-center justify-center gap-2 py-4 text-[var(--color-text-muted)]">
                 <span className="material-icons-round animate-spin text-lg">refresh</span>
                 <span className="text-sm font-bold">جاري حساب التقديرات...</span>
               </div>
@@ -1028,7 +1028,7 @@ export const ProductionPlans: React.FC = () => {
                 </div>
                 <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">متوسط الإنتاج اليومي</p>
-                  <p className="text-lg font-bold text-blue-600">
+                  <p className="text-lg font-bold text-[rgb(var(--color-primary))]">
                     {calculations.effectiveDailyRate > 0 ? `${formatNumber(calculations.effectiveDailyRate)} وحدة` : '—'}
                   </p>
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
@@ -1043,7 +1043,7 @@ export const ProductionPlans: React.FC = () => {
                 </div>
                 <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">الأيام المقدرة</p>
-                  <p className="text-lg font-bold text-emerald-600">
+                  <p className="text-lg font-bold text-[rgb(var(--color-success))]">
                     {calculations.estimatedDays > 0 ? `${calculations.estimatedDays} يوم` : '—'}
                   </p>
                   {calculations.usesOperationalPeriodTarget && calculations.operationalPeriod && (
@@ -1055,7 +1055,7 @@ export const ProductionPlans: React.FC = () => {
                 {canViewCosts && (
                   <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
                     <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">التكلفة المقدرة</p>
-                    <p className="text-lg font-bold text-violet-600">
+                    <p className="text-lg font-bold text-[rgb(var(--color-secondary))]">
                       {calculations.estimatedCost > 0 ? formatCurrency(calculations.estimatedCost) : '—'}
                     </p>
                   </div>
@@ -1083,17 +1083,17 @@ export const ProductionPlans: React.FC = () => {
       {/* Capacity Warning Modal */}
       {capacityWarning.show && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setCapacityWarning({ show: false, load: 0, capacity: 0 })}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setCapacityWarning({ show: false, load: 0, capacity: 0 })}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 text-center space-y-4">
-              <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto">
-                <span className="material-icons-round text-amber-500 text-2xl">warning</span>
+              <div className="w-14 h-14 bg-[rgb(var(--color-warning)/0.1)] rounded-full flex items-center justify-center mx-auto">
+                <span className="material-icons-round text-[rgb(var(--color-warning))] text-2xl">warning</span>
               </div>
               <h3 className="text-lg font-bold">تحذير: تجاوز طاقة الخط</h3>
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-[var(--color-text-muted)]">
                 الحمل الإجمالي ({formatNumber(capacityWarning.load)} وحدة/يوم) يتجاوز طاقة الخط ({formatNumber(capacityWarning.capacity)} وحدة/يوم).
               </p>
-              <p className="text-xs text-slate-400">هل تريد المتابعة رغم ذلك؟</p>
+              <p className="text-xs text-[var(--color-text-muted)]">هل تريد المتابعة رغم ذلك؟</p>
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setCapacityWarning({ show: false, load: 0, capacity: 0 })}>إلغاء</Button>
@@ -1229,7 +1229,7 @@ export const ProductionPlans: React.FC = () => {
 
       {/* Plan Drawer */}
       <ManagedModalPortal>
-      <div className={`fixed inset-0 z-50 transition-opacity ${activeDrawerPlan ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+      <div className={`fixed inset-0 z-[10050] transition-opacity ${activeDrawerPlan ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
         <div className="absolute inset-0 bg-black/35" onClick={() => setActiveDrawerPlanId(null)} />
         <aside className={`absolute top-0 right-0 h-full w-full max-w-xl bg-[var(--color-card)] border-l border-[var(--color-border)] shadow-2xl transition-transform duration-300 ${activeDrawerPlan ? 'translate-x-0' : 'translate-x-full'}`}>
           {activeDrawerPlan && (
@@ -1275,7 +1275,7 @@ export const ProductionPlans: React.FC = () => {
                     <span className="text-[var(--color-text-muted)]">التقدم</span>
                     <span className="font-bold text-primary">{Math.min(activeDrawerPlan.progressRatio, 100)}%</span>
                   </div>
-                  <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                  <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                     <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(activeDrawerPlan.progressRatio, 100)}%` }} />
                   </div>
                   <p className={`text-xs font-bold ${SMART_STATUS_CONFIG[activeDrawerPlan.smartStatus].color}`}>
@@ -1323,7 +1323,7 @@ export const ProductionPlans: React.FC = () => {
 
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-1">
                   <p className="text-xs text-[var(--color-text-muted)]">احتساب إنتاج التقارير وأوامر الشغل</p>
-                  <p className={`text-sm font-bold ${activeDrawerPlan.acceptsProductionFromReports === false ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  <p className={`text-sm font-bold ${activeDrawerPlan.acceptsProductionFromReports === false ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>
                     {activeDrawerPlan.acceptsProductionFromReports === false
                       ? 'متوقف — الكميات تبقى منفصلة عن تقدم الخطة'
                       : 'مفعل — الإنتاج المرتبط والمباشر يُحسب على الخطة'}
@@ -1368,12 +1368,12 @@ export const ProductionPlans: React.FC = () => {
                           .filter((l) => l.shortageQty > 0)
                           .slice(0, 8)
                           .map((l) => (
-                            <li key={l.materialId} className="text-rose-600 font-medium">
+                            <li key={l.materialId} className="text-[rgb(var(--color-danger))] font-medium">
                               {l.materialName}: نقص {formatNumber(l.shortageQty)} {l.unit}
                             </li>
                           ))}
                         {drawerRequirements.lines.every((l) => l.shortageQty <= 0) && (
-                          <li className="text-emerald-600">لا توجد نواقص في المواد</li>
+                          <li className="text-[rgb(var(--color-success))]">لا توجد نواقص في المواد</li>
                         )}
                       </ul>
                     </>
@@ -1434,11 +1434,11 @@ export const ProductionPlans: React.FC = () => {
       {/* Edit Modal */}
       {editPlan && canEdit && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setEditPlan(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setEditPlan(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">تعديل الخطة</h3>
-              <button onClick={() => setEditPlan(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"><span className="material-icons-round">close</span></button>
+              <button onClick={() => setEditPlan(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors"><span className="material-icons-round">close</span></button>
             </div>
             <div className="p-6 space-y-5">
               <div className="space-y-2">
@@ -1515,11 +1515,11 @@ export const ProductionPlans: React.FC = () => {
       {/* Status Change Modal */}
       {statusPlan && canEdit && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setStatusPlan(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setStatusPlan(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">تغيير حالة الخطة</h3>
-              <button onClick={() => setStatusPlan(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"><span className="material-icons-round">close</span></button>
+              <button onClick={() => setStatusPlan(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors"><span className="material-icons-round">close</span></button>
             </div>
             <div className="p-6 space-y-4">
               <p className="page-subtitle">
@@ -1547,14 +1547,14 @@ export const ProductionPlans: React.FC = () => {
       {/* Delete Confirm Modal */}
       {deletePlanId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeletePlanId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeletePlanId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 text-center space-y-4">
-              <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mx-auto">
-                <span className="material-icons-round text-rose-500 text-2xl">delete_forever</span>
+              <div className="w-14 h-14 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto">
+                <span className="material-icons-round text-[rgb(var(--color-danger))] text-2xl">delete_forever</span>
               </div>
               <h3 className="text-lg font-bold">حذف الخطة</h3>
-              <p className="text-sm text-slate-500">هل أنت متأكد من حذف هذه الخطة؟ لا يمكن التراجع عن هذا الإجراء.</p>
+              <p className="text-sm text-[var(--color-text-muted)]">هل أنت متأكد من حذف هذه الخطة؟ لا يمكن التراجع عن هذا الإجراء.</p>
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeletePlanId(null)}>إلغاء</Button>
@@ -1580,8 +1580,8 @@ export const ProductionPlans: React.FC = () => {
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-blue-600">list_alt</span>
+            <div className="w-10 h-10 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-[rgb(var(--color-primary))]">list_alt</span>
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--color-text)]">جميع الخطط</h3>
@@ -1623,7 +1623,7 @@ export const ProductionPlans: React.FC = () => {
         </div>
 
         {totalPlans === 0 ? (
-          <div className="p-12 text-center text-slate-400">
+          <div className="p-12 text-center text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">event_note</span>
             <p className="font-bold text-base">{hasActiveFilters ? 'لا توجد خطط تطابق التصفية' : 'لا توجد خطط إنتاج بعد'}</p>
             <p className="text-sm mt-1">{hasActiveFilters ? 'جرب تغيير معايير التصفية' : 'ابدأ بإنشاء خطة جديدة لتتبع الإنتاج'}</p>
@@ -1648,7 +1648,7 @@ export const ProductionPlans: React.FC = () => {
                     return (
                       <div
                         key={plan.id}
-                        className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5 cursor-pointer hover:bg-[#f8f9fa]/40 transition-colors"
+                        className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5 cursor-pointer hover:bg-[var(--color-bg)]/40 transition-colors"
                         onClick={() => openPlanDrawer(plan.id)}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -1659,11 +1659,11 @@ export const ProductionPlans: React.FC = () => {
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${priorityInfo.bg} ${priorityInfo.color}`}>{priorityInfo.label}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
                             <p className="text-[var(--color-text-muted)] mb-0.5">الحالة</p>
                             <p className="font-bold text-[var(--color-text)]">{statusInfo.label}</p>
                           </div>
-                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
                             <p className="text-[var(--color-text-muted)] mb-0.5">التقدم</p>
                             <p className="font-bold text-primary">{Math.min(plan.progressRatio, 100)}%</p>
                           </div>
@@ -1673,7 +1673,7 @@ export const ProductionPlans: React.FC = () => {
                             <span className="text-[var(--color-text-muted)]">التنفيذ</span>
                             <span className={smartInfo.color}>{smartInfo.label}</span>
                           </div>
-                          <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                          <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                             <div className="h-full bg-primary rounded-full" style={{ width: `${Math.min(plan.progressRatio, 100)}%` }} />
                           </div>
                         </div>
@@ -1703,7 +1703,7 @@ export const ProductionPlans: React.FC = () => {
             <div className="hidden md:block overflow-x-auto">
               <table className="erp-table w-full text-right border-collapse">
                 <thead>
-                  <tr className="bg-[#f8f9fa]/50 border-b border-[var(--color-border)]">
+                  <tr className="bg-[var(--color-bg)]/50 border-b border-[var(--color-border)]">
                     {canEdit && (
                       <th className="erp-th text-center w-10">
                         <input
@@ -1730,7 +1730,7 @@ export const ProductionPlans: React.FC = () => {
                   {groups.map((group) => (
                     <React.Fragment key={group.key}>
                       {groupBy !== 'none' && (
-                        <tr className="bg-[#f8f9fa]/70">
+                        <tr className="bg-[var(--color-bg)]/70">
                           <td className="px-4 py-2.5 text-xs font-bold text-[var(--color-text-muted)]" colSpan={columnCount}>
                             {group.label} ({group.plans.length})
                           </td>
@@ -1746,7 +1746,7 @@ export const ProductionPlans: React.FC = () => {
                         return (
                           <tr
                             key={plan.id}
-                            className="hover:bg-[#f8f9fa]/50 transition-colors cursor-pointer"
+                            className="hover:bg-[var(--color-bg)]/50 transition-colors cursor-pointer"
                             onClick={() => openPlanDrawer(plan.id)}
                           >
                             {canEdit && (
@@ -1792,23 +1792,23 @@ export const ProductionPlans: React.FC = () => {
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <p className="text-sm font-bold text-[var(--color-text)]">{formatNumber(plan.plannedQuantity)}</p>
-                              <p className="text-[10px] text-slate-400">متبقي: {formatNumber(plan.remaining)}</p>
+                              <p className="text-[10px] text-[var(--color-text-muted)]">متبقي: {formatNumber(plan.remaining)}</p>
                             </td>
                             <td className="px-4 py-3.5 text-center">
-                              <p className="text-xs font-medium text-slate-500">{plan.plannedStartDate || plan.startDate}</p>
-                              {plan.plannedEndDate && <p className="text-[10px] text-slate-400">â†’ {plan.plannedEndDate}</p>}
+                              <p className="text-xs font-medium text-[var(--color-text-muted)]">{plan.plannedStartDate || plan.startDate}</p>
+                              {plan.plannedEndDate && <p className="text-[10px] text-[var(--color-text-muted)]">â†’ {plan.plannedEndDate}</p>}
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <Badge variant={statusInfo.variant as any}>{statusInfo.label}</Badge>
                             </td>
                             <td className="px-4 py-3.5 text-center">
                               <div className="flex flex-col items-center gap-1.5">
-                                <span className={`text-sm font-bold ${plan.progressRatio >= 100 ? 'text-emerald-600' : plan.progressRatio >= 50 ? 'text-blue-600' : 'text-amber-600'}`}>
+                                <span className={`text-sm font-bold ${plan.progressRatio >= 100 ? 'text-[rgb(var(--color-success))]' : plan.progressRatio >= 50 ? 'text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--color-warning))]'}`}>
                                   {Math.min(plan.progressRatio, 100)}%
                                 </span>
-                                <div className="w-20 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
+                                <div className="w-20 h-1.5 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                                   <div
-                                    className={`h-full rounded-full transition-all duration-500 ${plan.progressRatio >= 100 ? 'bg-emerald-500' : plan.progressRatio >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                                    className={`h-full rounded-full transition-all duration-500 ${plan.progressRatio >= 100 ? 'bg-[rgb(var(--color-success)/0.1)]0' : plan.progressRatio >= 50 ? 'bg-[rgb(var(--color-primary)/0.1)]0' : 'bg-[rgb(var(--color-warning)/0.1)]0'}`}
                                     style={{ width: `${Math.min(plan.progressRatio, 100)}%` }}
                                   />
                                 </div>
@@ -1823,9 +1823,9 @@ export const ProductionPlans: React.FC = () => {
                             </td>
                             {canViewCosts && (
                               <td className="px-4 py-3.5 text-center">
-                                <p className="text-xs font-bold text-slate-600">{formatCurrency(plan.actualCost || 0)}</p>
+                                <p className="text-xs font-bold text-[var(--color-text-muted)]">{formatCurrency(plan.actualCost || 0)}</p>
                                 {(plan.estimatedCost ?? 0) > 0 && (
-                                  <p className="text-[10px] text-slate-400">من {formatCurrency(plan.estimatedCost)}</p>
+                                  <p className="text-[10px] text-[var(--color-text-muted)]">من {formatCurrency(plan.estimatedCost)}</p>
                                 )}
                               </td>
                             )}
@@ -1840,17 +1840,17 @@ export const ProductionPlans: React.FC = () => {
                                       </button>
                                   )}
                                   {canEdit && planStatusEnabled && (
-                                      <button onClick={() => { setStatusPlan(plan); setNewStatus(plan.effectiveStatus); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all" title="تغيير الحالة">
+                                      <button onClick={() => { setStatusPlan(plan); setNewStatus(plan.effectiveStatus); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.1)] dark:hover:bg-[rgb(var(--color-warning))]/10 rounded-[var(--border-radius-base)] transition-all" title="تغيير الحالة">
                                         <span className="material-icons-round text-sm">swap_horiz</span>
                                       </button>
                                   )}
                                   {planWorkOrderCreateEnabled && (can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
-                                    <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
+                                    <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)] dark:hover:bg-[rgb(var(--color-primary))]/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
                                       <span className="material-icons-round text-sm">assignment</span>
                                     </button>
                                   )}
                                   {planReportCreateEnabled && canCreateReport && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
-                                    <button onClick={() => openCreateReportForPlan(plan)} className="p-1.5 text-[var(--color-text-muted)] hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء تقرير من الخطة">
+                                    <button onClick={() => openCreateReportForPlan(plan)} className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.1)] dark:hover:bg-[rgb(var(--color-success))]/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء تقرير من الخطة">
                                       <span className="material-icons-round text-sm">post_add</span>
                                     </button>
                                   )}
@@ -1863,14 +1863,14 @@ export const ProductionPlans: React.FC = () => {
                                         productId: plan.productId,
                                         lineId: plan.lineId,
                                       })}
-                                      className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all"
+                                      className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.1)] dark:hover:bg-[rgb(var(--color-warning))]/10 rounded-[var(--border-radius-base)] transition-all"
                                       title="إضافة متابعة نقص"
                                     >
                                       <span className="material-icons-round text-sm">report_problem</span>
                                     </button>
                                   )}
                                   {canDelete && (
-                                    <button onClick={() => setDeletePlanId(plan.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
+                                    <button onClick={() => setDeletePlanId(plan.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
                                       <span className="material-icons-round text-sm">delete</span>
                                     </button>
                                   )}
@@ -1902,11 +1902,11 @@ export const ProductionPlans: React.FC = () => {
           const colPlans = plans.filter((p) => p.effectiveStatus === status);
           const cfg = STATUS_CONFIG[status];
           return (
-            <div key={status} className="bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] p-3 min-h-[200px]">
+            <div key={status} className="bg-[var(--color-bg)]/50 rounded-[var(--border-radius-lg)] p-3 min-h-[200px]">
               <div className="flex items-center justify-between mb-3 px-1">
                 <div className="flex items-center gap-2">
                   <Badge variant={cfg.variant as any}>{cfg.label}</Badge>
-                  <span className="text-xs font-bold text-slate-400">{colPlans.length}</span>
+                  <span className="text-xs font-bold text-[var(--color-text-muted)]">{colPlans.length}</span>
                 </div>
               </div>
               <div className="space-y-3">
@@ -1931,11 +1931,11 @@ export const ProductionPlans: React.FC = () => {
                       <div className="mb-2">
                         <div className="flex justify-between text-[11px] mb-1">
                           <span className="text-[var(--color-text-muted)] font-medium">{formatNumber(plan.produced)} / {formatNumber(plan.plannedQuantity)}</span>
-                          <span className={`font-bold ${plan.progressRatio >= 100 ? 'text-emerald-600' : 'text-blue-600'}`}>{Math.min(plan.progressRatio, 100)}%</span>
+                          <span className={`font-bold ${plan.progressRatio >= 100 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-primary))]'}`}>{Math.min(plan.progressRatio, 100)}%</span>
                         </div>
-                        <div className="w-full h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
+                        <div className="w-full h-1.5 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${plan.progressRatio >= 100 ? 'bg-emerald-500' : plan.progressRatio >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                            className={`h-full rounded-full transition-all duration-500 ${plan.progressRatio >= 100 ? 'bg-[rgb(var(--color-success)/0.1)]0' : plan.progressRatio >= 50 ? 'bg-[rgb(var(--color-primary)/0.1)]0' : 'bg-[rgb(var(--color-warning)/0.1)]0'}`}
                             style={{ width: `${Math.min(plan.progressRatio, 100)}%` }}
                           />
                         </div>
@@ -1949,7 +1949,7 @@ export const ProductionPlans: React.FC = () => {
                   );
                 })}
                 {colPlans.length === 0 && (
-                  <div className="text-center py-8 text-[var(--color-text-muted)] dark:text-slate-600">
+                  <div className="text-center py-8 text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)]">
                     <span className="material-icons-round text-2xl block mb-1">inbox</span>
                     <p className="text-xs font-medium">فارغ</p>
                   </div>
@@ -1968,7 +1968,7 @@ export const ProductionPlans: React.FC = () => {
     const activePlans = plans.filter((p) => p.plannedStartDate || p.startDate);
     if (activePlans.length === 0) {
       return (
-        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-12 text-center text-slate-400">
+        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-12 text-center text-[var(--color-text-muted)]">
           <span className="material-icons-round text-5xl mb-3 block opacity-30">timeline</span>
           <p className="font-bold">لا توجد خطط لعرضها على الجدول الزمني</p>
         </div>
@@ -1991,18 +1991,18 @@ export const ProductionPlans: React.FC = () => {
     };
 
     const smartStatusColors: Record<SmartStatus, string> = {
-      on_track: 'bg-emerald-500',
-      at_risk: 'bg-amber-500',
-      delayed: 'bg-orange-500',
-      critical: 'bg-rose-500',
-      completed: 'bg-emerald-400',
+      on_track: 'bg-[rgb(var(--color-success)/0.1)]0',
+      at_risk: 'bg-[rgb(var(--color-warning)/0.1)]0',
+      delayed: 'bg-[rgb(var(--color-warning)/0.1)]0',
+      critical: 'bg-[rgb(var(--color-danger)/0.1)]0',
+      completed: 'bg-[rgb(var(--color-success))]',
     };
 
     return (
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] overflow-hidden">
         <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-3">
-          <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-            <span className="material-icons-round text-violet-600 dark:text-violet-400">timeline</span>
+          <div className="w-10 h-10 bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary)/0.15)] rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+            <span className="material-icons-round text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">timeline</span>
           </div>
           <div>
             <h3 className="text-base font-bold text-[var(--color-text)]">الجدول الزمني</h3>
@@ -2023,11 +2023,11 @@ export const ProductionPlans: React.FC = () => {
               <div key={plan.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                 <div className="w-full sm:w-36 shrink-0 text-right">
                   <p className="text-xs font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
-                  <p className="text-[10px] text-slate-400">{line?.name ?? '—'}</p>
+                  <p className="text-[10px] text-[var(--color-text-muted)]">{line?.name ?? '—'}</p>
                 </div>
-                <div className="flex-1 relative h-8 bg-[#f8f9fa] rounded-[var(--border-radius-base)] overflow-hidden">
+                <div className="flex-1 relative h-8 bg-[var(--color-bg)] rounded-[var(--border-radius-base)] overflow-hidden">
                   {/* Today marker */}
-                  <div className="absolute top-0 bottom-0 w-px bg-rose-400 z-10" style={{ right: `${todayPercent}%` }} />
+                  <div className="absolute top-0 bottom-0 w-px bg-[rgb(var(--color-danger))] z-10" style={{ right: `${todayPercent}%` }} />
                   {/* Plan bar */}
                   <div
                     className={`absolute top-1 bottom-1 rounded-[var(--border-radius-sm)] ${smartColor} opacity-80 flex items-center justify-center`}
@@ -2045,11 +2045,11 @@ export const ProductionPlans: React.FC = () => {
         </div>
 
         <div className="px-5 pb-4 flex flex-wrap items-center gap-3 sm:gap-4 text-[10px] text-[var(--color-text-muted)] font-medium">
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-400"></span> اليوم</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> في المسار</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span> معرض للخطر</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500"></span> متأخر</span>
-          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500"></span> حرج</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-danger))]"></span> اليوم</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-success)/0.1)]0"></span> في المسار</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-warning)/0.1)]0"></span> معرض للخطر</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-warning)/0.1)]0"></span> متأخر</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-[rgb(var(--color-danger)/0.1)]0"></span> حرج</span>
         </div>
       </div>
     );

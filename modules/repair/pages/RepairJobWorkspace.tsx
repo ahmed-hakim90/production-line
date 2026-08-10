@@ -621,7 +621,7 @@ export const RepairJobWorkspace: React.FC = () => {
   if (loading && !job) {
     return (
       <RepairOpsPageShell
-        className="mx-auto max-w-3xl lg:max-w-6xl"
+        className="w-full min-w-0"
         dir={dir}
         eyebrow="ورشة الصيانة"
         actions={shellBackAction}
@@ -635,7 +635,7 @@ export const RepairJobWorkspace: React.FC = () => {
   if (!job) {
     return (
       <RepairOpsPageShell
-        className="mx-auto max-w-3xl lg:max-w-6xl"
+        className="w-full min-w-0"
         dir={dir}
         eyebrow="ورشة الصيانة"
         actions={shellBackAction}
@@ -674,7 +674,7 @@ export const RepairJobWorkspace: React.FC = () => {
 
   return (
     <RepairOpsPageShell
-      className="mx-auto max-w-3xl space-y-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:max-w-6xl lg:pb-8"
+      className="w-full min-w-0 space-y-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:pb-8"
       dir={dir}
       eyebrow="ورشة الصيانة"
       rangeLabel={`#${job.receiptNo} · ${deviceSummary}`}
@@ -792,12 +792,12 @@ export const RepairJobWorkspace: React.FC = () => {
       </div>
 
       {actionState?.blockedReason ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <div className="rounded-md border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-3 py-2 text-sm text-[rgb(var(--color-warning))]">
           {actionState.blockedReason}
         </div>
       ) : null}
       {!canManageWorkshopWork && canEditThisJob ? (
-        <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+        <div className="rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-3 py-2 text-sm text-[rgb(var(--color-primary))]">
           حساب الاستقبال: عرض فقط. الإسناد والطباعة من صفحة التفاصيل.
         </div>
       ) : null}
@@ -940,7 +940,7 @@ export const RepairJobWorkspace: React.FC = () => {
           ) : (
             <div className="space-y-3">
               {!hasBranchWarehouse ? (
-                <div className="rounded border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                <div className="rounded border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] p-2.5 text-xs text-[rgb(var(--color-warning))]">
                   اربط مخزناً بالفرع أولاً.
                 </div>
               ) : null}
@@ -1079,8 +1079,8 @@ export const RepairJobWorkspace: React.FC = () => {
             </Button>
           </div>
           {showUnrepairableForm ? (
-            <div className="space-y-1.5 rounded-md border border-rose-200 bg-rose-50/40 p-3">
-              <Label>سبب عدم قابلية الإصلاح <span className="text-rose-600">*</span></Label>
+            <div className="space-y-1.5 rounded-md border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/40 p-3">
+              <Label>سبب عدم قابلية الإصلاح <span className="text-[rgb(var(--color-danger))]">*</span></Label>
               <Select value={reasonCode} onValueChange={setReasonCode} disabled={!canEditWorkshop || applyingStatus}>
                 <SelectTrigger className="min-h-12 bg-background"><SelectValue placeholder="اختر السبب" /></SelectTrigger>
                 <SelectContent>
@@ -1123,7 +1123,7 @@ export const RepairJobWorkspace: React.FC = () => {
         className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 lg:hidden"
         style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
       >
-        <div className="mx-auto flex max-w-3xl items-center gap-2 px-2 py-2">
+        <div className="mx-auto flex w-full min-w-0 max-w-[var(--content-max-width)] items-center gap-2 px-2 py-2">
           {workshopStep === 'diagnose' ? (
             <>
               <Button

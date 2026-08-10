@@ -287,11 +287,11 @@ export const EmployeeEvaluation: React.FC = () => {
 
                   <div className="flex gap-4 lg:w-56 shrink-0">
                     <div className="text-center">
-                      <p className="text-lg font-bold text-emerald-600">{attendanceScore}</p>
+                      <p className="text-lg font-bold text-[rgb(var(--color-success))]">{attendanceScore}</p>
                       <p className="text-[10px] text-[var(--color-text-muted)]">حضور</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-lg font-bold text-blue-600">{punctualityScore}</p>
+                      <p className="text-lg font-bold text-[rgb(var(--color-primary))]">{punctualityScore}</p>
                       <p className="text-[10px] text-[var(--color-text-muted)]">انضباط</p>
                     </div>
                     <div className="text-center">

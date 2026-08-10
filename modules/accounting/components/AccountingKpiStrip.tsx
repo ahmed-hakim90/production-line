@@ -13,11 +13,11 @@ export type AccountingKpiItem = {
 
 const TONE_CLASS: Record<NonNullable<AccountingKpiItem["tone"]>, string> = {
   default: "text-foreground",
-  blue: "text-blue-700",
-  amber: "text-amber-700",
-  emerald: "text-emerald-700",
-  rose: "text-rose-700",
-  violet: "text-violet-700",
+  blue: "text-[rgb(var(--color-primary))]",
+  amber: "text-[rgb(var(--color-warning))]",
+  emerald: "text-[rgb(var(--color-success))]",
+  rose: "text-[rgb(var(--color-danger))]",
+  violet: "text-[rgb(var(--color-secondary))]",
 };
 
 export const AccountingKpiStrip: React.FC<{ items: AccountingKpiItem[] }> = ({

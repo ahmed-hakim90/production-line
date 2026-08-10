@@ -155,7 +155,7 @@ export const PayrollAccounts: React.FC = () => {
       }
     >
 
-      {error && <div className="card p-3 text-sm font-bold text-rose-600">{error}</div>}
+      {error && <div className="card p-3 text-sm font-bold text-[rgb(var(--color-danger))]">{error}</div>}
 
       <OpsDashPanel title="رواتب موزعة" accent="hr" bodyClassName="p-0">
         <SmartFilterBar

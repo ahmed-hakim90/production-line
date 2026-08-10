@@ -58,9 +58,9 @@ const formatMb = (bytes: number): string => {
 
 const statusStyle = (status: string): string => {
   const s = status.toLowerCase();
-  if (s === 'active') return 'text-emerald-700 bg-emerald-50 border-emerald-200';
-  if (s === 'suspended') return 'text-rose-700 bg-rose-50 border-rose-200';
-  return 'text-amber-800 bg-amber-50 border-amber-200';
+  if (s === 'active') return 'text-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)] border-[rgb(var(--color-success)/0.25)]';
+  if (s === 'suspended') return 'text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] border-[rgb(var(--color-danger)/0.25)]';
+  return 'text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border-[rgb(var(--color-warning)/0.25)]';
 };
 
 const toMillis = (value: unknown): number => {
@@ -386,7 +386,7 @@ export const TenantInsightsPage: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      className="max-w-6xl mx-auto"
+      className="w-full min-w-0"
       dir={dir}
       eyebrow="إدارة المنصة"
       rangeLabel="إحصائيات الشركات، النسخ الاحتياطية، وحجم بيانات Firestore لكل مستأجر"
@@ -427,8 +427,8 @@ export const TenantInsightsPage: React.FC = () => {
         <p
           className={`text-sm rounded-md px-3 py-2 border ${
             platformMessage.type === 'ok'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-rose-50 text-rose-700 border-rose-200'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border-[rgb(var(--color-success)/0.25)]'
+              : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border-[rgb(var(--color-danger)/0.25)]'
           }`}
         >
           {platformMessage.text}
@@ -436,7 +436,7 @@ export const TenantInsightsPage: React.FC = () => {
       ) : null}
 
       {listError ? (
-        <p className="text-sm text-rose-600">{listError}</p>
+        <p className="text-sm text-[rgb(var(--color-danger))]">{listError}</p>
       ) : null}
 
       {listLoading ? (
@@ -534,7 +534,7 @@ export const TenantInsightsPage: React.FC = () => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="text-amber-900 border-amber-300"
+                      className="text-[rgb(var(--color-warning))] border-[rgb(var(--color-warning)/0.35)]"
                       disabled={busyTenantAction !== null}
                       onClick={() => setRegistryDialog(t)}
                     >
@@ -559,7 +559,7 @@ export const TenantInsightsPage: React.FC = () => {
                     <p className="text-xs text-[var(--color-text-muted)]">جاري تحميل مسؤول الشركة والأدوار…</p>
                   ) : null}
                   {meta.kind === 'error' ? (
-                    <p className="text-xs text-rose-600">{meta.message}</p>
+                    <p className="text-xs text-[rgb(var(--color-danger))]">{meta.message}</p>
                   ) : null}
                   {meta.kind === 'ok' ? (
                     <div className="rounded-md border border-[var(--color-border)] bg-[var(--color-muted)]/20 p-3 space-y-2 text-sm">
@@ -627,10 +627,10 @@ export const TenantInsightsPage: React.FC = () => {
                               </Button>
                             </div>
                           ) : (
-                            <p className="text-xs text-amber-800">لا توجد أدوار مسجّلة لهذه الشركة في Firestore.</p>
+                            <p className="text-xs text-[rgb(var(--color-warning))]">لا توجد أدوار مسجّلة لهذه الشركة في Firestore.</p>
                           )}
                           {roleSaveError[t.id] ? (
-                            <p className="text-xs text-rose-600">{roleSaveError[t.id]}</p>
+                            <p className="text-xs text-[rgb(var(--color-danger))]">{roleSaveError[t.id]}</p>
                           ) : null}
                         </>
                       ) : (
@@ -656,7 +656,7 @@ export const TenantInsightsPage: React.FC = () => {
                   ) : null}
 
                   {fp.kind === 'error' ? (
-                    <p className="text-sm text-rose-600">{fp.message}</p>
+                    <p className="text-sm text-[rgb(var(--color-danger))]">{fp.message}</p>
                   ) : null}
 
                   {fp.kind === 'ok' ? (
@@ -700,7 +700,7 @@ export const TenantInsightsPage: React.FC = () => {
                       </p>
 
                       {fp.data.failedCollections.length > 0 ? (
-                        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+                        <p className="text-xs text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-md p-2">
                           تعذر عدّ بعض المجموعات: {fp.data.failedCollections.join(', ')}
                         </p>
                       ) : null}

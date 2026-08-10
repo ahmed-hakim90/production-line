@@ -12,7 +12,7 @@ import {
   DEFAULT_THEME,
 } from '../../../utils/dashboardConfig';
 import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
-import { resolveSystemSettings } from '../lib/resolveSystemSettings';
+import { resolvePrintTemplate, resolveSystemSettings } from '../lib/resolveSystemSettings';
 import type {
   AlertSettings,
   AlertToggleSettings,
@@ -51,7 +51,7 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
       customDashboardWidgets: JSON.parse(JSON.stringify(resolved.customDashboardWidgets ?? [])) as CustomWidgetConfig[],
       alertSettings: { ...DEFAULT_ALERT_SETTINGS, ...resolved.alertSettings } as AlertSettings,
       kpiThresholds: { ...DEFAULT_KPI_THRESHOLDS, ...resolved.kpiThresholds } as Record<string, KPIThreshold>,
-      printTemplate: { ...DEFAULT_PRINT_TEMPLATE, ...resolved.printTemplate } as PrintTemplateSettings,
+      printTemplate: resolvePrintTemplate(resolved.printTemplate),
       planSettings: syncPlanSettingsWarehouseRouting(resolved.planSettings) as PlanSettings,
       branding: { ...DEFAULT_BRANDING, ...resolved.branding } as BrandingSettings,
       theme: { ...DEFAULT_THEME, ...resolved.theme } as ThemeSettings,

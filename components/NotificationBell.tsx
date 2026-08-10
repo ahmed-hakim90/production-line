@@ -31,14 +31,14 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 const TYPE_COLORS: Record<string, string> = {
-  production_report: 'text-indigo-500',
-  work_order_assigned: 'text-blue-500',
-  work_order_updated: 'text-amber-500',
-  work_order_completed: 'text-emerald-500',
-  quality_report_created: 'text-violet-500',
-  quality_report_updated: 'text-cyan-500',
-  manual_broadcast: 'text-indigo-500',
-  daily_report_missing: 'text-rose-500',
+  production_report: 'text-[rgb(var(--color-primary))]',
+  work_order_assigned: 'text-[rgb(var(--color-primary))]',
+  work_order_updated: 'text-[rgb(var(--color-warning))]',
+  work_order_completed: 'text-[rgb(var(--color-success))]',
+  quality_report_created: 'text-[rgb(var(--color-secondary))]',
+  quality_report_updated: 'text-[rgb(var(--color-secondary))]',
+  manual_broadcast: 'text-[rgb(var(--color-primary))]',
+  daily_report_missing: 'text-[rgb(var(--color-danger))]',
 };
 
 const NOTIFICATION_ICON_MAP: Record<string, LucideIcon> = {
@@ -143,7 +143,7 @@ export const NotificationBell: React.FC = () => {
       >
         <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="absolute top-1 left-1 min-w-[18px] h-[18px] flex items-center justify-center bg-rose-500 text-white text-[10px] font-bold rounded-full border-2 border-[var(--color-card)] px-1">
+          <span className="absolute top-1 left-1 min-w-[18px] h-[18px] flex items-center justify-center bg-[rgb(var(--color-danger)/0.1)]0 text-white text-[10px] font-bold rounded-full border-2 border-[var(--color-card)] px-1">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -156,7 +156,7 @@ export const NotificationBell: React.FC = () => {
               <Bell size={18} className="text-[var(--color-text-muted)]" />
               <span className="text-[13px] font-bold text-[var(--color-text)]">{t('notifications.title')}</span>
               {unreadCount > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-bold">
+                <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[rgb(var(--color-danger)/0.1)]0 text-white text-[10px] font-bold">
                   {unreadCount}
                 </span>
               )}

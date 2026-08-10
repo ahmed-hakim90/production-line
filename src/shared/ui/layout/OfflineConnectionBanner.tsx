@@ -17,7 +17,7 @@ export const OfflineConnectionBanner: React.FC<OfflineConnectionBannerProps> = (
     <div
       role="status"
       aria-live="polite"
-      className="fixed top-[52px] left-0 right-0 z-[35] border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950/90 dark:text-amber-100"
+      className="fixed top-[52px] left-0 right-0 z-[35] border-b border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-4 py-2 text-center text-sm font-medium text-[rgb(var(--color-warning))] dark:border-[rgb(var(--color-warning)/0.25)] dark:bg-[rgb(var(--color-warning)/0.2)] dark:text-[rgb(var(--color-warning))]"
     >
       {t('layout.offlineConnectionMessage')}
     </div>

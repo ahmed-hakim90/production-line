@@ -43,7 +43,7 @@ export const InventoryExceptionsPreview: React.FC<Props> = ({ tenantPath, loadin
             <Skeleton key={`ex-sk-${i}`} className="h-12 w-full rounded-lg" />
           ))
         ) : rows.length === 0 ? (
-          <p className="text-sm font-medium text-emerald-600">لا توجد استثناءات ظاهرة حالياً.</p>
+          <p className="text-sm font-medium text-[rgb(var(--color-success))]">لا توجد استثناءات ظاهرة حالياً.</p>
         ) : (
           rows.map((row) => (
             <div
@@ -52,7 +52,7 @@ export const InventoryExceptionsPreview: React.FC<Props> = ({ tenantPath, loadin
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium text-[var(--color-text)] truncate">{row.title}</p>
-                <p className="text-xs text-slate-500 truncate">
+                <p className="text-xs text-[var(--color-text-muted)] truncate">
                   {row.warehouseName ? `${row.warehouseName} · ` : ''}
                   {row.detail}
                 </p>

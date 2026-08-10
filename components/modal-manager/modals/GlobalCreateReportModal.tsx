@@ -567,7 +567,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
       onClick={closeModal}
     >
       <div
@@ -582,7 +582,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 ? t('modalManager.createReport.createPackagingTitle')
                 : t('modalManager.createReport.createProductionTitle')}
           </h3>
-          <button onClick={closeModal} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+          <button onClick={closeModal} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -697,7 +697,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                   type="text"
                   readOnly
                   value={currentEmployee.name}
-                  className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
+                  className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
                 <SearchableSelect
@@ -718,7 +718,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                   type="text"
                   readOnly
                   value={currentEmployee.name}
-                  className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
+                  className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
                 <SearchableSelect
@@ -807,7 +807,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 return (
                   <div
                     key={idx}
-                    className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-end rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40"
+                    className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-end rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[var(--color-bg)]/40"
                   >
                     <div className={cn('space-y-2', productSpan)}>
                       <label className="block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.productRequired')}</label>
@@ -912,7 +912,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                       <button
                         type="button"
                         disabled={(form.packagingLines || []).length <= 1}
-                        className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
+                        className="text-sm font-bold text-[rgb(var(--color-danger))] disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
                         onClick={() => setForm((prev) => ({
                           ...prev,
                           packagingLines: (prev.packagingLines || []).filter((_, i) => i !== idx),
@@ -1051,7 +1051,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 <input
                   type="number"
                   readOnly
-                  className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-black text-primary"
+                  className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-black text-primary"
                   value={workersTotal || ''}
                   placeholder="0"
                 />

@@ -577,7 +577,7 @@ export const WarehouseLocations: React.FC = () => {
   };
 
   if (!can('inventory.view')) {
-    return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+    return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
   }
 
   return (
@@ -601,7 +601,7 @@ export const WarehouseLocations: React.FC = () => {
           >
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
-          <div className="rounded-lg border bg-slate-50 px-3 py-2 text-xs font-bold text-slate-600 md:col-span-2">
+          <div className="rounded-lg border bg-[var(--color-bg)] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)] md:col-span-2">
             {scoped
               ? warehouseSelectLocked
                 ? 'هذا الحساب مقيّد بمخزن المستلزمات فقط.'
@@ -610,7 +610,7 @@ export const WarehouseLocations: React.FC = () => {
           </div>
         </div>
         {defaultWarnings.length > 0 && (
-          <div className="mx-4 mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+          <div className="mx-4 mb-4 rounded-lg border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] p-3 text-xs font-bold text-[rgb(var(--color-warning))]">
             أصناف لها رف افتراضي موقوف: {defaultWarnings.slice(0, 6).join('، ')}
           </div>
         )}
@@ -672,7 +672,7 @@ export const WarehouseLocations: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b bg-slate-50">
+              <tr className="border-b bg-[var(--color-bg)]">
                 <th className="p-3 text-start">الراك</th>
                 <th className="p-3 text-start">الرف / اللوكيشن</th>
                 <th className="p-3 text-start">الأصناف داخل الرف</th>
@@ -685,9 +685,9 @@ export const WarehouseLocations: React.FC = () => {
                 const shelves = filteredLocations.filter((loc) => loc.rackId === rack.id || (!loc.rackId && loc.rack === rack.name));
                 return (
                   <React.Fragment key={rack.id}>
-                    <tr className="border-b bg-slate-100">
-                      <td className="p-3 font-bold">{rack.name} <span className="font-mono text-xs text-slate-500">({rack.code})</span></td>
-                      <td className="p-3 text-slate-500">{shelves.length} رف</td>
+                    <tr className="border-b bg-[var(--color-surface-hover)]">
+                      <td className="p-3 font-bold">{rack.name} <span className="font-mono text-xs text-[var(--color-text-muted)]">({rack.code})</span></td>
+                      <td className="p-3 text-[var(--color-text-muted)]">{shelves.length} رف</td>
                       <td className="p-3" />
                       <td className="p-3 text-center">{rack.isActive === false ? 'موقوف' : 'نشط'}</td>
                       {canManage && (
@@ -708,9 +708,9 @@ export const WarehouseLocations: React.FC = () => {
                       const isEffectivelyInactive = loc.isActive === false || inactiveRackIds.has(loc.rackId);
                       return (
                         <tr key={loc.id} className="border-b">
-                          <td className="p-3 text-slate-400">{loc.rackName || loc.rack}</td>
+                          <td className="p-3 text-[var(--color-text-muted)]">{loc.rackName || loc.rack}</td>
                           <td className="p-3 font-mono">{loc.code}</td>
-                          <td className="p-3 text-xs text-slate-600">
+                          <td className="p-3 text-xs text-[var(--color-text-muted)]">
                             {locBalances.length === 0
                               ? 'لا توجد أرصدة'
                               : locBalances.slice(0, 4).map((b) => `${b.itemName}: ${b.quantity}`).join('، ')}
@@ -746,8 +746,8 @@ export const WarehouseLocations: React.FC = () => {
 
       {modal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeModal}>
-          <div className="w-full max-w-3xl rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4" onClick={closeModal}>
+          <div className="w-full max-w-3xl rounded-lg bg-[var(--color-card)] shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
               <h3 className="text-base font-black">
                 {modal === 'rack'
@@ -758,7 +758,7 @@ export const WarehouseLocations: React.FC = () => {
                       ? 'إضافة أرفف داخل راك'
                       : 'رفع لوكيشنات من Excel'}
               </h3>
-              <button className="text-xl leading-none text-slate-500" onClick={closeModal}>x</button>
+              <button className="text-xl leading-none text-[var(--color-text-muted)]" onClick={closeModal}>x</button>
             </div>
 
             {modal === 'rack' && (
@@ -782,7 +782,7 @@ export const WarehouseLocations: React.FC = () => {
 
             {modal === 'editRack' && (
               <div className="space-y-4 p-5">
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[var(--color-text-muted)]">
                   تعديل الاسم فقط لا يغيّر أكواد اللوكيشن (مثل 20-01-0). تغيير الكود يعيد بناء أكواد الأرفف التابعة.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -854,13 +854,13 @@ export const WarehouseLocations: React.FC = () => {
                       onChange={(e) => e.target.files?.[0] && void parseImportFile(e.target.files[0])}
                     />
                   </label>
-                  {importFileName && <span className="text-xs font-bold text-slate-600">{importFileName}</span>}
+                  {importFileName && <span className="text-xs font-bold text-[var(--color-text-muted)]">{importFileName}</span>}
                 </div>
                 {importRows.length > 0 && (
                   <div className="max-h-[420px] overflow-auto rounded-lg border">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b bg-slate-50">
+                        <tr className="border-b bg-[var(--color-bg)]">
                           <th className="p-2 text-start">صف</th>
                           <th className="p-2 text-start">المخزن</th>
                           <th className="p-2 text-start">الراك</th>
@@ -875,7 +875,7 @@ export const WarehouseLocations: React.FC = () => {
                             <td className="p-2">{row.warehouseName}</td>
                             <td className="p-2">{row.rackName} ({row.rackCode})</td>
                             <td className="p-2">{row.mode === 'single' ? row.shelf : `${row.from} -> ${row.to}`}</td>
-                            <td className={`p-2 font-bold ${row.status === 'error' ? 'text-rose-600' : row.status === 'done' ? 'text-emerald-700' : 'text-slate-700'}`}>
+                            <td className={`p-2 font-bold ${row.status === 'error' ? 'text-[rgb(var(--color-danger))]' : row.status === 'done' ? 'text-[rgb(var(--color-success))]' : 'text-[var(--color-text)]'}`}>
                               {row.status === 'done' ? 'تم' : row.status === 'ready' ? 'جاهز' : row.error}
                             </td>
                           </tr>

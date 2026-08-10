@@ -135,7 +135,7 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
   };
 
   const modalContent = (
-    <div className="pointer-events-auto fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
+    <div className="pointer-events-auto fixed inset-0 z-[10050] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
       <div
         role="dialog"
         aria-modal="true"
@@ -144,8 +144,8 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
       >
         <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 shrink-0 rounded-[var(--border-radius-base)] bg-rose-500/15 dark:bg-rose-500/20 flex items-center justify-center">
-              <Package2 size={18} className="text-rose-600 dark:text-rose-400" aria-hidden />
+            <div className="w-10 h-10 shrink-0 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-danger)/0.1)]0/15 dark:bg-[rgb(var(--color-danger)/0.1)]0/20 flex items-center justify-center">
+              <Package2 size={18} className="text-[rgb(var(--color-danger))] dark:text-[rgb(var(--color-danger))]" aria-hidden />
             </div>
             <div className="min-w-0">
               <h3 id="component-scrap-modal-title" className="text-lg font-bold truncate">
@@ -264,10 +264,10 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
                 })}
               </div>
               {hasDuplicate && (
-                <div className="text-xs font-bold text-rose-600">{t('modalManager.componentScrap.duplicateError')}</div>
+                <div className="text-xs font-bold text-[rgb(var(--color-danger))]">{t('modalManager.componentScrap.duplicateError')}</div>
               )}
               {hasInvalidQty && (
-                <div className="text-xs font-bold text-rose-600">{t('modalManager.componentScrap.quantityError')}</div>
+                <div className="text-xs font-bold text-[rgb(var(--color-danger))]">{t('modalManager.componentScrap.quantityError')}</div>
               )}
             </>
           )}

@@ -473,7 +473,7 @@ export const SupplyCycleDetail: React.FC = () => {
 
   if (!cycleId) {
     return (
-      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
+      <ModuleOpsPageShell className="w-full min-w-0" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
         <p className="text-center text-sm text-muted-foreground py-12">معرّف غير صالح.</p>
       </ModuleOpsPageShell>
     );
@@ -481,7 +481,7 @@ export const SupplyCycleDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" rangeLabel="جاري التحميل" actions={shellBackAction}>
+      <ModuleOpsPageShell className="w-full min-w-0" eyebrow="تفاصيل دورة التوريد" rangeLabel="جاري التحميل" actions={shellBackAction}>
         <DetailPageStickyHeader>
           <OpsDashPanel title="جاري التحميل" accent="inventory">
             <SectionSkeleton rows={4} height={20} />
@@ -499,7 +499,7 @@ export const SupplyCycleDetail: React.FC = () => {
 
   if (!cycle) {
     return (
-      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
+      <ModuleOpsPageShell className="w-full min-w-0" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
         <OpsDashPanel title="الدورة غير موجودة" accent="inventory">
           <div className="py-8 text-center space-y-4">
             <p className="text-destructive font-medium">الدورة غير موجودة أو لا تملك صلاحية عرضها.</p>
@@ -563,7 +563,7 @@ export const SupplyCycleDetail: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      className="max-w-6xl mx-auto"
+      className="w-full min-w-0"
       eyebrow="تفاصيل دورة التوريد"
       rangeLabel={`${cycle.batchCode} — ${cycle.externalLabel || `${KIND_LABEL[cycle.kind]} · ${resolveItemName(cycle)}`}`}
       actions={cycleShellActions}
@@ -598,41 +598,41 @@ export const SupplyCycleDetail: React.FC = () => {
 
       <OpsDashPanel title="بيانات الصنف والفترة" accent="inventory">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+          <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">الصنف</dt>
             <dd className="font-medium text-end">{resolveItemName(cycle)}</dd>
           </div>
-          <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+          <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">التصنيف</dt>
             <dd className="text-sm font-medium text-end">{resolveItemCategory(cycle)}</dd>
           </div>
-          <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+          <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">الفترة</dt>
             <dd className="text-end">
               {cycle.periodStart} → {cycle.periodEnd}
             </dd>
           </div>
           {cycle.externalLabel ? (
-            <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 sm:col-span-2 dark:border-border/60 dark:bg-muted/25">
+            <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 sm:col-span-2 dark:border-border/60 dark:bg-muted/25">
               <dt className="text-muted-foreground">تسمية خارجية</dt>
               <dd className="text-end">{cycle.externalLabel}</dd>
             </div>
           ) : null}
-          <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+          <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">تاريخ الإنشاء</dt>
             <dd className="text-end">{formatOperationDateTime(cycle.createdAt) ?? '—'}</dd>
           </div>
-          <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+          <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">منشئ الدورة</dt>
             <dd className="text-sm font-medium text-end">{resolveUidLabel(cycle.createdByUid)}</dd>
           </div>
           {cycle.status === 'closed' && (
             <>
-              <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+              <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 dark:border-border/60 dark:bg-muted/25">
                 <dt className="text-muted-foreground">تاريخ الإقفال</dt>
                 <dd className="text-end">{formatOperationDateTime(cycle.closedAt) ?? '—'}</dd>
               </div>
-              <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
+              <div className="flex justify-between gap-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 dark:border-border/60 dark:bg-muted/25">
                 <dt className="text-muted-foreground">مُقفِل الدورة</dt>
                 <dd className="text-sm font-medium text-end">{resolveUidLabel(cycle.closedByUid)}</dd>
               </div>
@@ -702,7 +702,7 @@ export const SupplyCycleDetail: React.FC = () => {
         {linkedReports.length === 0 ? (
           <p className="text-sm text-muted-foreground">لا توجد تقارير مربوطة — اربط التقارير بهذه الدورة ليظهر التفصيل ويُحسب صرف الإنتاج (للتام).</p>
         ) : (
-          <div className="erp-table-wrap erp-table-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-border">
+          <div className="erp-table-wrap erp-table-scroll overflow-x-auto rounded-lg border border-[var(--color-border)] dark:border-border">
             <table className="erp-table w-full text-right text-sm border-collapse min-w-[640px]">
               <thead>
                 <tr>
@@ -736,7 +736,7 @@ export const SupplyCycleDetail: React.FC = () => {
                     </tr>
                   );
                 })}
-                <tr className="bg-slate-50/80 font-semibold dark:bg-muted/30">
+                <tr className="bg-[var(--color-bg)] font-semibold dark:bg-muted/30">
                   <td colSpan={6} className="text-end text-muted-foreground">
                     إجمالي يُحسب في صرف الإنتاج
                   </td>
@@ -759,7 +759,7 @@ export const SupplyCycleDetail: React.FC = () => {
           canEdit && (
             <div
               className={cn(
-                'flex flex-wrap items-end gap-3 mb-6 pb-4 border-b border-slate-200 dark:border-border',
+                'flex flex-wrap items-end gap-3 mb-6 pb-4 border-b border-[var(--color-border)] dark:border-border',
               )}
             >
               <div className="w-32 space-y-2">
@@ -785,7 +785,7 @@ export const SupplyCycleDetail: React.FC = () => {
             </div>
           )
         )}
-        <div className="erp-table-wrap erp-table-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-border">
+        <div className="erp-table-wrap erp-table-scroll overflow-x-auto rounded-lg border border-[var(--color-border)] dark:border-border">
           <table className="erp-table w-full text-right text-sm border-collapse min-w-[480px]">
             <thead>
               <tr>

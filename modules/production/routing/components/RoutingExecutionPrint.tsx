@@ -2,9 +2,12 @@ import React from 'react';
 import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
 import type { PrintTemplateSettings } from '@/types';
 import { DEFAULT_PRINT_TEMPLATE } from '@/utils/dashboardConfig';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { formatDurationSeconds } from '../domain/calculations';
 import { formatRoutingFirestoreInstant } from '../domain/formatFirestore';
 import type { ProductionRoutingExecution, ProductionRoutingExecutionStep } from '../types';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 export interface RoutingExecutionPrintProps {
   execution: ProductionRoutingExecution | null;
@@ -22,6 +25,8 @@ export const RoutingExecutionPrint = React.forwardRef<HTMLDivElement, RoutingExe
     }
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'routingExecution');
+    const font = resolvePrintFont(ps);
     const dp = ps.decimalPlaces ?? 0;
     const now = new Date().toLocaleString('ar-EG');
     const refShort =
@@ -57,91 +62,111 @@ export const RoutingExecutionPrint = React.forwardRef<HTMLDivElement, RoutingExe
       <PrintReportLayout
         ref={ref}
         exportRootId={exportRootId}
-        companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
+        companyName={doc.headerText || 'مؤسسة المغربي للإستيراد'}
         reportType="تقرير تنفيذ مسار"
         printDate={now}
         logoUrl={ps.logoUrl}
-        brandAccent={ps.primaryColor}
-        footerTagline={ps.footerText?.trim() || undefined}
+        brandAccent={resolvePrintAccentHex(ps.primaryColor)}
+        footerTagline={doc.footerText?.trim() || undefined}
+        extraLines={doc.customLines}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
+        fontFamily={font.fontFamily}
+        fontSize={font.fontSize}
         meta={{
           reportNumber: refShort,
           reportDate: finishedLabel,
           lineName: 'مسار إنتاج',
           supervisorName: supervisorName || '—',
         }}
-        kpis={[
-          {
-            label: 'الكمية',
-            value: execution.quantity,
-            unit: 'وحدة',
-            color: 'indigo',
-          },
-          {
-            label: 'الزمن القياسي',
-            value: formatDurationSeconds(stdTotal),
-            color: 'default',
-          },
-          {
-            label: 'الزمن الفعلي',
-            value: formatDurationSeconds(actTotal),
-            color: 'default',
-          },
-          {
-            label: 'كفاءة الزمن',
-            value: effPct,
-            color: 'green',
-          },
-        ]}
+        kpis={
+          doc.isFieldVisible('kpis')
+            ? [
+                {
+                  label: 'الكمية',
+                  value: execution.quantity,
+                  unit: 'وحدة',
+                  color: 'indigo',
+                },
+                {
+                  label: 'الزمن القياسي',
+                  value: formatDurationSeconds(stdTotal),
+                  color: 'default',
+                },
+                {
+                  label: 'الزمن الفعلي',
+                  value: formatDurationSeconds(actTotal),
+                  color: 'default',
+                },
+                {
+                  label: 'كفاءة الزمن',
+                  value: effPct,
+                  color: 'green',
+                },
+              ]
+            : []
+        }
         sections={[
-          {
-            title: 'المنتج والخطة',
-            rows: [
-              { label: 'المنتج', value: productName || '—', highlight: true },
-              { label: 'إصدار الخطة', value: `v${execution.planVersion}` },
-              { label: 'معرّف التنفيذ', value: execution.id },
-            ],
-          },
-          {
-            title: 'التكلفة والأداء',
-            rows: [
-              {
-                label: 'تكلفة الوحدة',
-                value:
-                  execution.costPerUnit != null && execution.costPerUnit > 0
-                    ? `${execution.costPerUnit.toFixed(dp)} ج.م`
-                    : '—',
-              },
-              {
-                label: 'إجمالي التكلفة',
-                value:
-                  execution.totalCost != null && execution.totalCost > 0
-                    ? `${execution.totalCost.toFixed(dp)} ج.م`
-                    : '—',
-              },
-              {
-                label: 'أجر الساعة المستخدم',
-                value:
-                  execution.workerHourRateUsed != null && execution.workerHourRateUsed > 0
-                    ? `${execution.workerHourRateUsed.toFixed(dp)} ج.م/ساعة`
-                    : '—',
-              },
-              ...(laborEffPct
-                ? [
+          ...(doc.isFieldVisible('productBlock')
+            ? [
+                {
+                  title: 'المنتج والخطة',
+                  rows: [
+                    { label: 'المنتج', value: productName || '—', highlight: true },
+                    { label: 'إصدار الخطة', value: `v${execution.planVersion}` },
+                    { label: 'معرّف التنفيذ', value: execution.id },
+                  ],
+                },
+              ]
+            : []),
+          ...(doc.isFieldVisible('costs')
+            ? [
+                {
+                  title: 'التكلفة والأداء',
+                  rows: [
                     {
-                      label: 'كفاءة العمالة (إصدار قديم)',
-                      value: laborEffPct,
+                      label: 'تكلفة الوحدة',
+                      value:
+                        execution.costPerUnit != null && execution.costPerUnit > 0
+                          ? `${execution.costPerUnit.toFixed(dp)} ج.م`
+                          : '—',
                     },
-                  ]
-                : []),
-            ],
-          },
-          {
-            title: 'خطوات التنفيذ',
-            rows: stepRows,
-          },
+                    {
+                      label: 'إجمالي التكلفة',
+                      value:
+                        execution.totalCost != null && execution.totalCost > 0
+                          ? `${execution.totalCost.toFixed(dp)} ج.م`
+                          : '—',
+                    },
+                    {
+                      label: 'أجر الساعة المستخدم',
+                      value:
+                        execution.workerHourRateUsed != null && execution.workerHourRateUsed > 0
+                          ? `${execution.workerHourRateUsed.toFixed(dp)} ج.م/ساعة`
+                          : '—',
+                    },
+                    ...(laborEffPct
+                      ? [
+                          {
+                            label: 'كفاءة العمالة (إصدار قديم)',
+                            value: laborEffPct,
+                          },
+                        ]
+                      : []),
+                  ],
+                },
+              ]
+            : []),
+          ...(doc.isFieldVisible('steps')
+            ? [
+                {
+                  title: 'خطوات التنفيذ',
+                  rows: stepRows,
+                },
+              ]
+            : []),
         ]}
+        signatures={doc.isFieldVisible('signatures') ? [{ title: 'المشرف' }, { title: 'الاعتماد' }] : []}
       />
     );
   },

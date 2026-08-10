@@ -152,7 +152,7 @@ export const ImportCustomerMetricsModal: React.FC<Props> = ({
                 </thead>
                 <tbody>
                   {previewRows.map((row) => (
-                    <tr key={row.rowNo} className={row.status === 'error' ? 'bg-rose-50/60' : undefined}>
+                    <tr key={row.rowNo} className={row.status === 'error' ? 'bg-[rgb(var(--color-danger)/0.1)]/60' : undefined}>
                       <td className="tabular-nums">{row.rowNo}</td>
                       <td className="tabular-nums font-medium">{row.code || '—'}</td>
                       <td>{row.name || '—'}</td>
@@ -162,9 +162,9 @@ export const ImportCustomerMetricsModal: React.FC<Props> = ({
                       <td className="tabular-nums">{fmt(row.balance)}</td>
                       <td>
                         {row.status === 'ready' ? (
-                          <span className="text-emerald-700">جاهز</span>
+                          <span className="text-[rgb(var(--color-success))]">جاهز</span>
                         ) : (
-                          <span className="text-rose-700">{row.error || 'خطأ'}</span>
+                          <span className="text-[rgb(var(--color-danger))]">{row.error || 'خطأ'}</span>
                         )}
                       </td>
                     </tr>

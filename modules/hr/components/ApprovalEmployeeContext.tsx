@@ -121,7 +121,7 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
     return (
       <div className="mt-3 border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-3 space-y-2">
         {[0, 1, 2].map((idx) => (
-          <div key={idx} className="h-7 rounded bg-[#f0f2f5] animate-pulse" />
+          <div key={idx} className="h-7 rounded bg-[var(--color-surface-hover)] animate-pulse" />
         ))}
       </div>
     );
@@ -129,7 +129,7 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
 
   if (error) {
     return (
-      <div className="mt-3 border border-rose-200 text-rose-600 rounded-[var(--border-radius-base)] p-3 text-xs font-bold">
+      <div className="mt-3 border border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] rounded-[var(--border-radius-base)] p-3 text-xs font-bold">
         {error}
       </div>
     );
@@ -137,7 +137,7 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
 
   return (
     <div className="mt-3 border border-[var(--color-border)] rounded-[var(--border-radius-base)] overflow-hidden">
-      <div className="px-3 py-2 text-xs font-bold bg-[#f8f9fa] border-b border-[var(--color-border)]">
+      <div className="px-3 py-2 text-xs font-bold bg-[var(--color-bg)] border-b border-[var(--color-border)]">
         بيانات الموظف لمساعدتك في اتخاذ القرار
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 text-xs">

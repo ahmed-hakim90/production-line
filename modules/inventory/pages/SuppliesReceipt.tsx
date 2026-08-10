@@ -541,7 +541,7 @@ export const SuppliesReceipt: React.FC = () => {
     || null;
 
   if (!can('inventory.transactions.create')) {
-    return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية تسجيل حركات المخزون.</p>;
+    return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية تسجيل حركات المخزون.</p>;
   }
 
   const renderLineEditor = (
@@ -563,9 +563,9 @@ export const SuppliesReceipt: React.FC = () => {
         ) : (
           <>
             <p className="font-semibold">{line.itemName || '—'}</p>
-            <p className="font-mono text-xs text-slate-500">{line.itemCode}</p>
+            <p className="font-mono text-xs text-[var(--color-text-muted)]">{line.itemCode}</p>
             {line.suggestedQty != null && (
-              <p className="text-[11px] font-bold text-slate-500">
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)]">
                 مقترح BOM: {Number(line.suggestedQty).toLocaleString('en-US')}
               </p>
             )}
@@ -594,10 +594,10 @@ export const SuppliesReceipt: React.FC = () => {
             placeholder="اللوكيشن"
           />
         ) : (
-          <span className="text-xs text-slate-400">بدون لوكيشنات</span>
+          <span className="text-xs text-[var(--color-text-muted)]">بدون لوكيشنات</span>
         )}
         {line.defaultLocationCode && (
-          <p className="mt-1 text-[11px] font-bold text-emerald-700">افتراضي: {line.defaultLocationCode}</p>
+          <p className="mt-1 text-[11px] font-bold text-[rgb(var(--color-success))]">افتراضي: {line.defaultLocationCode}</p>
         )}
       </td>
       <td className="p-3 text-center">
@@ -626,9 +626,9 @@ export const SuppliesReceipt: React.FC = () => {
       <OpsDashPanel accent="inventory" title={consumableMode ? 'إنشاء إذن استلام مستهلكات' : 'إنشاء إذن استلام مستلزمات'}>
         <div className="grid grid-cols-1 items-end gap-3 p-4 lg:grid-cols-[minmax(180px,0.8fr)_minmax(250px,1fr)_minmax(280px,1.4fr)]">
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">مخزن الاستلام</span>
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">مخزن الاستلام</span>
             <select
-              className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-700"
+              className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text)]"
               value={warehouseId}
               onChange={(e) => setWarehouseId(e.target.value)}
               disabled={effectiveWarehouseSelectLocked}
@@ -640,7 +640,7 @@ export const SuppliesReceipt: React.FC = () => {
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">رقم أمر التوريد / الحاوية / الشحنة</span>
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">رقم أمر التوريد / الحاوية / الشحنة</span>
             <input
               className="w-full rounded-lg border px-3 py-2 text-sm"
               placeholder="اختياري"
@@ -649,7 +649,7 @@ export const SuppliesReceipt: React.FC = () => {
             />
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">ملاحظة</span>
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">ملاحظة</span>
             <input
               className="w-full rounded-lg border px-3 py-2 text-sm"
               placeholder="اختياري"
@@ -731,7 +731,7 @@ export const SuppliesReceipt: React.FC = () => {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-slate-50">
+                  <tr className="border-b bg-[var(--color-bg)]">
                     <th className="p-3 text-start">المكون</th>
                     <th className="p-3 text-center">الكمية</th>
                     <th className="p-3 text-start">اللوكيشن</th>
@@ -762,7 +762,7 @@ export const SuppliesReceipt: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-slate-50">
+                <tr className="border-b bg-[var(--color-bg)]">
                   <th className="p-3 text-start">المكون</th>
                   <th className="p-3 text-center">الكمية</th>
                   <th className="p-3 text-start">اللوكيشن</th>
@@ -787,7 +787,7 @@ export const SuppliesReceipt: React.FC = () => {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
         <OpsDashPanel accent="inventory" className="!p-0 overflow-hidden" title="إذونات الاستلام">
           {orders.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-slate-400">لا توجد إذونات استلام بعد.</p>
+            <p className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد إذونات استلام بعد.</p>
           ) : (
             <>
               {pagedOrders.map((row) => {
@@ -801,15 +801,15 @@ export const SuppliesReceipt: React.FC = () => {
                     className={`block w-full border-b px-4 py-3 text-start transition-colors ${
                       selectedOrder?.id === row.id
                         ? 'bg-primary/10'
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                        : 'hover:bg-[var(--color-surface-hover)] dark:hover:bg-[var(--color-surface-hover)]'
                     }`}
                     onClick={() => setSelectedOrderId(row.id || '')}
                   >
                     <p className="font-bold">{row.referenceNo}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">
                       {row.warehouseName || row.warehouseId} - {STATUS_LABELS[row.status] || row.status}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">
                       {row.containerRef ? `أمر التوريد: ${row.containerRef} · ` : ''}
                       {componentCount.toLocaleString('en-US')} مكون
                     </p>
@@ -893,61 +893,61 @@ export const SuppliesReceipt: React.FC = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-3 border-b bg-slate-50/60 p-4 md:grid-cols-4 dark:bg-slate-900/30">
-                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
-                  <p className="text-xs font-bold text-slate-500">مخزن الاستلام</p>
+              <div className="grid grid-cols-2 gap-3 border-b bg-[var(--color-bg)] p-4 md:grid-cols-4 dark:bg-[var(--color-surface-hover)]">
+                <div className="rounded-lg border bg-[var(--color-card)] p-3 dark:bg-[var(--color-card)]">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">مخزن الاستلام</p>
                   <p className="mt-1 text-sm font-black">
                     {selectedOrder.warehouseName || selectedOrder.warehouseId}
                   </p>
                 </div>
-                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
-                  <p className="text-xs font-bold text-slate-500">أمر التوريد / الشحنة</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3 dark:bg-[var(--color-card)]">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">أمر التوريد / الشحنة</p>
                   <p className="mt-1 text-sm font-black">{selectedOrder.containerRef || '—'}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
-                  <p className="text-xs font-bold text-slate-500">الحالة</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3 dark:bg-[var(--color-card)]">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">الحالة</p>
                   <p className="mt-1 text-sm font-black">
                     {STATUS_LABELS[selectedOrder.status] || selectedOrder.status}
                   </p>
                 </div>
-                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
-                  <p className="text-xs font-bold text-slate-500">تاريخ الإنشاء</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3 dark:bg-[var(--color-card)]">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">تاريخ الإنشاء</p>
                   <p className="mt-1 text-sm font-black tabular-nums">
                     {formatReceiptDate(selectedOrder.createdAt)}
                   </p>
                 </div>
-                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
-                  <p className="text-xs font-bold text-slate-500">أنشئ بواسطة</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3 dark:bg-[var(--color-card)]">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">أنشئ بواسطة</p>
                   <p className="mt-1 text-sm font-black">{selectedOrder.createdBy || '—'}</p>
                 </div>
               </div>
 
               {selectedOrder.note?.trim() && (
                 <div className="border-b px-4 py-3">
-                  <p className="text-xs font-bold text-slate-500">ملاحظات</p>
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">ملاحظات</p>
                   <p className="mt-1 text-sm font-semibold">{selectedOrder.note}</p>
                 </div>
               )}
 
               {(selectedOrder.groups || []).map((group, groupIndex) => (
                 <section key={`${group.productId}-${groupIndex}`} className="border-b last:border-b-0">
-                  <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 px-4 py-3 dark:bg-slate-900/30">
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-[var(--color-bg)] px-4 py-3 dark:bg-[var(--color-surface-hover)]">
                     <div>
                       <p className="text-sm font-black">
                         منتج مفكك #{groupIndex + 1} — {group.productName}
                       </p>
                       {group.productCode && (
-                        <p className="mt-0.5 font-mono text-xs text-slate-500">{group.productCode}</p>
+                        <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">{group.productCode}</p>
                       )}
                     </div>
-                    <p className="text-xs font-bold text-slate-600">
+                    <p className="text-xs font-bold text-[var(--color-text-muted)]">
                       كمية المنتج: <span className="tabular-nums">{Number(group.quantity || 0).toLocaleString('en-US')}</span>
                     </p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b bg-slate-50/60 dark:bg-slate-900/20">
+                        <tr className="border-b bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)]">
                           <th className="p-3 text-start">المكون</th>
                           <th className="p-3 text-center">الكمية</th>
                           <th className="p-3 text-center">الوحدة</th>
@@ -959,7 +959,7 @@ export const SuppliesReceipt: React.FC = () => {
                           <tr key={`${line.itemType}-${line.itemId}-${lineIndex}`} className="border-b last:border-b-0">
                             <td className="p-3">
                               <p className="font-bold">{line.itemName}</p>
-                              <p className="mt-0.5 font-mono text-xs text-slate-500">{line.itemCode}</p>
+                              <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">{line.itemCode}</p>
                             </td>
                             <td className="p-3 text-center font-bold tabular-nums">
                               {Number(line.quantity || 0).toLocaleString('en-US')}
@@ -976,7 +976,7 @@ export const SuppliesReceipt: React.FC = () => {
 
               {(selectedOrder.standaloneLines || []).length > 0 && (
                 <section>
-                  <div className="border-b bg-slate-50 px-4 py-3 dark:bg-slate-900/30">
+                  <div className="border-b bg-[var(--color-bg)] px-4 py-3 dark:bg-[var(--color-surface-hover)]">
                     <p className="text-sm font-black">
                       {consumableMode ? 'المستهلكات المستلمة' : 'المكونات المستقلة'}
                     </p>
@@ -984,7 +984,7 @@ export const SuppliesReceipt: React.FC = () => {
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b bg-slate-50/60 dark:bg-slate-900/20">
+                        <tr className="border-b bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)]">
                           <th className="p-3 text-start">المكون</th>
                           <th className="p-3 text-center">الكمية</th>
                           <th className="p-3 text-center">الوحدة</th>
@@ -996,7 +996,7 @@ export const SuppliesReceipt: React.FC = () => {
                           <tr key={`${line.itemType}-${line.itemId}-${lineIndex}`} className="border-b last:border-b-0">
                             <td className="p-3">
                               <p className="font-bold">{line.itemName}</p>
-                              <p className="mt-0.5 font-mono text-xs text-slate-500">{line.itemCode}</p>
+                              <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">{line.itemCode}</p>
                             </td>
                             <td className="p-3 text-center font-bold tabular-nums">
                               {Number(line.quantity || 0).toLocaleString('en-US')}
@@ -1013,13 +1013,13 @@ export const SuppliesReceipt: React.FC = () => {
 
               {(selectedOrder.groups || []).length === 0
                 && (selectedOrder.standaloneLines || []).length === 0 && (
-                  <p className="px-4 py-8 text-center text-sm text-slate-400">
+                  <p className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                     لا توجد مكونات في هذا الإذن.
                   </p>
                 )}
             </>
           ) : (
-            <p className="px-4 py-8 text-center text-sm text-slate-400">
+            <p className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
               اختر إذناً لعرض تفاصيله.
             </p>
           )}

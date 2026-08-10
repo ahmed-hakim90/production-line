@@ -51,27 +51,27 @@ export interface SidebarProps {
 
 /* ── ERPNext-style icon colors (colorful mode) */
 const COLORFUL_ICON: Record<string, string> = {
-  dashboards: 'text-blue-600',
-  production: 'text-emerald-600',
-  inventory:  'text-teal-600',
-  hr:         'text-violet-600',
-  costs:      'text-amber-600',
-  quality:    'text-cyan-600',
-  repair:     'text-orange-600',
-  customers:  'text-indigo-600',
-  system:     'text-rose-600',
+  dashboards: 'text-[var(--chart-1)]',
+  production: 'text-[var(--chart-2)]',
+  inventory:  'text-[var(--chart-7)]',
+  hr:         'text-[var(--chart-5)]',
+  costs:      'text-[var(--chart-3)]',
+  quality:    'text-[var(--chart-6)]',
+  repair:     'text-[var(--chart-3)]',
+  customers:  'text-[var(--chart-5)]',
+  system:     'text-[var(--chart-4)]',
 };
 
 const COLORFUL_BG: Record<string, string> = {
-  dashboards: 'bg-blue-50',
-  production: 'bg-emerald-50',
-  inventory:  'bg-teal-50',
-  hr:         'bg-violet-50',
-  costs:      'bg-amber-50',
-  quality:    'bg-cyan-50',
-  repair:     'bg-orange-50',
-  customers:  'bg-indigo-50',
-  system:     'bg-rose-50',
+  dashboards: 'bg-[color-mix(in_srgb,var(--chart-1)_12%,transparent)]',
+  production: 'bg-[color-mix(in_srgb,var(--chart-2)_12%,transparent)]',
+  inventory:  'bg-[color-mix(in_srgb,var(--chart-7)_12%,transparent)]',
+  hr:         'bg-[color-mix(in_srgb,var(--chart-5)_12%,transparent)]',
+  costs:      'bg-[color-mix(in_srgb,var(--chart-3)_12%,transparent)]',
+  quality:    'bg-[color-mix(in_srgb,var(--chart-6)_12%,transparent)]',
+  repair:     'bg-[color-mix(in_srgb,var(--chart-3)_12%,transparent)]',
+  customers:  'bg-[color-mix(in_srgb,var(--chart-5)_12%,transparent)]',
+  system:     'bg-[color-mix(in_srgb,var(--chart-4)_12%,transparent)]',
 };
 
 function renderSidebarIcon(name?: string, className?: string, size = 16) {
@@ -465,9 +465,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
         {/* ── Read-only notice ─────────────────────────────────────── */}
         {isReadOnly && !navCollapsed && (
-          <div className="mx-2 mt-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-sm)] flex items-center gap-1.5 shrink-0">
-            <Eye size={14} className="text-amber-500" />
-            <span className="text-[11px] font-semibold text-amber-700">{t('sidebar.readOnlyMode')}</span>
+          <div className="mx-2 mt-2 px-2.5 py-1.5 bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-sm)] flex items-center gap-1.5 shrink-0">
+            <Eye size={14} className="text-[rgb(var(--color-warning))]" />
+            <span className="text-[11px] font-semibold text-[rgb(var(--color-warning))]">{t('sidebar.readOnlyMode')}</span>
           </div>
         )}
 
@@ -500,7 +500,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                           >
                             {renderSidebarIcon(item.icon, undefined, 18)}
                             {badge > 0 && (
-                              <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-rose-500 rounded-full" />
+                              <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-[rgb(var(--color-danger)/0.1)]0 rounded-full" />
                             )}
                           </NavLink>
                           <span className={`pointer-events-none absolute ${tooltipSideClass} top-1/2 -translate-y-1/2 px-2 py-1 rounded-[var(--border-radius-sm)] bg-[var(--color-text)] text-white text-[11px] font-semibold whitespace-nowrap opacity-0 group-hover/nav:opacity-100 transition-opacity shadow-lg z-[60]`}>
@@ -540,7 +540,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         </span>
                         <span className="flex-1 truncate">{item.label}</span>
                         {badge > 0 && (
-                          <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full shrink-0">
+                          <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold bg-[rgb(var(--color-danger)/0.1)]0 text-white rounded-full shrink-0">
                             {badge > 99 ? '99+' : badge}
                           </span>
                         )}
@@ -567,7 +567,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   >
                     {renderSidebarIcon(group.icon, undefined, 18)}
                     {totalBadge > 0 && (
-                      <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-rose-500 rounded-full" />
+                      <span className="absolute top-0.5 left-0.5 w-2 h-2 bg-[rgb(var(--color-danger)/0.1)]0 rounded-full" />
                     )}
                   </button>
                   {/* Tooltip towards content (left side for RTL right sidebar) */}
@@ -607,7 +607,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   </span>
                   <span className="flex-1 text-[13px] truncate">{group.label}</span>
                   {totalBadge > 0 && (
-                    <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold bg-rose-500 text-white rounded-full shrink-0">
+                    <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold bg-[rgb(var(--color-danger)/0.1)]0 text-white rounded-full shrink-0">
                       {totalBadge > 99 ? '99+' : totalBadge}
                     </span>
                   )}
@@ -646,7 +646,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                             </span>
                             <span className="flex-1 truncate">{item.label}</span>
                             {badge > 0 && (
-                              <span className="min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-bold bg-rose-500 text-white rounded-full shrink-0">
+                              <span className="min-w-[16px] h-4 px-1 flex items-center justify-center text-[9px] font-bold bg-[rgb(var(--color-danger)/0.1)]0 text-white rounded-full shrink-0">
                                 {badge > 99 ? '99+' : badge}
                               </span>
                             )}
@@ -671,7 +671,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               <button
                 type="button"
                 onClick={() => { void promptInstall(); }}
-                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[12px] font-bold text-primary"
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-[var(--color-card)] px-3 py-2 text-[12px] font-bold text-primary"
               >
                 <Download size={14} />
                 {t('topbar.install')}

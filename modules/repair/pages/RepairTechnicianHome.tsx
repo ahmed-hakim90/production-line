@@ -103,7 +103,7 @@ function TechJobRowCard({
         <span
           className={`text-xs tabular-nums ${
             dateTone === 'amber'
-              ? 'font-semibold text-amber-800 dark:text-amber-200'
+              ? 'font-semibold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]'
               : 'text-muted-foreground'
           }`}
         >
@@ -250,16 +250,16 @@ export const RepairTechnicianHome: React.FC = () => {
                     direction: 'rtl',
                   }}
                 />
-                <Bar dataKey="created" name="وارد" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={10} />
-                <Bar dataKey="fixed" name="تم الإصلاح" fill="#059669" radius={[4, 4, 0, 0]} barSize={10} />
-                <Bar dataKey="unrepairable" name="غير قابل" fill="#e11d48" radius={[4, 4, 0, 0]} barSize={10} />
+                <Bar dataKey="created" name="وارد" fill="var(--color-text-muted)" radius={[4, 4, 0, 0]} barSize={10} />
+                <Bar dataKey="fixed" name="تم الإصلاح" fill="var(--color-success-hex)" radius={[4, 4, 0, 0]} barSize={10} />
+                <Bar dataKey="unrepairable" name="غير قابل" fill="var(--color-danger-hex)" radius={[4, 4, 0, 0]} barSize={10} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
       </OpsDashPanel>
 
-      <OpsDashPanel title="المتأخر عن الموعد" accent="repair" className="border-amber-200/80 dark:border-amber-900/40">
+      <OpsDashPanel title="المتأخر عن الموعد" accent="repair" className="border-[rgb(var(--color-warning)/0.25)]/80 dark:border-[rgb(var(--color-warning))]/40">
         <div className="erp-mobile-card-list p-2 md:hidden">
           {loading ? (
             <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
@@ -310,7 +310,7 @@ export const RepairTechnicianHome: React.FC = () => {
                   <td className="p-2">
                     <StatusBadge status={row.status as RepairJobStatus} />
                   </td>
-                  <td className="p-2 tabular-nums text-amber-800 dark:text-amber-200">
+                  <td className="p-2 tabular-nums text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
                     {formatDate(row.dueAt)}
                   </td>
                   <td className="p-2">
@@ -405,7 +405,7 @@ export const RepairTechnicianHome: React.FC = () => {
       <OpsDashPanel
         title={`غير قابل للإصلاح — ${periodLabel(period)}`}
         accent="repair"
-        className="border-rose-200/80 dark:border-rose-900/40"
+        className="border-[rgb(var(--color-danger)/0.25)]/80 dark:border-[rgb(var(--color-danger))]/40"
       >
         <div className="erp-mobile-card-list p-2 md:hidden">
           {loading ? (

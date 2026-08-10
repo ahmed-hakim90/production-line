@@ -63,15 +63,15 @@ export const GlobalStockCountSessionModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => close()}>
+    <div className="fixed inset-0 bg-black/40 z-[10050] flex items-center justify-center p-4" onClick={() => close()}>
       <div
-        className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col border"
+        className="bg-[var(--color-card)] rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col border"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 py-4 border-b flex justify-between items-center">
           <div>
             <h3 className="font-bold text-lg">جرد ومطابقة: {session.warehouseName}</h3>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-[var(--color-text-muted)]">
               {session.status === 'approved'
                 ? 'مطابق ومعتمد'
                 : session.status === 'counted'
@@ -81,7 +81,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
               {new Date(session.createdAt).toLocaleString('ar-EG')}
             </p>
             {session.status !== 'approved' && (
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 أدخل الكميات الفعلية ثم طابق الفروقات واعتمدها كتسويات مخزنية.
               </p>
             )}
@@ -91,7 +91,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
         <div className="p-4 overflow-auto flex-1">
           <table className="erp-table w-full text-right text-sm">
             <thead>
-              <tr className="border-b bg-slate-50">
+              <tr className="border-b bg-[var(--color-bg)]">
                 <th className="px-2 py-2">الصنف</th>
                 <th className="px-2 py-2 text-center">رصيد النظام</th>
                 <th className="px-2 py-2 text-center">الفعلي</th>
@@ -122,7 +122,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
                         }}
                       />
                     </td>
-                    <td className={`px-2 py-2 text-center font-bold ${diff < 0 ? 'text-rose-600' : diff > 0 ? 'text-emerald-600' : ''}`}>
+                    <td className={`px-2 py-2 text-center font-bold ${diff < 0 ? 'text-[rgb(var(--color-danger))]' : diff > 0 ? 'text-[rgb(var(--color-success))]' : ''}`}>
                       {diff > 0 ? '+' : ''}{formatNumber(diff)}
                     </td>
                   </tr>
@@ -146,7 +146,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
               </select>
             </div>
           )}
-          {msg && <p className="mt-2 text-sm text-emerald-700 font-bold">{msg}</p>}
+          {msg && <p className="mt-2 text-sm text-[rgb(var(--color-success))] font-bold">{msg}</p>}
         </div>
         <div className="px-5 py-3 border-t flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={() => close()}>إغلاق</Button>

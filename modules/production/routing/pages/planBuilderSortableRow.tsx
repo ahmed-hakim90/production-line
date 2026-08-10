@@ -64,7 +64,7 @@ export function SortableRoutingStepRow({
     <>
       {isRunning && (
         <span
-          className="shrink-0 text-[11px] font-semibold tabular-nums text-emerald-600 animate-pulse dark:text-emerald-400"
+          className="shrink-0 text-[11px] font-semibold tabular-nums text-[rgb(var(--color-success))] animate-pulse dark:text-[rgb(var(--color-success))]"
           aria-live="polite"
         >
           {formatDurationSeconds(elapsedSeconds)}
@@ -114,7 +114,7 @@ export function SortableRoutingStepRow({
         variant="outline"
         title="اعتماد الوقت"
         aria-label="اعتماد الوقت"
-        className="size-9 shrink-0 border-emerald-600 bg-emerald-600 text-white shadow-sm hover:border-emerald-700 hover:bg-emerald-700 hover:text-white focus-visible:ring-emerald-500 dark:border-emerald-600 dark:bg-emerald-600 dark:hover:border-emerald-500 dark:hover:bg-emerald-500"
+        className="size-9 shrink-0 border-[rgb(var(--color-success))] bg-[rgb(var(--color-success))] text-white shadow-sm hover:border-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.9)] hover:text-white focus-visible:ring-[rgb(var(--color-success))] dark:border-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success))] dark:hover:border-[rgb(var(--color-success))] dark:hover:bg-[rgb(var(--color-success)/0.1)]0"
         onClick={applyMeasuredTime}
       >
         <Check className="size-4" aria-hidden />

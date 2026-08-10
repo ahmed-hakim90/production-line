@@ -114,7 +114,7 @@ export const DefineConsumableModal: React.FC<Props> = ({
       )}
     >
       {!canManage && (
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-[rgb(var(--color-warning))]">
           تحتاج صلاحية إدارة المواد أو إنشاء صرف مستهلكات لتعريف صنف جديد.
         </p>
       )}

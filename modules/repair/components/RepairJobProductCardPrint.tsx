@@ -3,6 +3,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
 import {
   buildRepairProductCardFields,
   resolveRepairJobPrintProducts,
@@ -20,17 +23,22 @@ export type RepairJobProductCardPrintProps = {
   workUrl?: string;
 };
 
-/** Compact A5-width internal job card — height follows content (no fixed full-page stretch). */
+/** Internal job card — fills full printable width (no fixed 148mm column). */
 export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, RepairJobProductCardPrintProps>(
   function RepairJobProductCardPrint({ job, branch, products, printSettings, statusMap, workUrl }, ref) {
     if (!job) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings, paperSize: 'a5' as const };
+    const doc = resolvePrintDocumentConfig(ps, 'repairJobCard');
     const palette = getPrintThemePalette(ps);
+    const font = resolvePrintFont(ps);
     const rows = resolveRepairJobPrintProducts(job, products);
     const cards = rows.map((product) => buildRepairProductCardFields(job, product, branch?.name, statusMap));
     const summary = cards[0];
     const statusStyle = repairStatusChipStyle(summary.statusColor);
+    const showQr = Boolean(workUrl) && doc.isFieldVisible('qrCode');
+    const showStatus = doc.isFieldVisible('statusBadge');
+    const brandName = String(doc.headerText || '').trim() || 'مركز الصيانة';
     const createdAt = job.createdAt
       ? (() => {
           const d = new Date(job.createdAt);
@@ -38,251 +46,260 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
         })()
       : '—';
 
-    const cellPad = '1mm 1.2mm';
+    const cellPad = '1.5mm 2mm';
     const thStyle: React.CSSProperties = {
       padding: cellPad,
       border: `1px solid ${palette.border}`,
-      fontSize: '6.5pt',
+      fontSize: '8pt',
       fontWeight: 900,
       textAlign: 'right',
       background: palette.tableRowAltBg,
-      lineHeight: 1.2,
+      lineHeight: 1.25,
     };
     const tdStyle: React.CSSProperties = {
       padding: cellPad,
       border: `1px solid ${palette.border}`,
-      fontSize: '7pt',
+      fontSize: '9pt',
       verticalAlign: 'top',
-      lineHeight: 1.25,
+      lineHeight: 1.3,
       overflowWrap: 'anywhere',
     };
 
     return (
-      <div ref={ref} dir="rtl" lang="ar" className="print-root print-report arabic-export-root">
-        <div
-          style={{
-            fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
-            width: '100%',
-            maxWidth: '148mm',
-            margin: '0 auto',
-            padding: '3mm 3.5mm',
-            background: '#fff',
-            color: palette.text,
-            fontSize: '8pt',
-            lineHeight: 1.25,
-            boxSizing: 'border-box',
-            letterSpacing: 'normal',
-          }}
-        >
+      <div
+        ref={ref}
+        dir="rtl"
+        lang="ar"
+        className="print-root print-report arabic-export-root"
+        style={{
+          fontFamily: font.fontFamily,
+          // Screen: stay A5-sized inside off-screen parking. Print CSS expands to full width.
+          width: '100%',
+          maxWidth: '148mm',
+          margin: '0 auto',
+          padding: '4mm 5mm',
+          background: '#fff',
+          color: palette.text,
+          fontSize: font.denseFontSize,
+          lineHeight: 1.3,
+          boxSizing: 'border-box',
+          letterSpacing: 'normal',
+        }}
+      >
+        <div style={{ borderBottom: `2px solid ${ps.primaryColor}` }}>
           <div
             style={{
-              borderBottom: `2px solid ${ps.primaryColor}`,
-              overflow: 'hidden',
+              padding: '2mm 0 3mm',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: '3mm',
             }}
           >
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
+              {ps.logoUrl ? (
+                <img
+                  src={ps.logoUrl}
+                  alt=""
+                  style={{ maxHeight: '9mm', objectFit: 'contain', marginBottom: '0.6mm', display: 'block' }}
+                />
+              ) : null}
+              <h1 style={{ margin: 0, fontSize: '13pt', fontWeight: 900, color: '#0f172a', lineHeight: 1.15 }}>
+                {brandName}
+              </h1>
+              <p style={{ margin: '0.3mm 0 0', fontSize: '7pt', fontWeight: 700, color: ps.primaryColor }}>
+                Factory PRODUCTION SYSTEM
+              </p>
+              <p style={{ margin: '0.5mm 0 0', fontSize: '10pt', fontWeight: 900, lineHeight: 1.15 }}>
+                كارت طلب الصيانة الداخلي
+              </p>
+              <p style={{ margin: '0.3mm 0 0', fontSize: '8pt', color: palette.mutedText, fontWeight: 700 }}>
+                {summary.branchName}
+                {createdAt !== '—' ? ` · ${createdAt}` : ''}
+              </p>
+            </div>
             <div
               style={{
-                padding: '2mm 0 2.5mm',
                 display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '2mm',
+                flexDirection: 'column',
+                gap: '1.5mm',
+                alignItems: 'stretch',
+                flexShrink: 0,
+                minWidth: '32mm',
               }}
             >
-              <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
-                {ps.logoUrl ? (
-                  <img
-                    src={ps.logoUrl}
-                    alt=""
-                    style={{ maxHeight: '7mm', objectFit: 'contain', marginBottom: '0.4mm', display: 'block' }}
-                  />
-                ) : null}
-                <h1 style={{ margin: 0, fontSize: '11pt', fontWeight: 900, color: '#0f172a', lineHeight: 1.15, letterSpacing: 'normal' }}>
-                  {ps.headerText || 'مركز الصيانة'}
-                </h1>
-                <p style={{ margin: '0.2mm 0 0', fontSize: '6pt', fontWeight: 700, color: ps.primaryColor, letterSpacing: 'normal' }}>
-                  Factory PRODUCTION SYSTEM
-                </p>
-                <p style={{ margin: '0.3mm 0 0', fontSize: '8pt', fontWeight: 900, lineHeight: 1.15 }}>
-                  كارت طلب الصيانة الداخلي
-                </p>
-                <p style={{ margin: '0.2mm 0 0', fontSize: '6.5pt', color: palette.mutedText, fontWeight: 700 }}>
-                  {summary.branchName}
-                  {createdAt !== '—' ? ` · ${createdAt}` : ''}
-                </p>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1mm', alignItems: 'stretch', flexShrink: 0 }}>
-                <div
-                  style={{
-                    padding: '1mm 2mm',
-                    borderRadius: '1.2mm',
-                    background: ps.primaryColor,
-                    color: '#fff',
-                    textAlign: 'center',
-                    WebkitPrintColorAdjust: 'exact',
-                    printColorAdjust: 'exact',
-                  }}
-                >
-                  <span style={{ fontSize: '5.5pt', fontWeight: 700, display: 'block' }}>رقم الإيصال</span>
-                  <span style={{ fontSize: '11pt', fontWeight: 900, fontFamily: 'monospace', lineHeight: 1.1 }}>
-                    {summary.receiptNo}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    padding: '1mm 2mm',
-                    borderRadius: '1.2mm',
-                    border: `1px solid ${statusStyle.borderColor}`,
-                    background: statusStyle.backgroundColor,
-                    color: statusStyle.color,
-                    textAlign: 'center',
-                    WebkitPrintColorAdjust: 'exact',
-                    printColorAdjust: 'exact',
-                  }}
-                >
-                  <span style={{ fontSize: '5.5pt', fontWeight: 700 }}>الحالة </span>
-                  <span style={{ fontSize: '8.5pt', fontWeight: 900 }}>{summary.statusLabel}</span>
-                </div>
-              </div>
-            </div>
-
-            <div style={{ padding: '2.5mm 3mm' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '2mm' }}>
-                <tbody>
-                  <tr>
-                    <td
-                      style={{
-                        ...tdStyle,
-                        width: '16%',
-                        color: palette.mutedText,
-                        fontWeight: 700,
-                        background: palette.tableRowAltBg,
-                        fontSize: '6.5pt',
-                      }}
-                    >
-                      العميل
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 800, width: '34%' }}>{summary.customerName}</td>
-                    <td
-                      style={{
-                        ...tdStyle,
-                        width: '14%',
-                        color: palette.mutedText,
-                        fontWeight: 700,
-                        background: palette.tableRowAltBg,
-                        fontSize: '6.5pt',
-                      }}
-                    >
-                      الهاتف
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 800, width: '36%' }}>{summary.customerPhone}</td>
-                  </tr>
-                </tbody>
-              </table>
-
               <div
                 style={{
-                  marginBottom: '1mm',
-                  fontSize: '8pt',
-                  fontWeight: 900,
-                  color: ps.primaryColor,
-                  lineHeight: 1.2,
+                  padding: '1.5mm 2.5mm',
+                  borderRadius: '1.5mm',
+                  background: ps.primaryColor,
+                  color: '#fff',
+                  textAlign: 'center',
+                  WebkitPrintColorAdjust: 'exact',
+                  printColorAdjust: 'exact',
                 }}
               >
-                منتجات الطلب ({rows.length})
+                <span style={{ fontSize: '6.5pt', fontWeight: 700, display: 'block' }}>رقم الإيصال</span>
+                <span style={{ fontSize: '12pt', fontWeight: 900, fontFamily: 'monospace', lineHeight: 1.1 }}>
+                  {summary.receiptNo}
+                </span>
               </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
-                <thead>
-                  <tr>
-                    <th style={{ ...thStyle, width: '5%' }}>#</th>
-                    <th style={{ ...thStyle, width: '28%' }}>المنتج × الكمية</th>
-                    <th style={{ ...thStyle, width: '16%' }}>السيريال</th>
-                    <th style={{ ...thStyle, width: '51%' }}>العطل / الملحقات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((product, index) => {
-                    const card = cards[index];
-                    const quantity = Math.max(1, Math.round(Number(product.quantity || 1)));
-                    return (
-                      <tr key={product.itemId || index} style={{ breakInside: 'avoid' }}>
-                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>{index + 1}</td>
-                        <td style={{ ...tdStyle, fontWeight: 900 }}>
-                          {card.productName}
-                          <span style={{ fontWeight: 800, color: palette.mutedText }}> × {quantity}</span>
-                        </td>
-                        <td
-                          style={{
-                            ...tdStyle,
-                            fontWeight: 700,
-                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                            fontSize: '6.5pt',
-                          }}
-                        >
-                          {card.serialNo}
-                        </td>
-                        <td style={{ ...tdStyle, fontSize: '6.5pt', whiteSpace: 'pre-wrap' }}>
-                          <strong>عطل:</strong> {card.diagnosis}
-                          {' · '}
-                          <strong>ملحقات:</strong> {card.accessories}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {workUrl ? (
-                <div
-                  style={{
-                    marginTop: '2.5mm',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '2.5mm',
-                    border: `1.5px dashed ${ps.primaryColor}`,
-                    borderRadius: '1.5mm',
-                    padding: '1.5mm 2mm',
-                    background: '#fff',
-                    breakInside: 'avoid',
-                  }}
-                >
-                  <QRCodeSVG value={workUrl} size={64} includeMargin={false} />
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '9pt', fontWeight: 900, color: ps.primaryColor, lineHeight: 1.2 }}>
-                      مسح الفني
-                    </div>
-                    <div style={{ marginTop: '0.4mm', fontSize: '6.5pt', fontWeight: 700, color: palette.mutedText, lineHeight: 1.25 }}>
-                      باركود فتح مساحة عمل الطلب
-                    </div>
-                    <div
-                      style={{
-                        marginTop: '0.4mm',
-                        fontSize: '6pt',
-                        fontWeight: 700,
-                        fontFamily: 'monospace',
-                        color: palette.mutedText,
-                      }}
-                    >
-                      {summary.receiptNo}
-                    </div>
-                  </div>
-                </div>
+              {showStatus ? (
+              <div
+                style={{
+                  padding: '1.5mm 2.5mm',
+                  borderRadius: '1.5mm',
+                  border: `1px solid ${statusStyle.borderColor}`,
+                  background: statusStyle.backgroundColor,
+                  color: statusStyle.color,
+                  textAlign: 'center',
+                  WebkitPrintColorAdjust: 'exact',
+                  printColorAdjust: 'exact',
+                }}
+              >
+                <span style={{ fontSize: '6.5pt', fontWeight: 700 }}>الحالة </span>
+                <span style={{ fontSize: '9pt', fontWeight: 900 }}>{summary.statusLabel}</span>
+              </div>
               ) : null}
             </div>
+          </div>
+
+          <PrintExtraLines lines={doc.customLines} dense />
+
+          <div style={{ padding: '3mm 0' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '3mm' }}>
+              <tbody>
+                <tr>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      width: '14%',
+                      color: palette.mutedText,
+                      fontWeight: 700,
+                      background: palette.tableRowAltBg,
+                    }}
+                  >
+                    العميل
+                  </td>
+                  <td style={{ ...tdStyle, fontWeight: 800, width: '36%' }}>{summary.customerName}</td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      width: '12%',
+                      color: palette.mutedText,
+                      fontWeight: 700,
+                      background: palette.tableRowAltBg,
+                    }}
+                  >
+                    الهاتف
+                  </td>
+                  <td style={{ ...tdStyle, fontWeight: 800, width: '38%' }}>{summary.customerPhone}</td>
+                </tr>
+              </tbody>
+            </table>
 
             <div
               style={{
-                padding: '1.5mm 3mm',
-                borderTop: `1px solid ${palette.border}`,
-                fontSize: '6.5pt',
-                color: palette.mutedText,
-                fontWeight: 700,
-                textAlign: 'center',
+                marginBottom: '1.5mm',
+                fontSize: '9pt',
+                fontWeight: 900,
+                color: ps.primaryColor,
+                lineHeight: 1.2,
               }}
             >
-              كارت واحد للطلب بالكامل — للاستخدام الداخلي
+              منتجات الطلب ({rows.length})
             </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thStyle, width: '6%' }}>#</th>
+                  <th style={{ ...thStyle, width: '28%' }}>المنتج × الكمية</th>
+                  <th style={{ ...thStyle, width: '18%' }}>السيريال</th>
+                  <th style={{ ...thStyle, width: '48%' }}>العطل / الملحقات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((product, index) => {
+                  const card = cards[index];
+                  const quantity = Math.max(1, Math.round(Number(product.quantity || 1)));
+                  return (
+                    <tr key={product.itemId || index} style={{ breakInside: 'avoid' }}>
+                      <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>{index + 1}</td>
+                      <td style={{ ...tdStyle, fontWeight: 900 }}>
+                        {card.productName}
+                        <span style={{ fontWeight: 800, color: palette.mutedText }}> × {quantity}</span>
+                      </td>
+                      <td
+                        style={{
+                          ...tdStyle,
+                          fontWeight: 700,
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                          fontSize: '8pt',
+                        }}
+                      >
+                        {card.serialNo}
+                      </td>
+                      <td style={{ ...tdStyle, fontSize: '8pt', whiteSpace: 'pre-wrap' }}>
+                        <strong>عطل:</strong> {card.diagnosis}
+                        {' · '}
+                        <strong>ملحقات:</strong> {card.accessories}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {showQr && workUrl ? (
+              <div
+                style={{
+                  marginTop: '3mm',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '3mm',
+                  border: `1.5px dashed ${ps.primaryColor}`,
+                  borderRadius: '2mm',
+                  padding: '2.5mm 3mm',
+                  background: '#fff',
+                  breakInside: 'avoid',
+                }}
+              >
+                <QRCodeSVG value={workUrl} size={72} includeMargin={false} />
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '10pt', fontWeight: 900, color: ps.primaryColor, lineHeight: 1.2 }}>
+                    مسح الفني
+                  </div>
+                  <div style={{ marginTop: '0.5mm', fontSize: '8pt', fontWeight: 700, color: palette.mutedText, lineHeight: 1.25 }}>
+                    باركود فتح مساحة عمل الطلب
+                  </div>
+                  <div
+                    style={{
+                      marginTop: '0.5mm',
+                      fontSize: '7.5pt',
+                      fontWeight: 700,
+                      fontFamily: 'monospace',
+                      color: palette.mutedText,
+                    }}
+                  >
+                    {summary.receiptNo}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div
+            style={{
+              padding: '2mm 0',
+              borderTop: `1px solid ${palette.border}`,
+              fontSize: '8pt',
+              color: palette.mutedText,
+              fontWeight: 700,
+              textAlign: 'center',
+            }}
+          >
+            {String(doc.footerText || '').trim() || 'كارت واحد للطلب بالكامل — للاستخدام الداخلي'}
           </div>
         </div>
       </div>

@@ -790,7 +790,7 @@ export const LineWorkerAssignment: React.FC = () => {
             </Select>
           </div>
         </div>
-        <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
+        <p className="mt-3 text-xs font-bold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
           تم إيقاف النسخ اليومي. أي إضافة من هذه الصفحة تنشئ ربطاً دائماً في سجل عمال الإنتاج، وليس سجل حضور يومي.
         </p>
       </OpsDashPanel>
@@ -830,7 +830,7 @@ export const LineWorkerAssignment: React.FC = () => {
                           disabled={alreadyLinked || savingPermanentLink}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-right transition-colors ${
                             alreadyLinked
-                              ? 'opacity-50 cursor-not-allowed bg-[#f8f9fa]/50'
+                              ? 'opacity-50 cursor-not-allowed bg-[var(--color-bg)]/50'
                               : 'hover:bg-primary/5 cursor-pointer'
                           }`}
                         >
@@ -839,10 +839,10 @@ export const LineWorkerAssignment: React.FC = () => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-bold text-[var(--color-text)] truncate">{emp.name}</p>
-                            <p className="text-xs text-slate-400">{emp.code} — {getPositionTitle(emp.jobPositionId)}</p>
+                            <p className="text-xs text-[var(--color-text-muted)]">{emp.code} — {getPositionTitle(emp.jobPositionId)}</p>
                           </div>
                           {alreadyLinked && (
-                            <span className="text-xs font-bold text-amber-500 shrink-0">
+                            <span className="text-xs font-bold text-[rgb(var(--color-warning))] shrink-0">
                               مربوط حالياً
                             </span>
                           )}
@@ -880,7 +880,7 @@ export const LineWorkerAssignment: React.FC = () => {
           action={<Badge variant="info">{currentLinePermanentAssignments.length} عامل</Badge>}
         >
           {currentLineLegacyAssignments.length > 0 && (
-            <div className="mb-4 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+            <div className="mb-4 rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-3 py-2 text-xs font-bold text-[rgb(var(--color-warning))]">
               يوجد {currentLineLegacyAssignments.length} سجل يومي قديم لهذا الخط. هذه السجلات تظهر في الملخص فقط ولا تعتبر ربطاً دائماً للإلغاء.
             </div>
           )}
@@ -888,7 +888,7 @@ export const LineWorkerAssignment: React.FC = () => {
           {loading ? (
             <div className="space-y-3">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-12 bg-[#f0f2f5] rounded-[var(--border-radius-base)] animate-pulse" />
+                <div key={i} className="h-12 bg-[var(--color-surface-hover)] rounded-[var(--border-radius-base)] animate-pulse" />
               ))}
             </div>
           ) : currentLinePermanentAssignments.length === 0 ? (
@@ -920,7 +920,7 @@ export const LineWorkerAssignment: React.FC = () => {
                     return (
                       <tr
                         key={a.id || `${a.lineId}_${a.employeeId}`}
-                        className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors"
+                        className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors"
                       >
                         <td className="py-2.5 px-3">
                           <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-xs font-mono font-bold">
@@ -936,7 +936,7 @@ export const LineWorkerAssignment: React.FC = () => {
                             {a.isPresent === false ? 'غائب' : 'حاضر'}
                           </Badge>
                           {!canUpdateDailyStatus && (
-                            <p className="mt-1 text-[10px] font-bold text-amber-600">
+                            <p className="mt-1 text-[10px] font-bold text-[rgb(var(--color-warning))]">
                               لا يوجد سجل حضور يومي بعد؛ يتم عرضه من الربط الدائم
                             </p>
                           )}
@@ -985,16 +985,16 @@ export const LineWorkerAssignment: React.FC = () => {
                 <p className="text-2xl font-bold text-primary">{permanentAssignmentsCount}</p>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold">ربط دائم</p>
               </div>
-              <div className="bg-amber-50 rounded-[var(--border-radius-lg)] p-3 text-center">
-                <p className="text-2xl font-bold text-amber-600">{legacyAssignmentsCount}</p>
+              <div className="bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-lg)] p-3 text-center">
+                <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">{legacyAssignmentsCount}</p>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold">سجلات يومية قديمة</p>
               </div>
-              <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] p-3 text-center">
-                <p className="text-2xl font-bold text-emerald-600">{lineGroups.length}</p>
+              <div className="bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-lg)] p-3 text-center">
+                <p className="text-2xl font-bold text-[rgb(var(--color-success))]">{lineGroups.length}</p>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold">تاريخ اليوم</p>
               </div>
               {lineGroups.slice(0, 1).map((g) => (
-                <div key={g.lineId} className="bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] p-3 text-center">
+                <div key={g.lineId} className="bg-[var(--color-bg)]/50 rounded-[var(--border-radius-lg)] p-3 text-center">
                   <p className="text-2xl font-bold text-[var(--color-text)]">{g.workers.length}</p>
                   <p className="text-xs text-[var(--color-text-muted)] font-bold truncate">{g.lineName}</p>
                 </div>
@@ -1007,7 +1007,7 @@ export const LineWorkerAssignment: React.FC = () => {
                 <div key={g.lineId} className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] overflow-hidden">
                   <button
                     onClick={() => toggleExpand(g.lineId)}
-                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#f8f9fa] transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--color-bg)] transition-colors"
                   >
                     <div className="flex items-center gap-2">
                       <span className="material-icons-round text-primary text-lg">
@@ -1019,7 +1019,7 @@ export const LineWorkerAssignment: React.FC = () => {
                   </button>
                   {expandedLines.has(g.lineId) && (
                     <div className="border-t border-[var(--color-border)] px-4 py-2">
-                      <div className="divide-y divide-slate-50/50">
+                      <div className="divide-y divide-[var(--color-border)]">
                         {g.workers.map((w) => {
                           const emp = getEmployeeInfo(w.employeeId);
                           return (
@@ -1036,7 +1036,7 @@ export const LineWorkerAssignment: React.FC = () => {
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs text-slate-400">{formatTime(w.assignedAt)}</span>
+                              <span className="text-xs text-[var(--color-text-muted)]">{formatTime(w.assignedAt)}</span>
                             </div>
                           );
                         })}

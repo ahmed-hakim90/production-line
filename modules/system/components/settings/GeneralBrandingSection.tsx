@@ -67,7 +67,7 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
               {localBranding.logoUrl ? 'تغيير' : 'رفع'}
             </button>
             {localBranding.logoUrl && (
-              <button onClick={() => setLocalBranding((p) => ({ ...p, logoUrl: '' }))} className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all">
+              <button onClick={() => setLocalBranding((p) => ({ ...p, logoUrl: '' }))} className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.15)] transition-all">
                 <span className="material-icons-round text-sm">delete</span>
               </button>
             )}

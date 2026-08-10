@@ -56,9 +56,9 @@ const typeLabel: Record<HealthIssueType, string> = {
 };
 
 const severityBadgeClass: Record<HealthIssueSeverity, string> = {
-  critical: 'bg-red-100 text-red-700 border border-red-200',
-  high: 'bg-amber-100 text-amber-700 border border-amber-200',
-  medium: 'bg-blue-100 text-blue-700 border border-blue-200',
+  critical: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]',
+  high: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]',
+  medium: 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary)/0.25)]',
 };
 
 export const CostDataHealth: React.FC = () => {
@@ -595,8 +595,8 @@ export const CostDataHealth: React.FC = () => {
       onRefresh={() => void reloadHealth()}
       refreshing={loading}
       periodExtra={(
-        <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
-          <span className="ml-2 text-xs text-slate-500">الشهر</span>
+        <div className="inline-flex h-[34px] items-center rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-2.5">
+          <span className="ml-2 text-xs text-[var(--color-text-muted)]">الشهر</span>
           <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
         </div>
       )}
@@ -659,8 +659,8 @@ export const CostDataHealth: React.FC = () => {
           </div>
         ) : filteredIssues.length === 0 ? (
           <div className="py-14 text-center">
-            <span className="material-icons-round text-5xl text-emerald-500 mb-3 block">verified</span>
-            <p className="text-lg font-bold text-emerald-600">ممتاز، لا توجد مشاكل مرجعية للشهر {month}</p>
+            <span className="material-icons-round text-5xl text-[rgb(var(--color-success))] mb-3 block">verified</span>
+            <p className="text-lg font-bold text-[rgb(var(--color-success))]">ممتاز، لا توجد مشاكل مرجعية للشهر {month}</p>
             <p className="text-sm text-[var(--color-text-muted)] mt-1">
               كل الفحوصات الحالية (حسابات/بيانات/اتساق) مرت بدون مرجعية.
             </p>

@@ -26,9 +26,12 @@ import { buildThemeSettingsCssVars } from '../core/ui-engine/theme/themeCssVars.
   assert.equal(vars['--font-size-base'], '16px');
   assert.equal(vars['--border-radius-base'], '10px');
   assert.equal(vars['--border-radius-lg'], '14px');
+  assert.equal(vars['--radius'], '10px');
   assert.equal(vars['--density-scale'], '1');
   assert.equal(vars['--content-max-width'], '1400px');
   assert.equal(vars['--color-secondary'], '17 34 51');
+  assert.equal(vars['--control-height'], '43px'); // 38 * (16/14)
+  assert.equal(vars['--control-height-lg'], '48px'); // 42 * (16/14)
 }
 
 {
@@ -39,6 +42,21 @@ import { buildThemeSettingsCssVars } from '../core/ui-engine/theme/themeCssVars.
   });
   assert.equal(compact['--density-scale'], '0.92');
   assert.equal(compact['--font-size-base'], '13px');
+  assert.equal(compact['--control-height'], '32px');
+  assert.equal(compact['--control-height-lg'], '36px');
+}
+
+{
+  const sharp = buildThemeSettingsCssVars({
+    ...DEFAULT_THEME,
+    borderRadius: 0,
+    cssVars: { ...DEFAULT_THEME.cssVars, '--radius': '0.75rem' },
+  });
+  assert.equal(sharp['--border-radius-sm'], '0px');
+  assert.equal(sharp['--border-radius-base'], '0px');
+  assert.equal(sharp['--border-radius-lg'], '0px');
+  assert.equal(sharp['--border-radius-xl'], '0px');
+  assert.equal(sharp['--radius'], '0px');
 }
 
 {

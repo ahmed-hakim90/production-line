@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter";
 import { SmartFilterBar } from "@/src/components/erp/SmartFilterBar";
 import { AccountingPeriodToolbar } from "../components/AccountingPeriodToolbar";
+import { AccountingReportPrint } from "../components/AccountingReportPrint";
 import { useAccountingBaseData } from "../hooks/useAccountingBaseData";
 import {
   accountingMoney,
@@ -19,9 +20,18 @@ import {
   exportAccountingCsv,
   formatAccountingMoney,
 } from "../lib/accountingUi";
+import { useAppStore } from "@/store/useAppStore";
+import { useManagedPrint } from "@/utils/printManager";
 
 export const AccountingTrialBalance: React.FC = () => {
   const { accounts, journals, loading, reload } = useAccountingBaseData();
+  const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: "ميزان-المراجعة",
+  });
   const [from, setFrom] = useState(accountingMonthStart());
   const [to, setTo] = useState(accountingToday());
   const [search, setSearch] = useState("");
@@ -69,7 +79,7 @@ export const AccountingTrialBalance: React.FC = () => {
       refreshing={loading}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => window.print()}>
+          <Button size="sm" variant="outline" onClick={() => handlePrint()} disabled={!visible.length}>
             طباعة
           </Button>
           <Button
@@ -103,7 +113,7 @@ export const AccountingTrialBalance: React.FC = () => {
             onToChange={setTo}
             onRefresh={() => void reload()}
             refreshing={loading}
-            onPrint={() => window.print()}
+            onPrint={() => handlePrint()}
             onExport={() =>
               exportAccountingCsv(
                 "trial-balance.csv",
@@ -237,6 +247,43 @@ export const AccountingTrialBalance: React.FC = () => {
           itemLabel="حساب"
         />
       </OpsDashPanel>
+      <div className="fixed left-[-10000px] top-0" aria-hidden>
+        <AccountingReportPrint
+          ref={printRef}
+          title="ميزان المراجعة"
+          subtitle={`${from} ← ${to}`}
+          metaCards={[
+            { label: "من", value: from },
+            { label: "إلى", value: to },
+            { label: "عدد الحسابات", value: String(visible.length) },
+            { label: "الفرق", value: formatAccountingMoney(totals.debit - totals.credit) },
+          ]}
+          kpis={[
+            { label: "إجمالي المدين", value: formatAccountingMoney(totals.debit), tone: "indigo" },
+            { label: "إجمالي الدائن", value: formatAccountingMoney(totals.credit), tone: "green" },
+            {
+              label: "الفرق",
+              value: formatAccountingMoney(totals.debit - totals.credit),
+              tone: Math.abs(totals.debit - totals.credit) > 0.009 ? "red" : "default",
+            },
+          ]}
+          columns={[
+            { key: "code", label: "الكود", width: "16%", mono: true },
+            { key: "name", label: "الحساب", width: "36%" },
+            { key: "debit", label: "مدين", width: "16%", align: "center", mono: true },
+            { key: "credit", label: "دائن", width: "16%", align: "center", mono: true },
+            { key: "balance", label: "الرصيد", width: "16%", align: "center", mono: true },
+          ]}
+          rows={visible.map((row) => ({
+            code: row.code,
+            name: row.name,
+            debit: formatAccountingMoney(row.debit),
+            credit: formatAccountingMoney(row.credit),
+            balance: formatAccountingMoney(row.balance),
+          }))}
+          printSettings={printTemplate}
+        />
+      </div>
     </ModuleOpsPageShell>
   );
 };

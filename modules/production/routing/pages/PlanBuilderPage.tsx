@@ -281,7 +281,7 @@ export const PlanBuilderPage: React.FC = () => {
                 عرض فقط
               </Badge>
             ) : effectiveReadonly ? (
-              <Badge variant="outline" className="border-amber-500/50 font-medium text-amber-950 dark:text-amber-100">
+              <Badge variant="outline" className="border-[rgb(var(--color-warning))]/50 font-medium text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
                 مراجعة فقط
               </Badge>
             ) : (
@@ -293,7 +293,7 @@ export const PlanBuilderPage: React.FC = () => {
           </div>
 
           {!readonly && effectiveReadonly && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+            <div className="rounded-lg border border-[rgb(var(--color-warning))]/40 bg-[rgb(var(--color-warning)/0.1)]0/5 px-4 py-3 text-sm text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
               ليس لديك صلاحية تعديل المسارات. يمكنك مراجعة الخطوات فقط.
             </div>
           )}
@@ -304,7 +304,7 @@ export const PlanBuilderPage: React.FC = () => {
               label="إجمالي زمن المسار"
               value={formatDurationSeconds(totalRouteSeconds)}
               icon={Zap}
-              iconClassName="text-amber-600 dark:text-amber-400"
+              iconClassName="text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]"
             />
           </div>
           {readonly && sourcePlan && (

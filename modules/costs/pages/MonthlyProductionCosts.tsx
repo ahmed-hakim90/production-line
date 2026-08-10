@@ -997,19 +997,19 @@ export const MonthlyProductionCosts: React.FC = () => {
     >
       {/* Month close banner */}
       {allClosed && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-emerald-600">lock</span>
-          <p className="text-sm font-semibold text-emerald-700">
+        <div className="bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+          <span className="material-icons-round text-[rgb(var(--color-success))]">lock</span>
+          <p className="text-sm font-semibold text-[rgb(var(--color-success))]">
             فترة {monthLabel} مُغلقة — لا يمكن إعادة الحساب
           </p>
         </div>
       )}
       {!allClosed && staleProductsCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 space-y-3">
+        <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4 space-y-3">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
-              <span className="material-icons-round text-amber-600">warning</span>
-              <p className="text-sm font-semibold text-amber-700">
+              <span className="material-icons-round text-[rgb(var(--color-warning))]">warning</span>
+              <p className="text-sm font-semibold text-[rgb(var(--color-warning))]">
               تم تعديل مدخلات التكلفة بعد آخر حساب في {staleProductsCount} منتج — برجاء إعادة حساب الكل لتحديث القيم.
               </p>
             </div>
@@ -1022,20 +1022,20 @@ export const MonthlyProductionCosts: React.FC = () => {
               </Button>
             )}
           </div>
-          <div className="rounded-[var(--border-radius-base)] border border-amber-200/80 bg-white/60 p-3">
-            <div className="text-xs font-bold text-amber-700 mb-2">المنتجات المتأثرة:</div>
+          <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)]/80 bg-[var(--color-card)]/60 p-3">
+            <div className="text-xs font-bold text-[rgb(var(--color-warning))] mb-2">المنتجات المتأثرة:</div>
             <div className="flex flex-wrap gap-2">
               {stalePreview.map((item) => (
                 <span
                   key={item.productId}
-                  className="inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-800 px-2.5 py-1 text-xs font-semibold"
+                  className="inline-flex items-center gap-1 rounded-full bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] px-2.5 py-1 text-xs font-semibold"
                   title={`فرق التكلفة: ${formatCost(item.delta)} ج.م`}
                 >
                   {item.productCode ? `${item.productCode} - ` : ''}{shortProductName(item.productName)}
                 </span>
               ))}
               {staleProductsCount > stalePreview.length && (
-                <span className="inline-flex items-center rounded-full bg-amber-200 text-amber-900 px-2.5 py-1 text-xs font-bold">
+                <span className="inline-flex items-center rounded-full bg-[rgb(var(--color-warning)/0.25)] text-[rgb(var(--color-warning))] px-2.5 py-1 text-xs font-bold">
                   +{staleProductsCount - stalePreview.length} منتج
                 </span>
               )}
@@ -1044,18 +1044,18 @@ export const MonthlyProductionCosts: React.FC = () => {
         </div>
       )}
       {calculating && calculateProgress.total > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-[var(--border-radius-lg)] p-4 space-y-2">
-          <div className="flex items-center justify-between gap-2 text-sm font-semibold text-blue-700">
+        <div className="bg-[rgb(var(--color-primary)/0.1)] border border-[rgb(var(--color-primary)/0.25)] rounded-[var(--border-radius-lg)] p-4 space-y-2">
+          <div className="flex items-center justify-between gap-2 text-sm font-semibold text-[rgb(var(--color-primary))]">
             <span>يتم حساب تكاليف الشهر الآن</span>
             <span>{calculateProgress.done}/{calculateProgress.total} ({calculateProgressPercent}%)</span>
           </div>
-          <div className="w-full h-2.5 rounded-full bg-blue-100 overflow-hidden">
+          <div className="w-full h-2.5 rounded-full bg-[rgb(var(--color-primary)/0.1)] overflow-hidden">
             <div
-              className="h-full bg-blue-500 transition-all duration-300"
+              className="h-full bg-[rgb(var(--color-primary)/0.1)]0 transition-all duration-300"
               style={{ width: `${calculateProgressPercent}%` }}
             />
           </div>
-          <p className="text-xs text-blue-700/90">
+          <p className="text-xs text-[rgb(var(--color-primary))]/90">
             {currentCalculatingProductName
               ? `المنتج الحالي: ${shortProductName(currentCalculatingProductName)}`
               : 'جاري بد، الحساب...'}
@@ -1127,15 +1127,15 @@ export const MonthlyProductionCosts: React.FC = () => {
               <div className="animate-spin w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full" />
             </div>
           ) : records.length > 0 && tableRecords.length === 0 && hideZeroQtyCostRows ? (
-            <div className="text-center py-16 text-slate-500 px-4">
-              <span className="material-icons-round text-5xl mb-3 block text-slate-400">filter_alt_off</span>
+            <div className="text-center py-16 text-[var(--color-text-muted)] px-4">
+              <span className="material-icons-round text-5xl mb-3 block text-[var(--color-text-muted)]">filter_alt_off</span>
               <p className="font-semibold text-lg">كل السجلات المحفوظة لهذا الشهر بكمية إنتاج معتمدة = 0</p>
               <p className="text-sm mt-2 max-w-md mx-auto">
                 ألغِ خيار «إخفاء المنتجات ذات الكمية المعتمدة = 0» أعلاه لعرضها في الجدول ومقارنتها بالتقارير.
               </p>
             </div>
           ) : displayRecords.length === 0 ? (
-            <div className="text-center py-16 text-slate-400">
+            <div className="text-center py-16 text-[var(--color-text-muted)]">
               <span className="material-icons-round text-5xl mb-3 block">price_check</span>
               <p className="font-semibold text-lg">لا توجد نتائج مطابقة للفلاتر الحالية</p>
               <p className="text-sm mt-1">جرّب تغيير البحث أو الفئة</p>
@@ -1143,7 +1143,7 @@ export const MonthlyProductionCosts: React.FC = () => {
           ) : (
             <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
-                <tr className="bg-[#f8f9fa]/50 text-[var(--color-text-muted)]">
+                <tr className="bg-[var(--color-bg)]/50 text-[var(--color-text-muted)]">
                   {baseColumns.rowIndex && <th className="erp-th">#</th>}
                   {baseColumns.productCode && <th className="erp-th">كود المنتج</th>}
                   {baseColumns.productName && <th className="erp-th">اسم المنتج</th>}
@@ -1225,8 +1225,8 @@ export const MonthlyProductionCosts: React.FC = () => {
                   <tr
                     key={r.id}
                     className={cn(
-                      'border-t border-[var(--color-border)] hover:bg-[#f8f9fa]/30 transition-colors cursor-pointer',
-                      zeroSavedQty && 'bg-slate-50/90 dark:bg-slate-900/25',
+                      'border-t border-[var(--color-border)] hover:bg-[var(--color-bg)]/30 transition-colors cursor-pointer',
+                      zeroSavedQty && 'bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)]',
                     )}
                     onClick={() => navigate(`/products/${r.productId}`)}
                   >
@@ -1234,7 +1234,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                       <td className="py-3 px-4 text-[var(--color-text-muted)] font-mono">{i + 1}</td>
                     )}
                     {baseColumns.productCode && (
-                      <td className="py-3 px-4 font-mono text-xs text-slate-500">{productCodeMap.get(r.productId) || '—'}</td>
+                      <td className="py-3 px-4 font-mono text-xs text-[var(--color-text-muted)]">{productCodeMap.get(r.productId) || '—'}</td>
                     )}
                     {baseColumns.productName && (
                       <td className="py-3 px-4 font-semibold text-[var(--color-text)]">
@@ -1278,7 +1278,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                       </td>
                     )}
                     {baseColumns.totalCost && (
-                      <td className="py-3 px-4 font-mono font-semibold text-amber-700">
+                      <td className="py-3 px-4 font-mono font-semibold text-[rgb(var(--color-warning))]">
                         {formatCost(r.totalProductionCost)}
                       </td>
                     )}
@@ -1292,7 +1292,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                           const indirectPerPiece = r.totalProducedQty > 0 ? indirect / r.totalProducedQty : 0;
                           return (
                             <div className="flex flex-col gap-0.5">
-                              <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
+                              <span className="text-xs tabular-nums text-[rgb(var(--color-primary))] font-bold leading-5">
                                 {formatCost(direct)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
                                 <span className="text-[10px] font-medium opacity-70"> — {formatCost(directPerPiece)} / وحدة</span>
                               </span>
@@ -1325,7 +1325,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                       <td className="py-3 px-4 font-mono font-bold text-primary">
                         <span className="block">{formatCost(r.averageUnitCost)} <small className="font-sans text-[9px] opacity-70">تحويل</small></span>
                         {Number(r.fullManufacturingAverageUnitCost || 0) > 0 ? (
-                          <span className="block mt-1 text-emerald-600">
+                          <span className="block mt-1 text-[rgb(var(--color-success))]">
                             {formatCost(r.fullManufacturingAverageUnitCost || 0)} <small className="font-sans text-[9px]">كاملة · {formatCost(r.fullCostCoveragePct || 0)}%</small>
                           </span>
                         ) : null}
@@ -1358,7 +1358,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                           if (prevAvg == null) return <span className="text-[var(--color-text-muted)]">—</span>;
                           const diff = r.averageUnitCost - prevAvg;
                           return (
-                            <span className={diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                            <span className={diff >= 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}>
                               {diff >= 0 ? '+' : ''}{formatCost(diff)}
                             </span>
                           );
@@ -1442,7 +1442,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                           if (sellingPrice <= 0) return <span className="text-[var(--color-text-muted)]">—</span>;
                           const profit = sellingPrice - r.averageUnitCost;
                           return (
-                            <span className={profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                            <span className={profit >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}>
                               {formatCost(profit)}
                             </span>
                           );
@@ -1473,7 +1473,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                   );
                 })}
                 {/* Totals row */}
-                <tr className="border-t-2 border-[var(--color-border)] bg-[#f8f9fa]/50 font-bold">
+                <tr className="border-t-2 border-[var(--color-border)] bg-[var(--color-bg)]/50 font-bold">
                   <td className="py-3 px-4" colSpan={Math.max(1, leadingBaseColumnCount)}>الإجمالي</td>
                   {baseColumns.qty && (
                     <td className="py-3 px-4 font-mono">{formatCost(totalQty)}</td>
@@ -1487,12 +1487,12 @@ export const MonthlyProductionCosts: React.FC = () => {
                     </td>
                   )}
                   {baseColumns.totalCost && (
-                    <td className="py-3 px-4 font-mono text-amber-700">{formatCost(totalCost)}</td>
+                    <td className="py-3 px-4 font-mono text-[rgb(var(--color-warning))]">{formatCost(totalCost)}</td>
                   )}
                   {baseColumns.directIndirect && (
                     <td className="py-3 px-4">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-xs tabular-nums text-blue-600 font-bold leading-5">
+                        <span className="text-xs tabular-nums text-[rgb(var(--color-primary))] font-bold leading-5">
                           {formatCost(totalDirect)} <span className="text-[10px] font-normal opacity-70">مباشر</span>
                           <span className="text-[10px] font-medium opacity-70"> — {formatCost(totalQty > 0 ? totalDirect / totalQty : 0)} / وحدة</span>
                         </span>
@@ -1595,7 +1595,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                         }, 0) / (totalQty > 0 ? totalQty : 1);
                         const totalProfit = weightedSellingPerUnit - overallAvg;
                         return (
-                          <span className={totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          <span className={totalProfit >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}>
                             {formatCost(totalProfit)}
                           </span>
                         );
@@ -1614,8 +1614,8 @@ export const MonthlyProductionCosts: React.FC = () => {
       {canClose && records.length > 0 && !allClosed && confirmClose ? (
         <OpsDashPanel accent="costs">
           <div className="flex flex-wrap items-center gap-3">
-            <span className="material-icons-round text-red-500">warning</span>
-            <p className="text-sm text-red-700 dark:text-red-400 font-semibold">
+            <span className="material-icons-round text-[rgb(var(--color-danger))]">warning</span>
+            <p className="text-sm text-[rgb(var(--color-danger))] dark:text-[rgb(var(--color-danger))] font-semibold">
               سيتم إغلاق الفترة ولن يمكن إعادة الحساب. متأكد؟
             </p>
           </div>
@@ -1629,14 +1629,14 @@ export const MonthlyProductionCosts: React.FC = () => {
         }}
       >
         <DialogContent className="max-w-3xl w-[min(100vw-1.5rem,52rem)] max-h-[88vh] overflow-y-auto sm:max-w-3xl border-0 p-0 rounded-2xl">
-          <div className="bg-gradient-to-br from-slate-50 via-white to-blue-50">
-          <DialogHeader className="px-6 py-5 border-b border-slate-200/80 bg-white/80 backdrop-blur-sm sticky top-0 z-10">
-            <DialogTitle className="text-right text-lg sm:text-xl font-black text-slate-800 tracking-tight">
+          <div className="bg-gradient-to-br from-[var(--color-bg)] via-white to-[rgb(var(--color-primary))]">
+          <DialogHeader className="px-6 py-5 border-b border-[var(--color-border)]/80 bg-[var(--color-card)]/80 backdrop-blur-sm sticky top-0 z-10">
+            <DialogTitle className="text-right text-lg sm:text-xl font-black text-[var(--color-text)] tracking-tight">
               {analysisRecord
                 ? `تحليل التكلفة — ${shortProductName(resolveManufacturingItemName(analysisRecord.productId, productNameMap))}`
                 : 'تحليل التكلفة'}
             </DialogTitle>
-            <DialogDescription className="text-right text-slate-500">
+            <DialogDescription className="text-right text-[var(--color-text-muted)]">
               {monthLabel}
               {analysisRecord && productCodeMap.get(analysisRecord.productId)
                 ? ` · ${productCodeMap.get(analysisRecord.productId)}`
@@ -1645,7 +1645,7 @@ export const MonthlyProductionCosts: React.FC = () => {
           </DialogHeader>
 
           {!analysisRecord && analysisProductId && (
-            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3">
+            <p className="text-sm text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-md p-3">
               لا يوجد هذا المنتج في الجدول الحالي.
             </p>
           )}
@@ -1653,30 +1653,30 @@ export const MonthlyProductionCosts: React.FC = () => {
           {analysisRecord && (
             <div className="space-y-4 text-sm p-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3">
-                  <span className="text-slate-500 text-[11px] block mb-1">الكمية المنتجة</span>
-                  <span className="font-mono font-extrabold text-slate-800">{formatCost(analysisRecord.totalProducedQty)}</span>
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm p-3">
+                  <span className="text-[var(--color-text-muted)] text-[11px] block mb-1">الكمية المنتجة</span>
+                  <span className="font-mono font-extrabold text-[var(--color-text)]">{formatCost(analysisRecord.totalProducedQty)}</span>
                 </div>
-                <div className="rounded-xl border border-blue-200 bg-blue-50/70 shadow-sm p-3">
-                  <span className="text-slate-500 text-[11px] block mb-1">متوسط تكلفة الوحدة</span>
-                  <span className="font-mono font-extrabold text-blue-700">{formatCost(analysisRecord.averageUnitCost)} ج.م</span>
+                <div className="rounded-xl border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/70 shadow-sm p-3">
+                  <span className="text-[var(--color-text-muted)] text-[11px] block mb-1">متوسط تكلفة الوحدة</span>
+                  <span className="font-mono font-extrabold text-[rgb(var(--color-primary))]">{formatCost(analysisRecord.averageUnitCost)} ج.م</span>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3">
-                  <span className="text-slate-500 text-[11px] block mb-1">إجمالي التكلفة</span>
-                  <span className="font-mono font-bold text-slate-800">{formatCost(analysisRecord.totalProductionCost)} ج.م</span>
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm p-3">
+                  <span className="text-[var(--color-text-muted)] text-[11px] block mb-1">إجمالي التكلفة</span>
+                  <span className="font-mono font-bold text-[var(--color-text)]">{formatCost(analysisRecord.totalProductionCost)} ج.م</span>
                 </div>
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-3">
-                  <span className="text-slate-500 text-[11px] block mb-1">الانحراف عن {previousMonthLabel}</span>
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm p-3">
+                  <span className="text-[var(--color-text-muted)] text-[11px] block mb-1">الانحراف عن {previousMonthLabel}</span>
                   {(() => {
                     const info = prevMonthInfoMap[analysisRecord.productId];
                     const prevAvg = info?.closed && (info.avg || 0) > 0 ? info.avg : null;
                     if (prevAvg == null) {
-                      return <span className="text-slate-400">— (لا يوجد معيار معتمد)</span>;
+                      return <span className="text-[var(--color-text-muted)]">— (لا يوجد معيار معتمد)</span>;
                     }
                     const diff = analysisRecord.averageUnitCost - prevAvg;
                     const pct = prevAvg > 0 ? (diff / prevAvg) * 100 : 0;
                     return (
-                      <span className={`font-mono font-bold ${diff >= 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      <span className={`font-mono font-bold ${diff >= 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
                         {diff >= 0 ? '+' : ''}{formatCost(diff)} ج.م ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}%)
                       </span>
                     );
@@ -1684,48 +1684,48 @@ export const MonthlyProductionCosts: React.FC = () => {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4 space-y-3">
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-black text-slate-700">تحليل انحراف التكلفة</p>
-                  <span className="text-[11px] px-2 py-1 rounded-full bg-slate-100 text-slate-600">AI Insight</span>
+                  <p className="text-sm font-black text-[var(--color-text)]">تحليل انحراف التكلفة</p>
+                  <span className="text-[11px] px-2 py-1 rounded-full bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]">AI Insight</span>
                 </div>
                 {deviationAnalysis.loading && (
-                  <p className="text-xs text-slate-500">جاري تحليل الانحراف والاتجاه…</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">جاري تحليل الانحراف والاتجاه…</p>
                 )}
                 {!deviationAnalysis.loading && deviationAnalysis.alert && (
-                  <div className="rounded-lg border border-amber-300/80 bg-amber-50/90 text-amber-950 p-3 text-right">
+                  <div className="rounded-lg border border-[rgb(var(--color-warning)/0.35)]/80 bg-[rgb(var(--color-warning)/0.1)]/90 text-[rgb(var(--color-warning))] p-3 text-right">
                     <p className="text-sm font-bold mb-1">تنبيه اتجاه</p>
                     <p className="text-sm">{deviationAnalysis.alert}</p>
                   </div>
                 )}
                 {!deviationAnalysis.loading && deviationAnalysis.analysis && !deviationAnalysis.analysis.valid && (
-                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+                  <p className="text-xs text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-md p-2">
                     {deviationAnalysis.analysis.message || deviationAnalysis.analysis.summary}
                   </p>
                 )}
                 {!deviationAnalysis.loading &&
                   deviationAnalysis.analysis?.valid &&
                   deviationAnalysis.analysis.deviationPercent !== undefined && (
-                    <div className="space-y-2 text-right rounded-xl bg-slate-50 border border-slate-200 p-3">
+                    <div className="space-y-2 text-right rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] p-3">
                       <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <span className="text-xs text-slate-500">انحراف عن الشهر السابق (المحرّك)</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">انحراف عن الشهر السابق (المحرّك)</span>
                         <span
                           className={`font-mono font-bold ${
-                            (deviationAnalysis.analysis.deviation ?? 0) >= 0 ? 'text-rose-600' : 'text-emerald-600'
+                            (deviationAnalysis.analysis.deviation ?? 0) >= 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'
                           }`}
                         >
                           {(deviationAnalysis.analysis.deviationPercent ?? 0) >= 0 ? '+' : ''}
                           {((deviationAnalysis.analysis.deviationPercent ?? 0) * 100).toFixed(1)}٪
                         </span>
                       </div>
-                      <p className="text-xs text-slate-700">{deviationAnalysis.analysis.summary}</p>
+                      <p className="text-xs text-[var(--color-text)]">{deviationAnalysis.analysis.summary}</p>
                       {deviationAnalysis.analysis.topReason && (
                         <p className="text-xs">
-                          <span className="text-slate-500">السبب الأبرز: </span>
+                          <span className="text-[var(--color-text-muted)]">السبب الأبرز: </span>
                           <span className="font-semibold">{deviationAnalysis.analysis.topReason.title}</span>
                         </p>
                       )}
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-[var(--color-text-muted)]">
                         ثقة التحليل: {deviationAnalysis.analysis.confidence}%
                       </p>
                       {deviationAnalysis.analysis.reasons.length > 0 && (
@@ -1734,7 +1734,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                             <li key={reason.id}>
                               <span className="font-medium">{reason.title}</span>
                               {reason.evidence?.length ? (
-                                <span className="text-slate-500"> — {reason.evidence[0]}</span>
+                                <span className="text-[var(--color-text-muted)]"> — {reason.evidence[0]}</span>
                               ) : null}
                             </li>
                           ))}
@@ -1744,17 +1744,17 @@ export const MonthlyProductionCosts: React.FC = () => {
                   )}
                 {!deviationAnalysis.loading && deviationAnalysis.history.length > 0 && (
                   <div>
-                    <p className="text-[11px] font-bold text-slate-500 mb-2">آخر 6 أشهر</p>
+                    <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-2">آخر 6 أشهر</p>
                     <div className="flex flex-wrap gap-2 justify-end">
                       {[...deviationAnalysis.history]
                         .sort((a, b) => b.month.localeCompare(a.month))
                         .map((h) => (
                           <div
                             key={h.month}
-                            className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[10px] font-mono text-right min-w-[5.5rem] shadow-sm"
+                            className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1.5 text-[10px] font-mono text-right min-w-[5.5rem] shadow-sm"
                           >
-                            <div className="text-slate-500">{h.month}</div>
-                            <div className={h.deviationPercent >= 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                            <div className="text-[var(--color-text-muted)]">{h.month}</div>
+                            <div className={h.deviationPercent >= 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}>
                               {h.deviationPercent >= 0 ? '+' : ''}
                               {(h.deviationPercent * 100).toFixed(1)}٪
                             </div>
@@ -1767,7 +1767,7 @@ export const MonthlyProductionCosts: React.FC = () => {
             </div>
           )}
 
-          <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between sm:space-x-0 px-6 py-4 border-t border-slate-200 bg-white/80">
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between sm:space-x-0 px-6 py-4 border-t border-[var(--color-border)] bg-[var(--color-card)]/80">
             <Button type="button" variant="outline" onClick={closeCostAnalysis}>
               إغلاق
             </Button>
@@ -1778,14 +1778,14 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       {showColumnsModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="erp-page-actions">
                 <span className="material-icons-round text-primary">tune</span>
                 <h3 className="text-lg font-bold">إدارة الأعمدة</h3>
               </div>
-              <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+              <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -1802,7 +1802,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                   className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
                     baseColumns[opt.key]
                       ? 'border-primary/30 bg-primary/5'
-                      : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
+                      : 'border-[var(--color-border)] hover:bg-[var(--color-bg)]'
                   }`}
                 >
                   <input
@@ -1811,7 +1811,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                     onChange={(e) => toggleBaseColumn(opt.key, e.target.checked)}
                     className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                   />
-                  <span className={`material-icons-round text-lg ${baseColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`}>{opt.icon}</span>
+                  <span className={`material-icons-round text-lg ${baseColumns[opt.key] ? 'text-primary' : 'text-[var(--color-text-muted)]'}`}>{opt.icon}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[var(--color-text)]">{opt.label}</p>
                   </div>
@@ -1835,7 +1835,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                   className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
                     extraColumns[opt.key]
                       ? 'border-primary/30 bg-primary/5'
-                      : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
+                      : 'border-[var(--color-border)] hover:bg-[var(--color-bg)]'
                   }`}
                 >
                   <input
@@ -1844,7 +1844,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                     onChange={(e) => toggleExtraColumn(opt.key, e.target.checked)}
                     className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                   />
-                  <span className={`material-icons-round text-lg ${extraColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`}>{opt.icon}</span>
+                  <span className={`material-icons-round text-lg ${extraColumns[opt.key] ? 'text-primary' : 'text-[var(--color-text-muted)]'}`}>{opt.icon}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[var(--color-text)]">{opt.label}</p>
                   </div>
@@ -1866,7 +1866,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                         className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
                           checked
                             ? 'border-primary/30 bg-primary/5'
-                            : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
+                            : 'border-[var(--color-border)] hover:bg-[var(--color-bg)]'
                         }`}
                       >
                         <input
@@ -1875,7 +1875,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                           onChange={(e) => toggleCenterColumn(center.id, e.target.checked)}
                           className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                         />
-                        <span className={`material-icons-round text-lg ${checked ? 'text-primary' : 'text-slate-400'}`}>account_balance</span>
+                        <span className={`material-icons-round text-lg ${checked ? 'text-primary' : 'text-[var(--color-text-muted)]'}`}>account_balance</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-[var(--color-text)] truncate">{center.name}</p>
                         </div>

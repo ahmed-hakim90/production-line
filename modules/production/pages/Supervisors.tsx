@@ -887,7 +887,7 @@ export const Supervisors: React.FC = () => {
           <div className="min-w-0">
             <span className="font-bold text-[var(--color-text)] block truncate">{sup.name}</span>
             {sup.code && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-sm)] bg-[#f0f2f5] text-[var(--color-text-muted)] text-[10px] font-mono font-bold mt-0.5">{sup.code}</span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-sm)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] text-[10px] font-mono font-bold mt-0.5">{sup.code}</span>
             )}
           </div>
           {/* Hover card */}
@@ -899,42 +899,42 @@ export const Supervisors: React.FC = () => {
                 </div>
                 <div>
                   <p className="font-bold text-sm text-[var(--color-text)]">{sup.name}</p>
-                  <p className="text-[10px] text-slate-400">{getDepartmentName(sup.departmentId ?? '')}</p>
+                  <p className="text-[10px] text-[var(--color-text-muted)]">{getDepartmentName(sup.departmentId ?? '')}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
-                  <p className="text-emerald-500 font-medium">إنتاج اليوم</p>
-                  <p className="font-bold text-emerald-700 text-sm">{formatNumber(sup.todayProduced)}</p>
+                <div className="bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] rounded-[var(--border-radius-base)] p-2 text-center">
+                  <p className="text-[rgb(var(--color-success))] font-medium">إنتاج اليوم</p>
+                  <p className="font-bold text-[rgb(var(--color-success))] text-sm">{formatNumber(sup.todayProduced)}</p>
                 </div>
-                <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
-                  <p className="text-blue-500 font-medium">الأسبوع</p>
-                  <p className="font-bold text-blue-700 dark:text-blue-300 text-sm">{formatNumber(sup.weekProduced)}</p>
+                <div className="bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-base)] p-2 text-center">
+                  <p className="text-[rgb(var(--color-primary))] font-medium">الأسبوع</p>
+                  <p className="font-bold text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))] text-sm">{formatNumber(sup.weekProduced)}</p>
                 </div>
-                <div className="bg-rose-50 dark:bg-rose-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
-                  <p className="text-rose-500 font-medium">الهالك</p>
-                  <p className="font-bold text-rose-700 text-sm">{sup.scrapRate}%</p>
+                <div className="bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] rounded-[var(--border-radius-base)] p-2 text-center">
+                  <p className="text-[rgb(var(--color-danger))] font-medium">الهالك</p>
+                  <p className="font-bold text-[rgb(var(--color-danger))] text-sm">{sup.scrapRate}%</p>
                 </div>
                 <div className={`rounded-[var(--border-radius-base)] p-2 text-center ${
                   (sup.deviationPct ?? 0) >= 0
-                    ? 'bg-emerald-50 dark:bg-emerald-900/10'
+                    ? 'bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)]'
                     : (sup.deviationPct ?? 0) <= -20
-                      ? 'bg-rose-50 dark:bg-rose-900/10'
-                      : 'bg-amber-50 dark:bg-amber-900/10'
+                      ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)]'
+                      : 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)]'
                 }`}>
                   <p className={`font-medium ${
                     (sup.deviationPct ?? 0) >= 0
-                      ? 'text-emerald-500'
+                      ? 'text-[rgb(var(--color-success))]'
                       : (sup.deviationPct ?? 0) <= -20
-                        ? 'text-rose-500'
-                        : 'text-amber-500'
+                        ? 'text-[rgb(var(--color-danger))]'
+                        : 'text-[rgb(var(--color-warning))]'
                   }`}>الانحراف</p>
                   <p className={`font-black text-sm ${
                     (sup.deviationPct ?? 0) >= 0
-                      ? 'text-emerald-700'
+                      ? 'text-[rgb(var(--color-success))]'
                       : (sup.deviationPct ?? 0) <= -20
-                        ? 'text-rose-700'
-                        : 'text-amber-700'
+                        ? 'text-[rgb(var(--color-danger))]'
+                        : 'text-[rgb(var(--color-warning))]'
                   }`}>
                     {sup.deviationPct === null ? '—' : `${sup.deviationPct > 0 ? '+' : ''}${sup.deviationPct}%`}
                   </p>
@@ -972,7 +972,7 @@ export const Supervisors: React.FC = () => {
       headerClassName: 'text-center',
       className: 'text-center',
       render: (sup) => (
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[#f0f2f5] text-[var(--color-text-muted)] text-sm font-bold">
+        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] text-sm font-bold">
           <span className="material-icons-round text-xs">precision_manufacturing</span>
           {sup.assignedLines.length}
         </span>
@@ -991,7 +991,7 @@ export const Supervisors: React.FC = () => {
       render: (sup) => {
         const pct = sup.teamCappedAchievementPercent;
         const rawPct = sup.teamAchievementPercent;
-        const tone = pct >= 95 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-rose-600';
+        const tone = pct >= 95 ? 'text-[rgb(var(--color-success))]' : pct >= 70 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-danger))]';
         return (
           <div className="flex flex-col items-center gap-1">
             <span className={`text-sm font-black tabular-nums ${tone}`}>{pct}%</span>
@@ -999,7 +999,7 @@ export const Supervisors: React.FC = () => {
               {formatNumber(sup.teamAchieved)} / {formatNumber(sup.teamTarget)}
             </span>
             {rawPct !== pct && (
-              <span className="text-[10px] text-amber-600">قبل السقف {rawPct}%</span>
+              <span className="text-[10px] text-[rgb(var(--color-warning))]">قبل السقف {rawPct}%</span>
             )}
           </div>
         );
@@ -1010,7 +1010,7 @@ export const Supervisors: React.FC = () => {
       headerClassName: 'text-center',
       className: 'text-center',
       render: (sup) => (
-        <span className={`text-sm font-bold ${sup.todayProduced > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+        <span className={`text-sm font-bold ${sup.todayProduced > 0 ? 'text-[rgb(var(--color-success))]' : 'text-[var(--color-text-muted)]'}`}>
           {formatNumber(sup.todayProduced)}
         </span>
       ),
@@ -1023,13 +1023,13 @@ export const Supervisors: React.FC = () => {
         const pct = sup.scrapRate;
         return (
           <div className="flex items-center gap-2 justify-center">
-            <div className="w-16 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+            <div className="w-16 h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${pct > 5 ? 'bg-rose-500' : pct > 2 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                className={`h-full rounded-full transition-all ${pct > 5 ? 'bg-[rgb(var(--color-danger)/0.1)]0' : pct > 2 ? 'bg-[rgb(var(--color-warning)/0.1)]0' : 'bg-[rgb(var(--color-success)/0.1)]0'}`}
                 style={{ width: `${Math.min(pct * 5, 100)}%` }}
               />
             </div>
-            <span className={`text-xs font-bold min-w-[32px] ${pct > 5 ? 'text-rose-500' : pct > 2 ? 'text-amber-500' : 'text-emerald-500'}`}>
+            <span className={`text-xs font-bold min-w-[32px] ${pct > 5 ? 'text-[rgb(var(--color-danger))]' : pct > 2 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>
               {pct}%
             </span>
           </div>
@@ -1043,7 +1043,7 @@ export const Supervisors: React.FC = () => {
       render: (sup) => {
         const deviation = sup.deviationPct;
         if (deviation === null) return <span className="text-xs text-[var(--color-text-muted)]">—</span>;
-        const tone = deviation >= 0 ? 'text-emerald-600' : deviation <= -20 ? 'text-rose-600' : 'text-amber-600';
+        const tone = deviation >= 0 ? 'text-[rgb(var(--color-success))]' : deviation <= -20 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-warning))]';
         return (
           <span className={`text-xs font-bold ${tone}`}>
             {deviation > 0 ? '+' : ''}{deviation}%
@@ -1057,13 +1057,13 @@ export const Supervisors: React.FC = () => {
       className: 'text-center',
       render: (sup) => {
         const { variant, label } = getScoreBadge(sup.performanceScore);
-        const colorMap = { success: 'text-emerald-600', warning: 'text-amber-600', danger: 'text-rose-600' };
-        const bgMap = { success: 'bg-emerald-500', warning: 'bg-amber-500', danger: 'bg-rose-500' };
+        const colorMap = { success: 'text-[rgb(var(--color-success))]', warning: 'text-[rgb(var(--color-warning))]', danger: 'text-[rgb(var(--color-danger))]' };
+        const bgMap = { success: 'bg-[rgb(var(--color-success)/0.1)]0', warning: 'bg-[rgb(var(--color-warning)/0.1)]0', danger: 'bg-[rgb(var(--color-danger)/0.1)]0' };
         return (
           <div className="flex flex-col items-center gap-1.5">
             <div className="flex flex-col items-center gap-1">
               <span className={`text-lg font-bold ${colorMap[variant]}`}>{sup.performanceScore}%</span>
-              <div className="w-12 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
+              <div className="w-12 h-1.5 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                 <div className={`h-full rounded-full ${bgMap[variant]}`} style={{ width: `${sup.performanceScore}%` }} />
               </div>
               <span className={`text-[10px] font-bold ${colorMap[variant]}`}>{label}</span>
@@ -1073,10 +1073,10 @@ export const Supervisors: React.FC = () => {
                 const lineBadge = getScoreBadge(line.performanceScore);
                 const lineTone =
                   lineBadge.variant === 'success'
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border-[rgb(var(--color-success)/0.25)]'
                     : lineBadge.variant === 'warning'
-                      ? 'bg-amber-50 text-amber-700 border-amber-200'
-                      : 'bg-rose-50 text-rose-700 border-rose-200';
+                      ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border-[rgb(var(--color-warning)/0.25)]'
+                      : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border-[rgb(var(--color-danger)/0.25)]';
                 return (
                   <span
                     key={`${sup.id}_${line.lineId}`}
@@ -1126,7 +1126,7 @@ export const Supervisors: React.FC = () => {
       {can('print') && (
         <button
           onClick={() => printSupervisorPerformance(sup)}
-          className="p-2 text-[var(--color-text-muted)] hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-[var(--border-radius-base)] transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.1)] dark:hover:bg-[rgb(var(--color-success))]/20 rounded-[var(--border-radius-base)] transition-all"
           title="طباعة تقييم الأداء"
         >
           <span className="material-icons-round text-lg">print</span>
@@ -1135,7 +1135,7 @@ export const Supervisors: React.FC = () => {
       {canExportFromPage && (
         <button
           onClick={() => exportSupervisorPerformance(sup)}
-          className="p-2 text-[var(--color-text-muted)] hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-[var(--border-radius-base)] transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)] dark:hover:bg-[rgb(var(--color-primary))]/20 rounded-[var(--border-radius-base)] transition-all"
           title="تصدير تقييم الأداء"
         >
           <span className="material-icons-round text-lg">download</span>
@@ -1151,7 +1151,7 @@ export const Supervisors: React.FC = () => {
       </button>
       <button
         onClick={() => navigate(`/hr/employees/${sup.id}`)}
-        className="p-2 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-[var(--border-radius-base)] transition-all"
+        className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)] dark:hover:bg-[rgb(var(--color-primary))]/20 rounded-[var(--border-radius-base)] transition-all"
         title="الملف الشخصي"
       >
         <span className="material-icons-round text-lg">person</span>
@@ -1237,7 +1237,7 @@ export const Supervisors: React.FC = () => {
             label="إنتاج اليوم"
             value={formatNumber(stats.todayTotal)}
             icon="today"
-            colorClass={statFilter === 'today' ? 'bg-primary text-white' : 'bg-emerald-50 text-emerald-600'}
+            colorClass={statFilter === 'today' ? 'bg-primary text-white' : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'}
             trend={stats.todayChange !== 0 ? `${Math.abs(stats.todayChange)}% عن أمس` : undefined}
             trendUp={stats.todayChange >= 0}
           />
@@ -1247,7 +1247,7 @@ export const Supervisors: React.FC = () => {
             label="إنتاج الأسبوع"
             value={formatNumber(stats.weekTotal)}
             icon="date_range"
-            colorClass={statFilter === 'week' ? 'bg-primary text-white' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}
+            colorClass={statFilter === 'week' ? 'bg-primary text-white' : 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)]'}
             trend={stats.weekChange !== 0 ? `${Math.abs(stats.weekChange)}% عن الأسبوع الماضي` : undefined}
             trendUp={stats.weekChange >= 0}
           />
@@ -1257,7 +1257,7 @@ export const Supervisors: React.FC = () => {
             label="نسبة الهالك الكلية"
             value={`${stats.overallScrapRate}%`}
             icon="delete_sweep"
-            colorClass={statFilter === 'highScrap' ? 'bg-primary text-white' : stats.overallScrapRate > 5 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}
+            colorClass={statFilter === 'highScrap' ? 'bg-primary text-white' : stats.overallScrapRate > 5 ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' : 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'}
           />
         </button>
         <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('lowScore')}>
@@ -1265,14 +1265,14 @@ export const Supervisors: React.FC = () => {
             label="متوسط درجة الأداء"
             value={stats.avgScore}
             icon="speed"
-            colorClass={statFilter === 'lowScore' ? 'bg-primary text-white' : stats.avgScore >= 85 ? 'bg-emerald-50 text-emerald-600' : stats.avgScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
+            colorClass={statFilter === 'lowScore' ? 'bg-primary text-white' : stats.avgScore >= 85 ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : stats.avgScore >= 70 ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}
           />
         </button>
         <KPIBox
           label="إجمالي مكافآت المشرفين"
           value={formatNumber(stats.totalSupervisorBonus)}
           icon="payments"
-          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))]"
         />
         <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('active')}>
           <KPIBox
@@ -1280,7 +1280,7 @@ export const Supervisors: React.FC = () => {
             value={stats.activeSupervisors}
             icon="engineering"
             unit={`/ ${supervisors.length}`}
-            colorClass={statFilter === 'active' ? 'bg-primary text-white' : 'bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400'}
+            colorClass={statFilter === 'active' ? 'bg-primary text-white' : 'bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary)/0.15)] dark:text-[rgb(var(--color-secondary))]'}
           />
         </button>
       </div>
@@ -1333,7 +1333,7 @@ export const Supervisors: React.FC = () => {
         />
 
         {rangeError && (
-          <div className="mx-3 mb-3 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-[var(--border-radius-base)] px-3 py-2">
+          <div className="mx-3 mb-3 text-xs text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-base)] px-3 py-2">
             {rangeError}
           </div>
         )}
@@ -1357,7 +1357,7 @@ export const Supervisors: React.FC = () => {
         const sup = detailDrawerSupervisor;
         const periodLabel = viewMode === 'today' ? `اليوم (${today})` : `${startDate} إلى ${endDate}`;
         const { variant: scoreVariant, label: scoreLabel } = getScoreBadge(sup.performanceScore);
-        const scoreColorMap = { success: 'text-emerald-600', warning: 'text-amber-600', danger: 'text-rose-600' } as const;
+        const scoreColorMap = { success: 'text-[rgb(var(--color-success))]', warning: 'text-[rgb(var(--color-warning))]', danger: 'text-[rgb(var(--color-danger))]' } as const;
         const linePreview = sup.performanceByLine.slice(0, 8);
         const lineExtra = sup.performanceByLine.length - linePreview.length;
         const deviation = sup.deviationPct;
@@ -1365,15 +1365,15 @@ export const Supervisors: React.FC = () => {
           deviation === null
             ? 'text-[var(--color-text-muted)]'
             : deviation >= 0
-              ? 'text-emerald-600'
+              ? 'text-[rgb(var(--color-success))]'
               : deviation <= -20
-                ? 'text-rose-600'
-                : 'text-amber-600';
+                ? 'text-[rgb(var(--color-danger))]'
+                : 'text-[rgb(var(--color-warning))]';
         return (
           <ManagedModalPortal>
           <>
             <div
-              className="fixed inset-0 bg-black/35 z-[60] mt-0"
+              className="fixed inset-0 bg-black/35 z-[10050] mt-0"
               onClick={() => setDetailDrawerSupervisorId(null)}
               aria-hidden
             />
@@ -1447,7 +1447,7 @@ export const Supervisors: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">إنتاج اليوم</span>
-                      <span className="font-black tabular-nums text-emerald-600">{formatNumber(sup.todayProduced)}</span>
+                      <span className="font-black tabular-nums text-[rgb(var(--color-success))]">{formatNumber(sup.todayProduced)}</span>
                     </div>
                     <div>
                       <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">إنتاج الأسبوع</span>
@@ -1498,10 +1498,10 @@ export const Supervisors: React.FC = () => {
                         const lb = getScoreBadge(line.performanceScore);
                         const lineTone =
                           lb.variant === 'success'
-                            ? 'text-emerald-700'
+                            ? 'text-[rgb(var(--color-success))]'
                             : lb.variant === 'warning'
-                              ? 'text-amber-700'
-                              : 'text-rose-700';
+                              ? 'text-[rgb(var(--color-warning))]'
+                              : 'text-[rgb(var(--color-danger))]';
                         return (
                           <li key={line.lineId} className="flex items-center justify-between gap-2 text-xs">
                             <span className="font-bold text-[var(--color-text)] truncate" title={line.lineName}>

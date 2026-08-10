@@ -375,7 +375,7 @@ export const QualitySettings: React.FC = () => {
                 className={`inline-flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
                   isActive
                     ? 'bg-primary text-white shadow-md shadow-primary/30'
-                    : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
+                    : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
                 }`}
               >
                 <span className="material-icons-round text-base">{tab.icon}</span>
@@ -401,7 +401,7 @@ export const QualitySettings: React.FC = () => {
                 disabled={!canManageSettings || savingPolicies}
                 onClick={() => setPolicies((prev) => ({ ...prev, closeRequiresQualityApproval: !prev.closeRequiresQualityApproval }))}
                 className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                  policies.closeRequiresQualityApproval ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'
+                  policies.closeRequiresQualityApproval ? 'bg-primary' : 'bg-[var(--color-border)]'
                 } ${!canManageSettings || savingPolicies ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               >
                 <span
@@ -431,7 +431,7 @@ export const QualitySettings: React.FC = () => {
                 <input
                   value={reasonForm.code}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, code: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                   placeholder="DEF-001"
                   disabled={!canManageCatalog || savingReason}
                 />
@@ -442,7 +442,7 @@ export const QualitySettings: React.FC = () => {
                 <input
                   value={reasonForm.labelAr}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, labelAr: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                   placeholder="عيب التجميع"
                   disabled={!canManageCatalog || savingReason}
                 />
@@ -454,7 +454,7 @@ export const QualitySettings: React.FC = () => {
                   list="quality-reason-categories"
                   value={reasonForm.category}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                   disabled={!canManageCatalog || savingReason}
                 />
                 <datalist id="quality-reason-categories">
@@ -469,7 +469,7 @@ export const QualitySettings: React.FC = () => {
                 <select
                   value={reasonForm.severityDefault}
                   onChange={(e) => setReasonForm((prev) => ({ ...prev, severityDefault: e.target.value as QualityDefectSeverity }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                   disabled={!canManageCatalog || savingReason}
                 >
                   {SEVERITY_OPTIONS.map((severity) => (
@@ -568,13 +568,13 @@ export const QualitySettings: React.FC = () => {
                 value={templateForm.name}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, name: e.target.value }))}
                 placeholder="اسم القالب"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
               />
               <select
                 value={templateForm.productId}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, productId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل المنتجات</option>
@@ -585,7 +585,7 @@ export const QualitySettings: React.FC = () => {
               <select
                 value={templateForm.lineId}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, lineId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل الخطوط</option>
@@ -597,14 +597,14 @@ export const QualitySettings: React.FC = () => {
                 value={templateForm.checklistCsv}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, checklistCsv: e.target.value }))}
                 placeholder="Checklist CSV"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
               />
               <input
                 value={templateForm.criticalChecksCsv}
                 onChange={(e) => setTemplateForm((p) => ({ ...p, criticalChecksCsv: e.target.value }))}
                 placeholder="Critical Checks CSV"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
               />
               <Button type="submit" disabled={!canManageSettings}>حفظ القالب</Button>
@@ -616,8 +616,8 @@ export const QualitySettings: React.FC = () => {
                 <div key={tpl.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-start justify-between gap-3">
                   <div>
                     <p className="font-bold text-sm">{tpl.name}</p>
-                    <p className="text-xs text-slate-500">Checklist: {tpl.checklist.join(', ') || '-'}</p>
-                    <p className="text-xs text-slate-500">Critical: {tpl.criticalChecks.join(', ') || '-'}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">Checklist: {tpl.checklist.join(', ') || '-'}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">Critical: {tpl.criticalChecks.join(', ') || '-'}</p>
                   </div>
                   <div className="flex gap-1">
                     <Button
@@ -649,7 +649,7 @@ export const QualitySettings: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {inspectionTemplates.length === 0 && <p className="text-sm text-slate-500">لا توجد قوالب فحص.</p>}
+              {inspectionTemplates.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">لا توجد قوالب فحص.</p>}
             </div>
           </OpsDashPanel>
         </div>
@@ -662,7 +662,7 @@ export const QualitySettings: React.FC = () => {
               <select
                 value={samplingForm.productId}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, productId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل المنتجات</option>
@@ -673,7 +673,7 @@ export const QualitySettings: React.FC = () => {
               <select
                 value={samplingForm.lineId}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, lineId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
               >
                 <option value="">كل الخطوط</option>
@@ -685,7 +685,7 @@ export const QualitySettings: React.FC = () => {
                 type="number"
                 value={samplingForm.frequencyMinutes}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, frequencyMinutes: Number(e.target.value) }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
                 placeholder="تكرار المعاينة بالدقائق"
               />
@@ -693,7 +693,7 @@ export const QualitySettings: React.FC = () => {
                 type="number"
                 value={samplingForm.sampleSize}
                 onChange={(e) => setSamplingForm((p) => ({ ...p, sampleSize: Number(e.target.value) }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
                 disabled={!canManageSettings}
                 placeholder="حجم العينة"
               />
@@ -706,7 +706,7 @@ export const QualitySettings: React.FC = () => {
                 <div key={plan.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-center justify-between gap-3">
                   <div className="text-sm">
                     <p className="font-bold">كل {plan.frequencyMinutes} دقيقة - عينة {plan.sampleSize}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-[var(--color-text-muted)]">
                       المنتج: {plan.productId ? (productNameById.get(plan.productId) ?? plan.productId) : 'كل المنتجات'} | الخط: {plan.lineId ? (lineNameById.get(plan.lineId) ?? plan.lineId) : 'كل الخطوط'}
                     </p>
                   </div>
@@ -739,7 +739,7 @@ export const QualitySettings: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {samplingPlans.length === 0 && <p className="text-sm text-slate-500">لا توجد خطط معاينة.</p>}
+              {samplingPlans.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">لا توجد خطط معاينة.</p>}
             </div>
           </OpsDashPanel>
         </div>
@@ -788,14 +788,14 @@ export const QualitySettings: React.FC = () => {
             <input
               value={printTemplates.headerText}
               onChange={(e) => setPrintTemplates((p) => ({ ...p, headerText: e.target.value }))}
-              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
               placeholder="Header"
               disabled={!canManageSettings}
             />
             <input
               value={printTemplates.footerText}
               onChange={(e) => setPrintTemplates((p) => ({ ...p, footerText: e.target.value }))}
-              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
+              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
               placeholder="Footer"
               disabled={!canManageSettings}
             />

@@ -6,7 +6,10 @@ import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { resolvePrintFont } from '@/utils/print/printFont';
 import type { RepairSalesInvoice } from '../types';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 export type RepairSalesInvoicePrintProps = {
   invoice: RepairSalesInvoice | null;
@@ -35,9 +38,11 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
     if (!invoice) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'repairSalesInvoice');
+    const font = resolvePrintFont(ps);
     const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
-    const accent = ps.primaryColor || undefined;
+    const accent = resolvePrintAccentHex(ps.primaryColor);
     const cancelled = String(invoice.status || '').toLowerCase() === 'cancelled';
     const statusLabel = STATUS_LABELS[String(invoice.status || '')] || 'مرحّلة قديمة';
     const createdAt = invoice.createdAt ? new Date(invoice.createdAt).toLocaleString('ar-EG') : '—';
@@ -46,52 +51,66 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
     const gross = Number(invoice.grossAmount ?? invoice.total ?? 0);
     const discount = Number(invoice.discountAmount || 0);
     const total = Number(invoice.total || 0);
+    const showCustomer = doc.isFieldVisible('customerBlock');
+    const showDiscount = doc.isFieldVisible('discount');
+    const showLineSku = doc.isFieldVisible('lineSku');
+    const showStatus = doc.isFieldVisible('statusBadge');
+    const showSignatures = doc.isFieldVisible('signatures');
+
+    const metaCards = [
+      { label: 'رقم الفاتورة', value: invoice.invoiceNo || '—' },
+      { label: 'التاريخ', value: createdAt },
+      ...(showStatus ? [{ label: 'الحالة', value: statusLabel }] : []),
+      { label: 'الفرع', value: branchName || '—' },
+    ];
+
+    const kpis = [
+      { label: 'عدد البنود', value: lines.length, tone: 'default' as const },
+      { label: 'الإجمالي', value: `${fmt(gross)} ج.م`, tone: 'indigo' as const },
+      ...(showDiscount && discount > 0
+        ? [{ label: 'الخصم', value: `${fmt(discount)} ج.م`, tone: 'red' as const }]
+        : []),
+      { label: 'الصافي', value: `${fmt(total)} ج.م`, tone: 'green' as const },
+    ];
 
     return (
       <FactoryPrintShell
         ref={ref}
-        companyName={ps.headerText || 'مركز الصيانة'}
+        companyName={doc.headerText || 'مركز الصيانة'}
         documentType="فاتورة بيع قطع غيار"
         printDate={printedAt}
         logoUrl={ps.logoUrl}
         brandAccent={cancelled ? '#991b1b' : accent}
-        footerTagline={ps.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        footerTagline={doc.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
         paperWidth={paper.width}
         minHeight={paper.minHeight}
         padding={isThermal ? '4mm 3mm' : '10mm 12mm'}
         dense={isThermal}
-        metaCards={[
-          { label: 'رقم الفاتورة', value: invoice.invoiceNo || '—' },
-          { label: 'التاريخ', value: createdAt },
-          { label: 'الحالة', value: statusLabel },
-          { label: 'الفرع', value: branchName || '—' },
-        ]}
-        kpis={[
-          { label: 'عدد البنود', value: lines.length, tone: 'default' },
-          { label: 'الإجمالي', value: `${fmt(gross)} ج.م`, tone: 'indigo' },
-          ...(discount > 0
-            ? [{ label: 'الخصم', value: `${fmt(discount)} ج.م`, tone: 'red' as const }]
-            : []),
-          { label: 'الصافي', value: `${fmt(total)} ج.م`, tone: 'green' },
-        ]}
-        signatures={[{ title: 'توقيع البائع' }, { title: 'توقيع العميل' }]}
+        extraLines={doc.customLines}
+        fontFamily={font.fontFamily}
+        fontSize={isThermal ? font.denseFontSize : font.fontSize}
+        metaCards={metaCards}
+        kpis={kpis}
+        signatures={showSignatures ? [{ title: 'توقيع البائع' }, { title: 'توقيع العميل' }] : undefined}
       >
-        <div className={`mb-4 grid overflow-hidden rounded-lg border border-slate-200 ${isThermal ? 'grid-cols-1' : 'grid-cols-2'}`}>
-          {[
-            ['العميل', invoice.customerName || 'عميل نقدي'],
-            ['الهاتف', invoice.customerPhone || '—'],
-            ['منشئ الفاتورة', invoice.createdByName || '—'],
-            ['عدد البنود', String(lines.length)],
-          ].map(([label, value], index) => (
-            <div
-              key={label}
-              className={`px-3 py-2.5 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'} border-b border-slate-100 ${!isThermal && index % 2 === 0 ? 'border-l border-slate-200' : ''}`}
-            >
-              <p className="text-[10px] font-bold text-slate-500">{label}</p>
-              <p className="mt-1 text-[12px] font-extrabold text-slate-900">{value}</p>
-            </div>
-          ))}
-        </div>
+        {showCustomer ? (
+          <div className={`mb-4 grid overflow-hidden rounded-lg border border-slate-200 ${isThermal ? 'grid-cols-1' : 'grid-cols-2'}`}>
+            {[
+              ['العميل', invoice.customerName || 'عميل نقدي'],
+              ['الهاتف', invoice.customerPhone || '—'],
+              ['منشئ الفاتورة', invoice.createdByName || '—'],
+              ['عدد البنود', String(lines.length)],
+            ].map(([label, value], index) => (
+              <div
+                key={label}
+                className={`px-3 py-2.5 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'} border-b border-slate-100 ${!isThermal && index % 2 === 0 ? 'border-l border-slate-200' : ''}`}
+              >
+                <p className="text-[10px] font-bold text-slate-500">{label}</p>
+                <p className="mt-1 text-[12px] font-extrabold text-slate-900">{value}</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <section className="mb-4">
           <FactoryPrintSectionTitle title="بنود الفاتورة" accent={accent} />
@@ -112,7 +131,12 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
                     {index + 1}
                   </td>
                   <td className="border border-slate-200 px-2 py-2 text-[12px] font-extrabold text-slate-900">
-                    {line.partName}
+                    <p className="leading-snug">{line.partName}</p>
+                    {showLineSku ? (
+                      <p className="mt-0.5 font-mono text-[10px] font-bold text-slate-500">
+                        {line.materialId || line.partId || '—'}
+                      </p>
+                    ) : null}
                   </td>
                   <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold tabular-nums">
                     {fmt(line.quantity)}
@@ -135,7 +159,7 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
         <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
           <span className="text-[12px] font-extrabold text-slate-700">
             الإجمالي {fmt(gross)} ج.م
-            {discount > 0 ? ` — الخصم ${fmt(discount)} ج.م` : ''}
+            {showDiscount && discount > 0 ? ` — الخصم ${fmt(discount)} ج.م` : ''}
           </span>
           <span className="text-[16px] font-black tabular-nums" style={{ color: accent }}>
             الصافي {fmt(total)} ج.م

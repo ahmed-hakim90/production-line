@@ -46,7 +46,7 @@ export const TenantsApproval: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      className="max-w-4xl mx-auto"
+      className="w-full min-w-0"
       eyebrow="إدارة المنصة"
       rangeLabel="موافقة على تسجيل شركات جديدة وتفعيل المستأجرين"
       onRefresh={() => void load()}
@@ -54,7 +54,7 @@ export const TenantsApproval: React.FC = () => {
     >
       {error ? (
         <OpsDashPanel accent="quality">
-          <p className="text-rose-600 text-sm">{error}</p>
+          <p className="text-[rgb(var(--color-danger))] text-sm">{error}</p>
         </OpsDashPanel>
       ) : null}
 

@@ -536,31 +536,31 @@ export const UsersManagement: React.FC = () => {
         <div className="flex flex-wrap gap-2">
           <Button
             variant="ghost"
-            className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+            className="font-medium border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]"
             onClick={() => exportHRData(exportRows, 'المستخدمون', `المستخدمون-${new Date().toISOString().slice(0, 10)}`)}
             disabled={rows.length === 0}
           >
-            <span className="material-icons-round text-[15px]">download</span>
+            <span className="material-icons-round [font-size:var(--font-size-base)]">download</span>
             تصدير
           </Button>
           <Button
             variant="ghost"
-            className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+            className="font-medium border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]"
             onClick={openImportUsersModal}
             data-modal-key={MODAL_KEYS.SYSTEM_USERS_IMPORT}
           >
-            <span className="material-icons-round text-[15px]">upload_file</span>
+            <span className="material-icons-round [font-size:var(--font-size-base)]">upload_file</span>
             استيراد
           </Button>
           <Button variant="primary" onClick={openCreateUserModal} data-modal-key={MODAL_KEYS.SYSTEM_USERS_CREATE}>
-            <span className="material-icons-round text-[15px]">add</span>
+            <span className="material-icons-round [font-size:var(--font-size-base)]">add</span>
             إنشاء مستخدم
           </Button>
         </div>
       )}
     >
       {msg && (
-        <div className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm border ${msg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+        <div className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm border ${msg.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border-[rgb(var(--color-danger)/0.25)]'}`}>
           {msg.text}
         </div>
       )}
@@ -608,7 +608,7 @@ export const UsersManagement: React.FC = () => {
         ) : (
           <div className="erp-table-scroll">
             <table className="erp-table w-full text-sm">
-              <thead className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
+              <thead className="sticky top-0 z-10" style={{ background: 'var(--color-bg)' }}>
                 <tr className="text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
                   <th className="text-right py-2.5 px-3 text-[11px] uppercase tracking-[0.08em]">المستخدم</th>
                   <th className="text-right py-2.5 px-3 text-[11px] uppercase tracking-[0.08em]">البريد</th>
@@ -624,7 +624,7 @@ export const UsersManagement: React.FC = () => {
                   return (
                     <tr
                       key={rowId}
-                      className="border-b border-[var(--color-border)] transition-colors hover:bg-[#f8f9fa]"
+                      className="border-b border-[var(--color-border)] transition-colors hover:bg-[var(--color-bg)]"
                     >
                       <td className="py-2.5 px-3 font-medium">{getUserDisplayName(row)}</td>
                       <td className="py-2.5 px-3">{row.user.email}</td>
@@ -638,7 +638,7 @@ export const UsersManagement: React.FC = () => {
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="!h-auto !px-1.5 !py-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+                          className="!h-auto !px-1.5 !py-0.5 text-xs font-medium text-[rgb(var(--color-primary))] hover:text-[rgb(var(--color-primary))] hover:underline"
                           onClick={() => openManageUserModal(row)}
                           data-modal-key={MODAL_KEYS.SYSTEM_USERS_MANAGE}
                         >

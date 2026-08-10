@@ -224,11 +224,11 @@ export const CustomersImport: React.FC = () => {
           return (
             <React.Fragment key={s.key}>
               {i > 0 && (
-                <div className={`flex-1 h-0.5 ${isPast || isCurrent ? 'bg-primary' : 'bg-slate-200'}`} />
+                <div className={`flex-1 h-0.5 ${isPast || isCurrent ? 'bg-primary' : 'bg-[var(--color-border)]'}`} />
               )}
               <div
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${
-                  isCurrent ? 'bg-primary/10 text-primary' : isPast ? 'text-primary' : 'text-slate-400'
+                  isCurrent ? 'bg-primary/10 text-primary' : isPast ? 'text-primary' : 'text-[var(--color-text-muted)]'
                 }`}
               >
                 <span className="material-icons-round text-sm">{s.icon}</span>
@@ -306,22 +306,22 @@ export const CustomersImport: React.FC = () => {
               <p className="text-2xl font-black tabular-nums">{rows.length.toLocaleString('en-US')}</p>
               {fileName ? <p className="text-[10px] text-muted-foreground mt-1 truncate">{fileName}</p> : null}
             </div>
-            <div className="rounded-xl border border-emerald-200 p-4 text-center">
+            <div className="rounded-xl border border-[rgb(var(--color-success)/0.25)] p-4 text-center">
               <p className="text-xs text-muted-foreground font-bold mb-1">جديد</p>
-              <p className="text-2xl font-bold text-emerald-600 tabular-nums">{createCount.toLocaleString('en-US')}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-success))] tabular-nums">{createCount.toLocaleString('en-US')}</p>
             </div>
-            <div className="rounded-xl border border-amber-200 p-4 text-center">
+            <div className="rounded-xl border border-[rgb(var(--color-warning)/0.25)] p-4 text-center">
               <p className="text-xs text-muted-foreground font-bold mb-1">تحديث</p>
-              <p className="text-2xl font-bold text-amber-600 tabular-nums">{updateCount.toLocaleString('en-US')}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-warning))] tabular-nums">{updateCount.toLocaleString('en-US')}</p>
             </div>
-            <div className="rounded-xl border border-rose-200 p-4 text-center">
+            <div className="rounded-xl border border-[rgb(var(--color-danger)/0.25)] p-4 text-center">
               <p className="text-xs text-muted-foreground font-bold mb-1">بها أخطاء</p>
-              <p className="text-2xl font-bold text-rose-600 tabular-nums">{errorCount.toLocaleString('en-US')}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-danger))] tabular-nums">{errorCount.toLocaleString('en-US')}</p>
             </div>
           </div>
 
           {errorCount > 0 ? (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 dark:bg-rose-950/20 p-3 flex items-start gap-2 text-sm text-rose-700">
+            <div className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.2)] p-3 flex items-start gap-2 text-sm text-[rgb(var(--color-danger))]">
               <span className="material-icons-round text-base mt-0.5">error</span>
               <div>
                 <p className="font-bold">صفوف بها أخطاء لن تُستورد</p>
@@ -330,7 +330,7 @@ export const CustomersImport: React.FC = () => {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-1 rounded-lg bg-[#f0f2f5] dark:bg-slate-900/40 p-1">
+          <div className="flex flex-wrap gap-1 rounded-lg bg-[var(--color-surface-hover)] dark:bg-[var(--color-surface-hover)] p-1">
             {filterButtons.map((f) => (
               <button
                 key={f.key}
@@ -342,13 +342,13 @@ export const CustomersImport: React.FC = () => {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
                   filter === f.key
                     ? 'bg-[var(--color-card)] text-primary shadow-sm'
-                    : 'text-slate-500 hover:text-[var(--color-text)]'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
                 }`}
               >
                 {f.label}
                 <span
                   className={`px-1.5 py-0.5 rounded-full text-[10px] tabular-nums ${
-                    filter === f.key ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-500'
+                    filter === f.key ? 'bg-primary/10 text-primary' : 'bg-[var(--color-border)] text-[var(--color-text-muted)]'
                   }`}
                 >
                   {f.count}
@@ -383,9 +383,9 @@ export const CustomersImport: React.FC = () => {
                       key={row.rowNo}
                       className={`border-t ${
                         row.status === 'error'
-                          ? 'bg-rose-50/70 dark:bg-rose-900/15'
+                          ? 'bg-[rgb(var(--color-danger)/0.1)]/70 dark:bg-[rgb(var(--color-danger))]/15'
                           : row.status === 'update'
-                            ? 'bg-amber-50/50 dark:bg-amber-900/10'
+                            ? 'bg-[rgb(var(--color-warning)/0.1)]/50 dark:bg-[rgb(var(--color-warning)/0.15)]'
                             : ''
                       }`}
                     >
@@ -399,7 +399,7 @@ export const CustomersImport: React.FC = () => {
                       <td className="p-2">{statusBadge(row)}</td>
                       <td className="p-2 text-xs">
                         {row.error ? (
-                          <span className="inline-flex items-center gap-1 text-rose-700">
+                          <span className="inline-flex items-center gap-1 text-[rgb(var(--color-danger))]">
                             <span className="material-icons-round text-xs">error</span>
                             {row.error}
                           </span>

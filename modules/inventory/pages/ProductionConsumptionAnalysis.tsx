@@ -70,7 +70,7 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
     exportGenericRows(rows, 'تحليل استهلاك الإنتاج', `تحليل-استهلاك-الإنتاج-${new Date().toISOString().slice(0, 10)}`);
   };
 
-  if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+  if (!can('inventory.view')) return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
 
   if (loading && !ordersData) {
     return (
@@ -111,7 +111,7 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-slate-50">
+                <tr className="border-b bg-[var(--color-bg)]">
                   <th className="p-3 text-start">المكون</th>
                   <th className="p-3 text-center">طبيعي BOM</th>
                   <th className="p-3 text-center">هالك قياسي</th>
@@ -141,7 +141,7 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
                       <td className="p-3 text-center">{ret.toFixed(2)}</td>
                       <td className="p-3 text-center">{scrap.toFixed(2)}</td>
                       <td className="p-3 text-center font-bold">{net.toFixed(2)}</td>
-                      <td className={`p-3 text-center font-bold ${Math.abs(variance) > 0.000001 ? 'text-amber-700' : 'text-emerald-700'}`}>{variance.toFixed(2)}</td>
+                      <td className={`p-3 text-center font-bold ${Math.abs(variance) > 0.000001 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>{variance.toFixed(2)}</td>
                     </tr>
                   );
                 })}

@@ -1121,12 +1121,12 @@ export const HRDashboard: React.FC = () => {
 
             {/* â”€â”€ Saving overlay â”€â”€ */}
             {qaSaving && (
-              <div className="absolute inset-0 bg-white/80/80 backdrop-blur-sm z-10 rounded-[var(--border-radius-xl)] flex flex-col items-center justify-center gap-4">
+              <div className="absolute inset-0 bg-[var(--color-card)]/80/80 backdrop-blur-sm z-10 rounded-[var(--border-radius-xl)] flex flex-col items-center justify-center gap-4">
                 <span className="material-icons-round text-5xl text-primary animate-spin">sync</span>
                 <div className="text-center">
                   <p className="text-sm font-bold text-[var(--color-text)] mb-2">جاري الحفظ...</p>
                   <p className="text-xs text-[var(--color-text-muted)] font-bold">{qaSaveProgress.done} / {qaSaveProgress.total}</p>
-                  <div className="w-48 h-2 bg-slate-200 rounded-full overflow-hidden mt-2">
+                  <div className="w-48 h-2 bg-[var(--color-border)] rounded-full overflow-hidden mt-2">
                     <div
                       className="h-full bg-primary rounded-full transition-all duration-300"
                       style={{ width: `${qaSaveProgress.total > 0 ? (qaSaveProgress.done / qaSaveProgress.total) * 100 : 0}%` }}
@@ -1140,10 +1140,10 @@ export const HRDashboard: React.FC = () => {
             <div className="erp-modal-head">
               <h3 className="erp-modal-title flex items-center gap-2.5">
                 <span className={`material-icons-round text-lg ${
-                  qaOpen === 'loan' ? 'text-violet-600' :
-                  qaOpen === 'leave' ? 'text-sky-600' :
-                  qaOpen === 'allowance' ? 'text-emerald-600' :
-                  'text-rose-600'
+                  qaOpen === 'loan' ? 'text-[rgb(var(--color-secondary))]' :
+                  qaOpen === 'leave' ? 'text-[rgb(var(--color-primary))]' :
+                  qaOpen === 'allowance' ? 'text-[rgb(var(--color-success))]' :
+                  'text-[rgb(var(--color-danger))]'
                 }`}>
                   {qaOpen === 'loan' ? 'payments' : qaOpen === 'leave' ? 'beach_access' : qaOpen === 'allowance' ? 'card_giftcard' : 'gavel'}
                 </span>
@@ -1229,7 +1229,7 @@ export const HRDashboard: React.FC = () => {
                   </div>
 
                   {qaLoanPickMethod === 'codes' && (
-                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[var(--color-bg)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
                         <label className="erp-filter-apply cursor-pointer">
@@ -1261,10 +1261,10 @@ export const HRDashboard: React.FC = () => {
                         {qaLoanImportMsg && (
                           <p className={`text-[11px] font-bold ${
                             qaLoanImportMsg.type === 'error'
-                              ? 'text-rose-600'
+                              ? 'text-[rgb(var(--color-danger))]'
                               : qaLoanImportMsg.type === 'warning'
-                                ? 'text-amber-600'
-                                : 'text-emerald-600'
+                                ? 'text-[rgb(var(--color-warning))]'
+                                : 'text-[rgb(var(--color-success))]'
                           }`}>
                             {qaLoanImportMsg.text}
                           </p>
@@ -1280,9 +1280,9 @@ export const HRDashboard: React.FC = () => {
                         {qaEmpIds.map((eid) => {
                           const emp = getEmpObj(eid);
                           return (
-                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-violet-50 border border-violet-200 text-xs font-bold text-violet-700">
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-secondary)/0.1)] border border-[rgb(var(--color-secondary)/0.25)] text-xs font-bold text-[rgb(var(--color-secondary))]">
                               {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
-                              <button onClick={() => removeEmpFromList(eid)} className="text-violet-400 hover:text-rose-500 transition-colors mr-0.5">
+                              <button onClick={() => removeEmpFromList(eid)} className="text-[rgb(var(--color-secondary))] hover:text-[rgb(var(--color-danger))] transition-colors mr-0.5">
                                 <span className="material-icons-round text-sm">close</span>
                               </button>
                             </span>
@@ -1366,7 +1366,7 @@ export const HRDashboard: React.FC = () => {
                   </div>
 
                   {qaLeavePickMethod === 'codes' && (
-                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[var(--color-bg)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
                         <label className="erp-filter-apply cursor-pointer">
@@ -1398,10 +1398,10 @@ export const HRDashboard: React.FC = () => {
                         {qaLeaveImportMsg && (
                           <p className={`text-[11px] font-bold ${
                             qaLeaveImportMsg.type === 'error'
-                              ? 'text-rose-600'
+                              ? 'text-[rgb(var(--color-danger))]'
                               : qaLeaveImportMsg.type === 'warning'
-                                ? 'text-amber-600'
-                                : 'text-emerald-600'
+                                ? 'text-[rgb(var(--color-warning))]'
+                                : 'text-[rgb(var(--color-success))]'
                           }`}>
                             {qaLeaveImportMsg.text}
                           </p>
@@ -1417,9 +1417,9 @@ export const HRDashboard: React.FC = () => {
                         {qaEmpIds.map((eid) => {
                           const emp = getEmpObj(eid);
                           return (
-                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-sky-50 border border-sky-200 text-xs font-bold text-sky-700">
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-primary)/0.1)] border border-[rgb(var(--color-primary)/0.25)] text-xs font-bold text-[rgb(var(--color-primary))]">
                               {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
-                              <button onClick={() => removeEmpFromList(eid)} className="text-sky-400 hover:text-rose-500 transition-colors mr-0.5">
+                              <button onClick={() => removeEmpFromList(eid)} className="text-[rgb(var(--color-primary))] hover:text-[rgb(var(--color-danger))] transition-colors mr-0.5">
                                 <span className="material-icons-round text-sm">close</span>
                               </button>
                             </span>
@@ -1505,7 +1505,7 @@ export const HRDashboard: React.FC = () => {
                     </div>
 
                     {qaAllowPickMethod === 'codes' && (
-                      <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                      <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[var(--color-bg)]">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
                           <label className="erp-filter-apply cursor-pointer">
@@ -1537,10 +1537,10 @@ export const HRDashboard: React.FC = () => {
                           {qaAllowImportMsg && (
                             <p className={`text-[11px] font-bold ${
                               qaAllowImportMsg.type === 'error'
-                                ? 'text-rose-600'
+                                ? 'text-[rgb(var(--color-danger))]'
                                 : qaAllowImportMsg.type === 'warning'
-                                  ? 'text-amber-600'
-                                  : 'text-emerald-600'
+                                  ? 'text-[rgb(var(--color-warning))]'
+                                  : 'text-[rgb(var(--color-success))]'
                             }`}>
                               {qaAllowImportMsg.text}
                             </p>
@@ -1566,10 +1566,10 @@ export const HRDashboard: React.FC = () => {
                         {qaEmpIds.map((eid) => {
                           const emp = getEmpObj(eid);
                           return (
-                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-700">
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] text-xs font-bold text-[rgb(var(--color-success))]">
                               {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
-                              <span className="text-[11px] text-emerald-500">{formatCurrency(resolveAllowAmountForEmp(eid))}</span>
-                              <button onClick={() => removeEmpFromList(eid)} className="text-emerald-400 hover:text-rose-500 transition-colors mr-0.5">
+                              <span className="text-[11px] text-[rgb(var(--color-success))]">{formatCurrency(resolveAllowAmountForEmp(eid))}</span>
+                              <button onClick={() => removeEmpFromList(eid)} className="text-[rgb(var(--color-success))] hover:text-[rgb(var(--color-danger))] transition-colors mr-0.5">
                                 <span className="material-icons-round text-sm">close</span>
                               </button>
                             </span>
@@ -1646,7 +1646,7 @@ export const HRDashboard: React.FC = () => {
                   </div>
 
                   {qaPenaltyPickMethod === 'codes' && (
-                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[#fcfcfd]">
+                    <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5 space-y-2 bg-[var(--color-bg)]">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-[11px] font-bold text-[var(--color-text-muted)]">استيراد الموظفين بكود الموظف</p>
                         <label className="erp-filter-apply cursor-pointer">
@@ -1678,10 +1678,10 @@ export const HRDashboard: React.FC = () => {
                         {qaPenaltyImportMsg && (
                           <p className={`text-[11px] font-bold ${
                             qaPenaltyImportMsg.type === 'error'
-                              ? 'text-rose-600'
+                              ? 'text-[rgb(var(--color-danger))]'
                               : qaPenaltyImportMsg.type === 'warning'
-                                ? 'text-amber-600'
-                                : 'text-emerald-600'
+                                ? 'text-[rgb(var(--color-warning))]'
+                                : 'text-[rgb(var(--color-success))]'
                           }`}>
                             {qaPenaltyImportMsg.text}
                           </p>
@@ -1697,9 +1697,9 @@ export const HRDashboard: React.FC = () => {
                         {qaEmpIds.map((eid) => {
                           const emp = getEmpObj(eid);
                           return (
-                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-rose-50 border border-rose-200 text-xs font-bold text-rose-700">
+                            <span key={eid} className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] text-xs font-bold text-[rgb(var(--color-danger))]">
                               {(emp as any)?.code ? `${(emp as any).code} — ` : ''}{emp?.name || eid}
-                              <button onClick={() => removeEmpFromList(eid)} className="text-rose-400 hover:text-rose-600 transition-colors mr-0.5">
+                              <button onClick={() => removeEmpFromList(eid)} className="text-[rgb(var(--color-danger))] hover:text-[rgb(var(--color-danger))] transition-colors mr-0.5">
                                 <span className="material-icons-round text-sm">close</span>
                               </button>
                             </span>
@@ -1737,14 +1737,14 @@ export const HRDashboard: React.FC = () => {
                     </thead>
                     <tbody>
                       {qaStaged.map((entry, i) => (
-                        <tr key={i} className="border-t border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
-                          <td className="py-2 px-3 font-mono text-xs text-slate-400">{i + 1}</td>
-                          <td className="py-2 px-3 font-mono text-xs text-slate-400">{entry.empCode || '—'}</td>
+                        <tr key={i} className="border-t border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--color-text-muted)]">{i + 1}</td>
+                          <td className="py-2 px-3 font-mono text-xs text-[var(--color-text-muted)]">{entry.empCode || '—'}</td>
                           <td className="py-2 px-3 font-bold text-[var(--color-text)] text-xs">{entry.empName}</td>
-                          <td className="py-2 px-3 text-xs text-slate-500">{entry.detail}</td>
+                          <td className="py-2 px-3 text-xs text-[var(--color-text-muted)]">{entry.detail}</td>
                           <td className="py-2 px-3 font-mono text-xs font-bold">{entry.amount > 0 ? formatCurrency(entry.amount) : '—'}</td>
                           <td className="py-2 px-3 text-center">
-                            <button onClick={() => removeStagedItem(i)} className="text-[var(--color-text-muted)] hover:text-rose-500 transition-colors">
+                            <button onClick={() => removeStagedItem(i)} className="text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] transition-colors">
                               <span className="material-icons-round text-base">close</span>
                             </button>
                           </td>
@@ -1752,7 +1752,7 @@ export const HRDashboard: React.FC = () => {
                       ))}
                     </tbody>
                   </table>
-                  <div className="bg-[#f8f9fa] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)] flex justify-between">
+                  <div className="bg-[var(--color-bg)] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)] flex justify-between">
                     <span>{qaStaged.length} عملية جاهزة للحفظ</span>
                     {qaStaged.some((e) => e.amount > 0) && (
                       <span>إجمالي: {formatCurrency(qaStaged.reduce((s, e) => s + e.amount, 0))}</span>
@@ -1760,7 +1760,7 @@ export const HRDashboard: React.FC = () => {
                   </div>
                 </div>
               ) : !(qaOpen === 'allowance' && qaEmpIds.length > 0) ? (
-                <div className="text-center py-6 text-[var(--color-text-muted)] dark:text-slate-600">
+                <div className="text-center py-6 text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)]">
                   <span className="material-icons-round text-3xl block mb-1">playlist_add</span>
                   <p className="text-xs font-medium">أدخل البيانات واضغط + لإضافتها للجدول</p>
                 </div>
@@ -1793,27 +1793,27 @@ export const HRDashboard: React.FC = () => {
         {/* Monthly KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center">
-            <p className="text-xl font-bold text-sky-600 dark:text-sky-400">{attendance.length}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]">{attendance.length}</p>
             <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">سجلات حضور</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center">
-            <p className="text-xl font-bold text-amber-600">{formatNumber(attKpis.totalLateMins)}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-warning))]">{formatNumber(attKpis.totalLateMins)}</p>
             <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">دقائق تأخير</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center">
-            <p className="text-xl font-bold text-emerald-600">{attKpis.avgHours.toFixed(1)}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-success))]">{attKpis.avgHours.toFixed(1)}</p>
             <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">متوسط ساعات</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center">
-            <p className="text-xl font-bold text-rose-600">{attKpis.totalAbsences}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-danger))]">{attKpis.totalAbsences}</p>
             <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">حالات غياب</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center">
-            <p className="text-xl font-bold text-blue-600">{leaveKpis.approvedThisMonth}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-primary))]">{leaveKpis.approvedThisMonth}</p>
             <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">إجازات معتمدة</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center">
-            <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{loanKpis.activeCount}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">{loanKpis.activeCount}</p>
             <p className="text-[11px] text-[var(--color-text-muted)] font-medium mt-1">سلف نشطة</p>
           </div>
         </div>
@@ -1861,9 +1861,9 @@ export const HRDashboard: React.FC = () => {
                       {recentLeaves.map((l) => {
                         const emp = employees.find((e) => e.id === l.employeeId || e.userId === l.employeeId);
                         return (
-                          <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                          <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                             <td className="py-2.5 px-2 font-bold text-[var(--color-text)]">{emp?.name || l.employeeId}</td>
-                            <td className="py-2.5 px-2 text-slate-500">{LEAVE_TYPE_LABELS[l.leaveType]}</td>
+                            <td className="py-2.5 px-2 text-[var(--color-text-muted)]">{LEAVE_TYPE_LABELS[l.leaveType]}</td>
                             <td className="py-2.5 px-2 font-mono text-[var(--color-text-muted)]">{l.totalDays}</td>
                             <td className="py-2.5 px-2">
                               <Badge variant={STATUS_VARIANT[l.finalStatus] ?? 'neutral'}>{STATUS_LABELS[l.finalStatus] ?? l.finalStatus}</Badge>
@@ -1917,9 +1917,9 @@ export const HRDashboard: React.FC = () => {
                     </thead>
                     <tbody>
                       {recentLoans.map((l) => (
-                        <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                        <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                           <td className="py-2.5 px-2 font-bold text-[var(--color-text)]">{l.employeeName || l.employeeId}</td>
-                          <td className="py-2.5 px-2 text-slate-500">{LOAN_TYPE_LABELS[l.loanType]}</td>
+                          <td className="py-2.5 px-2 text-[var(--color-text-muted)]">{LOAN_TYPE_LABELS[l.loanType]}</td>
                           <td className="py-2.5 px-2 font-mono text-[var(--color-text-muted)]">{formatCurrency(l.loanAmount)}</td>
                           <td className="py-2.5 px-2">
                             <Badge variant={STATUS_VARIANT[l.status] ?? 'neutral'}>{STATUS_LABELS[l.status] ?? l.status}</Badge>
@@ -1941,32 +1941,32 @@ export const HRDashboard: React.FC = () => {
       {/* â•گâ•گâ•گ SECTION 3 — إجراءات معلقة â•گâ•گâ•گ */}
       <section>
         <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
-          <span className="material-icons-round text-amber-500 text-lg">pending_actions</span>
+          <span className="material-icons-round text-[rgb(var(--color-warning))] text-lg">pending_actions</span>
           إجراءات تحتاج متابعة
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             onClick={() => navigate('/hr/approval-center')}
-            className="flex items-center gap-3 bg-[var(--color-card)] border border-amber-200 rounded-[var(--border-radius-lg)] p-4 hover:border-amber-400 transition-colors text-right w-full"
+            className="flex items-center gap-3 bg-[var(--color-card)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4 hover:border-[rgb(var(--color-warning))] transition-colors text-right w-full"
           >
-            <div className="w-10 h-10 bg-amber-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-amber-600">fact_check</span>
+            <div className="w-10 h-10 bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-[rgb(var(--color-warning))]">fact_check</span>
             </div>
             <div>
-              <p className="text-xl font-bold text-amber-600">{pendingApprovals}</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-warning))]">{pendingApprovals}</p>
               <p className="text-xs text-[var(--color-text-muted)] font-medium">طلبات موافقة معلقة</p>
             </div>
           </button>
 
           <button
             onClick={() => navigate('/hr/attendance/logs')}
-            className="flex items-center gap-3 bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-lg)] p-4 hover:border-rose-400 transition-colors text-right w-full"
+            className="flex items-center gap-3 bg-[var(--color-card)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-4 hover:border-[rgb(var(--color-danger))] transition-colors text-right w-full"
           >
-            <div className="w-10 h-10 bg-rose-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-rose-600">fingerprint</span>
+            <div className="w-10 h-10 bg-[rgb(var(--color-danger)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+              <span className="material-icons-round text-[rgb(var(--color-danger))]">fingerprint</span>
             </div>
             <div>
-              <p className="text-xl font-bold text-rose-600">{incompleteAttendance}</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-danger))]">{incompleteAttendance}</p>
               <p className="text-xs text-[var(--color-text-muted)] font-medium">بصمات ناقصة هذا الشهر</p>
             </div>
           </button>
@@ -1975,7 +1975,7 @@ export const HRDashboard: React.FC = () => {
             onClick={() => navigate('/hr/payroll')}
             className="flex items-center gap-3 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 hover:border-primary/40 transition-colors text-right w-full"
           >
-            <div className="w-10 h-10 bg-indigo-100 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 bg-[rgb(var(--color-primary)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">receipt_long</span>
             </div>
             <div>
@@ -2007,13 +2007,13 @@ export const HRDashboard: React.FC = () => {
                   <div className="flex items-start justify-between gap-2">
                     <p className="text-sm font-bold text-[var(--color-text)]">{item.employeeName}</p>
                     <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                      i === 0 ? 'bg-rose-100 text-rose-700' :
-                      i === 1 ? 'bg-amber-100 text-amber-700' :
-                      'bg-slate-100 text-slate-600'
+                      i === 0 ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' :
+                      i === 1 ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' :
+                      'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
                     }`}>{i + 1}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--color-text-muted)]">
-                    <span className="font-bold text-rose-600">{item.totalLateMinutes} د تأخير</span>
+                    <span className="font-bold text-[rgb(var(--color-danger))]">{item.totalLateMinutes} د تأخير</span>
                     <span>{item.lateDays} يوم</span>
                   </div>
                 </div>
@@ -2034,13 +2034,13 @@ export const HRDashboard: React.FC = () => {
                     <tr key={item.employeeId} className="border-b border-[var(--color-border)]/50">
                       <td className="py-2.5 px-2">
                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                          i === 0 ? 'bg-rose-100 text-rose-700' :
-                          i === 1 ? 'bg-amber-100 text-amber-700' :
-                          'bg-slate-100 text-slate-600'
+                          i === 0 ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' :
+                          i === 1 ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' :
+                          'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
                         }`}>{i + 1}</span>
                       </td>
                       <td className="py-2.5 px-2 font-medium text-[var(--color-text)]">{item.employeeName}</td>
-                      <td className="py-2.5 px-2 font-bold text-rose-600">{item.totalLateMinutes} د</td>
+                      <td className="py-2.5 px-2 font-bold text-[rgb(var(--color-danger))]">{item.totalLateMinutes} د</td>
                       <td className="py-2.5 px-2 text-[var(--color-text-muted)]">{item.lateDays} يوم</td>
                     </tr>
                   ))}
@@ -2054,17 +2054,17 @@ export const HRDashboard: React.FC = () => {
       {/* SECTION 5 — ملخص السُلف */}
       <section>
         <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
-          <span className="material-icons-round text-violet-500 text-lg">account_balance_wallet</span>
+          <span className="material-icons-round text-[rgb(var(--color-secondary))] text-lg">account_balance_wallet</span>
           ملخص السُلف
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي السُلف المستحقة</p>
-            <p className="text-xl font-bold text-violet-600">{formatNumber(loanPortfolio.totalOutstanding)} ج.م</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-secondary))]">{formatNumber(loanPortfolio.totalOutstanding)} ج.م</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي الخصومات الشهرية</p>
-            <p className="text-xl font-bold text-amber-600">{formatNumber(loanPortfolio.totalMonthlyDeduction)} ج.م</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-warning))]">{formatNumber(loanPortfolio.totalMonthlyDeduction)} ج.م</p>
           </div>
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">عدد السُلف النشطة</p>
@@ -2076,23 +2076,23 @@ export const HRDashboard: React.FC = () => {
       {/* â•گâ•گâ•گ SECTION 6 — تنبيهات التقييم â•گâ•گâ•گ */}
       <section>
         <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
-          <span className="material-icons-round text-cyan-500 text-lg">stars</span>
+          <span className="material-icons-round text-[rgb(var(--color-secondary))] text-lg">stars</span>
           تنبيهات التقييم — {getMonthKey()}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             onClick={() => navigate('/hr/evaluations')}
-            className="bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-lg)] p-4 text-right hover:border-rose-400 transition-colors"
+            className="bg-[var(--color-card)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-4 text-right hover:border-[rgb(var(--color-danger))] transition-colors"
           >
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفون منخفضو الأداء</p>
-            <p className="text-xl font-bold text-rose-600">{evaluationAlerts.lowPerformanceCount}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-danger))]">{evaluationAlerts.lowPerformanceCount}</p>
           </button>
           <button
             onClick={() => navigate('/hr/evaluations')}
-            className="bg-[var(--color-card)] border border-amber-200 rounded-[var(--border-radius-lg)] p-4 text-right hover:border-amber-400 transition-colors"
+            className="bg-[var(--color-card)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4 text-right hover:border-[rgb(var(--color-warning))] transition-colors"
           >
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مكافآت بانتظار الاعتماد</p>
-            <p className="text-xl font-bold text-amber-600">{evaluationAlerts.pendingBonusApprovals}</p>
+            <p className="text-xl font-bold text-[rgb(var(--color-warning))]">{evaluationAlerts.pendingBonusApprovals}</p>
           </button>
           <button
             onClick={() => navigate('/hr/evaluations')}
@@ -2126,9 +2126,9 @@ export const HRDashboard: React.FC = () => {
                   return (
                     <div key={d.id || `dept-${index}`} className="flex items-center gap-3">
                       <span className="text-sm font-medium text-[var(--color-text)] w-28 truncate">{d.name}</span>
-                      <div className="flex-1 bg-[#f0f2f5] rounded-full h-4 overflow-hidden">
+                      <div className="flex-1 bg-[var(--color-surface-hover)] rounded-full h-4 overflow-hidden">
                         <div
-                          className="bg-indigo-500 dark:bg-indigo-400 h-full rounded-full transition-all duration-500"
+                          className="bg-[rgb(var(--color-primary)/0.1)]0 dark:bg-[rgb(var(--color-primary))] h-full rounded-full transition-all duration-500"
                           style={{ width: `${Math.max(pct, 2)}%` }}
                         />
                       </div>
@@ -2144,9 +2144,9 @@ export const HRDashboard: React.FC = () => {
             <OpsDashPanel title="أنواع التوظيف" accent="hr">
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(empKpis.byType).map(([type, count]) => (
-                  <div key={type} className="flex items-center gap-2 p-3 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
-                    <div className="w-8 h-8 bg-indigo-100 dark:bg-indigo-900/30 rounded-[var(--border-radius-sm)] flex items-center justify-center shrink-0">
-                      <span className="material-icons-round text-indigo-600 dark:text-indigo-400 text-sm">badge</span>
+                  <div key={type} className="flex items-center gap-2 p-3 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-base)]">
+                    <div className="w-8 h-8 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary))]/30 rounded-[var(--border-radius-sm)] flex items-center justify-center shrink-0">
+                      <span className="material-icons-round text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))] text-sm">badge</span>
                     </div>
                     <div className="min-w-0">
                       <p className="text-base font-bold text-[var(--color-text)] leading-tight">{count}</p>
@@ -2163,9 +2163,9 @@ export const HRDashboard: React.FC = () => {
               ) : (
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(leaveKpis.byType).map(([type, count]) => (
-                    <div key={type} className="flex items-center gap-2 p-3 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
-                      <div className="w-8 h-8 bg-emerald-100 rounded-[var(--border-radius-sm)] flex items-center justify-center shrink-0">
-                        <span className="material-icons-round text-emerald-600 text-sm">beach_access</span>
+                    <div key={type} className="flex items-center gap-2 p-3 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-base)]">
+                      <div className="w-8 h-8 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-sm)] flex items-center justify-center shrink-0">
+                        <span className="material-icons-round text-[rgb(var(--color-success))] text-sm">beach_access</span>
                       </div>
                       <div className="min-w-0">
                         <p className="text-base font-bold text-[var(--color-text)] leading-tight">{count}</p>
@@ -2181,9 +2181,9 @@ export const HRDashboard: React.FC = () => {
 
         {/* Financial summary row */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <KPIBox label="إجمالي الرواتب الأساسية" value={formatCurrency(empKpis.totalSalary)} icon="payments" colorClass="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400" />
-          <KPIBox label="إجمالي مبالغ السُلف" value={formatCurrency(loanKpis.totalAmount)} icon="monetization_on" colorClass="bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400" />
-          <KPIBox label="أيام إجازات هذا الشهر" value={leaveKpis.totalDaysThisMonth} icon="event_busy" colorClass="bg-rose-100 text-rose-600" />
+          <KPIBox label="إجمالي الرواتب الأساسية" value={formatCurrency(empKpis.totalSalary)} icon="payments" colorClass="bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary))]/30 text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]" />
+          <KPIBox label="إجمالي مبالغ السُلف" value={formatCurrency(loanKpis.totalAmount)} icon="monetization_on" colorClass="bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary))]/30 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]" />
+          <KPIBox label="أيام إجازات هذا الشهر" value={leaveKpis.totalDaysThisMonth} icon="event_busy" colorClass="bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]" />
         </div>
       </section>
 

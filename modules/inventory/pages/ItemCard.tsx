@@ -487,7 +487,7 @@ export const ItemCard: React.FC = () => {
                   <li key={opt.id}>
                     <button
                       type="button"
-                      className={`w-full text-right px-3 py-2 text-sm hover:bg-[#f8f9fa] ${
+                      className={`w-full text-right px-3 py-2 text-sm hover:bg-[var(--color-bg)] ${
                         active ? 'bg-primary/10 font-bold' : ''
                       }`}
                       onClick={() => setItemId(opt.id)}

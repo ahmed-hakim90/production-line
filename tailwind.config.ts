@@ -21,6 +21,25 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      borderRadius: {
+        /** Theme-driven via محرك المظهر (`ThemeSettings.borderRadius` → CSS vars). */
+        sm: "var(--border-radius-sm)",
+        DEFAULT: "var(--border-radius-base)",
+        md: "var(--border-radius-base)",
+        lg: "var(--border-radius-lg)",
+        xl: "var(--border-radius-xl)",
+        "2xl": "var(--border-radius-xl)",
+        "3xl": "calc(var(--border-radius-xl) + 4px)",
+      },
+      fontSize: {
+        /** Theme-driven via محرك المظهر (`ThemeSettings.baseFontSize` → CSS vars). */
+        xs: ["var(--font-size-xs)", { lineHeight: "1.35" }],
+        sm: ["var(--font-size-sm)", { lineHeight: "1.4" }],
+        base: ["var(--font-size-base)", { lineHeight: "1.5" }],
+        lg: ["calc(var(--font-size-base) + 2px)", { lineHeight: "1.45" }],
+        xl: ["calc(var(--font-size-base) + 4px)", { lineHeight: "1.35" }],
+        "2xl": ["calc(var(--font-size-base) + 8px)", { lineHeight: "1.3" }],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

@@ -818,7 +818,7 @@ export const RepairBranches: React.FC = () => {
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>الاسم <span className="text-rose-600">*</span></Label>
+              <Label>الاسم <span className="text-[rgb(var(--color-danger))]">*</span></Label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
@@ -845,7 +845,7 @@ export const RepairBranches: React.FC = () => {
               />
             </div>
             <div className="space-y-1.5 md:col-span-2">
-              <Label>المسؤول عن الفرع <span className="text-rose-600">*</span></Label>
+              <Label>المسؤول عن الفرع <span className="text-[rgb(var(--color-danger))]">*</span></Label>
               <Select
                 value={form.managerEmployeeId || ''}
                 onOpenChange={(open) => {
@@ -962,7 +962,7 @@ export const RepairBranches: React.FC = () => {
               ) : null}
               <div className="space-y-1.5">
                 <Label>
-                  مخزن مركز الصيانة <span className="text-rose-600">*</span>
+                  مخزن مركز الصيانة <span className="text-[rgb(var(--color-danger))]">*</span>
                 </Label>
                 <Select
                   value={form.warehouseId.trim() || undefined}
@@ -997,12 +997,12 @@ export const RepairBranches: React.FC = () => {
                   الكود: {linkedWarehouse.code || '—'} · المعرف: {linkedWarehouse.id || '—'}
                 </p>
               ) : (
-                <p className="text-xs text-amber-700">اختر مخزنًا من مخازن مراكز الصيانة غير المرتبطة بفرع آخر.</p>
+                <p className="text-xs text-[rgb(var(--color-warning))]">اختر مخزنًا من مخازن مراكز الصيانة غير المرتبطة بفرع آخر.</p>
               )}
             </div>
-            <div className="md:col-span-2 rounded-md border border-sky-200 bg-sky-50/60 p-3 text-sm">
-              <p className="font-semibold text-sky-950">الربط المحاسبي مستقل عن بيانات الفرع التشغيلية</p>
-              <p className="mt-1 text-xs text-sky-800">
+            <div className="md:col-span-2 rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/60 p-3 text-sm">
+              <p className="font-semibold text-[rgb(var(--color-primary))]">الربط المحاسبي مستقل عن بيانات الفرع التشغيلية</p>
+              <p className="mt-1 text-xs text-[rgb(var(--color-primary))]">
                 بعد حفظ الفرع، اربطه بمركز التكلفة فقط من «الحسابات ← إعدادات الحسابات» —
                 الحسابات الافتراضية تُطبَّق تلقائيًا عند الحفظ.
               </p>

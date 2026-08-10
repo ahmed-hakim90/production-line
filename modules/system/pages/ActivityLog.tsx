@@ -576,18 +576,18 @@ export const ActivityLogPage: React.FC = () => {
                             return (
                               <div key={log.id} className="flex items-start gap-4 py-4 px-2">
                                 <div className={`w-10 h-10 rounded-[var(--border-radius-lg)] flex items-center justify-center flex-shrink-0 ${
-                                  info.variant === 'success' ? 'bg-emerald-100' :
-                                  info.variant === 'warning' ? 'bg-amber-100' :
-                                  info.variant === 'danger' ? 'bg-rose-100' :
-                                  info.variant === 'info' ? 'bg-blue-100' :
-                                  'bg-[#f0f2f5]'
+                                  info.variant === 'success' ? 'bg-[rgb(var(--color-success)/0.1)]' :
+                                  info.variant === 'warning' ? 'bg-[rgb(var(--color-warning)/0.1)]' :
+                                  info.variant === 'danger' ? 'bg-[rgb(var(--color-danger)/0.1)]' :
+                                  info.variant === 'info' ? 'bg-[rgb(var(--color-primary)/0.1)]' :
+                                  'bg-[var(--color-surface-hover)]'
                                 }`}>
                                   <span className={`material-icons-round text-lg ${
-                                    info.variant === 'success' ? 'text-emerald-600' :
-                                    info.variant === 'warning' ? 'text-amber-600' :
-                                    info.variant === 'danger' ? 'text-rose-600' :
-                                    info.variant === 'info' ? 'text-blue-600' :
-                                    'text-slate-500'
+                                    info.variant === 'success' ? 'text-[rgb(var(--color-success))]' :
+                                    info.variant === 'warning' ? 'text-[rgb(var(--color-warning))]' :
+                                    info.variant === 'danger' ? 'text-[rgb(var(--color-danger))]' :
+                                    info.variant === 'info' ? 'text-[rgb(var(--color-primary))]' :
+                                    'text-[var(--color-text-muted)]'
                                   }`}>{info.icon}</span>
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -628,7 +628,7 @@ export const ActivityLogPage: React.FC = () => {
             ))}
 
             {visibleLogs.length === 0 && (
-              <div className="py-16 text-center text-slate-400">
+              <div className="py-16 text-center text-[var(--color-text-muted)]">
                 <span className="material-icons-round text-5xl block mb-3">history</span>
                 <p className="font-bold">لا توجد أحداث مسجلة</p>
               </div>
@@ -640,7 +640,7 @@ export const ActivityLogPage: React.FC = () => {
               <Button
                 onClick={loadMore}
                 disabled={loadingMore}
-                className="px-6 py-2.5 bg-[#f0f2f5] text-[var(--color-text-muted)] rounded-[var(--border-radius-lg)] text-sm font-bold hover:bg-[#e8eaed] transition-all disabled:opacity-50"
+                className="px-6 py-2.5 bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] rounded-[var(--border-radius-lg)] text-sm font-bold hover:bg-[var(--color-surface-hover)] transition-all disabled:opacity-50"
               >
                 {loadingMore ? (
                   <span className="flex items-center gap-2 justify-center">

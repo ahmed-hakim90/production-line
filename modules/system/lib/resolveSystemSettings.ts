@@ -2,14 +2,17 @@ import type {
   AttendanceIntegrationSettings,
   OperationPathSettings,
   PlanSettings,
+  PrintTemplateSettings,
   ProductionWorkerSettings,
   RepairSettings,
   SystemSettings,
 } from '../../../types';
 import {
   DEFAULT_PLAN_SETTINGS,
+  DEFAULT_PRINT_TEMPLATE,
   DEFAULT_SYSTEM_SETTINGS,
 } from '../../../utils/dashboardConfig';
+import { migratePrintTemplateV1 } from '../../../utils/print/migratePrintTemplate';
 import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import { resolveOperationPathSettings } from './operationPathSettings';
 
@@ -118,6 +121,18 @@ function resolveOperationPaths(
   return resolveOperationPathSettings(input ?? DEFAULT_SYSTEM_SETTINGS.operationPaths);
 }
 
+export function resolvePrintTemplate(
+  input: Partial<PrintTemplateSettings> | null | undefined,
+): PrintTemplateSettings {
+  const raw = isPlainObject(input) ? (input as Partial<PrintTemplateSettings>) : {};
+  return migratePrintTemplateV1({
+    ...DEFAULT_PRINT_TEMPLATE,
+    ...raw,
+    // Pass tenant documents as-is (may be undefined) so migrate can seed from legacy.
+    documents: isPlainObject(raw.documents) ? raw.documents : undefined,
+  });
+}
+
 /**
  * Deep-merge Partial/null SystemSettings with DEFAULT_SYSTEM_SETTINGS /
  * DEFAULT_PLAN_SETTINGS so nested inventoryRouting, reportBehavior, and other
@@ -130,6 +145,7 @@ export function resolveSystemSettings(
     return {
       ...DEFAULT_SYSTEM_SETTINGS,
       planSettings: resolvePlanSettings(DEFAULT_SYSTEM_SETTINGS.planSettings),
+      printTemplate: resolvePrintTemplate(DEFAULT_SYSTEM_SETTINGS.printTemplate),
       attendanceIntegration: resolveAttendanceIntegration(
         DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
       ),
@@ -145,6 +161,7 @@ export function resolveSystemSettings(
     ...DEFAULT_SYSTEM_SETTINGS,
     ...input,
     planSettings: resolvePlanSettings(input.planSettings),
+    printTemplate: resolvePrintTemplate(input.printTemplate),
     attendanceIntegration: resolveAttendanceIntegration(input.attendanceIntegration),
     repairSettings: resolveRepairSettings(input.repairSettings),
     operationPaths: resolveOperationPaths(input.operationPaths),

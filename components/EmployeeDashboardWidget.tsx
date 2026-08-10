@@ -138,15 +138,15 @@ const PERIOD_OPTIONS: { value: Period; label: string; icon: string }[] = [
 const DashboardPeriodFilter: React.FC<{ value: Period; onChange: (p: Period) => void }> = ({ value, onChange }) => {
   const { t } = useTranslation();
   return (
-    <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 gap-1">
+    <div className="flex items-center bg-[var(--color-surface-hover)] rounded-[var(--border-radius-lg)] p-1 gap-1">
       {PERIOD_OPTIONS.map((opt) => (
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
           className={`flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
             value === opt.value
-              ? 'bg-white text-primary'
-              : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
+              ? 'bg-[var(--color-card)] text-primary'
+              : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
           }`}
         >
           {renderDashboardIcon(opt.icon, 14)}
@@ -615,26 +615,26 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
           <Users size={16} className="text-primary" />
           <span>عمال الخط ({presentCount} حاضر / {workers.length} إجمالي)</span>
         </div>
-        {loadingWorkers && <Loader2 size={16} className="animate-spin text-slate-400" />}
+        {loadingWorkers && <Loader2 size={16} className="animate-spin text-[var(--color-text-muted)]" />}
       </div>
 
       {!workerLineId ? (
-        <p className="text-xs text-[var(--color-text-muted)] bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-3">
+        <p className="text-xs text-[var(--color-text-muted)] bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-3">
           اختر الخط أولاً لتحميل عمال اليوم.
         </p>
       ) : workers.length === 0 && !loadingWorkers ? (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-[var(--border-radius-base)] p-3">
+        <p className="text-xs text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-base)] p-3">
           لا توجد قائمة عمال محفوظة لهذا الخط اليوم.
         </p>
       ) : (
         <div className="space-y-2 max-h-[45vh] overflow-auto pr-1">
           {workers.map((worker) => (
-            <div key={worker.employeeId} className="grid grid-cols-1 sm:grid-cols-[1fr_auto_150px] gap-2 items-center bg-white dark:bg-slate-900/30 border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5">
+            <div key={worker.employeeId} className="grid grid-cols-1 sm:grid-cols-[1fr_auto_150px] gap-2 items-center bg-[var(--color-card)] dark:bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5">
               <div>
                 <p className="text-sm font-bold text-[var(--color-text)]">{worker.employeeName}</p>
                 <p className="text-[11px] text-[var(--color-text-muted)]">{worker.employeeCode || worker.employeeId}</p>
               </div>
-              <div className="flex gap-1 rounded-[var(--border-radius-base)] bg-[#f0f2f5] p-1">
+              <div className="flex gap-1 rounded-[var(--border-radius-base)] bg-[var(--color-surface-hover)] p-1">
                 <Button
                   type="button"
                   onClick={() => updateWorker(worker.employeeId, { isPresent: true })}
@@ -697,7 +697,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                 className={`rounded-[var(--border-radius-base)] border px-3 py-2 text-xs font-bold transition-colors ${
                   startStep === index
                     ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-[var(--color-border)] bg-[#f8f9fa] text-[var(--color-text-muted)]'
+                    : 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)]'
                 }`}
               >
                 {index + 1}. {label}
@@ -707,7 +707,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
 
           {startStep === 0 && (
             <div className="space-y-4">
-              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-4">
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
                 <p className="text-sm font-extrabold text-[var(--color-text)]">{context.label}</p>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">
                   {fixedPlan
@@ -718,11 +718,11 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
 
               {fixedPlan ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-white p-3">
+                  <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
                     <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{startLineName}</p>
                   </div>
-                  <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-white p-3">
+                  <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-3">
                     <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{startProductName}</p>
                   </div>
@@ -751,20 +751,20 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
           {startStep === 2 && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
                   <p className="text-sm font-bold text-[var(--color-text)]">{startLineName}</p>
                 </div>
-                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
                   <p className="text-sm font-bold text-[var(--color-text)]">{startProductName}</p>
                 </div>
-                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">حضور العمال</p>
-                  <p className="text-sm font-bold text-emerald-600">{presentCount} حاضر / {workers.length} إجمالي</p>
+                  <p className="text-sm font-bold text-[rgb(var(--color-success))]">{presentCount} حاضر / {workers.length} إجمالي</p>
                 </div>
               </div>
-              <p className="text-xs text-[var(--color-text-muted)] bg-blue-50 border border-blue-100 rounded-[var(--border-radius-base)] p-3">
+              <p className="text-xs text-[var(--color-text-muted)] bg-[rgb(var(--color-primary)/0.1)] border border-[rgb(var(--color-primary)/0.25)] rounded-[var(--border-radius-base)] p-3">
                 سيتم تسجيل وقت بداية الوردية تلقائياً وحفظ لقطة حضور العمال والأدوار الحالية.
               </p>
             </div>
@@ -815,11 +815,11 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     return (
       <div
         key={shift.id}
-        className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-900/10 dark:border-emerald-900/30 p-4"
+        className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/70 dark:bg-[rgb(var(--color-success)/0.15)] dark:border-[rgb(var(--color-success))]/30 p-4"
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-extrabold">
+            <div className="flex items-center gap-2 text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))] font-extrabold">
               <SquareCheckBig size={18} />
               <span>وردية مفتوحة</span>
             </div>
@@ -846,8 +846,8 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     <Dialog open={closeDialogOpen} onOpenChange={handleCloseDialogOpenChange}>
       <DialogContent className={`${closeWorkerOutputEntryEnabled ? 'max-w-3xl' : 'max-w-2xl'} w-[min(100vw-1.5rem,48rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0 max-h-[90vh] overflow-y-auto`} dir="rtl">
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-            <SquareCheckBig size={20} className="text-emerald-600" />
+          <div className="w-10 h-10 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+            <SquareCheckBig size={20} className="text-[rgb(var(--color-success))]" />
           </div>
           <div className="pl-8">
             <DialogTitle className="text-lg font-bold text-[var(--color-text)]">
@@ -863,29 +863,29 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
 
         <div className="p-6 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
               <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">وقت البدء</p>
               <p className="text-sm font-bold text-[var(--color-text)]">{formatShiftTime(closeFlowReport.shiftStartedAt)}</p>
             </div>
-            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
               <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
               <p className="text-sm font-bold text-[var(--color-text)]">{closeLineName}</p>
             </div>
-            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
               <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
               <p className="text-sm font-bold text-[var(--color-text)]">{closeProductName}</p>
             </div>
           </div>
 
           {closeSucceeded ? (
-            <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+            <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] p-4 space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-extrabold text-emerald-700">تم تسجيل الإنتاج بنجاح</p>
-                  <p className="text-xs text-emerald-700/80 mt-1">
+                  <p className="text-sm font-extrabold text-[rgb(var(--color-success))]">تم تسجيل الإنتاج بنجاح</p>
+                  <p className="text-xs text-[rgb(var(--color-success))]/80 mt-1">
                     الكمية: {formatNumber(closeFlowReport.quantityProduced || 0)} وحدة
                   </p>
-                  <p className="text-xs text-emerald-700/80 mt-1">
+                  <p className="text-xs text-[rgb(var(--color-success))]/80 mt-1">
                     وقت الإغلاق: {formatShiftTime(closeFlowReport.shiftClosedAt)}
                   </p>
                 </div>
@@ -972,7 +972,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
       {!isGeneralContext && planOpenShift && renderOpenShiftCard(planOpenShift)}
 
       {showStartSection && shiftStartEnabled && (
-        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-4">
+        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 font-extrabold text-[var(--color-text)]">
@@ -1260,7 +1260,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
       </div>
 
       {isLoadingData && (
-        <div className="flex items-center justify-center gap-2 py-4 text-slate-400">
+        <div className="flex items-center justify-center gap-2 py-4 text-[var(--color-text-muted)]">
           <Loader2 size={18} className="animate-spin" />
           <span className="text-sm font-bold">{t('dashboard.loadingData')}</span>
         </div>
@@ -1288,24 +1288,24 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <Package size={20} className="text-blue-600" />
+            <div className="w-10 h-10 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+              <Package size={20} className="text-[rgb(var(--color-primary))]" />
             </div>
-            <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.totalProduction')}</p>
+            <p className="text-[11px] font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.totalProduction')}</p>
           </div>
-          <h3 className="text-2xl font-bold text-blue-600">{formatNumber(kpis.totalProduction)}</h3>
+          <h3 className="text-2xl font-bold text-[rgb(var(--color-primary))]">{formatNumber(kpis.totalProduction)}</h3>
           <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.unitWithPeriod', { period: periodLabel })}</p>
         </div>
 
         {activePlan && (
           <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <CheckCircle2 size={20} className="text-emerald-600" />
+              <div className="w-10 h-10 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <CheckCircle2 size={20} className="text-[rgb(var(--color-success))]" />
               </div>
-              <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.planAchievement')}</p>
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.planAchievement')}</p>
             </div>
-            <h3 className={`text-2xl font-bold ${activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}`}>
+            <h3 className={`text-2xl font-bold ${activePlan.progress >= 80 ? 'text-[rgb(var(--color-success))]' : activePlan.progress >= 50 ? 'text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--color-warning))]'}`}>
               {activePlan.progress}%
             </h3>
             <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.kpi.fromCurrentPlan')}</p>
@@ -1315,24 +1315,24 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
         {activePlan && (
           <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-10 h-10 bg-indigo-50 dark:bg-indigo-900/20 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <ListChecks size={20} className="text-indigo-600 dark:text-indigo-400" />
+              <div className="w-10 h-10 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <ListChecks size={20} className="text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]" />
               </div>
-              <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.remainingQty')}</p>
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.remainingQty')}</p>
             </div>
-            <h3 className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatNumber(activePlan.remaining)}</h3>
+            <h3 className="text-2xl font-bold text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]">{formatNumber(activePlan.remaining)}</h3>
             <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.kpi.remainingUnits')}</p>
           </div>
         )}
 
         <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2.5 mb-3">
-            <div className="w-10 h-10 bg-rose-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <Trash2 size={20} className="text-rose-600" />
+            <div className="w-10 h-10 bg-[rgb(var(--color-danger)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+              <Trash2 size={20} className="text-[rgb(var(--color-danger))]" />
             </div>
-            <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.wasteRatio')}</p>
+            <p className="text-[11px] font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.wasteRatio')}</p>
           </div>
-          <h3 className={`text-2xl font-bold ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-[var(--color-text)]'}`}>
+          <h3 className={`text-2xl font-bold ${kpis.wasteRatio > 5 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text)]'}`}>
             {kpis.wasteRatio}%
           </h3>
           <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.wasteUnits', { count: formatNumber(kpis.totalWaste) })}</p>
@@ -1341,12 +1341,12 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
         {period !== 'daily' && (
           <div className="bg-[var(--color-card)] p-4 sm:p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2.5 mb-3">
-              <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <Gauge size={20} className="text-amber-600" />
+              <div className="w-10 h-10 bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <Gauge size={20} className="text-[rgb(var(--color-warning))]" />
               </div>
-              <p className="text-[11px] font-bold text-slate-400">{t('dashboard.kpi.dailyAverage')}</p>
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.dailyAverage')}</p>
             </div>
-            <h3 className="text-2xl font-bold text-amber-600">{formatNumber(kpis.avgPerDay)}</h3>
+            <h3 className="text-2xl font-bold text-[rgb(var(--color-warning))]">{formatNumber(kpis.avgPerDay)}</h3>
             <p className="text-[10px] text-[var(--color-text-muted)] font-medium mt-0.5">{t('dashboard.unitsPerDay', { days: kpis.uniqueDays })}</p>
           </div>
         )}
@@ -1373,23 +1373,23 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
                   <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.product')}</p>
                   <p className="text-sm font-bold text-[var(--color-text)]">
                     {_rawProducts.find((p) => p.id === activePlan.plan.productId)?.name ?? '—'}
                   </p>
                 </div>
-                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
                   <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.plannedQty')}</p>
                   <p className="text-sm font-bold text-primary">{formatNumber(activePlan.plan.plannedQuantity)}</p>
                 </div>
-                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
                   <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.producedInPeriod', { period: periodLabel })}</p>
-                  <p className="text-sm font-bold text-blue-600">{formatNumber(periodPlanProduced)}</p>
+                  <p className="text-sm font-bold text-[rgb(var(--color-primary))]">{formatNumber(periodPlanProduced)}</p>
                 </div>
-                <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
+                <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3.5 text-center border border-[var(--color-border)]">
                   <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">{t('dashboard.activePlan.remainingTotal')}</p>
-                  <p className="text-sm font-bold text-indigo-600">{formatNumber(activePlan.remaining)}</p>
+                  <p className="text-sm font-bold text-[rgb(var(--color-primary))]">{formatNumber(activePlan.remaining)}</p>
                 </div>
               </div>
 
@@ -1397,16 +1397,16 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               <div className="space-y-2">
                 <div className="flex justify-between text-xs font-bold">
                   <span className="text-[var(--color-text-muted)]">{t('dashboard.activePlan.totalProgress')}</span>
-                  <span className={activePlan.progress >= 80 ? 'text-emerald-600' : activePlan.progress >= 50 ? 'text-blue-600' : 'text-amber-600'}>
+                  <span className={activePlan.progress >= 80 ? 'text-[rgb(var(--color-success))]' : activePlan.progress >= 50 ? 'text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--color-warning))]'}>
                     {activePlan.progress}%
                   </span>
                 </div>
-                <div className="w-full h-3 bg-[#f0f2f5] rounded-full overflow-hidden shadow-inner">
+                <div className="w-full h-3 bg-[var(--color-surface-hover)] rounded-full overflow-hidden shadow-inner">
                   <div
                     className={`h-full rounded-full transition-all duration-1000 ${
-                      activePlan.progress >= 80 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
-                      activePlan.progress >= 50 ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.3)]' :
-                      'bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
+                      activePlan.progress >= 80 ? 'bg-[rgb(var(--color-success)/0.1)]0 shadow-[0_0_10px_rgba(16,185,129,0.3)]' :
+                      activePlan.progress >= 50 ? 'bg-[rgb(var(--color-primary)/0.1)]0 shadow-[0_0_10px_rgba(59,130,246,0.3)]' :
+                      'bg-[rgb(var(--color-warning)/0.1)]0 shadow-[0_0_10px_rgba(245,158,11,0.3)]'
                     }`}
                     style={{ width: `${Math.min(activePlan.progress, 100)}%` }}
                   />
@@ -1434,7 +1434,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             </Card>
           ) : (
             <Card>
-              <div className="text-center py-8 text-slate-400">
+              <div className="text-center py-8 text-[var(--color-text-muted)]">
                 <NotebookText size={32} className="mb-2 block opacity-30 mx-auto" />
                 <p className="font-bold">{t('dashboard.noActivePlan')}</p>
                 <p className="text-sm mt-1">{t('dashboard.noActivePlanHint')}</p>
@@ -1446,8 +1446,8 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           {alerts.length > 0 && (
             <Card>
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                  <BellRing size={18} className="text-amber-600" />
+                <div className="w-10 h-10 bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+                  <BellRing size={18} className="text-[rgb(var(--color-warning))]" />
                 </div>
                 <h3 className="text-base font-bold text-[var(--color-text)]">{t('dashboard.alerts.title')}</h3>
               </div>
@@ -1457,14 +1457,14 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                     key={i}
                     className={`flex items-start gap-3 p-3.5 rounded-[var(--border-radius-lg)] border ${
                       alert.type === 'danger'
-                        ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 dark:border-rose-900/20'
-                        : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-900/20'
+                        ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border-[rgb(var(--color-danger)/0.25)] dark:border-[rgb(var(--color-danger))]/20'
+                        : 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border-[rgb(var(--color-warning)/0.25)] dark:border-[rgb(var(--color-warning))]/20'
                     }`}
                   >
                     {renderDashboardIcon(
                       alert.icon,
                       18,
-                      `mt-0.5 ${alert.type === 'danger' ? 'text-rose-500' : 'text-amber-500'}`
+                      `mt-0.5 ${alert.type === 'danger' ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-warning))]'}`
                     )}
                     <p className="text-sm font-medium text-[var(--color-text)] leading-relaxed">{alert.text}</p>
                   </div>
@@ -1476,10 +1476,10 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
         {/* ── Personal Performance (right sidebar) ── */}
         <div className="lg:col-span-1">
-          <Card className="sticky top-24 border-emerald-500/20 shadow-emerald-500/5">
+          <Card className="sticky top-24 border-[rgb(var(--color-success))]/20 shadow-emerald-500/5">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <User size={18} className="text-emerald-600" />
+              <div className="w-10 h-10 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <User size={18} className="text-[rgb(var(--color-success))]" />
               </div>
               <div>
                 <h3 className="text-base font-bold text-[var(--color-text)]">{t('dashboard.personalPerformance')}</h3>
@@ -1489,34 +1489,34 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
             <div className="space-y-4">
               {/* Reports count */}
-              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <div className="flex items-center justify-between p-3.5 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <FileText size={18} className="text-blue-500" />
+                  <FileText size={18} className="text-[rgb(var(--color-primary))]" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.reportsCount')}</span>
                 </div>
-                <span className="text-lg font-bold text-blue-600">{kpis.reportsCount}</span>
+                <span className="text-lg font-bold text-[rgb(var(--color-primary))]">{kpis.reportsCount}</span>
               </div>
 
               {/* Avg production per hour */}
-              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <div className="flex items-center justify-between p-3.5 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <Gauge size={18} className="text-emerald-500" />
+                  <Gauge size={18} className="text-[rgb(var(--color-success))]" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.avgPerHour')}</span>
                 </div>
-                <span className="text-lg font-bold text-emerald-600">{kpis.avgPerHour > 0 ? formatNumber(kpis.avgPerHour) : '—'}</span>
+                <span className="text-lg font-bold text-[rgb(var(--color-success))]">{kpis.avgPerHour > 0 ? formatNumber(kpis.avgPerHour) : '—'}</span>
               </div>
 
               {/* Total work hours */}
-              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <div className="flex items-center justify-between p-3.5 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <Clock3 size={18} className="text-amber-500" />
+                  <Clock3 size={18} className="text-[rgb(var(--color-warning))]" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.workHours')}</span>
                 </div>
-                <span className="text-lg font-bold text-amber-600">{kpis.totalHours > 0 ? t('dashboard.hoursValue', { value: kpis.totalHours }) : '—'}</span>
+                <span className="text-lg font-bold text-[rgb(var(--color-warning))]">{kpis.totalHours > 0 ? t('dashboard.hoursValue', { value: kpis.totalHours }) : '—'}</span>
               </div>
 
               {/* Total production */}
-              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <div className="flex items-center justify-between p-3.5 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
                   <Package size={18} className="text-primary" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.totalProduction')}</span>
@@ -1525,13 +1525,13 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
               </div>
 
               {/* Waste */}
-              <div className="flex items-center justify-between p-3.5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+              <div className="flex items-center justify-between p-3.5 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                 <div className="flex items-center gap-2.5">
-                  <Trash2 size={18} className="text-rose-500" />
+                  <Trash2 size={18} className="text-[rgb(var(--color-danger))]" />
                   <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('dashboard.kpi.waste')}</span>
                 </div>
                 <div className="text-left">
-                  <span className={`text-lg font-bold ${kpis.wasteRatio > 5 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
+                  <span className={`text-lg font-bold ${kpis.wasteRatio > 5 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
                     {formatNumber(kpis.totalWaste)}
                   </span>
                   <span className="text-[11px] text-[var(--color-text-muted)] font-medium mr-1">({kpis.wasteRatio}%)</span>
@@ -1541,7 +1541,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
 
             {/* No data state */}
             {kpis.reportsCount === 0 && !isLoadingData && (
-              <div className="mt-6 text-center py-4 text-slate-400">
+              <div className="mt-6 text-center py-4 text-[var(--color-text-muted)]">
                 <Info size={22} className="mb-1 block opacity-40 mx-auto" />
                 <p className="text-xs font-bold">{t('dashboard.noReportsForPeriod', { period: periodLabel })}</p>
               </div>
@@ -1550,9 +1550,9 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
             {/* Alerts summary at bottom */}
             {alerts.length === 0 && kpis.reportsCount > 0 && (
               <div className="mt-6 pt-4 border-t border-[var(--color-border)]">
-                <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-[var(--border-radius-base)] border border-emerald-100 dark:border-emerald-900/20">
-                  <CheckCircle2 size={14} className="text-emerald-500 mt-0.5" />
-                  <p className="text-xs text-[var(--color-text-muted)] dark:text-emerald-200/80 leading-relaxed font-medium">
+                <div className="flex items-start gap-3 bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] p-3 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-success)/0.25)] dark:border-[rgb(var(--color-success))]/20">
+                  <CheckCircle2 size={14} className="text-[rgb(var(--color-success))] mt-0.5" />
+                  <p className="text-xs text-[var(--color-text-muted)] dark:text-[rgb(var(--color-success))]/80 leading-relaxed font-medium">
                     {t('dashboard.goodPerformance')}
                   </p>
                 </div>

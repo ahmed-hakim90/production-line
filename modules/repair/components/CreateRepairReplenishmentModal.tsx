@@ -12,6 +12,9 @@ import {
 } from '@/components/ui/dialog';
 import { SearchableSelect } from '@/components/UI';
 import { toast } from '../../../components/Toast';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
+import { useAppStore } from '../../../store/useAppStore';
 import { sparePartsReplenishmentService } from '../../inventory/services/sparePartsReplenishmentService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
@@ -20,6 +23,19 @@ import { usePermission } from '../../../utils/permissions';
 import type { RepairSparePart } from '../types';
 
 type DraftLine = { key: string; itemId: string; quantity: string };
+
+type ReplenishmentFormDraft = {
+  note: string;
+  draftLines: DraftLine[];
+};
+
+const emptyReplenishmentLines = (): DraftLine[] => [{ key: '1', itemId: '', quantity: '1' }];
+
+const isReplenishmentFormDraftEmpty = (draft: ReplenishmentFormDraft): boolean => {
+  const hasNote = Boolean(draft.note.trim());
+  const hasLines = draft.draftLines.some((line) => Boolean(line.itemId) || String(line.quantity || '1') !== '1');
+  return !hasNote && !hasLines;
+};
 
 type Props = {
   open: boolean;
@@ -38,13 +54,38 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
   onCreated,
 }) => {
   const { can } = usePermission();
+  const user = useAppStore((s) => s.userProfile);
   const canCreate = can('sparePartsReplenishment.create');
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [draftLines, setDraftLines] = useState<DraftLine[]>([
-    { key: '1', itemId: '', quantity: '1' },
-  ]);
+  const [draftLines, setDraftLines] = useState<DraftLine[]>(emptyReplenishmentLines());
+
+  const replenishmentDraftValue = useMemo<ReplenishmentFormDraft>(() => ({
+    note,
+    draftLines,
+  }), [note, draftLines]);
+
+  const { hasDraft, clearDraft } = useLocalFormDraft<ReplenishmentFormDraft>({
+    formKey: 'repair:replenishmentCreate',
+    tenantId: getCurrentTenantIdOrNull() || user?.tenantId,
+    userId: user?.id,
+    value: replenishmentDraftValue,
+    enabled: open,
+    isEmpty: isReplenishmentFormDraftEmpty,
+    onRestore: (draft) => {
+      setNote(String(draft.note || ''));
+      setDraftLines(
+        Array.isArray(draft.draftLines) && draft.draftLines.length > 0
+          ? draft.draftLines.map((line, index) => ({
+              key: String(line.key || String(index + 1)),
+              itemId: String(line.itemId || ''),
+              quantity: String(line.quantity || '1'),
+            }))
+          : emptyReplenishmentLines(),
+      );
+    },
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -83,8 +124,9 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
   }, [parts, materials]);
 
   const reset = () => {
+    clearDraft();
     setNote('');
-    setDraftLines([{ key: '1', itemId: '', quantity: '1' }]);
+    setDraftLines(emptyReplenishmentLines());
   };
 
   const submitCreate = async () => {
@@ -129,7 +171,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) reset();
+        // Keep local draft on dismiss — only successful submit clears it.
         onOpenChange(next);
       }}
     >
@@ -222,6 +264,11 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
         )}
 
         <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+          {hasDraft ? (
+            <Button type="button" variant="ghost" className="w-full sm:w-auto" onClick={reset} disabled={busy}>
+              مسح المسودة
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => onOpenChange(false)} disabled={busy}>
             إلغاء
           </Button>

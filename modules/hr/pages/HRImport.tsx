@@ -436,9 +436,9 @@ export const HRImport: React.FC = () => {
           const isPast = ['upload', 'preview', 'importing', 'done'].indexOf(step) > i;
           return (
             <React.Fragment key={s}>
-              {i > 0 && <div className={`flex-1 h-0.5 ${isPast ? 'bg-primary' : 'bg-slate-200'}`} />}
+              {i > 0 && <div className={`flex-1 h-0.5 ${isPast ? 'bg-primary' : 'bg-[var(--color-border)]'}`} />}
               <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${
-                isActive ? 'bg-primary/10 text-primary' : isPast ? 'text-primary' : 'text-slate-400'
+                isActive ? 'bg-primary/10 text-primary' : isPast ? 'text-primary' : 'text-[var(--color-text-muted)]'
               }`}>
                 <span className="material-icons-round text-sm">{icons[i]}</span>
                 <span className="hidden sm:inline">{labels[i]}</span>
@@ -460,16 +460,16 @@ export const HRImport: React.FC = () => {
             >
               {lookupsLoading ? (
                 <>
-                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block animate-pulse">hourglass_empty</span>
-                  <p className="text-sm font-bold text-slate-400">جاري تحميل البيانات المرجعية...</p>
+                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block animate-pulse">hourglass_empty</span>
+                  <p className="text-sm font-bold text-[var(--color-text-muted)]">جاري تحميل البيانات المرجعية...</p>
                 </>
               ) : (
                 <>
-                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">cloud_upload</span>
+                  <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">cloud_upload</span>
                   <p className="text-sm font-bold text-[var(--color-text-muted)] mb-1">
                     اسحب ملف Excel هنا أو اضغط للاختيار
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-[var(--color-text-muted)]">
                     يدعم ملفات .xlsx و .xls — يمكن أن يحتوي على أوراق: الأقسام، المناصب، الموظفين
                   </p>
                 </>
@@ -486,9 +486,9 @@ export const HRImport: React.FC = () => {
           </OpsDashPanel>
 
           {parseError && (
-            <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-              <span className="material-icons-round text-rose-500">error</span>
-              <p className="text-sm font-bold text-rose-700">{parseError}</p>
+            <div className="bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+              <span className="material-icons-round text-[rgb(var(--color-danger))]">error</span>
+              <p className="text-sm font-bold text-[rgb(var(--color-danger))]">{parseError}</p>
             </div>
           )}
 
@@ -496,7 +496,7 @@ export const HRImport: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-[var(--color-text)] mb-1">تحميل القالب</h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-[var(--color-text-muted)]">
                   قم بتحميل ملف Excel نموذجي يحتوي على الأعمدة المطلوبة (3 أوراق: الأقسام، المناصب، الموظفين)
                 </p>
               </div>
@@ -536,33 +536,33 @@ export const HRImport: React.FC = () => {
           {/* Summary cards */}
           <div className={`grid grid-cols-1 gap-4 ${totalUpdates > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-              <span className="material-icons-round text-blue-500 text-3xl mb-2 block">description</span>
+              <span className="material-icons-round text-[rgb(var(--color-primary))] text-3xl mb-2 block">description</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي الصفوف</p>
               <p className="text-2xl font-black">
                 {(result.departments.rows.length + result.positions.rows.length + result.employees.rows.length).toLocaleString('en-US')}
               </p>
             </div>
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-              <span className="material-icons-round text-emerald-500 text-3xl mb-2 block">add_circle</span>
+              <span className="material-icons-round text-[rgb(var(--color-success))] text-3xl mb-2 block">add_circle</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">جديد</p>
-              <p className="text-2xl font-bold text-emerald-600">{totalNew.toLocaleString('en-US')}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-success))]">{totalNew.toLocaleString('en-US')}</p>
             </div>
             {totalUpdates > 0 && (
-              <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-amber-200 text-center">
-                <span className="material-icons-round text-amber-500 text-3xl mb-2 block">sync</span>
+              <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] text-center">
+                <span className="material-icons-round text-[rgb(var(--color-warning))] text-3xl mb-2 block">sync</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">تحديث موظفين حاليين</p>
-                <p className="text-2xl font-bold text-amber-600">{totalUpdates.toLocaleString('en-US')}</p>
+                <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">{totalUpdates.toLocaleString('en-US')}</p>
               </div>
             )}
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-              <span className="material-icons-round text-rose-500 text-3xl mb-2 block">error</span>
+              <span className="material-icons-round text-[rgb(var(--color-danger))] text-3xl mb-2 block">error</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بها أخطاء</p>
-              <p className="text-2xl font-bold text-rose-600">{totalErrors.toLocaleString('en-US')}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-danger))]">{totalErrors.toLocaleString('en-US')}</p>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="flex gap-1 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1">
+          <div className="flex gap-1 bg-[var(--color-surface-hover)] rounded-[var(--border-radius-lg)] p-1">
             {([
               { key: 'employees' as PreviewTab, label: 'الموظفون', count: result.employees.rows.length, icon: 'groups' },
               { key: 'departments' as PreviewTab, label: 'الأقسام', count: result.departments.rows.length, icon: 'business' },
@@ -574,14 +574,14 @@ export const HRImport: React.FC = () => {
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
                   tab === t.key
                     ? 'bg-[var(--color-card)] text-primary'
-                    : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
+                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
                 }`}
               >
                 <span className="material-icons-round text-base">{t.icon}</span>
                 <span className="hidden sm:inline">{t.label}</span>
                 {t.count > 0 && (
                   <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    tab === t.key ? 'bg-primary/10 text-primary' : 'bg-slate-200 text-slate-500'
+                    tab === t.key ? 'bg-primary/10 text-primary' : 'bg-[var(--color-border)] text-[var(--color-text-muted)]'
                   }`}>
                     {t.count}
                   </span>
@@ -609,7 +609,7 @@ export const HRImport: React.FC = () => {
                     </thead>
                     <tbody>
                       {result.departments.rows.map((row) => (
-                        <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}`}>
+                        <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${row.errors.length > 0 ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]' : ''}`}>
                           <td className="py-2.5 px-3 font-mono text-[var(--color-text-muted)] text-xs">{row.rowIndex}</td>
                           <td className="py-2.5 px-3 font-bold">{row.name || '—'}</td>
                           <td className="py-2.5 px-3 font-mono text-xs">{row.code || '—'}</td>
@@ -617,7 +617,7 @@ export const HRImport: React.FC = () => {
                             {row.errors.length > 0 ? (
                               <div className="space-y-0.5">
                                 {row.errors.map((err, i) => (
-                                  <div key={i} className="flex items-center gap-1 text-xs text-rose-600">
+                                  <div key={i} className="flex items-center gap-1 text-xs text-[rgb(var(--color-danger))]">
                                     <span className="material-icons-round text-xs">error</span>
                                     {err}
                                   </div>
@@ -631,7 +631,7 @@ export const HRImport: React.FC = () => {
                             <Button
                               variant="ghost"
                               onClick={() => removeDepartmentRow(row.rowIndex)}
-                              className="!px-2 !py-1 text-rose-600 hover:bg-rose-50"
+                              className="!px-2 !py-1 text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                             >
                               <span className="material-icons-round text-sm">delete</span>
                             </Button>
@@ -665,7 +665,7 @@ export const HRImport: React.FC = () => {
                     </thead>
                     <tbody>
                       {result.positions.rows.map((row) => (
-                        <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}`}>
+                        <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${row.errors.length > 0 ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]' : ''}`}>
                           <td className="py-2.5 px-3 font-mono text-[var(--color-text-muted)] text-xs">{row.rowIndex}</td>
                           <td className="py-2.5 px-3 font-bold">{row.title || '—'}</td>
                           <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.departmentName || '—'}</td>
@@ -674,7 +674,7 @@ export const HRImport: React.FC = () => {
                             {row.errors.length > 0 ? (
                               <div className="space-y-0.5">
                                 {row.errors.map((err, i) => (
-                                  <div key={i} className="flex items-center gap-1 text-xs text-rose-600">
+                                  <div key={i} className="flex items-center gap-1 text-xs text-[rgb(var(--color-danger))]">
                                     <span className="material-icons-round text-xs">error</span>
                                     {err}
                                   </div>
@@ -688,7 +688,7 @@ export const HRImport: React.FC = () => {
                             <Button
                               variant="ghost"
                               onClick={() => removePositionRow(row.rowIndex)}
-                              className="!px-2 !py-1 text-rose-600 hover:bg-rose-50"
+                              className="!px-2 !py-1 text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                             >
                               <span className="material-icons-round text-sm">delete</span>
                             </Button>
@@ -720,9 +720,9 @@ export const HRImport: React.FC = () => {
                     </Button>
                   </div>
                   {result.employees.updates > 0 && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-base)] p-3 mb-4 flex items-start gap-2">
-                      <span className="material-icons-round text-amber-500 text-lg mt-0.5">info</span>
-                      <div className="text-xs text-amber-700 font-medium">
+                    <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-base)] p-3 mb-4 flex items-start gap-2">
+                      <span className="material-icons-round text-[rgb(var(--color-warning))] text-lg mt-0.5">info</span>
+                      <div className="text-xs text-[rgb(var(--color-warning))] font-medium">
                         <p className="font-bold mb-0.5">تم اكتشاف موظفين حاليين</p>
                         <p>الصفوف المميزة بظ€ "تحديث" سيتم تحديث بياناتها فقط بالأعمدة الموجودة في الملف — لن يتم مسح أي بيانات قديمة.</p>
                       </div>
@@ -753,9 +753,9 @@ export const HRImport: React.FC = () => {
                         {result.employees.rows.map((row) => (
                           <tr key={row.rowIndex} className={`border-b border-[var(--color-border)] ${
                             row.errors.length > 0
-                              ? 'bg-rose-50/50 dark:bg-rose-900/10'
+                              ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]'
                               : row.existingId
-                                ? 'bg-amber-50/50 dark:bg-amber-900/10'
+                                ? 'bg-[rgb(var(--color-warning)/0.1)]/50 dark:bg-[rgb(var(--color-warning)/0.15)]'
                                 : ''
                           }`}>
                             <td className="py-2.5 px-3 font-mono text-[var(--color-text-muted)] text-xs">{row.rowIndex}</td>
@@ -781,14 +781,14 @@ export const HRImport: React.FC = () => {
                               {row.errors.length > 0 ? (
                                 <div className="space-y-0.5">
                                   {row.errors.map((err, i) => (
-                                    <div key={i} className="flex items-center gap-1 text-xs text-rose-600">
+                                    <div key={i} className="flex items-center gap-1 text-xs text-[rgb(var(--color-danger))]">
                                       <span className="material-icons-round text-xs">error</span>
                                       {err}
                                     </div>
                                   ))}
                                 </div>
                               ) : (
-                                <span className="text-xs text-emerald-600 font-bold">
+                                <span className="text-xs text-[rgb(var(--color-success))] font-bold">
                                   {row.providedFields.filter((f) => f !== 'name' && f !== 'code').length} {row.existingId ? 'حقل للتحديث' : 'حقل'}
                                 </span>
                               )}
@@ -797,7 +797,7 @@ export const HRImport: React.FC = () => {
                               <Button
                                 variant="ghost"
                                 onClick={() => removeEmployeeRow(row.rowIndex)}
-                                className="!px-2 !py-1 text-rose-600 hover:bg-rose-50"
+                                className="!px-2 !py-1 text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                               >
                                 <span className="material-icons-round text-sm">delete</span>
                               </Button>
@@ -840,49 +840,49 @@ export const HRImport: React.FC = () => {
                 {result && result.departments.valid > 0 && (
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">الأقسام</span>
-                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-[var(--color-border)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.depts / result.departments.valid) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs font-mono text-slate-400">{importProgress.depts}/{result.departments.valid}</span>
+                    <span className="text-xs font-mono text-[var(--color-text-muted)]">{importProgress.depts}/{result.departments.valid}</span>
                   </div>
                 )}
                 {result && result.positions.valid > 0 && (
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">المناصب</span>
-                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-[var(--color-border)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.positions / result.positions.valid) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs font-mono text-slate-400">{importProgress.positions}/{result.positions.valid}</span>
+                    <span className="text-xs font-mono text-[var(--color-text-muted)]">{importProgress.positions}/{result.positions.valid}</span>
                   </div>
                 )}
                 {result && (result.employees.valid - result.employees.updates) > 0 && (
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-bold text-[var(--color-text-muted)] w-16 text-left">موظفون جدد</span>
-                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <div className="flex-1 h-2 bg-[var(--color-border)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.employees / (result.employees.valid - result.employees.updates)) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs font-mono text-slate-400">{importProgress.employees}/{result.employees.valid - result.employees.updates}</span>
+                    <span className="text-xs font-mono text-[var(--color-text-muted)]">{importProgress.employees}/{result.employees.valid - result.employees.updates}</span>
                   </div>
                 )}
                 {result && result.employees.updates > 0 && (
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-amber-500 w-16 text-left">تحديث</span>
-                    <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                    <span className="text-xs font-bold text-[rgb(var(--color-warning))] w-16 text-left">تحديث</span>
+                    <div className="flex-1 h-2 bg-[var(--color-border)] rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                        className="h-full bg-[rgb(var(--color-warning)/0.1)]0 rounded-full transition-all duration-300"
                         style={{ width: `${(importProgress.updated / result.employees.updates) * 100}%` }}
                       />
                     </div>
-                    <span className="text-xs font-mono text-slate-400">{importProgress.updated}/{result.employees.updates}</span>
+                    <span className="text-xs font-mono text-[var(--color-text-muted)]">{importProgress.updated}/{result.employees.updates}</span>
                   </div>
                 )}
               </div>
@@ -896,38 +896,38 @@ export const HRImport: React.FC = () => {
         <>
           <div className={`grid grid-cols-2 gap-4 ${importDone.updated > 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-              <span className="material-icons-round text-blue-500 text-3xl mb-2 block">business</span>
+              <span className="material-icons-round text-[rgb(var(--color-primary))] text-3xl mb-2 block">business</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أقسام</p>
-              <p className="text-2xl font-bold text-blue-600">{importDone.depts}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-primary))]">{importDone.depts}</p>
             </div>
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-              <span className="material-icons-round text-indigo-500 text-3xl mb-2 block">work</span>
+              <span className="material-icons-round text-[rgb(var(--color-primary))] text-3xl mb-2 block">work</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مناصب</p>
-              <p className="text-2xl font-bold text-indigo-600">{importDone.positions}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-primary))]">{importDone.positions}</p>
             </div>
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-              <span className="material-icons-round text-emerald-500 text-3xl mb-2 block">person_add</span>
+              <span className="material-icons-round text-[rgb(var(--color-success))] text-3xl mb-2 block">person_add</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">موظفون جدد</p>
-              <p className="text-2xl font-bold text-emerald-600">{importDone.employees}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-success))]">{importDone.employees}</p>
             </div>
             {importDone.updated > 0 && (
-              <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-amber-200 text-center">
-                <span className="material-icons-round text-amber-500 text-3xl mb-2 block">sync</span>
+              <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] text-center">
+                <span className="material-icons-round text-[rgb(var(--color-warning))] text-3xl mb-2 block">sync</span>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">تم تحديثهم</p>
-                <p className="text-2xl font-bold text-amber-600">{importDone.updated}</p>
+                <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">{importDone.updated}</p>
               </div>
             )}
             <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-              <span className="material-icons-round text-rose-500 text-3xl mb-2 block">error</span>
+              <span className="material-icons-round text-[rgb(var(--color-danger))] text-3xl mb-2 block">error</span>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">أخطاء</p>
-              <p className="text-2xl font-bold text-rose-600">{importDone.errors}</p>
+              <p className="text-2xl font-bold text-[rgb(var(--color-danger))]">{importDone.errors}</p>
             </div>
           </div>
 
           {importDone.errors === 0 && (importDone.depts + importDone.positions + importDone.employees + importDone.updated) > 0 && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-              <span className="material-icons-round text-emerald-500">check_circle</span>
-              <p className="text-sm font-bold text-emerald-700">
+            <div className="bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+              <span className="material-icons-round text-[rgb(var(--color-success))]">check_circle</span>
+              <p className="text-sm font-bold text-[rgb(var(--color-success))]">
                 تم الاستيراد بنجاح!
                 {importDone.depts > 0 && ` تمت إضافة ${importDone.depts} قسم`}
                 {importDone.positions > 0 && ` و${importDone.positions} منصب`}
@@ -942,7 +942,7 @@ export const HRImport: React.FC = () => {
             <OpsDashPanel title="أخطاء الاستيراد" accent="hr">
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {importErrors.map((err, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs text-rose-600">
+                  <div key={i} className="flex items-start gap-2 text-xs text-[rgb(var(--color-danger))]">
                     <span className="material-icons-round text-sm mt-0.5 shrink-0">error</span>
                     <span>{err}</span>
                   </div>

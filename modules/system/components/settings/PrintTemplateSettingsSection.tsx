@@ -2,15 +2,61 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SingleReportPrint } from '../../../production/components/ProductionReportPrint';
 import { ProductionReportShareCard } from '../../../production/components/ProductionReportShareCard';
-import { PRINT_PREVIEW_SAMPLE_ROW } from '../../../production/lib/printPreviewSample';
+import { RepairSalesInvoicePrint } from '../../../repair/components/RepairSalesInvoicePrint';
+import { RepairPaymentPrint } from '../../../repair/components/RepairPaymentPrint';
+import { RepairSpareIssuePrint } from '../../../repair/components/RepairSpareIssuePrint';
+import { RepairTreasuryMonthlyPrint } from '../../../repair/components/RepairTreasuryMonthlyPrint';
+import { StockTransferPrint } from '../../../inventory/components/StockTransferPrint';
+import { ItemCardPrint } from '../../../inventory/components/ItemCardPrint';
+import { SuppliesReceiptPrint } from '../../../inventory/components/SuppliesReceiptPrint';
+import { AccountingReportPrint } from '../../../accounting/components/AccountingReportPrint';
+import { QualityReportPrint } from '../../../quality/components/QualityReportPrint';
+import { PayslipPrint } from '../../../hr/components/PayslipPrint';
+import { RoutingExecutionPrint } from '../../../production/routing/components/RoutingExecutionPrint';
 import { Button } from '../UI';
-import type { PaperOrientation, PaperSize, PrintTemplateSettings, PrintThemePreset } from '../../../../types';
+import type {
+  PaperOrientation,
+  PaperSize,
+  PrintDocumentTypeId,
+  PrintFontFamily,
+  PrintTemplateSettings,
+  PrintThemePreset,
+} from '../../../../types';
 import type { ReportPrintRow } from '../../../production/components/ProductionReportPrint';
 import { getPrintThemePresetDefaults } from '../../../../utils/printTheme';
-import { exportAsImage } from '../../../../utils/reportExport';
+import {
+  exportAsImage,
+  exportToPDF,
+  getShareResultFeedbackMessage,
+  shareToWhatsApp,
+} from '../../../../utils/reportExport';
+import { useManagedPrint } from '../../../../utils/printManager';
 import { toast } from '../../../../components/Toast';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
+import { PrintDocumentControlsPanel } from './PrintDocumentControlsPanel';
+import { PRINT_DOCUMENT_REGISTRY, getPrintDocumentEntry } from '../../../../utils/print/printDocumentRegistry';
+import {
+  PRINT_FONT_FAMILIES,
+  PRINT_FONT_SIZE_DEFAULT,
+  PRINT_FONT_SIZE_MAX,
+  PRINT_FONT_SIZE_MIN,
+} from '../../../../utils/print/printFont';
+import {
+  PRINT_PREVIEW_ACCOUNTING,
+  PRINT_PREVIEW_BRANCH_NAME,
+  PRINT_PREVIEW_ITEM_CARD,
+  PRINT_PREVIEW_PAYSLIP,
+  PRINT_PREVIEW_QUALITY,
+  PRINT_PREVIEW_REPAIR_INVOICE,
+  PRINT_PREVIEW_REPAIR_PAYMENT_AUTH,
+  PRINT_PREVIEW_REPAIR_SPARE_ISSUE,
+  PRINT_PREVIEW_REPAIR_TREASURY,
+  PRINT_PREVIEW_ROUTING_EXECUTION,
+  PRINT_PREVIEW_SAMPLE_ROW,
+  PRINT_PREVIEW_SUPPLIES_RECEIPT,
+  PRINT_PREVIEW_TRANSFER,
+} from '../../lib/printPreviewSamples';
 
 const WHATSAPP_CARD_WIDTH = 1080;
 const WHATSAPP_PREVIEW_SCALE = 0.42;
@@ -45,11 +91,60 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
 }) => {
   const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
   const [exportingWhatsAppPng, setExportingWhatsAppPng] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState<PrintDocumentTypeId>('productionReport');
+  const [previewBusy, setPreviewBusy] = useState<string | null>(null);
   const whatsAppCardRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const previewRow = useMemo(
     () => sampleRows[0] ?? PRINT_PREVIEW_SAMPLE_ROW,
     [sampleRows],
+  );
+
+  const selectedDocLabel = useMemo(
+    () => getPrintDocumentEntry(selectedDocType).labelAr,
+    [selectedDocType],
+  );
+
+  const handlePreviewPrint = useManagedPrint({
+    contentRef: previewRef,
+    printSettings: localPrint,
+    documentTitle: `معاينة-${selectedDocLabel}`,
+  });
+
+  const runPreviewExport = useCallback(
+    async (mode: 'png' | 'pdf' | 'share') => {
+      const el = previewRef.current;
+      if (!el) {
+        toast.error('عنصر المعاينة غير جاهز.');
+        return;
+      }
+      setPreviewBusy(mode);
+      try {
+        const safeName = `preview-${selectedDocType}`;
+        if (mode === 'png') {
+          await exportAsImage(el, safeName);
+          toast.success('تم تحميل صورة PNG.');
+          return;
+        }
+        if (mode === 'pdf') {
+          await exportToPDF(el, safeName, {
+            paperSize: localPrint.paperSize,
+            orientation: localPrint.orientation,
+          });
+          toast.success('تم تحميل ملف PDF.');
+          return;
+        }
+        const result = await shareToWhatsApp(el, selectedDocLabel);
+        const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: selectedDocLabel });
+        if (msg) toast.success(msg, 8000);
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'تعذر تنفيذ العملية.');
+      } finally {
+        setPreviewBusy(null);
+      }
+    },
+    [localPrint.orientation, localPrint.paperSize, selectedDocLabel, selectedDocType],
   );
 
   const exportWhatsAppPng = useCallback(async () => {
@@ -75,7 +170,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold">إعدادات قالب الطباعة</h3>
-          <p className="page-subtitle">تخصيص مظهر التقارير المطبوعة — الشعار، الألوان، حجم الورق والمزيد.</p>
+          <p className="page-subtitle">تخصيص مظهر التقارير المطبوعة — الشعار، الألوان، حجم الورق وعناصر كل مستند.</p>
         </div>
         <div className="erp-page-actions w-full sm:w-auto">
           <Button
@@ -286,6 +381,77 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
           </div>
         </div>
       </OpsDashPanel>
+      <OpsDashPanel title="خط الطباعة">
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-primary">font_download</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[var(--color-text)]">عائلة الخط</p>
+                <p className="text-xs text-[var(--color-text-muted)]">يُطبَّق على الطباعة وصورة PNG/PDF/المشاركة</p>
+              </div>
+            </div>
+            <select
+              className="w-full sm:w-56 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 bg-[var(--color-card)]"
+              value={localPrint.printFontFamily || 'Cairo'}
+              onChange={(e) =>
+                setLocalPrint((p) => ({
+                  ...p,
+                  printFontFamily: e.target.value as PrintFontFamily,
+                }))
+              }
+              style={{ fontFamily: `'${localPrint.printFontFamily || 'Cairo'}', sans-serif` }}
+            >
+              {PRINT_FONT_FAMILIES.map((font) => (
+                <option key={font.value} value={font.value} style={{ fontFamily: `'${font.value}', sans-serif` }}>
+                  {font.labelAr}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="material-icons-round text-primary">format_size</span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-[var(--color-text)]">حجم الخط الأساسي</p>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  من {PRINT_FONT_SIZE_MIN} إلى {PRINT_FONT_SIZE_MAX} نقطة — الحالي: {localPrint.printFontSizePt ?? PRINT_FONT_SIZE_DEFAULT}pt
+                </p>
+              </div>
+            </div>
+            <input
+              type="range"
+              min={PRINT_FONT_SIZE_MIN}
+              max={PRINT_FONT_SIZE_MAX}
+              step={1}
+              className="w-full sm:w-48 accent-[var(--color-primary)]"
+              value={localPrint.printFontSizePt ?? PRINT_FONT_SIZE_DEFAULT}
+              onChange={(e) =>
+                setLocalPrint((p) => ({
+                  ...p,
+                  printFontSizePt: Number(e.target.value),
+                }))
+              }
+            />
+          </div>
+          <div
+            className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4"
+            style={{
+              fontFamily: `'${localPrint.printFontFamily || 'Cairo'}', 'Noto Sans Arabic', Tahoma, sans-serif`,
+              fontSize: `${localPrint.printFontSizePt ?? PRINT_FONT_SIZE_DEFAULT}pt`,
+            }}
+          >
+            <p className="font-bold text-[var(--color-text)]">معاينة سريعة للخط</p>
+            <p className="mt-1 text-[var(--color-text-muted)]">
+              تقرير الإنتاج — فاتورة صيانة — تحويل مخزون — كارت الصنف
+            </p>
+          </div>
+        </div>
+      </OpsDashPanel>
       <OpsDashPanel title="الورق والهوامش">
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
@@ -416,48 +582,12 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
           </div>
         </div>
       </OpsDashPanel>
-      <OpsDashPanel title="عناصر التقرير">
-        <div className="space-y-3">
-          {([
-            { key: 'showWaste' as const, label: 'عرض الهالك', icon: 'delete_sweep', desc: 'إظهار عمود ونسبة الهالك في التقرير' },
-            { key: 'showEmployee' as const, label: 'عرض المشرف', icon: 'person', desc: 'إظهار اسم المشرف في التقرير' },
-            { key: 'showCosts' as const, label: 'عرض التكاليف', icon: 'payments', desc: 'إظهار تكاليف المنتج والتكاليف الصناعية في الجدول' },
-            { key: 'showWorkOrder' as const, label: 'عرض أمر الشغل', icon: 'assignment', desc: 'إظهار رقم أمر الشغل وبياناته في التقرير' },
-            { key: 'showSellingPrice' as const, label: 'عرض سعر البيع', icon: 'sell', desc: 'إظهار سعر البيع وهامش الربح في بطاقة المنتج' },
-            { key: 'printBackground' as const, label: 'طباعة الألوان والخلفيات', icon: 'format_color_fill', desc: 'الاعتماد على ألوان التصميم أثناء الطباعة' },
-            { key: 'showQRCode' as const, label: 'عرض رمز QR', icon: 'qr_code', desc: 'إظهار رمز QR للتحقق من صحة التقرير' },
-          ]).map((toggle) => (
-            <div
-              key={toggle.key}
-              className={`flex items-center gap-3 p-4 rounded-[var(--border-radius-lg)] border transition-all ${
-                localPrint[toggle.key]
-                  ? 'bg-[var(--color-card)] border-[var(--color-border)]'
-                  : 'bg-[var(--color-bg)]/70 border-[var(--color-border)] opacity-60'
-              }`}
-            >
-              <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
-                <span className="material-icons-round text-primary">{toggle.icon}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-[var(--color-text)]">{toggle.label}</p>
-                <p className="text-xs text-[var(--color-text-muted)]">{toggle.desc}</p>
-              </div>
-              <button
-                onClick={() => setLocalPrint((p) => ({ ...p, [toggle.key]: !p[toggle.key] }))}
-                className={`w-12 h-7 rounded-full transition-all relative shrink-0 ${
-                  localPrint[toggle.key] ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full shadow transition-all ${
-                    localPrint[toggle.key] ? 'right-0.5' : 'right-[22px]'
-                  }`}
-                />
-              </button>
-            </div>
-          ))}
-        </div>
-      </OpsDashPanel>
+      <PrintDocumentControlsPanel
+        localPrint={localPrint}
+        setLocalPrint={setLocalPrint}
+        selectedDocType={selectedDocType}
+        setSelectedDocType={setSelectedDocType}
+      />
       <div className="flex justify-end">
         <Button onClick={onReset} variant="ghost" solid={false}>
           إعادة تعيين للقيم الافتراضية
@@ -465,27 +595,175 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
       </div>
       {showPreview && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
-              <h3 className="text-lg font-bold text-[var(--color-text)] flex items-center gap-2">
-                <span className="material-icons-round text-primary">visibility</span>
-                معاينة التقرير المطبوع
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowPreview(false)}
-                className="w-9 h-9 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] flex items-center justify-center hover:bg-[var(--color-surface-hover)] transition-all"
-              >
-                <span className="material-icons-round text-[var(--color-text-muted)]">close</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-[var(--color-border)]">
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-[var(--color-text)] flex items-center gap-2">
+                  <span className="material-icons-round text-primary">visibility</span>
+                  معاينة الطباعة — {selectedDocLabel}
+                </h3>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {PRINT_DOCUMENT_REGISTRY.map((doc) => (
+                    <button
+                      key={doc.id}
+                      type="button"
+                      onClick={() => setSelectedDocType(doc.id)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-bold border ${
+                        selectedDocType === doc.id
+                          ? 'bg-primary text-white border-primary'
+                          : 'border-[var(--color-border)] text-[var(--color-text-muted)]'
+                      }`}
+                    >
+                      {doc.labelAr}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  solid={false}
+                  disabled={!!previewBusy}
+                  onClick={() => handlePreviewPrint()}
+                >
+                  طباعة
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  solid={false}
+                  disabled={!!previewBusy}
+                  onClick={() => void runPreviewExport('png')}
+                >
+                  {previewBusy === 'png' ? '...' : 'PNG'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  solid={false}
+                  disabled={!!previewBusy}
+                  onClick={() => void runPreviewExport('pdf')}
+                >
+                  {previewBusy === 'pdf' ? '...' : 'PDF'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  solid={false}
+                  disabled={!!previewBusy}
+                  onClick={() => void runPreviewExport('share')}
+                >
+                  {previewBusy === 'share' ? '...' : 'مشاركة'}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(false)}
+                  className="w-9 h-9 rounded-[var(--border-radius-base)] bg-[var(--color-bg)] flex items-center justify-center hover:bg-[var(--color-surface-hover)] transition-all"
+                >
+                  <span className="material-icons-round text-[var(--color-text-muted)]">close</span>
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-auto p-6 bg-[var(--color-bg)] flex justify-center">
-              <div className="shadow-2xl">
-                <SingleReportPrint
-                  report={previewRow}
-                  printSettings={localPrint}
-                />
+              <div className="shadow-2xl bg-[var(--color-card)]">
+                {selectedDocType === 'productionReport' ? (
+                  <SingleReportPrint
+                    ref={previewRef}
+                    report={previewRow}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'repairSalesInvoice' ? (
+                  <RepairSalesInvoicePrint
+                    ref={previewRef}
+                    invoice={PRINT_PREVIEW_REPAIR_INVOICE}
+                    branchName={PRINT_PREVIEW_BRANCH_NAME}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'stockTransfer' ? (
+                  <StockTransferPrint
+                    ref={previewRef}
+                    data={PRINT_PREVIEW_TRANSFER}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'itemCard' ? (
+                  <ItemCardPrint
+                    ref={previewRef}
+                    card={PRINT_PREVIEW_ITEM_CARD}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'accountingReport' ? (
+                  <AccountingReportPrint
+                    ref={previewRef}
+                    title={PRINT_PREVIEW_ACCOUNTING.title}
+                    subtitle={PRINT_PREVIEW_ACCOUNTING.subtitle}
+                    columns={[...PRINT_PREVIEW_ACCOUNTING.columns]}
+                    rows={[...PRINT_PREVIEW_ACCOUNTING.rows]}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'qualityReport' ? (
+                  <QualityReportPrint
+                    ref={previewRef}
+                    title={PRINT_PREVIEW_QUALITY.title}
+                    subtitle={PRINT_PREVIEW_QUALITY.subtitle}
+                    workOrderNumber={PRINT_PREVIEW_QUALITY.workOrderNumber}
+                    summary={PRINT_PREVIEW_QUALITY.summary}
+                    topDefects={[...PRINT_PREVIEW_QUALITY.topDefects]}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'payslip' ? (
+                  <PayslipPrint
+                    ref={previewRef}
+                    data={PRINT_PREVIEW_PAYSLIP as any}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'suppliesReceipt' ? (
+                  <SuppliesReceiptPrint
+                    ref={previewRef}
+                    order={PRINT_PREVIEW_SUPPLIES_RECEIPT as any}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'repairPayment' ? (
+                  <RepairPaymentPrint
+                    ref={previewRef}
+                    authorization={PRINT_PREVIEW_REPAIR_PAYMENT_AUTH as any}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'repairSpareIssue' ? (
+                  <RepairSpareIssuePrint
+                    ref={previewRef}
+                    issue={PRINT_PREVIEW_REPAIR_SPARE_ISSUE as any}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'repairTreasuryMonthly' ? (
+                  <RepairTreasuryMonthlyPrint
+                    ref={previewRef}
+                    report={PRINT_PREVIEW_REPAIR_TREASURY as any}
+                    branchLabel={PRINT_PREVIEW_BRANCH_NAME}
+                    printSettings={localPrint}
+                  />
+                ) : null}
+                {selectedDocType === 'routingExecution' ? (
+                  <RoutingExecutionPrint
+                    ref={previewRef}
+                    execution={PRINT_PREVIEW_ROUTING_EXECUTION.execution as any}
+                    steps={PRINT_PREVIEW_ROUTING_EXECUTION.steps as any}
+                    productName={PRINT_PREVIEW_ROUTING_EXECUTION.productName}
+                    supervisorName={PRINT_PREVIEW_ROUTING_EXECUTION.supervisorName}
+                    printSettings={localPrint}
+                  />
+                ) : null}
               </div>
             </div>
           </div>
@@ -494,7 +772,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
       )}
       {showWhatsAppPreview && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-[var(--color-border)]">
               <div className="min-w-0">
@@ -527,7 +805,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
             <div className="flex-1 overflow-auto p-4 sm:p-6 bg-[var(--color-bg)] flex justify-center">
               <div
-                className="shadow-2xl overflow-hidden bg-white rounded-[var(--border-radius-lg)]"
+                className="shadow-2xl overflow-hidden bg-[var(--color-card)] rounded-[var(--border-radius-lg)]"
                 style={{ zoom: WHATSAPP_PREVIEW_SCALE }}
               >
                 <div style={{ width: WHATSAPP_CARD_WIDTH, background: 'white' }}>

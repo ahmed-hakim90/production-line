@@ -342,14 +342,14 @@ export const CostCenters: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setViewMode('table')}
-                className={`px-3 py-2 text-xs font-medium ${viewMode === 'table' ? 'bg-[#4F46E5] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
+                className={`px-3 py-2 text-xs font-medium ${viewMode === 'table' ? 'bg-[rgb(var(--color-primary))] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
               >
                 جدول
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('cards')}
-                className={`px-3 py-2 text-xs font-medium ${viewMode === 'cards' ? 'bg-[#4F46E5] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
+                className={`px-3 py-2 text-xs font-medium ${viewMode === 'cards' ? 'bg-[rgb(var(--color-primary))] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
               >
                 بطاقات
               </button>
@@ -359,7 +359,7 @@ export const CostCenters: React.FC = () => {
         />
 
       {filteredCenters.length === 0 ? (
-        <div className="text-center py-12 text-slate-400">
+        <div className="text-center py-12 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">account_balance</span>
             <p className="font-medium">لا توجد نتائج مطابقة</p>
             {canManage && <p className="text-sm mt-1">أضف مراكز التكلفة لبدء تتبع المصروفات</p>}
@@ -375,8 +375,8 @@ export const CostCenters: React.FC = () => {
                 <div className="flex min-w-0 items-center gap-3">
                   <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--border-radius-base)] ${
                     cc.type === 'indirect'
-                      ? 'bg-[#4F46E5]/10 text-[#4F46E5]'
-                      : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'
+                      ? 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
+                      : 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)]'
                   }`}>
                     <span className="material-icons-round text-lg">
                       {cc.type === 'indirect' ? 'share' : 'engineering'}
@@ -431,7 +431,7 @@ export const CostCenters: React.FC = () => {
                     <Button
                       variant="ghost"
                       onClick={() => setDeleteConfirm(cc.id!)}
-                      className="border-red-200 text-red-700 hover:bg-red-50"
+                      className="border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                     >
                       حذف
                     </Button>
@@ -454,9 +454,9 @@ export const CostCenters: React.FC = () => {
       {/* Delete Confirm */}
       {deleteConfirm && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-none w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <span className="material-icons-round text-rose-500 text-4xl mb-3">warning</span>
+            <span className="material-icons-round text-[rgb(var(--color-danger))] text-4xl mb-3">warning</span>
             <h3 className="text-lg font-medium mb-2">حذف مركز التكلفة</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا المركز؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
@@ -464,7 +464,7 @@ export const CostCenters: React.FC = () => {
               <Button
                 variant="ghost"
                 onClick={() => handleDelete(deleteConfirm)}
-                className="border-red-200 text-red-700 hover:bg-red-50"
+                className="border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
               >
                 حذف
               </Button>

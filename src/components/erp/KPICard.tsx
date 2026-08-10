@@ -50,7 +50,7 @@ export function KPICard({
     <article
       className={cn(
         "erp-kpi-card flex min-h-[108px] flex-col justify-between rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4",
-        "shadow-[var(--shadow-desk-card)] ring-1 ring-slate-900/[0.04] dark:ring-white/10",
+        "shadow-[var(--shadow-desk-card)] ring-1 ring-[var(--color-text)]/[0.04] dark:ring-white/10",
         className
       )}
     >

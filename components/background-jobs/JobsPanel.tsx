@@ -22,7 +22,7 @@ export const TasksNavButton: React.FC = () => {
         // Keep the live panel visible when there are active jobs.
         setPanelMinimized(activeCount === 0);
       }}
-      className="relative p-2 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] rounded-full transition-colors"
+      className="relative p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] rounded-full transition-colors"
       title={t('jobs.tasks')}
     >
       <CheckCheck size={20} />
@@ -56,7 +56,7 @@ export const JobsPanel: React.FC = () => {
   return (
     <div className="fixed bottom-5 left-5 z-50 w-[340px] sm:w-[380px] max-w-[calc(100vw-1.5rem)] erp-jobs-panel">
       {/* Panel header */}
-      <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between bg-[#f8f9fa]">
+      <div className="px-4 py-3 border-b border-[var(--color-border)] flex items-center justify-between bg-[var(--color-bg)]">
         <div>
           <p className="text-[13px] font-bold text-[var(--color-text)]">{t('jobs.runningOperations')}</p>
           <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
@@ -66,7 +66,7 @@ export const JobsPanel: React.FC = () => {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setPanelHidden(true)}
-            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[#e8eaed] transition-colors"
+            className="p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface-hover)] transition-colors"
             title={t('shared.close')}
           >
             <X size={18} />

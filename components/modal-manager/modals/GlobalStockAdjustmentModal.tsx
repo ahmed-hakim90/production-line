@@ -93,13 +93,13 @@ export const GlobalStockAdjustmentModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => close()}>
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md border p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 z-[10050] flex items-center justify-center p-4" onClick={() => close()}>
+      <div className="bg-[var(--color-card)] rounded-xl shadow-xl w-full max-w-md border p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center">
           <h3 className="font-bold text-lg">تسوية مخزون</h3>
           <button type="button" onClick={() => close()}><X size={18} /></button>
         </div>
-        <p className="text-sm text-slate-600">{data.itemName} ({data.itemCode})</p>
+        <p className="text-sm text-[var(--color-text-muted)]">{data.itemName} ({data.itemCode})</p>
         <p className="text-sm font-bold text-primary">
           {loading ? 'جاري التحميل...' : `الرصيد الحالي: ${available ?? 0}`}
         </p>
@@ -118,7 +118,7 @@ export const GlobalStockAdjustmentModal: React.FC = () => {
           <option value="manual_correction">تصحيح يدوي</option>
         </select>
         <textarea className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ملاحظة" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
-        {error && <p className="text-sm text-rose-600 font-bold">{error}</p>}
+        {error && <p className="text-sm text-[rgb(var(--color-danger))] font-bold">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => close()}>إلغاء</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>حفظ</Button>

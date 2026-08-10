@@ -222,14 +222,14 @@ export const StockCounts: React.FC = () => {
       />
 
       {(fromSupplies || scoped) && warehouseId && (
-        <p className="text-sm font-medium text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] border border-[rgb(var(--color-primary)/0.25)] rounded-lg px-4 py-3">
           جرد مخزن المستلزمات: <span className="font-bold">{selectedWarehouseName}</span>.
           المطابقة تعتمد فروق العد (الفعلي مقابل النظام) كتسويات مخزنية.
         </p>
       )}
 
       <OpsDashPanel title="مسار الجرد والمطابقة" accent="inventory">
-        <ol className="mb-4 space-y-1 text-sm text-slate-600 list-decimal list-inside">
+        <ol className="mb-4 space-y-1 text-sm text-[var(--color-text-muted)] list-decimal list-inside">
           <li>افتح جلسة جرد للمخزن المحدد.</li>
           <li>أدخل الكميات الفعلية لكل صنف.</li>
           <li>طابق الفروقات واعتمدها لترحيل التسويات.</li>
@@ -240,7 +240,7 @@ export const StockCounts: React.FC = () => {
             disabled={warehouseSelectLocked}
             onValueChange={(value) => setWarehouseId(value === 'none' ? '' : value)}
           >
-            <SelectTrigger className="flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]">
+            <SelectTrigger className="flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)]">
               <SelectValue placeholder="اختر المخزن" />
             </SelectTrigger>
             <SelectContent>
@@ -280,33 +280,33 @@ export const StockCounts: React.FC = () => {
             }}
           />
         </div>
-        {msg && <p className="mt-3 text-sm font-bold text-slate-600">{msg}</p>}
+        {msg && <p className="mt-3 text-sm font-bold text-[var(--color-text-muted)]">{msg}</p>}
       </OpsDashPanel>
 
       {countPreview && (
         <OpsDashPanel title={`معاينة الجرد — ${countPreview.fileName}`} accent="inventory">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 mb-4">
-            <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">صفوف المخزن</div><div className="text-xl font-bold">{countPreview.parsed.lines.length}</div></div>
-            <div className="rounded-lg bg-emerald-50 p-3"><div className="text-xs text-emerald-700">معدود من الملف</div><div className="text-xl font-bold">{countPreview.parsed.importedRows}</div></div>
-            <div className="rounded-lg bg-amber-50 p-3"><div className="text-xs text-amber-700">فروقات</div><div className="text-xl font-bold">{countPreview.parsed.changedRows}</div></div>
-            <div className="rounded-lg bg-rose-50 p-3"><div className="text-xs text-rose-700">أخطاء مانعة</div><div className="text-xl font-bold">{countPreview.parsed.errors.length}</div></div>
-            <div className="rounded-lg bg-sky-50 p-3"><div className="text-xs text-sky-700">تحذيرات</div><div className="text-xl font-bold">{countPreview.parsed.warnings.length}</div></div>
+            <div className="rounded-lg bg-[var(--color-bg)] p-3"><div className="text-xs text-[var(--color-text-muted)]">صفوف المخزن</div><div className="text-xl font-bold">{countPreview.parsed.lines.length}</div></div>
+            <div className="rounded-lg bg-[rgb(var(--color-success)/0.1)] p-3"><div className="text-xs text-[rgb(var(--color-success))]">معدود من الملف</div><div className="text-xl font-bold">{countPreview.parsed.importedRows}</div></div>
+            <div className="rounded-lg bg-[rgb(var(--color-warning)/0.1)] p-3"><div className="text-xs text-[rgb(var(--color-warning))]">فروقات</div><div className="text-xl font-bold">{countPreview.parsed.changedRows}</div></div>
+            <div className="rounded-lg bg-[rgb(var(--color-danger)/0.1)] p-3"><div className="text-xs text-[rgb(var(--color-danger))]">أخطاء مانعة</div><div className="text-xl font-bold">{countPreview.parsed.errors.length}</div></div>
+            <div className="rounded-lg bg-[rgb(var(--color-primary)/0.1)] p-3"><div className="text-xs text-[rgb(var(--color-primary))]">تحذيرات</div><div className="text-xl font-bold">{countPreview.parsed.warnings.length}</div></div>
           </div>
           {countPreview.parsed.errors.length > 0 && (
-            <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+            <div className="mb-3 rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] p-3 text-sm text-[rgb(var(--color-danger))]">
               {countPreview.parsed.errors.slice(0, 6).map((error) => <div key={error}>{error}</div>)}
             </div>
           )}
           {countPreview.parsed.warnings.length > 0 && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="mb-3 rounded-lg border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] p-3 text-sm text-[rgb(var(--color-warning))]">
               {countPreview.parsed.warnings.map((warning) => <div key={warning}>{warning}</div>)}
             </div>
           )}
           <div className="max-h-80 overflow-auto rounded-lg border mb-4">
             <table className="w-full min-w-[680px] text-sm text-right">
-              <thead className="bg-slate-100 sticky top-0"><tr><th className="p-2">الكود</th><th className="p-2">الصنف</th><th className="p-2">المتوقع</th><th className="p-2">الفعلي</th><th className="p-2">الفرق</th></tr></thead>
+              <thead className="bg-[var(--color-surface-hover)] sticky top-0"><tr><th className="p-2">الكود</th><th className="p-2">الصنف</th><th className="p-2">المتوقع</th><th className="p-2">الفعلي</th><th className="p-2">الفرق</th></tr></thead>
               <tbody>{countPreview.parsed.lines.filter((line) => Math.abs(line.countedQty - line.expectedQty) > 0.00001).slice(0, 100).map((line) => (
-                <tr key={`${line.itemType}-${line.itemId}`} className="border-t"><td className="p-2">{line.itemCode || '—'}</td><td className="p-2 font-medium">{line.itemName}</td><td className="p-2 tabular-nums">{line.expectedQty}</td><td className="p-2 tabular-nums">{line.countedQty}</td><td className={`p-2 font-bold tabular-nums ${line.countedQty - line.expectedQty >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>{(line.countedQty - line.expectedQty).toFixed(2)}</td></tr>
+                <tr key={`${line.itemType}-${line.itemId}`} className="border-t"><td className="p-2">{line.itemCode || '—'}</td><td className="p-2 font-medium">{line.itemName}</td><td className="p-2 tabular-nums">{line.expectedQty}</td><td className="p-2 tabular-nums">{line.countedQty}</td><td className={`p-2 font-bold tabular-nums ${line.countedQty - line.expectedQty >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`}>{(line.countedQty - line.expectedQty).toFixed(2)}</td></tr>
               ))}</tbody>
             </table>
           </div>
@@ -321,7 +321,7 @@ export const StockCounts: React.FC = () => {
 
       <OpsDashPanel title="جلسات الجرد والمطابقة" accent="inventory">
         {visibleSessions.length === 0 ? (
-          <p className="text-sm text-slate-400">لا توجد جلسات جرد حتى الآن.</p>
+          <p className="text-sm text-[var(--color-text-muted)]">لا توجد جلسات جرد حتى الآن.</p>
         ) : (
           <div className="space-y-3">
             {visibleSessions.map((session) => (
@@ -329,7 +329,7 @@ export const StockCounts: React.FC = () => {
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-bold text-[var(--color-text)]">{session.warehouseName}</p>
-                    <p className="text-xs text-slate-400">{new Date(session.createdAt).toLocaleString('ar-EG')}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">{new Date(session.createdAt).toLocaleString('ar-EG')}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={session.status === 'approved' ? 'success' : session.status === 'counted' ? 'warning' : 'info'}>

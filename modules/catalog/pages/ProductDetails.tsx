@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTenantNavigate } from "@/lib/useTenantNavigate";
 import {
@@ -42,6 +42,7 @@ import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
 import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
 import { calculateWasteRatio } from "@/utils/calculations";
 import { usePermission } from "../../../utils/permissions";
+import { useManagedPrint } from "@/utils/printManager";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ import {
   SectionSkeleton,
   SURFACE_CARD,
 } from "@/src/components/erp/DetailPageChrome";
+import { CatalogProductDetailPrint } from "../components/CatalogProductDetailPrint";
 
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   borderRadius: 8,
@@ -103,18 +105,18 @@ type ToneKey = "teal" | "blue" | "coral" | "amber" | "red" | "gray";
 
 const TONE_ICON_WRAP: Record<ToneKey, string> = {
   teal: "bg-primary/15 text-primary",
-  blue: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  coral: "bg-orange-500/15 text-orange-700 dark:text-orange-400",
-  amber: "bg-amber-500/15 text-amber-800 dark:text-amber-400",
+  blue: "bg-[rgb(var(--color-primary)/0.1)]0/15 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]",
+  coral: "bg-[rgb(var(--color-warning)/0.1)]0/15 text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]",
+  amber: "bg-[rgb(var(--color-warning)/0.1)]0/15 text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]",
   red: "bg-destructive/15 text-destructive",
   gray: "bg-muted text-muted-foreground",
 };
 
 const TONE_VALUE_TEXT: Record<ToneKey, string> = {
   teal: "text-primary",
-  blue: "text-blue-700 dark:text-blue-400",
-  coral: "text-orange-700 dark:text-orange-400",
-  amber: "text-amber-800 dark:text-amber-400",
+  blue: "text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]",
+  coral: "text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]",
+  amber: "text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]",
   red: "text-destructive",
   gray: "text-muted-foreground",
 };
@@ -181,7 +183,9 @@ export const ProductDetails: React.FC = () => {
   );
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
-  const canManageMaterials = can("costs.manage") || can("products.edit");
+  const canViewCosts = can("costs.view");
+  const canViewBom = can("bom.view") || can("bom.manage");
+  const canManageBom = can("bom.manage") || can("products.edit");
   const { data, isLoading, isError } = useProductDetail(id);
   const {
     costCenters,
@@ -220,6 +224,17 @@ export const ProductDetails: React.FC = () => {
 
   const [detailTab, setDetailTab] = useState<"overview" | "bom">("overview");
   const uid = useAppStore((s) => s.uid) || "";
+  const printTemplate = useAppStore((s) => s.systemSettings?.printTemplate);
+  const printRef = useRef<HTMLDivElement>(null);
+  const handleManagedPrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: data?.header?.name ? `تفاصيل-منتج-${data.header.name}` : "تفاصيل-منتج",
+  });
+
+  useEffect(() => {
+    if (!canViewBom && detailTab === "bom") setDetailTab("overview");
+  }, [canViewBom, detailTab]);
   const [activePeriod, setActivePeriod] = useState("all");
   const [lineFilter, setLineFilter] = useState("كل الخطوط");
   const [supervisorFilter, setSupervisorFilter] = useState("كل المشرفين");
@@ -500,81 +515,7 @@ export const ProductDetails: React.FC = () => {
 
   const onExport = () => {
     if (!data) return;
-    const printWindow = window.open("", "_blank", "width=1100,height=800");
-    if (!printWindow) return;
-    const rowsHtml = filteredReports
-      .map(
-        (row) => `
-          <tr>
-            <td>${row.date}</td>
-            <td>${row.line}</td>
-            <td>${row.employee}</td>
-            <td>${arNumber(row.quantity)}</td>
-            <td>${arNumber(row.waste)}</td>
-            <td>${arNumber(row.workers)}</td>
-            <td>${arNumber(row.hours)}</td>
-          </tr>
-        `,
-      )
-      .join("");
-
-    printWindow.document.write(`
-      <!doctype html>
-      <html dir="rtl" lang="ar">
-        <head>
-          <meta charset="utf-8"/>
-          <title>تقرير المنتج ${data.id}</title>
-          <style>
-            body { font-family: Cairo, sans-serif; background:#fff; color:#252521; padding:20px; }
-            .card { border:0.5px solid rgba(0,0,0,0.12); border-radius:12px; padding:16px 18px; margin-bottom:12px; }
-            .row { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; }
-            table { width:100%; border-collapse:collapse; margin-top:8px; }
-            th, td { border:0.5px solid rgba(0,0,0,0.12); padding:8px; text-align:right; font-weight:400; font-size:12px; }
-            th { background:#F1EFE8; font-weight:500; }
-            .muted { color:#666; font-size:12px; }
-            .title { font-size:18px; font-weight:500; margin:0; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <p class="muted">الكتالوج › المنتجات › ${data.id}</p>
-            <h1 class="title">${data.header.name}</h1>
-            <div class="row muted">
-              <span>الكود: ${data.header.code}</span>
-              <span>الفئة: ${data.header.category}</span>
-              <span>الفترة: ${fromDate || "-"} إلى ${toDate || "-"}</span>
-            </div>
-          </div>
-          <div class="card">
-            <div class="row">
-              ${data.kpis
-                .map(
-                  (kpi) =>
-                    `<div><div class="muted">${kpi.label}</div><div style="font-weight:500">${typeof kpi.value === "number" ? arNumber(kpi.value) : kpi.value} ${kpi.unit}</div></div>`,
-                )
-                .join("")}
-            </div>
-          </div>
-          <div class="card">
-            <h2 style="font-size:14px;font-weight:500;margin:0 0 8px 0;">التقارير التفصيلية</h2>
-            <table className="erp-table">
-              <thead>
-                <tr>
-                  <th>التاريخ</th><th>خط الإنتاج</th><th>المشرف</th><th>الكمية</th><th>الهالك</th><th>عمال</th><th>ساعات</th>
-                </tr>
-              </thead>
-              <tbody>${rowsHtml || `<tr><td colspan="7">لا توجد بيانات بعد الفلترة</td></tr>`}</tbody>
-            </table>
-          </div>
-        </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    window.setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    void handleManagedPrint();
   };
 
   const onExcel = () => {
@@ -701,14 +642,16 @@ export const ProductDetails: React.FC = () => {
             >
               نظرة عامة
             </Button>
-            <Button
-              type="button"
-              variant={detailTab === "bom" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setDetailTab("bom")}
-            >
-              BOM والمواد
-            </Button>
+            {canViewBom ? (
+              <Button
+                type="button"
+                variant={detailTab === "bom" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setDetailTab("bom")}
+              >
+                BOM والمواد
+              </Button>
+            ) : null}
           </div>
         )}
 
@@ -717,7 +660,7 @@ export const ProductDetails: React.FC = () => {
             <SectionSkeleton rows={2} height={38} />
           ) : (
             <div className="flex flex-wrap items-center gap-3 p-1">
-              <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
+              <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--color-border)]/90 bg-[var(--color-surface-hover)] p-1 dark:border-border dark:bg-muted/40">
                 {PERIOD_OPTIONS.map((option) => (
                   <Button
                     key={option.key}
@@ -757,14 +700,14 @@ export const ProductDetails: React.FC = () => {
               </select>
 
               <div className="flex flex-wrap items-center gap-2 lg:mr-auto">
-                <span className="text-xs font-medium text-slate-600 dark:text-muted-foreground">من</span>
+                <span className="text-xs font-medium text-[var(--color-text-muted)] dark:text-muted-foreground">من</span>
                 <input
                   type="date"
                   value={fromDate}
                   onChange={(event) => setFromDate(event.target.value)}
                   className={cn("h-9 rounded-md border px-3 text-sm text-foreground", FIELD_ON_PANEL)}
                 />
-                <span className="text-xs font-medium text-slate-600 dark:text-muted-foreground">إلى</span>
+                <span className="text-xs font-medium text-[var(--color-text-muted)] dark:text-muted-foreground">إلى</span>
                 <input
                   type="date"
                   value={toDate}
@@ -777,11 +720,12 @@ export const ProductDetails: React.FC = () => {
         </OpsDashPanel>
       </DetailPageStickyHeader>
 
-      {detailTab === "bom" && id ? (
+      {detailTab === "bom" && id && canViewBom ? (
         <OpsDashPanel title="BOM والمواد" accent="production">
           <ProductBomSection
             productId={id}
-            canManage={canManageMaterials || can("bom.manage")}
+            canManage={canManageBom}
+            canViewCosts={canViewCosts}
             userId={uid}
           />
         </OpsDashPanel>
@@ -800,14 +744,14 @@ export const ProductDetails: React.FC = () => {
               return (
                 <div key={kpi.id} className={cn("space-y-2 p-3", NESTED_TILE)}>
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-[11px] font-medium text-slate-600 dark:text-muted-foreground">{kpi.label}</p>
+                    <p className="text-[11px] font-medium text-[var(--color-text-muted)] dark:text-muted-foreground">{kpi.label}</p>
                     <div className={cn("flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-lg", wrap)}>
                       {renderIcon(kpi.icon, 16)}
                     </div>
                   </div>
                   <div className="space-y-0.5">
-                    <p className="text-[22px] font-semibold leading-none text-slate-900 dark:text-foreground">{value}</p>
-                    <p className="text-[11px] text-slate-500 dark:text-muted-foreground">{kpi.unit}</p>
+                    <p className="text-[22px] font-semibold leading-none text-[var(--color-text)] dark:text-foreground">{value}</p>
+                    <p className="text-[11px] text-[var(--color-text-muted)] dark:text-muted-foreground">{kpi.unit}</p>
                   </div>
                 </div>
               );
@@ -816,28 +760,29 @@ export const ProductDetails: React.FC = () => {
         )}
       </OpsDashPanel>
 
-      <OpsDashPanel title="الأداء والتكلفة الشهرية" accent="production">
+      <OpsDashPanel title={canViewCosts ? "الأداء والتكلفة الشهرية" : "الأداء"} accent="production">
         {isLoading || !sectionReady.performance || !data ? (
           <SectionSkeleton rows={4} height={62} />
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:col-span-2">
+          <div className={cn("grid grid-cols-1 gap-4", canViewCosts ? "lg:grid-cols-3" : "")}>
+            <div className={cn("grid grid-cols-1 gap-3 md:grid-cols-2", canViewCosts ? "lg:col-span-2" : "")}>
               {displayPerformanceCards.map((item) => {
                 const valueCls = TONE_VALUE_TEXT[item.tone];
                 return (
                   <div key={item.id} className={cn("space-y-2 p-3", NESTED_TILE)}>
-                    <p className="text-xs font-medium text-slate-600 dark:text-muted-foreground">{item.label}</p>
+                    <p className="text-xs font-medium text-[var(--color-text-muted)] dark:text-muted-foreground">{item.label}</p>
                     <p className={cn("text-lg font-medium", valueCls)}>{item.value}</p>
                   </div>
                 );
               })}
             </div>
+            {canViewCosts ? (
             <OpsDashPanel
               title="متوسط تكلفة الإنتاج للفترة"
               accent="production"
               className={cn("overflow-hidden shadow-none", NESTED_TILE)}
               action={
-                <span className="text-xs font-medium text-slate-600 dark:text-muted-foreground">{periodCostLabel}</span>
+                <span className="text-xs font-medium text-[var(--color-text-muted)] dark:text-muted-foreground">{periodCostLabel}</span>
               }
             >
                 <div className="grid grid-cols-1 gap-2">
@@ -881,18 +826,20 @@ export const ProductDetails: React.FC = () => {
                   ))}
                 </div>
             </OpsDashPanel>
+            ) : null}
           </div>
         )}
       </OpsDashPanel>
 
+      {canViewCosts ? (
       <OpsDashPanel title="التكاليف والمواد" accent="production">
         {isLoading || !sectionReady.costBreakdown || !sectionReady.rawMaterials || !sectionReady.summary || !data ? (
           <SectionSkeleton rows={10} height={24} />
         ) : (
           <>
             <div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">تفصيل تكلفة المنتج</h3>
-              <p className="mb-3 text-xs font-medium text-slate-600 dark:text-muted-foreground">يتم الحساب تلقائياً عند تغيير أي عنصر</p>
+              <h3 className="text-sm font-semibold text-[var(--color-text)] dark:text-foreground">تفصيل تكلفة المنتج</h3>
+              <p className="mb-3 text-xs font-medium text-[var(--color-text-muted)] dark:text-muted-foreground">يتم الحساب تلقائياً عند تغيير أي عنصر</p>
               <div className="erp-table-wrap overflow-x-auto">
                 <table className="erp-table w-full min-w-[700px] text-right">
                   <thead>
@@ -946,12 +893,14 @@ export const ProductDetails: React.FC = () => {
               </div>
             </div>
 
-            <p className="mt-4 text-xs text-muted-foreground">
-              لإدارة مواد المنتج استخدم تبويب قائمة المواد (BOM) أعلاه.
-            </p>
+            {canViewBom ? (
+              <p className="mt-4 text-xs text-muted-foreground">
+                لإدارة مواد المنتج استخدم تبويب قائمة المواد (BOM) أعلاه.
+              </p>
+            ) : null}
 
             <div className="mt-6 border-t border-border pt-6">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-foreground">ملخص التكلفة والتوقعات</h3>
+              <h3 className="mb-3 text-sm font-semibold text-[var(--color-text)] dark:text-foreground">ملخص التكلفة والتوقعات</h3>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
                 {data.costSummaryItems.map((item) => {
                   const value =
@@ -977,6 +926,7 @@ export const ProductDetails: React.FC = () => {
           </>
         )}
       </OpsDashPanel>
+      ) : null}
 
       <OpsDashPanel title="الإنتاج والرسوم البيانية" accent="production">
         {isLoading || !sectionReady.lineTable || !sectionReady.costTrend || !sectionReady.prodLog || !data ? (
@@ -984,7 +934,9 @@ export const ProductDetails: React.FC = () => {
         ) : (
           <div className="space-y-8">
             <div>
-              <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-foreground">تكلفة الإنتاج حسب خط الإنتاج</h3>
+              <h3 className="mb-3 text-sm font-semibold text-[var(--color-text)] dark:text-foreground">
+                {canViewCosts ? "تكلفة الإنتاج حسب خط الإنتاج" : "الإنتاج حسب خط الإنتاج"}
+              </h3>
               {filteredProductionByLine.length === 0 ? (
                 <div className="py-10 text-center">
                   <Table2 size={32} className="mx-auto text-muted-foreground/50" />
@@ -997,8 +949,12 @@ export const ProductDetails: React.FC = () => {
                       <tr className="border-b border-border bg-muted/50">
                         <th className="px-3 py-2 text-xs font-medium text-muted-foreground">خط الإنتاج</th>
                         <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الكمية المنتجة</th>
-                        <th className="px-3 py-2 text-xs font-medium text-muted-foreground">إجمالي التكلفة</th>
-                        <th className="px-3 py-2 text-xs font-medium text-muted-foreground">تكلفة الوحدة</th>
+                        {canViewCosts ? (
+                          <>
+                            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">إجمالي التكلفة</th>
+                            <th className="px-3 py-2 text-xs font-medium text-muted-foreground">تكلفة الوحدة</th>
+                          </>
+                        ) : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -1006,18 +962,22 @@ export const ProductDetails: React.FC = () => {
                         <tr key={row.id} className="border-b border-border/80">
                           <td className="px-3 py-2 text-sm text-foreground">{row.lineName}</td>
                           <td className="px-3 py-2 text-sm text-foreground">{arNumber(row.producedQty)}</td>
-                          <td className="px-3 py-2 text-sm text-foreground">{arDecimal(row.totalCost)} ج.م</td>
-                          <td className="px-3 py-2">
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "font-medium",
-                                row.isBest && "border border-primary bg-primary/10 text-primary",
-                              )}
-                            >
-                              {arDecimal(row.unitCost)} ج.م
-                            </Badge>
-                          </td>
+                          {canViewCosts ? (
+                            <>
+                              <td className="px-3 py-2 text-sm text-foreground">{arDecimal(row.totalCost)} ج.م</td>
+                              <td className="px-3 py-2">
+                                <Badge
+                                  variant="secondary"
+                                  className={cn(
+                                    "font-medium",
+                                    row.isBest && "border border-primary bg-primary/10 text-primary",
+                                  )}
+                                >
+                                  {arDecimal(row.unitCost)} ج.م
+                                </Badge>
+                              </td>
+                            </>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>
@@ -1026,8 +986,9 @@ export const ProductDetails: React.FC = () => {
               )}
             </div>
 
+            {canViewCosts ? (
             <div className="border-t border-border pt-6">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-foreground">اتجاه تكلفة الوحدة</h3>
+              <h3 className="mb-3 text-sm font-semibold text-[var(--color-text)] dark:text-foreground">اتجاه تكلفة الوحدة</h3>
               {filteredUnitCostTrend.length === 0 ? (
                 <div className="py-10 text-center">
                   <LineChart size={32} className="mx-auto text-muted-foreground/50" />
@@ -1055,9 +1016,10 @@ export const ProductDetails: React.FC = () => {
                 </div>
               )}
             </div>
+            ) : null}
 
             <div className="border-t border-border pt-6">
-              <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-foreground">سجل الإنتاج</h3>
+              <h3 className="mb-3 text-sm font-semibold text-[var(--color-text)] dark:text-foreground">سجل الإنتاج</h3>
               {filteredProductionLog.length === 0 ? (
                 <div className="py-10 text-center">
                   <BarChart3 size={32} className="mx-auto text-muted-foreground/50" />
@@ -1178,6 +1140,22 @@ export const ProductDetails: React.FC = () => {
       </OpsDashPanel>
       </>
       )}
+
+      <div className="hidden" aria-hidden>
+        {data ? (
+          <CatalogProductDetailPrint
+            ref={printRef}
+            productId={data.id}
+            productName={data.header.name}
+            productCode={data.header.code}
+            category={data.header.category}
+            periodLabel={`${fromDate || "—"} إلى ${toDate || "—"}`}
+            kpis={displayKpis}
+            rows={filteredReports}
+            printSettings={printTemplate}
+          />
+        ) : null}
+      </div>
     </ModuleOpsPageShell>
   );
 };

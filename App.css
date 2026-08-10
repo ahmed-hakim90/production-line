@@ -18,9 +18,12 @@ body {
   line-height: 1.5;
 }
 
-/* Global Tailwind text size uplift */
+/* Global Tailwind text size → محرك المظهر */
 .text-xs { font-size: var(--font-size-xs) !important; }
 .text-sm { font-size: var(--font-size-sm) !important; }
+.text-base { font-size: var(--font-size-base) !important; }
+.text-lg { font-size: calc(var(--font-size-base) + 2px) !important; }
+.text-xl { font-size: calc(var(--font-size-base) + 4px) !important; }
 
 /* ── Focus ──────────────────────────────────────────────── */
 :focus-visible {
@@ -31,7 +34,7 @@ body {
 /* ── Scrollbar ──────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d8dd; border-radius: 8px; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 8px; }
 ::-webkit-scrollbar-thumb:hover { background: rgb(var(--color-primary)); }
 
 /* ══════════════════════════════════════════════════════════
@@ -43,7 +46,7 @@ body {
 table.erp-table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
 }
 
 /* Header row */
@@ -191,16 +194,16 @@ input[type="checkbox"] {
   letter-spacing: 0.05em;
 }
 
-/* ERPNext-style page title */
+/* ERPNext-style page title — scales with محرك المظهر */
 .page-title {
-  font-size: 18px;
+  font-size: calc(var(--font-size-base) + 4px);
   font-weight: 700;
   color: var(--color-text);
   line-height: 1.3;
 }
 
 .page-subtitle {
-  font-size: 13px;
+  font-size: var(--font-size-sm);
   color: var(--color-text-muted);
   margin-top: 2px;
 }
@@ -210,11 +213,27 @@ input[type="checkbox"] {
    ══════════════════════════════════════════════════════════ */
 
 /* Override old badge pill styles with ERPNext-style bordered badges */
-.badge-success { background: #e8f5e9 !important; color: #2e7d32 !important; border: 1px solid #c8e6c9 !important; }
-.badge-warning { background: #fff8e1 !important; color: #f57f17 !important; border: 1px solid #ffecb3 !important; }
-.badge-danger  { background: #fce4ec !important; color: #c62828 !important; border: 1px solid #f8bbd0 !important; }
-.badge-info    { background: #e3f2fd !important; color: #1565c0 !important; border: 1px solid #bbdefb !important; }
-.badge-neutral { background: #f0f2f5 !important; color: var(--color-text-muted) !important; border: 1px solid var(--color-border) !important; }
+.badge-success {
+  background: rgb(var(--color-success) / 0.12) !important;
+  color: var(--color-success-hex) !important;
+  border: 1px solid rgb(var(--color-success) / 0.3) !important;
+}
+.badge-warning {
+  background: rgb(var(--color-warning) / 0.12) !important;
+  color: var(--color-warning-hex) !important;
+  border: 1px solid rgb(var(--color-warning) / 0.3) !important;
+}
+.badge-danger  {
+  background: rgb(var(--color-danger) / 0.12) !important;
+  color: var(--color-danger-hex) !important;
+  border: 1px solid rgb(var(--color-danger) / 0.3) !important;
+}
+.badge-info    {
+  background: rgb(var(--color-primary) / 0.12) !important;
+  color: var(--color-primary-hex) !important;
+  border: 1px solid rgb(var(--color-primary) / 0.3) !important;
+}
+.badge-neutral { background: var(--color-surface-hover) !important; color: var(--color-text-muted) !important; border: 1px solid var(--color-border) !important; }
 
 /* ══════════════════════════════════════════════════════════
    ERPNext Button System
@@ -228,15 +247,16 @@ button {
   font-family: var(--font-family-base) !important;
 }
 
-/* Standard ERPNext button classes */
+/* Standard ERPNext button classes — typography follows محرك المظهر */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-size: 14px;
+  font-size: var(--font-size-sm);
   font-weight: 600;
   padding: 7px 14px;
+  min-height: var(--control-height);
   border-radius: var(--border-radius-base);
   cursor: pointer;
   transition: all 120ms;
@@ -268,15 +288,15 @@ button {
   color: var(--color-text);
   border-color: var(--color-border);
 }
-.btn-secondary:hover:not(:disabled) { background: #f0f2f5; border-color: #bcc4cb; }
+.btn-secondary:hover:not(:disabled) { background: var(--color-surface-hover); border-color: var(--color-border); }
 
 /* Danger */
 .btn-danger {
-  background: #dc2626;
+  background: var(--color-danger-hex);
   color: #fff;
-  border-color: #dc2626;
+  border-color: var(--color-danger-hex);
 }
-.btn-danger:hover:not(:disabled) { background: #b91c1c; }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--color-danger-hex) 85%, #000 15%); }
 
 /* Ghost / Link */
 .btn-ghost {
@@ -284,12 +304,12 @@ button {
   color: var(--color-text-muted);
   border-color: transparent;
 }
-.btn-ghost:hover:not(:disabled) { background: #f0f2f5; color: var(--color-text); }
+.btn-ghost:hover:not(:disabled) { background: var(--color-surface-hover); color: var(--color-text); }
 
 /* Sizes */
-.btn-sm  { padding: 5px 10px; font-size: 12px; gap: 4px; }
-.btn-lg  { padding: 10px 20px; font-size: 14px; gap: 8px; }
-.btn-xl  { padding: 12px 24px; font-size: 15px; gap: 10px; }
+.btn-sm  { padding: 5px 10px; font-size: var(--font-size-xs); min-height: var(--control-height-sm); gap: 4px; }
+.btn-lg  { padding: 10px 20px; font-size: var(--font-size-base); min-height: var(--control-height-lg); gap: 8px; }
+.btn-xl  { padding: 12px 24px; font-size: var(--font-size-base); min-height: calc(var(--control-height-lg) + 4px); gap: 10px; }
 .btn-full { width: 100%; }
 
 /* ── ERPNext Input Field ────────────────────────────────── */
@@ -302,7 +322,7 @@ button {
 }
 
 .erp-field-label {
-  font-size: 12.5px;
+  font-size: var(--font-size-xs);
   font-weight: 600;
   color: var(--color-text-muted);
   text-transform: uppercase;
@@ -319,18 +339,19 @@ button {
   position: absolute;
   right: 10px;
   color: var(--color-text-muted);
-  font-size: 18px;
+  font-size: var(--font-size-base);
   pointer-events: none;
   z-index: 1;
 }
 
 .erp-field-input {
   width: 100%;
-  padding: 8px 10px;
-  font-size: 14px;
+  min-height: var(--control-height-lg);
+  padding: 8px var(--control-pad-x, 10px);
+  font-size: var(--font-size-sm);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-base);
-  background: #f8f9fa;
+  background: var(--color-bg);
   color: var(--color-text);
   transition: border-color 150ms, box-shadow 150ms, background 150ms;
   font-family: var(--font-family-base);
@@ -354,15 +375,7 @@ button {
    ═══════════════════════════════════════════════════════════ */
 
 .erp-auth-page {
-  /* Auth shell now follows semantic tokens with indigo defaults. */
-  --color-primary: 79 70 229;        /* indigo-600 */
-  --color-primary-hover: 67 56 202;  /* indigo-700 */
-  --color-bg: var(--background-auth, #f1f2fe);
-  --color-card: var(--card-auth, var(--color-card, #ffffff));
-  --color-border: var(--border-auth, var(--color-border, #e2e3f0));
-  --color-text: var(--text-auth, var(--color-text, #1e1b4b));
-  --color-text-muted: var(--text-muted-auth, var(--color-text-muted, #6b7280));
-
+  /* Inherit root theme tokens from applyAppTheme (no local primary override). */
   min-height: 100vh;
   background: var(--color-bg);
   display: flex;
@@ -396,8 +409,8 @@ button {
   min-height: 100vh;
   background:
     radial-gradient(ellipse 120% 80% at 100% -20%, rgb(var(--color-primary) / 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 80% 50% at 0% 100%, rgb(99 102 241 / 0.08) 0%, transparent 50%),
-    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 50%, #eef2ff 100%);
+    radial-gradient(ellipse 80% 50% at 0% 100%, rgb(var(--color-secondary) / 0.08) 0%, transparent 50%),
+    linear-gradient(180deg, var(--color-bg) 0%, color-mix(in srgb, var(--color-bg) 70%, var(--color-card)) 50%, color-mix(in srgb, var(--color-primary-hex) 8%, var(--color-bg)) 100%);
   color: var(--color-text);
 }
 
@@ -407,7 +420,7 @@ button {
   z-index: 50;
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  background: rgba(248, 250, 252, 0.82);
+  background: color-mix(in srgb, var(--color-bg) 82%, transparent);
   border-bottom: 1px solid var(--color-border);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
 }
@@ -840,7 +853,7 @@ button {
 .erp-auth-tip {
   margin-top: 14px;
   border: 1px dashed var(--color-border);
-  background: #f8f9fa;
+  background: var(--color-bg);
   border-radius: var(--border-radius-base);
   padding: 10px 12px;
   display: flex;
@@ -986,9 +999,10 @@ button {
    ══════════════════════════════════════════════════════════ */
 
 .app-splash {
-  --splash-brand: #8f2424;
-  --splash-brand-dark: #6d1b1b;
-  --splash-brand-light: #a83232;
+  /* Brand tokens set by applyTenantTheme; CSS fallbacks for first paint */
+  --splash-brand: var(--color-primary-hex, #4F46E5);
+  --splash-brand-dark: color-mix(in srgb, var(--splash-brand) 78%, #000);
+  --splash-brand-light: color-mix(in srgb, var(--splash-brand) 88%, #fff);
 
   min-height: 100vh;
   min-height: 100dvh;
@@ -1003,7 +1017,7 @@ button {
 @media (min-width: 900px) {
   .app-splash {
     flex-direction: row;
-    background: #f8f4f4;
+    background: var(--color-bg, #f8fafc);
     color: var(--color-text, #1e1b4b);
   }
 }
@@ -1013,7 +1027,7 @@ button {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background: #f8f4f4;
+  background: var(--color-bg, #f8fafc);
   color: var(--color-text, #1e1b4b);
 }
 
@@ -1199,13 +1213,13 @@ button {
   width: 64px;
   height: 64px;
   border-radius: 16px;
-  box-shadow: 0 10px 28px rgba(143, 36, 36, 0.35);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--splash-brand) 35%, transparent);
 }
 
 .app-splash__ring {
   position: absolute;
   inset: -8px;
-  border: 2.5px solid rgba(143, 36, 36, 0.15);
+  border: 2.5px solid color-mix(in srgb, var(--splash-brand) 15%, transparent);
   border-top-color: var(--splash-brand);
   border-radius: 50%;
   animation: erp-spin 1s linear infinite;
@@ -1251,7 +1265,7 @@ button {
 
 @media (min-width: 900px) {
   .app-splash__progress {
-    background: rgba(143, 36, 36, 0.12);
+    background: color-mix(in srgb, var(--splash-brand) 12%, transparent);
   }
 }
 
@@ -1264,7 +1278,7 @@ button {
 
 @media (min-width: 900px) {
   .app-splash__progress-bar {
-    background: linear-gradient(90deg, var(--splash-brand), rgba(143, 36, 36, 0.55));
+    background: linear-gradient(90deg, var(--splash-brand), color-mix(in srgb, var(--splash-brand) 55%, transparent));
   }
 }
 
@@ -1300,7 +1314,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 20px;
-  background: linear-gradient(165deg, #8f2424 0%, #6d1b1b 100%);
+  background: linear-gradient(165deg, var(--splash-brand) 0%, var(--splash-brand-dark) 100%);
   color: #fff;
   transition: opacity 0.35s ease, visibility 0.35s ease;
 }
@@ -1469,7 +1483,7 @@ button {
 }
 
 .erpnext-kpi-btn {
-  border-radius: 12px;
+  border-radius: var(--border-radius-lg);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -1489,7 +1503,7 @@ button {
 }
 
 .erpnext-filter-title {
-  font-size: 12px;
+  font-size: var(--font-size-xs);
   font-weight: 800;
   color: var(--color-text-muted);
   letter-spacing: 0.02em;
@@ -1499,10 +1513,10 @@ button {
   display: inline-flex;
   align-items: center;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--border-radius-base);
   background: rgba(59, 130, 246, 0.12);
   color: var(--color-primary, #2563eb);
-  font-size: 11px;
+  font-size: var(--font-size-2xs);
   font-weight: 700;
 }
 
@@ -1510,18 +1524,21 @@ button {
 .erpnext-supervisors .erp-filter-input-inner {
   border: 1px solid var(--color-border);
   background: var(--color-card);
-  min-height: 38px;
+  min-height: var(--control-height);
+  border-radius: var(--border-radius-base);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family-base);
 }
 
 .erpnext-supervisors .erp-date-seg {
   border: 1px solid var(--color-border);
-  border-radius: 10px;
+  border-radius: var(--border-radius-lg);
   padding: 4px;
-  background: #f8fafc;
+  background: var(--color-bg);
 }
 
 .erpnext-supervisors .erp-date-seg-btn {
-  border-radius: 8px;
+  border-radius: var(--border-radius-base);
 }
 
 .erpnext-supervisors .erp-date-seg-btn.active {
@@ -1670,7 +1687,7 @@ button {
   border-radius: var(--border-radius-base);
   font-size: 12px;
   font-weight: 500;
-  background: #f0f2f5;
+  background: var(--color-surface-hover);
   border: 1px solid var(--color-border);
   color: var(--color-text);
   cursor: pointer;
@@ -1726,7 +1743,7 @@ button {
   transition: background 120ms, border-color 120ms;
 }
 
-.action-btn:hover { background: #f0f2f5; }
+.action-btn:hover { background: var(--color-surface-hover); }
 .action-btn.primary { background: rgb(var(--color-primary)); color: white; border-color: transparent; }
 .action-btn.primary:hover { opacity: 0.92; }
 .action-btn.danger { background: #fce4ec; color: #c62828; border-color: #f8bbd0; }
@@ -1779,7 +1796,7 @@ button {
 .form-section-head {
   padding: 10px 16px;
   border-bottom: 1px solid var(--color-border);
-  background: #f8f9fa;
+  background: var(--color-bg);
   font-size: 12px;
   font-weight: 600;
   color: var(--color-text-muted);
@@ -1862,7 +1879,7 @@ html.dark [class*="text-slate-500"] {
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  z-index: 10050;
+  z-index: var(--z-modal, 10050);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1913,7 +1930,7 @@ html.dark [class*="text-slate-500"] {
 .erp-modal-footer {
   padding: 12px 18px;
   border-top: 1px solid var(--color-border);
-  background: #f8f9fa;
+  background: var(--color-bg);
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1932,7 +1949,7 @@ html.dark [class*="text-slate-500"] {
   cursor: pointer;
   transition: background 120ms;
 }
-.erp-modal-close:hover { background: #f0f2f5; color: var(--color-text); }
+.erp-modal-close:hover { background: var(--color-surface-hover); color: var(--color-text); }
 
 /* ══════════════════════════════════════════════════════════
    ERPNext ALERT / TOAST SYSTEM
@@ -1980,7 +1997,7 @@ html.dark [class*="text-slate-500"] {
   top: 64px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 9999;
+  z-index: var(--z-toast, 10200);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2103,7 +2120,7 @@ select {
   width: 100%;
   text-align: right;
 }
-.erp-dropdown-item:hover { background: #f0f2f5; }
+.erp-dropdown-item:hover { background: var(--color-surface-hover); }
 .erp-dropdown-item.active { background: rgb(var(--color-primary) / 0.08); color: rgb(var(--color-primary)); font-weight: 600; }
 .erp-dropdown-item.selected { background: rgb(var(--color-primary) / 0.06); }
 
@@ -2122,7 +2139,7 @@ select {
   border-radius: var(--border-radius-sm) !important;
   padding: 5px 8px !important;
   font-size: 12.5px !important;
-  background: #f8f9fa !important;
+  background: var(--color-bg) !important;
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -2613,7 +2630,7 @@ table.erp-table tbody tr[data-selected="true"] {
 .erp-notif-head {
   padding: 10px 14px;
   border-bottom: 1px solid var(--color-border);
-  background: #f8f9fa;
+  background: var(--color-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2630,7 +2647,7 @@ table.erp-table tbody tr[data-selected="true"] {
   width: 100%;
   text-align: right;
 }
-.erp-notif-item:hover { background: #f8f9fa; }
+.erp-notif-item:hover { background: var(--color-bg); }
 .erp-notif-item.unread { background: rgb(var(--color-primary) / 0.04); }
 .erp-notif-item:last-child { border-bottom: none; }
 
@@ -2738,10 +2755,15 @@ label[class*="text-[12"] {
   max-width: 100%;
 }
 
-/* Visual hierarchy: one primary CTA + secondary + overflow menu */
+/* Header actions follow theme font + control height + radius (محرك المظهر) */
 .erp-page-actions > .btn,
-.erp-page-actions > button {
-  min-height: 36px;
+.erp-page-actions > button,
+.erp-page-actions a.btn,
+.erp-page-actions [role='button'] {
+  min-height: var(--control-height);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-family-base);
+  border-radius: var(--border-radius-base) !important;
 }
 
 /* Phone + tablet: stack title above actions so buttons stay on-screen */
@@ -2865,7 +2887,7 @@ input[type="radio"] {
 
 .erp-accordion-head {
   padding: 10px 14px;
-  background: #f8f9fa;
+  background: var(--color-bg);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2877,7 +2899,7 @@ input[type="radio"] {
   width: 100%;
   text-align: right;
 }
-.erp-accordion-head:hover { background: #f0f2f5; }
+.erp-accordion-head:hover { background: var(--color-surface-hover); }
 
 .erp-accordion-body {
   padding: 12px 14px;
@@ -2918,7 +2940,7 @@ input[type="radio"] {
 
 /* Standard thead - apply to all tables */
 .erp-thead {
-  background: #f8f9fa;
+  background: var(--color-bg);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -3071,10 +3093,12 @@ input[type="radio"] {
   border: 1px solid var(--color-border);
   background: var(--color-card);
   color: var(--color-text-muted);
-  font-size: 0.68rem;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-base);
   font-weight: 700;
-  padding: 0.28rem 0.65rem;
-  border-radius: 999px;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--control-pad-x, 10px);
+  border-radius: var(--border-radius-base);
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
@@ -3141,13 +3165,14 @@ input[type="radio"] {
 .ops-dash-toolbar__actions > button,
 .ops-dash-toolbar__actions > div:not(.ops-toolbar-seg) > button,
 .ops-dash-toolbar__actions button[type='button']:not(.ops-dash-period-chip):not(.ops-dash-refresh__btn) {
-  min-height: 1.85rem !important;
-  height: 1.85rem !important;
-  padding: 0 0.75rem !important;
-  font-size: 0.72rem !important;
+  min-height: var(--control-height) !important;
+  height: var(--control-height) !important;
+  padding: 0 var(--control-pad-x, 10px) !important;
+  font-size: var(--font-size-sm) !important;
+  font-family: var(--font-family-base) !important;
   font-weight: 700;
   line-height: 1;
-  border-radius: 999px !important;
+  border-radius: var(--border-radius-base) !important;
   gap: 0.3rem;
   box-shadow: none;
   white-space: nowrap;
@@ -3155,14 +3180,14 @@ input[type="radio"] {
 
 .ops-dash-toolbar__actions .btn .material-icons-round,
 .ops-dash-toolbar__actions button[type='button'] .material-icons-round {
-  font-size: 0.95rem !important;
+  font-size: var(--font-size-base) !important;
   line-height: 1;
 }
 
 .ops-dash-toolbar__actions .btn svg,
 .ops-dash-toolbar__actions button[type='button'] svg {
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 1em;
+  height: 1em;
   flex-shrink: 0;
 }
 
@@ -3184,7 +3209,7 @@ input[type="radio"] {
 .ops-dash-toolbar__actions .btn-destructive,
 .ops-dash-toolbar__actions button[type='button'][data-variant='destructive'],
 .ops-dash-toolbar__actions .btn[class*='destructive'] {
-  border-radius: 999px !important;
+  border-radius: var(--border-radius-base) !important;
 }
 
 /* Compact selects / month filters sitting in the action strip */
@@ -3194,13 +3219,14 @@ input[type="radio"] {
 .ops-dash-toolbar__actions select,
 .ops-dash-toolbar__actions [data-slot='select-trigger'],
 .ops-dash-toolbar__actions button[role='combobox'] {
-  min-height: 1.85rem !important;
-  height: 1.85rem !important;
-  border-radius: 999px !important;
-  font-size: 0.72rem !important;
+  min-height: var(--control-height) !important;
+  height: var(--control-height) !important;
+  border-radius: var(--border-radius-base) !important;
+  font-size: var(--font-size-sm) !important;
+  font-family: var(--font-family-base) !important;
   font-weight: 650;
   padding-block: 0 !important;
-  padding-inline: 0.75rem !important;
+  padding-inline: var(--control-pad-x, 10px) !important;
   background: var(--color-card);
   border: 1px solid var(--color-border);
   color: var(--color-text);
@@ -3213,17 +3239,17 @@ input[type="radio"] {
   align-items: center;
   gap: 0.15rem;
   padding: 0.15rem;
-  border-radius: 999px;
+  border-radius: var(--border-radius-lg);
   border: 1px solid var(--color-border);
   background: color-mix(in srgb, var(--color-muted) 55%, var(--color-card));
 }
 
 .ops-dash-toolbar__actions .ops-toolbar-seg > button {
-  min-height: 1.55rem !important;
-  height: 1.55rem !important;
-  width: 1.85rem !important;
+  min-height: var(--control-height-sm) !important;
+  height: var(--control-height-sm) !important;
+  width: var(--control-height) !important;
   padding: 0 !important;
-  border-radius: 999px !important;
+  border-radius: var(--border-radius-base) !important;
   border: 0 !important;
   background: transparent;
   color: var(--color-text-muted);
@@ -3237,19 +3263,19 @@ input[type="radio"] {
 }
 
 .ops-dash-toolbar__actions .ops-toolbar-seg .material-icons-round {
-  font-size: 1rem !important;
+  font-size: var(--font-size-base) !important;
 }
 
 /* Status / info chips mixed into the action strip */
 .ops-dash-toolbar__actions [class*='Badge'],
 .ops-dash-toolbar__actions [class*='badge'],
 .ops-dash-toolbar__actions [class*='StatusBadge'] {
-  min-height: 1.85rem;
+  min-height: var(--control-height);
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
+  border-radius: var(--border-radius-base);
   padding-inline: 0.65rem;
-  font-size: 0.68rem;
+  font-size: var(--font-size-xs);
   font-weight: 700;
 }
 
@@ -3289,11 +3315,13 @@ input[type="radio"] {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border-radius: 999px;
+  border-radius: var(--border-radius-base);
   border: 1px solid var(--color-border);
   background: var(--color-card);
-  padding: 0.28rem 0.7rem;
-  font-size: 0.68rem;
+  min-height: var(--control-height-sm);
+  padding: 0 var(--control-pad-x, 10px);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-base);
   font-weight: 700;
   color: var(--color-text);
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
@@ -3465,10 +3493,11 @@ input[type="radio"] {
   border: 0;
   background: rgb(var(--color-primary) / 0.1);
   color: rgb(var(--color-primary));
-  font-size: 0.68rem;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-family-base);
   font-weight: 800;
   padding: 0.28rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--border-radius-base);
   transition: background 150ms ease, color 150ms ease;
 }
 
@@ -4007,7 +4036,7 @@ input[type="radio"] {
 
 .erp-ds-clean:not(.ops-dash-board) [class*="bg-gradient"] {
   background-image: none !important;
-  background-color: #eef2ff !important;
+  background-color: color-mix(in srgb, var(--color-primary-hex) 10%, #fff) !important;
 }
 
 /* ── Hakimo Flow — production line cards ───────────────── */

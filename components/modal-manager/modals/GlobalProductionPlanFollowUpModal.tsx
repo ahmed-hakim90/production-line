@@ -123,30 +123,30 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
   };
 
   const modalContent = (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4">
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]">
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-amber-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <AlertTriangle size={18} className="text-amber-600" />
+            <div className="w-10 h-10 bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+              <AlertTriangle size={18} className="text-[rgb(var(--color-warning))]" />
             </div>
             <div>
               <h3 className="text-lg font-bold">{t('modalManager.productionPlanFollowUp.title')}</h3>
               <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{t('modalManager.productionPlanFollowUp.subtitle')}</p>
             </div>
           </div>
-          <button onClick={close} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+          <button onClick={close} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-2.5">
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5">
               <p className="text-[var(--color-text-muted)] mb-1">{t('modalManager.productionPlanFollowUp.product')}</p>
               <p className="font-bold text-[var(--color-text)]">{productName}</p>
             </div>
-            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-2.5">
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5">
               <p className="text-[var(--color-text-muted)] mb-1">{t('modalManager.productionPlanFollowUp.line')}</p>
               <p className="font-bold text-[var(--color-text)]">{lineName}</p>
             </div>

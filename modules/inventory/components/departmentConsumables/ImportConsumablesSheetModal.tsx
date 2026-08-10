@@ -154,14 +154,14 @@ export const ImportConsumablesSheetModal: React.FC<Props> = ({
         <div className="space-y-2">
           <div className="flex flex-wrap gap-3 text-xs font-bold">
             <span>صفوف: {result.totalRows}</span>
-            <span className="text-emerald-700">صالح: {result.validCount}</span>
-            <span className="text-rose-700">أخطاء: {result.errorCount}</span>
-            <span className="text-sky-700">إنشاء أصناف: {result.createCount}</span>
+            <span className="text-[rgb(var(--color-success))]">صالح: {result.validCount}</span>
+            <span className="text-[rgb(var(--color-danger))]">أخطاء: {result.errorCount}</span>
+            <span className="text-[rgb(var(--color-primary))]">إنشاء أصناف: {result.createCount}</span>
             <span>تحديث كمية: {result.qtyUpdateCount}</span>
             <span>تحديث سعر: {result.priceUpdateCount}</span>
           </div>
           {result.fileErrors.length > 0 ? (
-            <ul className="text-sm text-rose-700 list-disc pe-5">
+            <ul className="text-sm text-[rgb(var(--color-danger))] list-disc pe-5">
               {result.fileErrors.map((err) => <li key={err}>{err}</li>)}
             </ul>
           ) : null}
@@ -185,7 +185,7 @@ export const ImportConsumablesSheetModal: React.FC<Props> = ({
                 {previewRows.map((row) => (
                   <tr
                     key={`${row.rowIndex}-${row.itemCode}-${row.warehouseId}-${row.locationCode}`}
-                    className={row.errors.length ? 'bg-rose-50' : row.willCreateItem ? 'bg-sky-50' : ''}
+                    className={row.errors.length ? 'bg-[rgb(var(--color-danger)/0.1)]' : row.willCreateItem ? 'bg-[rgb(var(--color-primary)/0.1)]' : ''}
                   >
                     <td className="px-2 py-1.5 border-t border-[var(--color-border)]">{row.rowIndex}</td>
                     <td className="px-2 py-1.5 border-t border-[var(--color-border)]">

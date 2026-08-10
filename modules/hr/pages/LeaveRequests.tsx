@@ -492,28 +492,28 @@ export const LeaveRequests: React.FC = () => {
       {balance && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className="material-icons-round text-blue-500 text-3xl mb-2 block">beach_access</span>
+            <span className="material-icons-round text-[rgb(var(--color-primary))] text-3xl mb-2 block">beach_access</span>
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">سنوية</p>
-            <p className="text-2xl font-bold text-blue-600">{balance.annualBalance}</p>
-            <p className="text-xs text-slate-400">يوم</p>
+            <p className="text-2xl font-bold text-[rgb(var(--color-primary))]">{balance.annualBalance}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
           </div>
           <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className="material-icons-round text-rose-500 text-3xl mb-2 block">local_hospital</span>
+            <span className="material-icons-round text-[rgb(var(--color-danger))] text-3xl mb-2 block">local_hospital</span>
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مرضية</p>
-            <p className="text-2xl font-bold text-rose-600">{balance.sickBalance}</p>
-            <p className="text-xs text-slate-400">يوم</p>
+            <p className="text-2xl font-bold text-[rgb(var(--color-danger))]">{balance.sickBalance}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
           </div>
           <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className="material-icons-round text-amber-500 text-3xl mb-2 block">warning</span>
+            <span className="material-icons-round text-[rgb(var(--color-warning))] text-3xl mb-2 block">warning</span>
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الرصيد</p>
-            <p className="text-2xl font-bold text-amber-600">{balance.emergencyBalance}</p>
-            <p className="text-xs text-slate-400">يوم</p>
+            <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">{balance.emergencyBalance}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
           </div>
           <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
             <span className="material-icons-round text-[var(--color-text-muted)] text-3xl mb-2 block">money_off</span>
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بدون راتب (مأخوذة)</p>
-            <p className="text-2xl font-bold text-slate-600">{balance.unpaidTaken}</p>
-            <p className="text-xs text-slate-400">يوم</p>
+            <p className="text-2xl font-bold text-[var(--color-text-muted)]">{balance.unpaidTaken}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
           </div>
         </div>
       )}
@@ -537,7 +537,7 @@ export const LeaveRequests: React.FC = () => {
                   placeholder="اختر الموظف..."
                 />
                 {formEmployeeId && formEmployeeId !== employeeId && (
-                  <p className="mt-2 text-xs font-bold text-blue-600">
+                  <p className="mt-2 text-xs font-bold text-[rgb(var(--color-primary))]">
                     سيتم إرسال الطلب نيابة عن {getEmpName(formEmployeeId)} عبر سلسلة مديره حتى مدير الموارد البشرية.
                   </p>
                 )}
@@ -549,7 +549,7 @@ export const LeaveRequests: React.FC = () => {
                 نوع الإجازة
               </label>
               <select
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={formLeaveType}
                 onChange={(e) => setFormLeaveType(e.target.value as LeaveType)}
               >
@@ -563,9 +563,9 @@ export const LeaveRequests: React.FC = () => {
             </div>
 
             <div className="flex items-end">
-              <div className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm bg-[#f8f9fa]">
+              <div className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm bg-[var(--color-bg)]">
                 <span className="text-[var(--color-text-muted)] font-bold">الأثر على الراتب: </span>
-                <span className={selectedLeaveType?.isPaid === false ? 'text-rose-500 font-bold' : 'text-emerald-600 font-bold'}>
+                <span className={selectedLeaveType?.isPaid === false ? 'text-[rgb(var(--color-danger))] font-bold' : 'text-[rgb(var(--color-success))] font-bold'}>
                   {selectedLeaveType?.isPaid === false ? 'غير مدفوعة (سيتم الخصم)' : 'مدفوعة (بدون خصم)'}
                 </span>
               </div>
@@ -577,7 +577,7 @@ export const LeaveRequests: React.FC = () => {
               </label>
               <input
                 type="date"
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={formStartDate}
                 onChange={(e) => setFormStartDate(e.target.value)}
               />
@@ -589,7 +589,7 @@ export const LeaveRequests: React.FC = () => {
               </label>
               <input
                 type="date"
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                 value={formEndDate}
                 onChange={(e) => setFormEndDate(e.target.value)}
                 min={formStartDate}
@@ -601,7 +601,7 @@ export const LeaveRequests: React.FC = () => {
                 السبب
               </label>
               <textarea
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none"
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none resize-none"
                 rows={3}
                 value={formReason}
                 onChange={(e) => setFormReason(e.target.value)}
@@ -611,9 +611,9 @@ export const LeaveRequests: React.FC = () => {
           </div>
 
           {formDays > 0 && (
-            <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-              <span className="material-icons-round text-blue-500">info</span>
-              <p className="text-sm font-bold text-blue-700">
+            <div className="mt-4 bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+              <span className="material-icons-round text-[rgb(var(--color-primary))]">info</span>
+              <p className="text-sm font-bold text-[rgb(var(--color-primary))]">
                 مدة الإجازة: {formDays} يوم
               </p>
             </div>
@@ -663,10 +663,10 @@ export const LeaveRequests: React.FC = () => {
         />
         {filtered.length === 0 ? (
           <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">
               event_busy
             </span>
-            <p className="text-sm font-bold text-slate-500">لا توجد طلبات إجازة</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد طلبات إجازة</p>
           </div>
         ) : (
           <>
@@ -707,7 +707,7 @@ export const LeaveRequests: React.FC = () => {
                         <dt className="text-[10px] text-[var(--color-text-muted)]">تؤثر على الراتب</dt>
                         <dd>
                           {(typeof req.leaveTypeIsPaid === 'boolean' ? !req.leaveTypeIsPaid : req.affectsSalary)
-                            ? <span className="text-rose-500 font-bold">نعم</span>
+                            ? <span className="text-[rgb(var(--color-danger))] font-bold">نعم</span>
                             : <span className="text-[var(--color-text-muted)]">لا</span>}
                         </dd>
                       </div>
@@ -721,7 +721,7 @@ export const LeaveRequests: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setDeleteConfirm(req.id!)}
-                          className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                          className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                         >
                           <span className="material-icons-round text-base">delete</span>
                           حذف
@@ -753,7 +753,7 @@ export const LeaveRequests: React.FC = () => {
                     const statusCfg = STATUS_CONFIG[req.finalStatus];
                     const pendingSummary = getPendingChainSummary(req);
                     return (
-                      <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                      <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30">
                         {showEmployeeColumn && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
                         <td className="py-3 px-3">
                           <Badge variant="info">{leaveTypeByKey[req.leaveType]?.label || req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType}</Badge>
@@ -763,7 +763,7 @@ export const LeaveRequests: React.FC = () => {
                         <td className="py-3 px-3 font-bold">{req.totalDays}</td>
                         <td className="py-3 px-3">
                           {(typeof req.leaveTypeIsPaid === 'boolean' ? !req.leaveTypeIsPaid : req.affectsSalary)
-                            ? <span className="text-rose-500 font-bold">نعم</span>
+                            ? <span className="text-[rgb(var(--color-danger))] font-bold">نعم</span>
                             : <span className="text-[var(--color-text-muted)]">لا</span>}
                         </td>
                         <td className="py-3 px-3">
@@ -772,7 +772,7 @@ export const LeaveRequests: React.FC = () => {
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-1">
                             {req.approvalChain.length === 0 ? (
-                              <span className="text-xs text-slate-400">—</span>
+                              <span className="text-xs text-[var(--color-text-muted)]">—</span>
                             ) : (
                               req.approvalChain.map((step, i) => {
                                 const stepCfg = STATUS_CONFIG[step.status];
@@ -780,9 +780,9 @@ export const LeaveRequests: React.FC = () => {
                                   <span
                                     key={i}
                                     className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                                      ${step.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                        step.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
-                                        'bg-[#f0f2f5] text-[var(--color-text-muted)]'}`}
+                                      ${step.status === 'approved' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' :
+                                        step.status === 'rejected' ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' :
+                                        'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'}`}
                                     title={`مستوى ${step.level} — ${stepCfg.label}`}
                                   >
                                     {step.level}
@@ -806,7 +806,7 @@ export const LeaveRequests: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             <button
                               onClick={() => setDeleteConfirm(req.id!)}
-                              className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
+                              className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/30 text-[rgb(var(--color-danger))] hover:text-[rgb(var(--color-danger))] transition-colors"
                               title="حذف الطلب"
                             >
                               <span className="material-icons-round text-lg">delete</span>
@@ -826,10 +826,10 @@ export const LeaveRequests: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10050] p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
-              <span className="material-icons-round text-5xl text-rose-500 mb-2">warning</span>
+              <span className="material-icons-round text-5xl text-[rgb(var(--color-danger))] mb-2">warning</span>
               <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">تأكيد الحذف</h3>
               <p className="text-sm text-[var(--color-text-muted)] mb-4">هل تريد حذف طلب الإجازة نهائياً؟</p>
             </div>

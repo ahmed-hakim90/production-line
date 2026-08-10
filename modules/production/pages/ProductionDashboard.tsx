@@ -581,7 +581,7 @@ export const ProductionDashboard: React.FC = () => {
                         type="monotone"
                         dataKey="costPerUnit"
                         name="تكلفة الوحدة"
-                        stroke="#d97706"
+                        stroke="var(--color-warning-hex)"
                         strokeWidth={2.5}
                         dot={false}
                       />
@@ -668,7 +668,7 @@ export const ProductionDashboard: React.FC = () => {
                 ) : null}
                 <StatusBarChart
                   data={data.qualityBars}
-                  fill="#0d9488"
+                  fill="var(--chart-7)"
                   onBarClick={() => drill('quality')}
                 />
               </div>

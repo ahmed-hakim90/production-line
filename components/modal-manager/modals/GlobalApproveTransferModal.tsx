@@ -38,33 +38,33 @@ export const GlobalApproveTransferModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => close()}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => close()}>
       <div className="bg-[var(--color-card)] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-[var(--color-card)] z-10">
           <div>
             <h3 className="text-lg font-bold">طلب تحويل #{request.referenceNo}</h3>
-            <p className="text-xs text-slate-500">{transferRequestTypeLabel(request.requestType)} — {request.status}</p>
+            <p className="text-xs text-[var(--color-text-muted)]">{transferRequestTypeLabel(request.requestType)} — {request.status}</p>
           </div>
-          <button type="button" onClick={() => close()} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+          <button type="button" onClick={() => close()} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]"><X size={20} /></button>
         </div>
         <div className="p-6 space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-slate-500">من:</span> <strong>{fromName}</strong></div>
-            <div><span className="text-slate-500">إلى:</span> <strong>{toName}</strong></div>
-            <div><span className="text-slate-500">المنشئ:</span> {request.createdBy}</div>
-            <div><span className="text-slate-500">التاريخ:</span> {new Date(request.createdAt).toLocaleString('ar-EG')}</div>
+            <div><span className="text-[var(--color-text-muted)]">من:</span> <strong>{fromName}</strong></div>
+            <div><span className="text-[var(--color-text-muted)]">إلى:</span> <strong>{toName}</strong></div>
+            <div><span className="text-[var(--color-text-muted)]">المنشئ:</span> {request.createdBy}</div>
+            <div><span className="text-[var(--color-text-muted)]">التاريخ:</span> {new Date(request.createdAt).toLocaleString('ar-EG')}</div>
           </div>
-          {request.note && <p className="text-sm bg-slate-50 rounded-lg p-3">{request.note}</p>}
+          {request.note && <p className="text-sm bg-[var(--color-bg)] rounded-lg p-3">{request.note}</p>}
           <table className="w-full text-sm text-right border-collapse">
             <thead>
-              <tr className="border-b text-slate-500">
+              <tr className="border-b text-[var(--color-text-muted)]">
                 <th className="py-2">الصنف</th>
                 <th className="py-2 text-center">الكمية</th>
               </tr>
             </thead>
             <tbody>
               {request.lines.map((line, i) => (
-                <tr key={i} className="border-b border-slate-100">
+                <tr key={i} className="border-b border-[var(--color-border)]">
                   <td className="py-2">{line.itemName} ({line.itemCode})</td>
                   <td className="py-2 text-center font-bold">{formatNumber(line.quantity)}</td>
                 </tr>

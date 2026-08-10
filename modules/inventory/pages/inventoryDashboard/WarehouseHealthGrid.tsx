@@ -20,7 +20,7 @@ export const WarehouseHealthGrid: React.FC<Props> = ({ loading, rows, onSelectWa
           ))}
         </div>
       ) : rows.length === 0 ? (
-        <p className="text-sm text-slate-400">لا توجد مخازن.</p>
+        <p className="text-sm text-[var(--color-text-muted)]">لا توجد مخازن.</p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {rows.map((row) => {
@@ -32,25 +32,25 @@ export const WarehouseHealthGrid: React.FC<Props> = ({ loading, rows, onSelectWa
                 onClick={() => onSelectWarehouse?.(row.warehouseId)}
                 className={`text-right rounded-[var(--border-radius-lg)] border px-3 py-3 transition-colors ${
                   alertish
-                    ? 'border-amber-200 bg-amber-50/60 hover:bg-amber-50'
-                    : 'border-slate-200 bg-white hover:bg-slate-50'
+                    ? 'border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/60 hover:bg-[rgb(var(--color-warning)/0.1)]'
+                    : 'border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-surface-hover)]'
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium text-[var(--color-text)]">{row.warehouseName}</p>
                   {row.roleHint && (
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    <span className="shrink-0 rounded-full bg-[var(--color-surface-hover)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-text-muted)]">
                       {row.roleHint}
                     </span>
                   )}
                 </div>
-                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-600">
+                <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[var(--color-text-muted)]">
                   <span>أصناف: {row.skuCount}</span>
                   <span className="tabular-nums">كمية: {formatNumber(row.totalQty)}</span>
-                  <span className={row.lowCount > 0 ? 'text-amber-700 font-medium' : ''}>
+                  <span className={row.lowCount > 0 ? 'text-[rgb(var(--color-warning))] font-medium' : ''}>
                     منخفضة: {row.lowCount}
                   </span>
-                  <span className={row.negativeCount > 0 ? 'text-rose-700 font-medium' : ''}>
+                  <span className={row.negativeCount > 0 ? 'text-[rgb(var(--color-danger))] font-medium' : ''}>
                     سالبة: {row.negativeCount}
                   </span>
                 </div>

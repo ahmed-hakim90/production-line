@@ -92,7 +92,7 @@ const SearchableSupervisorField: React.FC<SearchableSupervisorFieldProps> = ({
     <div className="relative w-full">
       <input
         type="search"
-        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal outline-none focus:border-[rgb(var(--color-primary))]"
+        className="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-normal outline-none focus:border-[rgb(var(--color-primary))]"
         placeholder={placeholder}
         value={query}
         onFocus={() => setOpen(true)}
@@ -107,15 +107,15 @@ const SearchableSupervisorField: React.FC<SearchableSupervisorFieldProps> = ({
         }}
       />
       {open && (
-        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white">
+        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)]">
           {filtered.length === 0 && (
-            <div className="px-3 py-2 text-xs font-normal text-gray-500">لا توجد نتائج مطابقة</div>
+            <div className="px-3 py-2 text-xs font-normal text-[var(--color-text-muted)]">لا توجد نتائج مطابقة</div>
           )}
           {filtered.map((item) => (
             <button
               key={item.id}
               type="button"
-              className="flex w-full items-center justify-between px-3 py-2 text-right text-sm font-normal text-gray-700 hover:bg-gray-50"
+              className="flex w-full items-center justify-between px-3 py-2 text-right text-sm font-normal text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]"
               onMouseDown={(event) => {
                 event.preventDefault();
                 onSelect(item.id);
@@ -124,7 +124,7 @@ const SearchableSupervisorField: React.FC<SearchableSupervisorFieldProps> = ({
               }}
             >
               <span>{item.name}</span>
-              <span className="text-xs text-gray-400">{item.code ?? '—'}</span>
+              <span className="text-xs text-[var(--color-text-muted)]">{item.code ?? '—'}</span>
             </button>
           ))}
         </div>
@@ -152,19 +152,19 @@ const LineCard = memo(({
 
   return (
     <article
-      className="rounded-xl border border-gray-200 bg-white p-3"
-      style={{ borderRightWidth: 3, borderRightColor: hasSupervisor ? 'rgb(var(--color-primary))' : '#D85A30' }}
+      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3"
+      style={{ borderRightWidth: 3, borderRightColor: hasSupervisor ? 'rgb(var(--color-primary))' : 'var(--color-danger-hex)' }}
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-medium text-gray-800">{line.name}</h3>
-          {pending && <span className="h-2 w-2 rounded-full bg-amber-500" title="تغييرات غير محفوظة" />}
+          <h3 className="text-sm font-medium text-[var(--color-text)]">{line.name}</h3>
+          {pending && <span className="h-2 w-2 rounded-full bg-[rgb(var(--color-warning)/0.1)]0" title="تغييرات غير محفوظة" />}
         </div>
         <div
           className={`rounded-full px-2 py-0.5 text-xs font-normal ${
-            hasSupervisor ? 'text-[rgb(var(--color-primary))]' : 'text-[#791F1F]'
+            hasSupervisor ? 'text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--color-danger))]'
           }`}
-          style={{ backgroundColor: hasSupervisor ? 'rgb(var(--color-primary) / 0.12)' : '#FCEBEB' }}
+          style={{ backgroundColor: hasSupervisor ? 'rgb(var(--color-primary) / 0.12)' : 'rgb(var(--color-danger) / 0.12)' }}
         >
           ● {hasSupervisor ? `الحالي: ${getShortName(activeSupervisor?.name || '')}` : 'بدون مشرف'}
         </div>
@@ -172,7 +172,7 @@ const LineCard = memo(({
 
       {!hasSupervisor && (
         <div className="mb-3 flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-sm font-normal text-gray-500">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-surface-hover)] text-sm font-normal text-[var(--color-text-muted)]">
             —
           </div>
           <SearchableSupervisorField
@@ -194,12 +194,12 @@ const LineCard = memo(({
               {getInitials(activeSupervisor?.name || '')}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-800">{activeSupervisor?.name}</p>
-              <p className="text-xs font-normal text-gray-400">المعرف: {activeSupervisor?.code ?? '—'}</p>
+              <p className="truncate text-sm font-medium text-[var(--color-text)]">{activeSupervisor?.name}</p>
+              <p className="text-xs font-normal text-[var(--color-text-muted)]">المعرف: {activeSupervisor?.code ?? '—'}</p>
             </div>
             <Button
               type="button"
-              className="rounded-lg border border-red-200 px-2 py-1 text-xs font-normal text-red-700 hover:bg-red-50 disabled:opacity-50"
+              className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] px-2 py-1 text-xs font-normal text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-50"
               onClick={() => onUnassign(line.id)}
               disabled={isSaving}
             >
@@ -215,10 +215,10 @@ const LineCard = memo(({
         </div>
       )}
 
-      <footer className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
+      <footer className="flex flex-wrap items-center gap-2 border-t border-[var(--color-border)] pt-2">
         <Button
           type="button"
-          className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-normal text-gray-600"
+          className="rounded-lg border border-[var(--color-border)] px-2 py-1 text-xs font-normal text-[var(--color-text-muted)]"
           onClick={() => onShowHistory(line)}
           data-modal-key={MODAL_KEYS.PRODUCTION_SUPERVISOR_ASSIGNMENT_HISTORY}
           disabled={isSaving}
@@ -227,7 +227,7 @@ const LineCard = memo(({
         </Button>
         <Button
           type="button"
-          className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-normal text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg border border-[var(--color-border)] px-2 py-1 text-xs font-normal text-[var(--color-text-muted)] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => onUnassign(line.id)}
           disabled={!hasSupervisor || isSaving}
         >
@@ -361,7 +361,7 @@ export const SupervisorLineAssignment: React.FC = () => {
       actions={(
         <Button
           type="button"
-          className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-normal text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-lg border border-[var(--color-border)] px-4 py-2 text-sm font-normal text-[var(--color-text)] disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => void saveAll()}
           disabled={pendingCount === 0 || isSaving}
         >
@@ -396,13 +396,13 @@ export const SupervisorLineAssignment: React.FC = () => {
             if (key === 'referenceDate') setReferenceDate(value);
           }}
           extra={
-            <div className="flex items-center rounded-lg border border-gray-200 p-1">
+            <div className="flex items-center rounded-lg border border-[var(--color-border)] p-1">
               <Button
                 type="button"
                 size="icon"
                 iconName="grid_view"
                 tone="view"
-                className={`rounded-lg px-2 py-1 text-xs font-normal h-8 w-8 ${viewMode === 'grid' ? 'bg-gray-100' : ''}`}
+                className={`rounded-lg px-2 py-1 text-xs font-normal h-8 w-8 ${viewMode === 'grid' ? 'bg-[var(--color-surface-hover)]' : ''}`}
                 onClick={() => setViewMode('grid')}
                 title="عرض شبكي"
                 aria-label="عرض شبكي"
@@ -412,7 +412,7 @@ export const SupervisorLineAssignment: React.FC = () => {
                 size="icon"
                 iconName="view_list"
                 tone="view"
-                className={`rounded-lg px-2 py-1 text-xs font-normal h-8 w-8 ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
+                className={`rounded-lg px-2 py-1 text-xs font-normal h-8 w-8 ${viewMode === 'list' ? 'bg-[var(--color-surface-hover)]' : ''}`}
                 onClick={() => setViewMode('list')}
                 title="عرض قائمة"
                 aria-label="عرض قائمة"
@@ -426,8 +426,8 @@ export const SupervisorLineAssignment: React.FC = () => {
         <div
           className={`rounded-lg border px-3 py-2 text-sm font-normal ${
             toast.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'border-red-200 bg-red-50 text-red-700'
+              ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
+              : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
           }`}
         >
           {toast.message}
@@ -436,7 +436,7 @@ export const SupervisorLineAssignment: React.FC = () => {
 
       {isLoading && lines.length === 0 ? (
         <OpsDashPanel title="جاري تحميل البيانات" accent="production">
-          <p className="text-center text-sm font-normal text-gray-500 py-4">جاري تحميل البيانات...</p>
+          <p className="text-center text-sm font-normal text-[var(--color-text-muted)] py-4">جاري تحميل البيانات...</p>
         </OpsDashPanel>
       ) : (
         <>
@@ -444,7 +444,7 @@ export const SupervisorLineAssignment: React.FC = () => {
             title="خطوط بدون مشرف"
             accent="production"
             action={(
-              <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: '#FAEEDA', color: '#BA7517' }}>
+              <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: 'rgb(var(--color-warning) / 0.12)', color: 'var(--color-warning-hex)' }}>
                 {toAr(withoutSupervisor.length)}
               </span>
             )}
@@ -465,7 +465,7 @@ export const SupervisorLineAssignment: React.FC = () => {
                 />
               ))}
               {withoutSupervisor.length === 0 && (
-                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-normal text-gray-500">
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-sm font-normal text-[var(--color-text-muted)]">
                   لا توجد خطوط في هذا القسم حسب الفلاتر الحالية.
                 </div>
               )}
@@ -497,7 +497,7 @@ export const SupervisorLineAssignment: React.FC = () => {
                 />
               ))}
               {withSupervisor.length === 0 && (
-                <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm font-normal text-gray-500">
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 text-sm font-normal text-[var(--color-text-muted)]">
                   لا توجد خطوط في هذا القسم حسب الفلاتر الحالية.
                 </div>
               )}

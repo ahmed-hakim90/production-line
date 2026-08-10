@@ -81,16 +81,16 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
       <div
         role="status"
         aria-live="polite"
-        className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3 animate-in fade-in duration-300"
+        className="bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3 animate-in fade-in duration-300"
       >
-        <span className="material-icons-round text-emerald-500" aria-hidden>
+        <span className="material-icons-round text-[rgb(var(--color-success))]" aria-hidden>
           image
         </span>
-        <p className="text-sm font-medium text-emerald-900 flex-1">{shareToast}</p>
+        <p className="text-sm font-medium text-[rgb(var(--color-success))] flex-1">{shareToast}</p>
         <button
           type="button"
           onClick={onDismissShareToast}
-          className="p-1 text-emerald-700 hover:text-emerald-900 transition-colors shrink-0 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="p-1 text-[rgb(var(--color-success))] hover:text-[rgb(var(--color-success))] transition-colors shrink-0 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           aria-label="إغلاق التنبيه"
         >
           <span className="material-icons-round text-sm" aria-hidden>
@@ -103,7 +103,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {selectedPending && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
         role="presentation"
         onClick={onClosePending}
         onKeyDown={(e) => e.key === 'Escape' && onClosePending()}
@@ -122,7 +122,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
             <button
               type="button"
               onClick={onClosePending}
-              className="text-[var(--color-text-muted)] hover:text-slate-600 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               aria-label="إغلاق النافذة"
             >
               <span className="material-icons-round" aria-hidden>
@@ -133,11 +133,11 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           <div className="p-6 overflow-auto flex-1 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs text-slate-600">من</p>
+                <p className="text-xs text-[var(--color-text-muted)]">من</p>
                 <p className="font-bold">{warehouseMap.get(selectedPending.fromWarehouseId) ?? selectedPending.fromWarehouseId}</p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs text-slate-600">إلى</p>
+                <p className="text-xs text-[var(--color-text-muted)]">إلى</p>
                 <p className="font-bold">{warehouseMap.get(selectedPending.toWarehouseId) ?? selectedPending.toWarehouseId}</p>
               </div>
             </div>
@@ -154,7 +154,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                   {selectedPending.lines.map((line) => (
                     <tr key={`${line.itemType}-${line.itemId}`}>
                       <td className="px-3 py-2 text-sm font-bold">
-                        {line.itemName} <span className="text-xs text-slate-500">({line.itemCode})</span>
+                        {line.itemName} <span className="text-xs text-[var(--color-text-muted)]">({line.itemCode})</span>
                       </td>
                       <td className="px-3 py-2 text-sm">{line.itemType === 'finished_good' ? 'منتج نهائي' : 'مادة خام'}</td>
                       <td className="px-3 py-2 text-sm text-center font-black">
@@ -185,7 +185,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {selectedApprovedTransfer && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
         role="presentation"
         onClick={onCloseApproved}
         onKeyDown={(e) => e.key === 'Escape' && onCloseApproved()}
@@ -204,7 +204,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
             <button
               type="button"
               onClick={onCloseApproved}
-              className="text-[var(--color-text-muted)] hover:text-slate-600 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               aria-label="إغلاق النافذة"
             >
               <span className="material-icons-round" aria-hidden>
@@ -215,13 +215,13 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           <div className="p-6 overflow-auto flex-1 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs text-slate-600">من</p>
+                <p className="text-xs text-[var(--color-text-muted)]">من</p>
                 <p className="font-bold">
                   {warehouseMap.get(selectedApprovedTransfer.fromWarehouseId) ?? selectedApprovedTransfer.fromWarehouseId}
                 </p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs text-slate-600">إلى</p>
+                <p className="text-xs text-[var(--color-text-muted)]">إلى</p>
                 <p className="font-bold">
                   {warehouseMap.get(selectedApprovedTransfer.toWarehouseId) ?? selectedApprovedTransfer.toWarehouseId}
                 </p>
@@ -248,7 +248,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                   {selectedApprovedTransfer.lines.map((line) => (
                     <tr key={`${line.id || ''}-${line.itemType}-${line.itemId}`}>
                       <td className="px-3 py-2 text-sm font-bold">
-                        {line.itemName} <span className="text-xs text-slate-500">({line.itemCode})</span>
+                        {line.itemName} <span className="text-xs text-[var(--color-text-muted)]">({line.itemCode})</span>
                       </td>
                       <td className="px-3 py-2 text-sm">{line.itemType === 'finished_good' ? 'منتج نهائي' : 'مادة خام'}</td>
                       <td className="px-3 py-2 text-sm text-center font-black">
@@ -295,7 +295,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {selectedVoucher && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
         role="presentation"
         onClick={onCloseVoucher}
         onKeyDown={(e) => e.key === 'Escape' && onCloseVoucher()}
@@ -314,7 +314,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
             <button
               type="button"
               onClick={onCloseVoucher}
-              className="text-[var(--color-text-muted)] hover:text-slate-600 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               aria-label="إغلاق النافذة"
             >
               <span className="material-icons-round" aria-hidden>
@@ -325,19 +325,19 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           <div className="p-6 overflow-auto flex-1 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs text-slate-600">المخزن</p>
+                <p className="text-xs text-[var(--color-text-muted)]">المخزن</p>
                 <p className="font-bold">
                   {warehouseMap.get(selectedVoucher.warehouseId) ?? selectedVoucher.warehouseId}
                 </p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs text-slate-600">التاريخ</p>
+                <p className="text-xs text-[var(--color-text-muted)]">التاريخ</p>
                 <p className="font-bold text-sm tabular-nums">
                   {new Date(selectedVoucher.createdAt).toLocaleString('ar-EG')}
                 </p>
               </div>
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                <p className="text-xs text-slate-600">المنفذ</p>
+                <p className="text-xs text-[var(--color-text-muted)]">المنفذ</p>
                 <p className="font-bold">{selectedVoucher.createdBy}</p>
               </div>
             </div>
@@ -358,11 +358,11 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                     <tr key={`${line.id || ''}-${line.itemId}`}>
                       <td className="px-3 py-2 text-sm font-bold">
                         {line.itemName}{' '}
-                        <span className="text-xs text-slate-500">({line.itemCode})</span>
+                        <span className="text-xs text-[var(--color-text-muted)]">({line.itemCode})</span>
                       </td>
-                      <td className="px-3 py-2 text-sm text-slate-500">{line.locationCode || '—'}</td>
+                      <td className="px-3 py-2 text-sm text-[var(--color-text-muted)]">{line.locationCode || '—'}</td>
                       <td className="px-3 py-2 text-sm text-center font-black tabular-nums">
-                        <span className={selectedVoucher.movementType === 'IN' ? 'text-emerald-600' : 'text-rose-500'}>
+                        <span className={selectedVoucher.movementType === 'IN' ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}>
                           {selectedVoucher.movementType === 'IN' ? '+' : '−'}
                           {formatNumber(Math.abs(Number(line.quantity || 0)))}
                         </span>
@@ -407,7 +407,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {editPending && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
         role="presentation"
         onClick={() => !processing && onCloseEdit()}
         onKeyDown={(e) => e.key === 'Escape' && !processing && onCloseEdit()}
@@ -426,7 +426,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
             <button
               type="button"
               onClick={() => !processing && onCloseEdit()}
-              className="text-[var(--color-text-muted)] hover:text-slate-600 disabled:opacity-50 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] disabled:opacity-50 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               disabled={processing}
               aria-label="إغلاق النافذة"
             >
@@ -442,7 +442,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               </label>
               <input
                 id="stock-tx-edit-note"
-                className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
+                className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)]"
                 value={editNote}
                 onChange={(e) => onEditNoteChange(e.target.value)}
               />
@@ -455,10 +455,10 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                 >
                   <div className="md:col-span-7">
                     <p className="text-sm font-bold">{line.itemName}</p>
-                    <p className="text-xs text-slate-500">{line.itemCode}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">{line.itemCode}</p>
                   </div>
                   <div className="md:col-span-5 space-y-1">
-                    <label className="text-xs font-bold text-slate-600" htmlFor={`stock-tx-edit-qty-${idx}`}>
+                    <label className="text-xs font-bold text-[var(--color-text-muted)]" htmlFor={`stock-tx-edit-qty-${idx}`}>
                       الكمية (
                       {line.requestUnit === 'carton' ? 'كرتونة' : line.requestUnit === 'piece' ? 'قطعة' : 'وحدة'})
                     </label>
@@ -467,7 +467,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                       type="number"
                       step="any"
                       min={0}
-                      className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]"
+                      className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)]"
                       placeholder="0"
                       value={line.requestQuantity ?? line.quantity ?? ''}
                       onChange={(e) => onEditLineQuantity(idx, Number(e.target.value))}

@@ -516,7 +516,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
         action={(
           <div className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
             report && report.reconciliation.missingPaymentMethod + report.reconciliation.missingCostCenter + report.reconciliation.missingJournalReference === 0
-              ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
           }`}>
             {report ? `الحركات ${fmt(report.reconciliation.entriesCount)} — نواقص الوسيلة ${fmt(report.reconciliation.missingPaymentMethod)} — المركز ${fmt(report.reconciliation.missingCostCenter)} — القيد ${fmt(report.reconciliation.missingJournalReference)}` : 'لا توجد بيانات'}
           </div>
@@ -534,8 +534,8 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
                   <td className="px-4 py-2.5 font-medium">{row.branchName}</td>
                   <td className="px-4 py-2.5 font-mono">{row.costCenterId || 'غير مربوط'}</td>
                   <td className="px-4 py-2.5">{{ cash: 'نقدي', card: 'بطاقة', bank_transfer: 'تحويل بنكي', unspecified: 'غير محدد' }[row.paymentMethod]}</td>
-                  <td className="px-4 py-2.5 text-center text-emerald-700 tabular-nums">{fmt(row.income)}</td>
-                  <td className="px-4 py-2.5 text-center text-rose-700 tabular-nums">{fmt(row.expense)}</td>
+                  <td className="px-4 py-2.5 text-center text-[rgb(var(--color-success))] tabular-nums">{fmt(row.income)}</td>
+                  <td className="px-4 py-2.5 text-center text-[rgb(var(--color-danger))] tabular-nums">{fmt(row.expense)}</td>
                   <td className="px-4 py-2.5 text-center font-semibold tabular-nums">{fmt(row.net)}</td>
                   <td className="px-4 py-2.5 text-center tabular-nums">{fmt(row.entriesCount)}</td>
                 </tr>
@@ -587,9 +587,9 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
                     </td>
                     <td className="px-4 py-2.5 text-center tabular-nums">{fmt(row.sessionsCount)}</td>
                     <td className="px-4 py-2.5 text-center font-mono tabular-nums">{fmt(row.totalOpening)}</td>
-                    <td className="px-4 py-2.5 text-center font-mono tabular-nums text-emerald-700">{fmt(row.totalIncome)}</td>
-                    <td className="px-4 py-2.5 text-center font-mono tabular-nums text-rose-700">{fmt(row.totalExpense)}</td>
-                    <td className={`px-4 py-2.5 text-center font-mono tabular-nums ${row.netMovement >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    <td className="px-4 py-2.5 text-center font-mono tabular-nums text-[rgb(var(--color-success))]">{fmt(row.totalIncome)}</td>
+                    <td className="px-4 py-2.5 text-center font-mono tabular-nums text-[rgb(var(--color-danger))]">{fmt(row.totalExpense)}</td>
+                    <td className={`px-4 py-2.5 text-center font-mono tabular-nums ${row.netMovement >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`}>
                       {fmt(row.netMovement)}
                     </td>
                     <td className="px-4 py-2.5 text-center font-mono font-semibold tabular-nums">{fmt(row.totalClosing)}</td>
@@ -672,7 +672,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
                   <td className="px-4 py-2.5 whitespace-nowrap">{row.day}</td>
                   <td className="px-4 py-2.5 text-center tabular-nums">{fmt(row.sessionsCount)}</td>
                   <td className="px-4 py-2.5 text-center font-mono tabular-nums">{fmt(row.opening)}</td>
-                  <td className={`px-4 py-2.5 text-center font-mono tabular-nums ${row.net >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                  <td className={`px-4 py-2.5 text-center font-mono tabular-nums ${row.net >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`}>
                     {fmt(row.net)}
                   </td>
                   <td className="px-4 py-2.5 text-center font-mono font-semibold tabular-nums">{fmt(row.closing)}</td>

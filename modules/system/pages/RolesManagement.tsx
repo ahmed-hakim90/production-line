@@ -195,7 +195,7 @@ export const RolesManagement: React.FC = () => {
       {/* ── Roles Card Grid: 1 col → 2 col → 3 col ── */}
       {visibleRoleGroups.length === 0 ? (
         <OpsDashPanel title="لا توجد أدوار" accent="hr">
-          <div className="text-center py-16 text-slate-400">
+          <div className="text-center py-16 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-3 block opacity-20">admin_panel_settings</span>
             <p className="font-bold text-base">لا توجد أدوار بعد</p>
             <p className="text-sm mt-1">ابدأ بإنشاء أول دور للمؤسسة</p>
@@ -234,7 +234,7 @@ export const RolesManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/80 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/80 px-3 py-2">
                     <span className="text-[11px] font-bold text-[var(--color-text-muted)]">مستخدمو الدور</span>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-[var(--color-text)] tabular-nums">
@@ -254,10 +254,10 @@ export const RolesManagement: React.FC = () => {
                   {/* Progress bar */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-slate-400">نسبة الصلاحيات</span>
+                      <span className="text-[11px] font-bold text-[var(--color-text-muted)]">نسبة الصلاحيات</span>
                       <span className="text-[11px] font-bold text-primary">{pct}%</span>
                     </div>
-                    <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+                    <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary rounded-full transition-all duration-700"
                         style={{ width: `${pct}%` }}
@@ -270,10 +270,10 @@ export const RolesManagement: React.FC = () => {
                     {activeGroups.slice(0, 6).map((g) => (
                       <span
                         key={g.key}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--border-radius-base)] text-[10px] font-bold bg-[#f0f2f5] text-[var(--color-text-muted)]"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[var(--border-radius-base)] text-[10px] font-bold bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]"
                       >
                         {g.label}
-                        <span className="w-4 h-4 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-[var(--color-text-muted)]">
+                        <span className="w-4 h-4 rounded-full bg-[var(--color-border)] flex items-center justify-center text-[9px] font-bold text-[var(--color-text-muted)]">
                           {g.count}
                         </span>
                       </span>
@@ -290,7 +290,7 @@ export const RolesManagement: React.FC = () => {
                 </div>
 
                 {/* Card footer */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 border-t border-[var(--color-border)] bg-[#f8f9fa]/60/30">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 border-t border-[var(--color-border)] bg-[var(--color-bg)]/60/30">
                   {canManageRoles && (
                     <Button
                       onClick={() => openModal(MODAL_KEYS.SYSTEM_ROLES_CREATE, { role })}
@@ -303,7 +303,7 @@ export const RolesManagement: React.FC = () => {
                   {role.id !== userRoleId && canManageRoles && (
                     <button
                       onClick={() => setDeleteConfirmId(role.id!)}
-                      className="w-full sm:w-auto p-2 rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border border-transparent hover:border-rose-200 dark:hover:border-rose-800 transition-all"
+                      className="w-full sm:w-auto p-2 rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/20 border border-transparent hover:border-[rgb(var(--color-danger)/0.25)] dark:hover:border-[rgb(var(--color-danger))] transition-all"
                       title="حذف الدور"
                     >
                       <span className="material-icons-round text-[18px]">delete_outline</span>
@@ -320,10 +320,10 @@ export const RolesManagement: React.FC = () => {
       {/* ── Delete Confirmation Modal ── */}
       {deleteConfirmId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-sm border border-[var(--color-border)] p-6 text-center animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-rose-500 text-3xl">delete_forever</span>
+            <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="material-icons-round text-[rgb(var(--color-danger))] text-3xl">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف الدور</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">

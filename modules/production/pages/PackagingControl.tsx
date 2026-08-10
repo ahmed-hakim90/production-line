@@ -270,7 +270,7 @@ export const PackagingControl: React.FC = () => {
       )}
     >
       {!configured && (
-        <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-4 py-3">
           التوجيه غير مكتمل: عيّن مخزن تحت التسليم وبانتظار التغليف والمنتج التام من الإعدادات، ويجب أن تكون مختلفة.
           <Link className="font-bold underline ms-2" to={withTenantPath(tenantSlug, '/settings/production')}>
             فتح الإعدادات
@@ -279,7 +279,7 @@ export const PackagingControl: React.FC = () => {
       )}
 
       {loadError && (
-        <p className="text-sm font-medium text-rose-800 bg-rose-50 border border-rose-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-lg px-4 py-3">
           تعذر تحميل طابور التغليف. حدّث الصفحة أو تحقق من صلاحية عرض المخزون.
         </p>
       )}
@@ -344,7 +344,7 @@ export const PackagingControl: React.FC = () => {
                   Array.from({ length: 3 }).map((_, i) => (
                     <tr key={`hk-${i}`}>
                       <td className="px-4 py-3" colSpan={7}>
-                        <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                        <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface-hover)]" />
                       </td>
                     </tr>
                   ))
@@ -375,14 +375,14 @@ export const PackagingControl: React.FC = () => {
                         <td className="px-4 py-3">
                           <p className="text-sm font-bold">{row.referenceNo}</p>
                           <p className="text-sm font-medium">{line?.itemName || '—'}</p>
-                          <p className="text-xs text-slate-400 font-mono">{line?.itemCode || '—'}</p>
-                          <p className="text-xs text-slate-500 mt-1">
+                          <p className="text-xs text-[var(--color-text-muted)] font-mono">{line?.itemCode || '—'}</p>
+                          <p className="text-xs text-[var(--color-text-muted)] mt-1">
                             المحوّل: <span className="font-semibold">{row.createdBy || '—'}</span>
                           </p>
                         </td>
                         <td className="px-4 py-3 text-center tabular-nums font-bold">{formatNumber(reported)}</td>
                         <td className="px-4 py-3 text-center tabular-nums">{formatNumber(received)}</td>
-                        <td className="px-4 py-3 text-center tabular-nums text-amber-700 font-bold">{formatNumber(remaining)}</td>
+                        <td className="px-4 py-3 text-center tabular-nums text-[rgb(var(--color-warning))] font-bold">{formatNumber(remaining)}</td>
                         <td className="px-4 py-3 text-center">
                           <input
                             type="number"
@@ -398,7 +398,7 @@ export const PackagingControl: React.FC = () => {
                           />
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                          <label className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-text)]">
                             <input
                               type="checkbox"
                               checked={isFinal}
@@ -470,7 +470,7 @@ export const PackagingControl: React.FC = () => {
                   Array.from({ length: 4 }).map((_, i) => (
                     <tr key={`sk-${i}`}>
                       <td className="px-4 py-3" colSpan={4}>
-                        <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                        <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface-hover)]" />
                       </td>
                     </tr>
                   ))
@@ -488,7 +488,7 @@ export const PackagingControl: React.FC = () => {
                       <tr key={row.id || `${row.itemId}-${row.warehouseId}`} className="border-b border-[var(--color-border)]">
                         <td className="px-4 py-3">
                           <p className="text-sm font-medium text-[var(--color-text)]">{row.itemName}</p>
-                          <p className="text-xs text-slate-400 font-mono">{row.itemCode || '—'}</p>
+                          <p className="text-xs text-[var(--color-text-muted)] font-mono">{row.itemCode || '—'}</p>
                         </td>
                         <td className="px-4 py-3 text-center text-sm font-bold tabular-nums">
                           {formatNumber(row.quantity)}
@@ -496,7 +496,7 @@ export const PackagingControl: React.FC = () => {
                         <td className="px-4 py-3 text-center text-sm tabular-nums">
                           {formatNumber(row.availableQty ?? row.quantity)}
                         </td>
-                        <td className="px-4 py-3 text-center text-xs font-bold text-amber-700">
+                        <td className="px-4 py-3 text-center text-xs font-bold text-[rgb(var(--color-warning))]">
                           بانتظار التغليف
                         </td>
                       </tr>

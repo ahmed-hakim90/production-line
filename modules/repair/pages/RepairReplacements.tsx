@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -53,8 +53,14 @@ const PAGE_SIZE = 20;
 
 type NoteAction = 'rejectReplacement' | 'cancelReplacement' | 'deliverReplacement';
 
+type LocationState = {
+  focusReplacementId?: string;
+  focusReceiptNo?: string;
+};
+
 export const RepairReplacements: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const location = useLocation();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const canView =
@@ -124,6 +130,20 @@ export const RepairReplacements: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const state = (location.state || {}) as LocationState;
+    const focusId = String(state.focusReplacementId || '').trim();
+    const focusReceipt = String(state.focusReceiptNo || '').trim();
+    if (!focusId && !focusReceipt) return;
+    if (focusReceipt) setSearch(focusReceipt);
+    setBoardView('table');
+    if (focusId && rows.length > 0) {
+      const found = rows.find((row) => row.id === focusId);
+      if (found?.receiptNo) setSearch(found.receiptNo);
+    }
+    window.history.replaceState({}, document.title);
+  }, [location.state, rows, setBoardView]);
 
   const branchName = useCallback(
     (branchId?: string) => branches.find((b) => b.id === branchId)?.name || branchId || '—',

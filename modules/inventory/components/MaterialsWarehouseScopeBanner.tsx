@@ -18,11 +18,11 @@ export const MaterialsWarehouseScopeBanner: React.FC<Props> = ({
   if (!scoped || routingConfigured) return null;
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+    <div className="rounded-lg border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-4 py-3 text-sm font-medium text-[rgb(var(--color-warning))]">
       حدّد مخزن المستلزمات من توجيه المخازن (المفكك و/أو المواد الخام) قبل العمل على هذه الشاشة.{' '}
       <Link
         to={withTenantPath(tenantSlug, settingsPath)}
-        className="font-bold text-indigo-700 underline underline-offset-2"
+        className="font-bold text-[rgb(var(--color-primary))] underline underline-offset-2"
       >
         فتح الإعدادات
       </Link>

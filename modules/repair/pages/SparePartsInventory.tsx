@@ -463,14 +463,14 @@ export const SparePartsInventory: React.FC = () => {
       )}
     >
       {!branchId && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 text-sm">
+        <div className="rounded border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] p-3 text-[rgb(var(--color-warning))] text-sm">
           {canManageAllBranches
             ? 'اختر فرعًا أولًا لإدارة المخزون.'
             : 'لا يوجد فرع صيانة مرتبط بالمستخدم الحالي.'}
         </div>
       )}
       {branchId && !activeWarehouseId && (
-        <div className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 text-sm">
+        <div className="rounded border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] p-3 text-[rgb(var(--color-warning))] text-sm">
           هذا الفرع لا يملك مخزنًا مرتبطًا بعد. أنشئ فرعًا جديدًا أو اربط مخزنًا يدويًا للفرع الحالي.
         </div>
       )}

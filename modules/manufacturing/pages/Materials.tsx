@@ -37,6 +37,10 @@ import {
 } from '../types';
 import { manufacturingMigrationService } from '../services/manufacturingMigrationService';
 import {
+  parseCatalogMaterialGap,
+  type CatalogMaterialGap,
+} from '@/modules/catalog/lib/catalogDrilldown';
+import {
   BOM_UPSERT_PATHS,
   MANUFACTURING_OPERATION_KEYS,
   MATERIAL_CREATE_PATHS,
@@ -188,6 +192,7 @@ export const Materials: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<MaterialType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [manufacturedFilter, setManufacturedFilter] = useState<ManufacturedFilter>('all');
+  const [gapFilter, setGapFilter] = useState<CatalogMaterialGap | ''>('');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -227,6 +232,8 @@ export const Materials: React.FC = () => {
       if (statusFilter === 'inactive' && r.isActive !== false) return false;
       if (manufacturedFilter === 'internal' && !r.isManufacturedInternally) return false;
       if (manufacturedFilter === 'external' && r.isManufacturedInternally) return false;
+      if (gapFilter === 'no_category' && String(r.categoryId || '').trim()) return false;
+      if (gapFilter === 'no_cost' && Number(r.purchaseCost) > 0) return false;
       if (!q) return true;
       const category = String(r.categoryName || '').toLowerCase();
       return (
@@ -235,7 +242,7 @@ export const Materials: React.FC = () => {
         category.includes(q)
       );
     });
-  }, [rows, search, typeFilter, statusFilter, manufacturedFilter]);
+  }, [rows, search, typeFilter, statusFilter, manufacturedFilter, gapFilter]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -265,7 +272,7 @@ export const Materials: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, typeFilter, statusFilter, manufacturedFilter, sortKey, sortDir]);
+  }, [search, typeFilter, statusFilter, manufacturedFilter, gapFilter, sortKey, sortDir]);
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -294,6 +301,16 @@ export const Materials: React.FC = () => {
     openCreate();
     navigate('/manufacturing/materials', { replace: true });
   }, [location.search, canManage, navigate]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const type = String(params.get('type') || '').trim();
+    if (type && type in MATERIAL_TYPE_LABELS) {
+      setTypeFilter(type as MaterialType);
+    }
+    const gap = parseCatalogMaterialGap(params.get('gap'));
+    if (gap) setGapFilter(gap);
+  }, [location.search]);
 
   const openEdit = (row: Material) => {
     setEditing(row);
@@ -860,16 +877,26 @@ export const Materials: React.FC = () => {
                 { value: 'external', label: 'شراء خارجي' },
               ],
             },
+            {
+              key: 'gap',
+              placeholder: 'فجوة الماستر',
+              options: [
+                { value: 'no_category', label: 'بلا فئة' },
+                { value: 'no_cost', label: 'بلا تكلفة شراء' },
+              ],
+            },
           ]}
           quickFilterValues={{
             type: typeFilter,
             status: statusFilter,
             manufactured: manufacturedFilter,
+            gap: gapFilter || 'all',
           }}
           onQuickFilterChange={(key, value) => {
             if (key === 'type') setTypeFilter(value as MaterialType | 'all');
             if (key === 'status') setStatusFilter(value as StatusFilter);
             if (key === 'manufactured') setManufacturedFilter(value as ManufacturedFilter);
+            if (key === 'gap') setGapFilter(value === 'all' ? '' : (value as CatalogMaterialGap));
           }}
           className="mb-0 border-0 rounded-none"
         />
@@ -1017,7 +1044,7 @@ export const Materials: React.FC = () => {
                 paged.map((row) => {
                   const active = row.isActive !== false;
                   return (
-                    <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                    <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                       <td className="px-4 py-3 font-mono text-sm tabular-nums">{row.code}</td>
                       <td className="px-4 py-3">
                         <p className="text-sm font-bold text-[var(--color-text)]">{row.name}</p>
@@ -1486,7 +1513,7 @@ export const Materials: React.FC = () => {
 
       {showImportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4">
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-card shadow-lg">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <div>
@@ -1534,10 +1561,10 @@ export const Materials: React.FC = () => {
                       الإجمالي: <strong>{importResult.totalRows}</strong>
                     </span>
                     {importResult.newCount > 0 && (
-                      <span className="text-emerald-600">جديد: {importResult.newCount}</span>
+                      <span className="text-[rgb(var(--color-success))]">جديد: {importResult.newCount}</span>
                     )}
                     {importResult.updateCount > 0 && (
-                      <span className={importSkipUpdates ? 'text-muted-foreground' : 'text-blue-600'}>
+                      <span className={importSkipUpdates ? 'text-muted-foreground' : 'text-[rgb(var(--color-primary))]'}>
                         {importSkipUpdates
                           ? `تخطي تحديث: ${importResult.updateCount}`
                           : `تحديث: ${importResult.updateCount}`}

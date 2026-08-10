@@ -89,8 +89,8 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
   };
   if (!tenantId) return null;
   return (
-    <OpsDashPanel title="بيانات الشركة" className="bg-white border-slate-200 rounded-xl shadow-none">
-      {err ? <p className="text-sm text-rose-600 mb-3">{err}</p> : null}
+    <OpsDashPanel title="بيانات الشركة" className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
+      {err ? <p className="text-sm text-[rgb(var(--color-danger))] mb-3">{err}</p> : null}
       {loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل...</p>
       ) : (
@@ -123,7 +123,7 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
               disabled={!isAdmin}
             />
           </div>
-          <div className="rounded-xl border border-[var(--color-border)] bg-[#f8f9fa]/80 p-3 space-y-2">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)]/80 p-3 space-y-2">
             <p className="text-sm font-bold text-[var(--color-text)]">باقات النشاط (Module Apps)</p>
             <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
               كل باقة تظهر كموديول/تطبيق مستقل في القائمة. تعطيل «التصنيع» يخفي الإنتاج والجودة — لا يؤثر على بيانات

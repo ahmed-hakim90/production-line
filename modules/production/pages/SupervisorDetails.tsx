@@ -900,7 +900,7 @@ export const SupervisorDetails: React.FC = () => {
         </div>
         <OpsDashPanel title="الفترة" accent="hr">
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
+            <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--color-border)]/90 bg-[var(--color-surface-hover)] p-1 dark:border-border dark:bg-muted/40">
               {PERIOD_OPTIONS.map((opt) => (
                 <Button
                   key={opt.value}
@@ -920,14 +920,14 @@ export const SupervisorDetails: React.FC = () => {
 
       <OpsDashPanel title="مؤشرات الأداء" accent="hr">
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
-        {/* <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" /> */}
-        <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20" />
+        {/* <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]" /> */}
+        <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)]" />
         <KPIBox
           label="إجمالي الإنتاج"
           value={formatNumber(totalProduced)}
           unit={target > 0 ? `/ ${formatNumber(target)}` : 'وحدة'}
           icon="inventory"
-          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))]"
           trend={target > 0 ? `${Math.min(Math.round((totalProduced / target) * 100), 100)}% من الهدف` : undefined}
           trendUp={target > 0 && totalProduced >= target * 0.5}
         />
@@ -935,19 +935,19 @@ export const SupervisorDetails: React.FC = () => {
           label="نسبة الهدر"
           value={`${wasteRatio}%`}
           icon="delete_sweep"
-          colorClass={wasteRatio <= 2 ? 'bg-emerald-50 text-emerald-600' : wasteRatio <= 5 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
+          colorClass={wasteRatio <= 2 ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : wasteRatio <= 5 ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}
           trend={`${formatNumber(totalWaste)} وحدة هالك`}
           trendUp={wasteRatio <= wasteThreshold}
         />
-        <KPIBox label="ساعات العمل" value={formatNumber(totalHours)} unit="ساعة" icon="schedule" colorClass="bg-amber-50 text-amber-600" trend={`${uniqueDays} يوم عمل`} trendUp />
-        <KPIBox label="متوسط الإنتاج/تقرير" value={formatNumber(avgPerReport)} icon="trending_up" colorClass="bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400" />
-        <KPIBox label="عدد التقارير" value={formatNumber(periodReports.length)} icon="description" colorClass="bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400" />
+        <KPIBox label="ساعات العمل" value={formatNumber(totalHours)} unit="ساعة" icon="schedule" colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]" trend={`${uniqueDays} يوم عمل`} trendUp />
+        <KPIBox label="متوسط الإنتاج/تقرير" value={formatNumber(avgPerReport)} icon="trending_up" colorClass="bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary)/0.15)] dark:text-[rgb(var(--color-secondary))]" />
+        <KPIBox label="عدد التقارير" value={formatNumber(periodReports.length)} icon="description" colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))]" />
         <KPIBox
           label="درجة الأداء"
           value={performanceScore}
           unit="/ 100"
           icon="speed"
-          colorClass={performanceScore >= 85 ? 'bg-emerald-50 text-emerald-600' : performanceScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
+          colorClass={performanceScore >= 85 ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : performanceScore >= 70 ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}
           trend={scoreBadge.label}
           trendUp={performanceScore >= 70}
         />
@@ -956,7 +956,7 @@ export const SupervisorDetails: React.FC = () => {
           value={`${supervisorBonus.cappedAchievementPercent}%`}
           unit={supervisorBonus.achievementPercent !== supervisorBonus.cappedAchievementPercent ? `قبل السقف ${supervisorBonus.achievementPercent}%` : undefined}
           icon="groups"
-          colorClass={supervisorBonus.cappedAchievementPercent >= 95 ? 'bg-emerald-50 text-emerald-600' : supervisorBonus.cappedAchievementPercent >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
+          colorClass={supervisorBonus.cappedAchievementPercent >= 95 ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : supervisorBonus.cappedAchievementPercent >= 70 ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}
           trend={`${formatNumber(supervisorBonus.totalAchieved)} / ${formatNumber(supervisorBonus.totalTarget)}`}
           trendUp={supervisorBonus.cappedAchievementPercent >= 70}
         />
@@ -964,7 +964,7 @@ export const SupervisorDetails: React.FC = () => {
           label="تقدير المكافأة"
           value={formatNumber(supervisorBonus.bonusEstimate)}
           icon="payments"
-          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))]"
           trend={`معامل ${supervisorBonus.supervisorMultiplier}x · شريحة ${supervisorBonus.tierMultiplier}x`}
           trendUp={supervisorBonus.bonusEstimate > 0}
         />
@@ -973,15 +973,15 @@ export const SupervisorDetails: React.FC = () => {
           value={formatNumber(Number(executionSummary.avgDailyActual.toFixed(1)))}
           unit="وحدة"
           icon="trending_up"
-          colorClass="bg-sky-50 text-sky-600 dark:bg-sky-900/20 dark:text-sky-400"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))]"
         />
         <KPIBox
           label="الانتهاء المتوقع"
           value={executionSummary.latestForecast}
           icon="event_available"
           colorClass={executionSummary.latestForecast !== '—' && executionSummary.latestForecast > periodRange.end
-            ? 'bg-amber-50 text-amber-600'
-            : 'bg-emerald-50 text-emerald-600'}
+            ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+            : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'}
         />
         <KPIBox
           label="انحراف التنفيذ"
@@ -990,12 +990,12 @@ export const SupervisorDetails: React.FC = () => {
             : `${executionSummary.weightedDeviation > 0 ? '+' : ''}${executionSummary.weightedDeviation}%`}
           icon="compare_arrows"
           colorClass={executionSummary.weightedDeviation === null
-            ? 'bg-[#f0f2f5] text-[var(--color-text-muted)]'
+            ? 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
             : executionSummary.weightedDeviation >= 0
-              ? 'bg-emerald-50 text-emerald-600'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
               : executionSummary.weightedDeviation <= -20
-                ? 'bg-rose-50 text-rose-600'
-                : 'bg-amber-50 text-amber-600'}
+                ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
+                : 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'}
           trend={`أوامر متأخرة: ${executionSummary.delayedCount}`}
           trendUp={executionSummary.weightedDeviation !== null && executionSummary.weightedDeviation >= 0}
         />
@@ -1020,23 +1020,23 @@ export const SupervisorDetails: React.FC = () => {
                       <div className="min-w-0">
                         <h4 className="truncate text-base font-bold text-[var(--color-text)]">{getProductName(plan.productId)}</h4>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-[var(--color-text-muted)]">
-                          <span className="rounded-full bg-slate-100 px-2 py-1">{getLineName(plan.lineId)}</span>
-                          <span className="rounded-full bg-slate-100 px-2 py-1">{plan.planDate}</span>
-                          {plan.workOrderNumber && <span className="rounded-full bg-slate-100 px-2 py-1">أمر {plan.workOrderNumber}</span>}
+                          <span className="rounded-full bg-[var(--color-surface-hover)] px-2 py-1">{getLineName(plan.lineId)}</span>
+                          <span className="rounded-full bg-[var(--color-surface-hover)] px-2 py-1">{plan.planDate}</span>
+                          {plan.workOrderNumber && <span className="rounded-full bg-[var(--color-surface-hover)] px-2 py-1">أمر {plan.workOrderNumber}</span>}
                         </div>
                       </div>
                       <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
                     </div>
                     <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[var(--color-bg)] p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">المخطط</div>
                         <div className="mt-1 font-bold">{formatNumber(plan.plannedQuantity)}</div>
                       </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[var(--color-bg)] p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">المنتج</div>
-                        <div className="mt-1 font-bold text-emerald-600">{formatNumber(plan.producedSoFar)}</div>
+                        <div className="mt-1 font-bold text-[rgb(var(--color-success))]">{formatNumber(plan.producedSoFar)}</div>
                       </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[var(--color-bg)] p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">الإنجاز</div>
                         <div className="mt-1 font-bold">{plan.achievementPct}%</div>
                       </div>
@@ -1076,7 +1076,7 @@ export const SupervisorDetails: React.FC = () => {
                       <td className="px-4 py-3">
                         <div className="font-bold text-[var(--color-text)]">{getProductName(plan.productId)}</div>
                         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-[var(--color-text-muted)]">
-                          <span className={`rounded-full px-2 py-0.5 ${assemblyMode === 'team' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                          <span className={`rounded-full px-2 py-0.5 ${assemblyMode === 'team' ? 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]' : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'}`}>
                             {assemblyMode === 'team' ? 'تجميع جماعي' : 'تجميع فردي'}
                           </span>
                           {plan.workOrderNumber && <span>أمر {plan.workOrderNumber}</span>}
@@ -1090,10 +1090,10 @@ export const SupervisorDetails: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-center font-bold">{formatNumber(plan.plannedQuantity)}</td>
-                      <td className="px-4 py-3 text-center font-bold text-emerald-600">{formatNumber(plan.producedSoFar)}</td>
+                      <td className="px-4 py-3 text-center font-bold text-[rgb(var(--color-success))]">{formatNumber(plan.producedSoFar)}</td>
                       <td className="px-4 py-3 text-center font-bold text-[var(--color-text-muted)]">{formatNumber(plan.remainingQty)}</td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`font-black ${plan.achievementPct >= 100 ? 'text-emerald-600' : plan.achievementPct >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
+                        <span className={`font-black ${plan.achievementPct >= 100 ? 'text-[rgb(var(--color-success))]' : plan.achievementPct >= 70 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-danger))]'}`}>
                           {plan.achievementPct}%
                         </span>
                       </td>
@@ -1136,7 +1136,7 @@ export const SupervisorDetails: React.FC = () => {
           label="عمالة مرتبطة"
           value={formatNumber(teamWorkerRows.length)}
           icon="groups"
-          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)]"
           trend={`${formatNumber(achievedWorkerRows.length)} حققوا الهدف`}
           trendUp={achievedWorkerRows.length >= belowTargetWorkerRows.length}
         />
@@ -1144,7 +1144,7 @@ export const SupervisorDetails: React.FC = () => {
           label="حققوا الأهداف"
           value={formatNumber(achievedWorkerRows.length)}
           icon="check_circle"
-          colorClass="bg-emerald-50 text-emerald-600"
+          colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]"
           trend={productionTargetWorkerRows.length > 0 ? `${Math.round((achievedWorkerRows.length / productionTargetWorkerRows.length) * 100)}% من عمال الإنتاج` : undefined}
           trendUp
         />
@@ -1152,7 +1152,7 @@ export const SupervisorDetails: React.FC = () => {
           label="لم يحققوا الأهداف"
           value={formatNumber(belowTargetWorkerRows.length)}
           icon="warning"
-          colorClass="bg-amber-50 text-amber-600"
+          colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]"
           trend={productionTargetWorkerRows.length > 0 ? `${Math.round((belowTargetWorkerRows.length / productionTargetWorkerRows.length) * 100)}% من عمال الإنتاج` : undefined}
           trendUp={belowTargetWorkerRows.length === 0}
         />
@@ -1160,7 +1160,7 @@ export const SupervisorDetails: React.FC = () => {
           label="متوسط تحقيق العمال"
           value={`${productionTargetWorkerRows.length > 0 ? Math.round(productionTargetWorkerRows.reduce((sum, row) => sum + row.achievementPercent, 0) / productionTargetWorkerRows.length) : 0}%`}
           icon="speed"
-          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))]"
           trend={`${formatNumber(supervisorBonus.totalAchieved)} / ${formatNumber(supervisorBonus.totalTarget)}`}
           trendUp={supervisorBonus.achievementPercent >= 100}
         />
@@ -1187,7 +1187,7 @@ export const SupervisorDetails: React.FC = () => {
                       <td className="px-4 py-3 font-bold text-[var(--color-text)]">{row.workerName}</td>
                       <td className="px-4 py-3 text-center">{formatNumber(row.targetQty)}</td>
                       <td className="px-4 py-3 text-center">{formatNumber(row.outputQty)}</td>
-                      <td className="px-4 py-3 text-center font-bold text-emerald-600">{row.achievementPercent}%</td>
+                      <td className="px-4 py-3 text-center font-bold text-[rgb(var(--color-success))]">{row.achievementPercent}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1216,7 +1216,7 @@ export const SupervisorDetails: React.FC = () => {
                       <td className="px-4 py-3 font-bold text-[var(--color-text)]">{row.workerName}</td>
                       <td className="px-4 py-3 text-center">{formatNumber(row.targetQty)}</td>
                       <td className="px-4 py-3 text-center">{formatNumber(row.outputQty)}</td>
-                      <td className={`px-4 py-3 text-center font-bold ${row.achievementPercent >= 100 ? 'text-emerald-600' : 'text-rose-600'}`}>{row.achievementPercent}%</td>
+                      <td className={`px-4 py-3 text-center font-bold ${row.achievementPercent >= 100 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`}>{row.achievementPercent}%</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1227,7 +1227,7 @@ export const SupervisorDetails: React.FC = () => {
       </div>
 
       <OpsDashPanel title="تقييم عمال المشرف" accent="hr">
-        <div className="flex flex-col gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/70 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h4 className="font-bold text-[var(--color-text)]">صفحة مستقلة لتقييم العمالة</h4>
             <p className="mt-1 text-xs font-medium text-[var(--color-text-muted)]">
@@ -1246,19 +1246,19 @@ export const SupervisorDetails: React.FC = () => {
 
       <OpsDashPanel title="حساب المكافأة من أهداف العمال" accent="hr">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] border border-[var(--color-border)] p-3 text-center">
             <p className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي أهداف الفريق</p>
             <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(supervisorBonus.totalTarget)}</p>
           </div>
-          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] border border-[var(--color-border)] p-3 text-center">
             <p className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي المحقق</p>
             <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(supervisorBonus.totalAchieved)}</p>
           </div>
-          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] border border-[var(--color-border)] p-3 text-center">
             <p className="text-xs font-bold text-[var(--color-text-muted)]">النسبة المعتمدة</p>
             <p className="text-lg font-black text-primary">{supervisorBonus.cappedAchievementPercent}%</p>
           </div>
-          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] border border-[var(--color-border)] p-3 text-center">
             <p className="text-xs font-bold text-[var(--color-text-muted)]">مكافأة المشرف</p>
             <p className="text-lg font-black text-primary">{formatNumber(supervisorBonus.bonusEstimate)}</p>
           </div>
@@ -1308,7 +1308,7 @@ export const SupervisorDetails: React.FC = () => {
             className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm transition-all ${
               activeTab === tab.id
                 ? 'bg-primary text-white shadow-primary/20'
-                : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa]'
+                : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[var(--color-bg)]'
             }`}
           >
             <span className="material-icons-round text-lg">{tab.icon}</span>
@@ -1353,7 +1353,7 @@ export const SupervisorDetails: React.FC = () => {
                           {formatNumber(Number(row.execution.avgDailyActual.toFixed(1)))}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={row.isLateForecast ? 'text-rose-600 font-bold' : 'text-[var(--color-text-muted)] font-bold'}>
+                          <span className={row.isLateForecast ? 'text-[rgb(var(--color-danger))] font-bold' : 'text-[var(--color-text-muted)] font-bold'}>
                             {row.execution.forecastEndDate}
                           </span>
                         </td>
@@ -1363,10 +1363,10 @@ export const SupervisorDetails: React.FC = () => {
                           ) : (
                             <span className={
                               row.deviationTone === 'good'
-                                ? 'text-emerald-600'
+                                ? 'text-[rgb(var(--color-success))]'
                                 : row.deviationTone === 'danger'
-                                  ? 'text-rose-600'
-                                  : 'text-amber-600'
+                                  ? 'text-[rgb(var(--color-danger))]'
+                                  : 'text-[rgb(var(--color-warning))]'
                             }>
                               {row.execution.deviationPct > 0 ? '+' : ''}{row.execution.deviationPct}%
                             </span>
@@ -1394,7 +1394,7 @@ export const SupervisorDetails: React.FC = () => {
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
                       chartTab === tab.key
                         ? 'bg-primary text-white shadow-primary/20'
-                        : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
+                        : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
                     }`}
                   >
                     <span className="material-icons-round text-sm">{tab.icon}</span>
@@ -1405,7 +1405,7 @@ export const SupervisorDetails: React.FC = () => {
             </div>
 
             {enrichedChartData.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
+              <div className="text-center py-12 text-[var(--color-text-muted)]">
                 <span className="material-icons-round text-4xl mb-2 block opacity-30">show_chart</span>
                 <p className="font-bold">لا توجد بيانات بعد</p>
               </div>
@@ -1416,39 +1416,39 @@ export const SupervisorDetails: React.FC = () => {
                     <AreaChart data={enrichedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="svColorProd" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#1392ec" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#1392ec" stopOpacity={0} />
+                          <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="svColorWaste" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                          <stop offset="5%" stopColor="var(--chart-4)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--chart-4)" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                      <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
                       <Tooltip content={<ChartTooltip />} />
                       <Legend />
-                      <Area type="monotone" dataKey="produced" name="الإنتاج" stroke="#1392ec" strokeWidth={2} fillOpacity={1} fill="url(#svColorProd)" />
-                      <Area type="monotone" dataKey="waste" name="الهالك" stroke="#ef4444" strokeWidth={1.5} fillOpacity={1} fill="url(#svColorWaste)" />
+                      <Area type="monotone" dataKey="produced" name="الإنتاج" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#svColorProd)" />
+                      <Area type="monotone" dataKey="waste" name="الهالك" stroke="var(--chart-4)" strokeWidth={1.5} fillOpacity={1} fill="url(#svColorWaste)" />
                     </AreaChart>
                   ) : chartTab === 'efficiency' ? (
                     <BarChart data={enrichedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                      <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
                       <Tooltip content={<ChartTooltip />} />
                       <Legend />
-                      <Bar dataKey="efficiency" name="الكفاءة" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                      <Bar dataKey="efficiency" name="الكفاءة" fill="var(--chart-2)" radius={[4, 4, 0, 0]} barSize={20} />
                     </BarChart>
                   ) : (
                     <BarChart data={enrichedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                      <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
                       <Tooltip content={<ChartTooltip />} />
                       <Legend />
-                      <Bar dataKey="hours" name="ساعات العمل" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={20} />
+                      <Bar dataKey="hours" name="ساعات العمل" fill="var(--chart-5)" radius={[4, 4, 0, 0]} barSize={20} />
                     </BarChart>
                   )}
                 </ResponsiveContainer>
@@ -1462,13 +1462,13 @@ export const SupervisorDetails: React.FC = () => {
               <div style={{ width: '100%', height: 280 }} dir="ltr">
                 <ResponsiveContainer>
                   <BarChart data={productStats} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis type="number" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                    <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: '#94a3b8' }} width={100} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                    <XAxis type="number" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                    <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} width={100} />
                     <Tooltip content={<ChartTooltip />} />
                     <Legend />
-                    <Bar dataKey="produced" name="الإنتاج" fill="#10b981" radius={[0, 4, 4, 0]} />
-                    <Bar dataKey="waste" name="الهالك" fill="#ef4444" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="produced" name="الإنتاج" fill="var(--chart-2)" radius={[0, 4, 4, 0]} />
+                    <Bar dataKey="waste" name="الهالك" fill="var(--chart-4)" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1480,7 +1480,7 @@ export const SupervisorDetails: React.FC = () => {
             <div className="px-6 py-4 border-b border-[var(--color-border)]">
               <h3 className="text-lg font-bold">سجل التقارير</h3>
               {reports.length > 0 && periodReports.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">
+                <p className="text-xs text-[rgb(var(--color-warning))] mt-1">
                   لا توجد تقارير داخل الفترة الحالية. جرظ‘ب تغيير الفترة إلى "كل البيانات".
                 </p>
               )}
@@ -1501,7 +1501,7 @@ export const SupervisorDetails: React.FC = () => {
                 <tbody className="divide-y divide-[var(--color-border)]">
                   {periodReports.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                      <td colSpan={7} className="px-6 py-12 text-center text-[var(--color-text-muted)]">
                         <span className="material-icons-round text-5xl mb-3 block opacity-30">description</span>
                         <p className="font-bold">لا توجد تقارير</p>
                       </td>
@@ -1513,11 +1513,11 @@ export const SupervisorDetails: React.FC = () => {
                       <td className="px-5 py-3 text-sm font-medium">{getLineName(r.lineId)}</td>
                       <td className="px-5 py-3 text-sm font-medium">{getProductName(r.productId)}</td>
                       <td className="px-5 py-3 text-center">
-                        <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 text-sm font-bold ring-1 ring-emerald-500/20">
+                        <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] text-sm font-bold ring-1 ring-[rgb(var(--color-success))]/20">
                           {formatNumber(r.quantityProduced)}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
+                      <td className="px-5 py-3 text-center text-[rgb(var(--color-danger))] font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
                       <td className="px-5 py-3 text-center text-sm font-bold">{r.workersCount}</td>
                       <td className="px-5 py-3 text-center text-sm font-bold">{r.workHours}</td>
                     </tr>
@@ -1526,7 +1526,7 @@ export const SupervisorDetails: React.FC = () => {
               </table>
             </div>
             {periodReports.length > 0 && (
-              <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)]">
+              <div className="px-6 py-4 bg-[var(--color-bg)]/50 border-t border-[var(--color-border)]">
                 <span className="text-sm text-[var(--color-text-muted)] font-bold">
                   إجمالي <span className="text-primary">{periodReports.length}</span> تقرير
                   {periodReports.length > 30 && <span className="text-[var(--color-text-muted)] mr-2">— عرض أحدث 30</span>}
@@ -1542,7 +1542,7 @@ export const SupervisorDetails: React.FC = () => {
         <div className="space-y-6">
           {lineStats.length === 0 ? (
             <OpsDashPanel accent="hr">
-              <div className="text-center py-12 text-slate-400">
+              <div className="text-center py-12 text-[var(--color-text-muted)]">
                 <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
                 <p className="font-bold">لا توجد خطوط إنتاج مرتبطة</p>
               </div>
@@ -1560,7 +1560,7 @@ export const SupervisorDetails: React.FC = () => {
                         </div>
                         <div>
                           <h4 className="font-bold text-[var(--color-text)]">{line.name}</h4>
-                          <span className="text-xs text-slate-400">{formatNumber(line.reports)} تقرير آ· {formatNumber(Math.round(line.hours))} ساعة</span>
+                          <span className="text-xs text-[var(--color-text-muted)]">{formatNumber(line.reports)} تقرير آ· {formatNumber(Math.round(line.hours))} ساعة</span>
                         </div>
                       </div>
                       <button
@@ -1572,17 +1572,17 @@ export const SupervisorDetails: React.FC = () => {
                       </button>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] p-3 text-center">
-                        <p className="text-xs text-emerald-600 font-medium mb-1">الإنتاج</p>
-                        <p className="text-lg font-bold text-emerald-700">{formatNumber(line.produced)}</p>
+                      <div className="bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] rounded-[var(--border-radius-base)] p-3 text-center">
+                        <p className="text-xs text-[rgb(var(--color-success))] font-medium mb-1">الإنتاج</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-success))]">{formatNumber(line.produced)}</p>
                       </div>
-                      <div className="bg-rose-50 dark:bg-rose-900/10 rounded-[var(--border-radius-base)] p-3 text-center">
-                        <p className="text-xs text-rose-600 font-medium mb-1">الهالك</p>
-                        <p className="text-lg font-bold text-rose-700">{formatNumber(line.waste)}</p>
+                      <div className="bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] rounded-[var(--border-radius-base)] p-3 text-center">
+                        <p className="text-xs text-[rgb(var(--color-danger))] font-medium mb-1">الهالك</p>
+                        <p className="text-lg font-bold text-[rgb(var(--color-danger))]">{formatNumber(line.waste)}</p>
                       </div>
-                      <div className={`rounded-[var(--border-radius-base)] p-3 text-center ${lineWasteRatio > 5 ? 'bg-rose-50 dark:bg-rose-900/10' : 'bg-amber-50 dark:bg-amber-900/10'}`}>
-                        <p className={`text-xs font-medium mb-1 ${lineWasteRatio > 5 ? 'text-rose-600' : 'text-amber-600'}`}>نسبة الهالك</p>
-                        <p className={`text-lg font-bold ${lineWasteRatio > 5 ? 'text-rose-700' : 'text-amber-700'}`}>{lineWasteRatio}%</p>
+                      <div className={`rounded-[var(--border-radius-base)] p-3 text-center ${lineWasteRatio > 5 ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)]' : 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)]'}`}>
+                        <p className={`text-xs font-medium mb-1 ${lineWasteRatio > 5 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-warning))]'}`}>نسبة الهالك</p>
+                        <p className={`text-lg font-bold ${lineWasteRatio > 5 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-warning))]'}`}>{lineWasteRatio}%</p>
                       </div>
                     </div>
                   </OpsDashPanel>
@@ -1609,7 +1609,7 @@ export const SupervisorDetails: React.FC = () => {
               { label: 'الرمز', value: employee.code || '—', icon: 'tag' },
               { label: 'ساعات العمل الكلية', value: formatNumber(Math.round(totalWorkerHours)) + ' ساعة', icon: 'timer' },
             ].map((item) => (
-              <div key={item.label} className="flex items-center gap-3 p-4 bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]/50">
+              <div key={item.label} className="flex items-center gap-3 p-4 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]/50">
                 <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] flex items-center justify-center shrink-0">
                   <span className="material-icons-round text-[var(--color-text-muted)] text-lg">{item.icon}</span>
                 </div>
@@ -1628,7 +1628,7 @@ export const SupervisorDetails: React.FC = () => {
       <OpsDashPanel title="التنبيهات" accent="hr">
       <OpsDashPanel accent="hr">
         <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-amber-500">notifications_active</span>
+          <span className="material-icons-round text-[rgb(var(--color-warning))]">notifications_active</span>
           <h3 className="text-lg font-bold">التنبيهات</h3>
         </div>
         <div className="space-y-2">
@@ -1637,10 +1637,10 @@ export const SupervisorDetails: React.FC = () => {
               key={i}
               className={`flex items-start sm:items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
+                  ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))]'
                   : alert.type === 'warning'
-                  ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
-                  : 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 text-blue-700'
+                  ? 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border-[rgb(var(--color-warning)/0.25)] text-[rgb(var(--color-warning))]'
+                  : 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)] text-[rgb(var(--color-primary))]'
               }`}
             >
               <span className="material-icons-round text-lg">{alert.icon}</span>

@@ -627,7 +627,7 @@ export const TransferApprovals: React.FC = () => {
             type="button"
             onClick={() => setTypeTab(key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
-              typeTab === key ? 'bg-primary text-white border-primary' : 'bg-white border-slate-200 text-slate-600'
+              typeTab === key ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'
             }`}
           >
             {label}
@@ -636,7 +636,7 @@ export const TransferApprovals: React.FC = () => {
       </div>
 
       {typeTab === 'production_handover' && (
-        <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-primary))]">
           استلام التغليف يُؤكَّد بالكمية الفعلية من{' '}
           <Link
             className="font-bold underline"
@@ -649,14 +649,14 @@ export const TransferApprovals: React.FC = () => {
       )}
 
       {!canApprove && (
-        <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">
+        <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-4 py-3 text-sm font-bold text-[rgb(var(--color-warning))]">
           لا تملك صلاحية الاعتماد الحالية: <span dir="ltr">{transferApprovalPermission}</span>
         </div>
       )}
       {canApprove &&
         (allowNegativeFinishedTransferStock || allowNegativeDecomposedStock) &&
         !canApproveNegativeFinishedTransfer && (
-        <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">
+        <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-4 py-3 text-sm font-bold text-[rgb(var(--color-primary))]">
           تم تفعيل التحويل بالسالب من الإعدادات (تم الصنع و/أو مخزن المفكك)، لكن دورك لا يملك صلاحية
           <span dir="ltr" className="mx-1">inventory.finishedStock.allowNegativeApprove</span>
           لذلك الاعتماد بالسالب غير متاح لك.
@@ -671,7 +671,7 @@ export const TransferApprovals: React.FC = () => {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-10 text-center text-sm text-slate-400">لا توجد طلبات تحويل في هذا الفلتر.</div>
+          <div className="p-10 text-center text-sm text-[var(--color-text-muted)]">لا توجد طلبات تحويل في هذا الفلتر.</div>
         ) : (
           <div className="space-y-2.5">
             <div className="erp-mobile-card-list p-3">
@@ -722,7 +722,7 @@ export const TransferApprovals: React.FC = () => {
                       {row.status === 'pending' && (row.requestType || '') === 'production_handover' && (
                         <Link
                           to={withTenantPath(tenantSlug, '/production/packaging/control')}
-                          className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800"
+                          className="inline-flex items-center rounded-md border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] px-2.5 py-1 text-xs font-bold text-[rgb(var(--color-success))]"
                         >
                           استلام بكمية
                         </Link>
@@ -783,11 +783,11 @@ export const TransferApprovals: React.FC = () => {
                     : (warehouseMap.get(row.fromWarehouseId) || row.fromWarehouseName || row.fromWarehouseId);
                   const toName = warehouseMap.get(row.toWarehouseId) || row.toWarehouseName || row.toWarehouseId;
                   return (
-                    <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                    <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                       <td className="px-4 py-3 text-sm">
                         <div className="space-y-1">
                           <p className="font-bold">{row.referenceNo}</p>
-                          <p className="text-[11px] text-slate-500">{transferRequestTypeLabel(requestType)}</p>
+                          <p className="text-[11px] text-[var(--color-text-muted)]">{transferRequestTypeLabel(requestType)}</p>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm">{fromName}</td>
@@ -797,7 +797,7 @@ export const TransferApprovals: React.FC = () => {
                           {row.lines.length > 1 && (
                             <p className="font-bold">{row.lines.length} صنف</p>
                           )}
-                          <p className={row.lines.length === 1 ? 'font-semibold text-[var(--color-text)]' : 'text-xs text-slate-500'}>
+                          <p className={row.lines.length === 1 ? 'font-semibold text-[var(--color-text)]' : 'text-xs text-[var(--color-text-muted)]'}>
                             {formatTransferLinesSummary(row.lines)}
                           </p>
                         </div>
@@ -816,7 +816,7 @@ export const TransferApprovals: React.FC = () => {
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-sm tabular-nums">
-                        <span className={transferAgeDays(row) >= transferSlaDays && row.status === 'pending' ? 'text-rose-600 font-bold' : ''}>
+                        <span className={transferAgeDays(row) >= transferSlaDays && row.status === 'pending' ? 'text-[rgb(var(--color-danger))] font-bold' : ''}>
                           {transferAgeDays(row)}
                         </span>
                       </td>
@@ -851,7 +851,7 @@ export const TransferApprovals: React.FC = () => {
                           {row.status === 'pending' && requestType === 'production_handover' && (
                             <Link
                               to={withTenantPath(tenantSlug, '/production/packaging/control')}
-                              className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800"
+                              className="inline-flex items-center rounded-md border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] px-2.5 py-1 text-xs font-bold text-[rgb(var(--color-success))]"
                             >
                               استلام بكمية
                             </Link>

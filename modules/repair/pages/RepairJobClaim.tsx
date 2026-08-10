@@ -51,13 +51,18 @@ export const RepairJobClaim: React.FC = () => {
     >
       <OpsDashPanel title="استلام طلب صيانة" accent="repair" className="mx-auto w-full max-w-md text-center">
         <div className="mx-auto mb-4 rounded-full bg-muted p-3 w-fit">
-          <Icon className={`size-8 ${state === 'claiming' ? 'animate-spin text-primary' : state === 'done' ? 'text-emerald-600' : 'text-rose-600'}`} />
+          <Icon className={`size-8 ${state === 'claiming' ? 'animate-spin text-primary' : state === 'done' ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}`} />
         </div>
         <p className="text-sm text-muted-foreground">{message}</p>
         {state === 'error' ? (
-          <div className="mt-4 flex justify-center gap-2">
-            <Button type="button" onClick={() => void claim()}>إعادة المحاولة</Button>
-            <Button type="button" variant="outline" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/my-jobs'))}>طلباتي</Button>
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              لو الطلب مسند لفني تاني أو مش موجود: من تفاصيل الطلب (استقبال / مسؤول المركز) غيّر الفني أو فك الإسناد، ثم أعد المسح.
+            </p>
+            <div className="flex justify-center gap-2">
+              <Button type="button" onClick={() => void claim()}>إعادة المحاولة</Button>
+              <Button type="button" variant="outline" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/my-jobs'))}>طلباتي</Button>
+            </div>
           </div>
         ) : null}
       </OpsDashPanel>

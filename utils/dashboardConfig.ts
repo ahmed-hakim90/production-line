@@ -6,6 +6,10 @@ import type {
 } from '../types';
 import { DEFAULT_REPORT_BEHAVIOR_SETTINGS } from '../modules/production/lib/reportBehaviorSettings';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../types';
+import {
+  PRINT_DOCUMENT_TYPE_IDS,
+  defaultFieldsForDocument,
+} from './print/printDocumentRegistry';
 
 // ─── Widget Registry ─────────────────────────────────────────────────────────
 
@@ -184,6 +188,19 @@ function buildDefaultWidgets(dashboardKey: string): WidgetConfig[] {
   return defs.map((d) => ({ id: d.id, visible: true }));
 }
 
+const DEFAULT_PRINT_DOCUMENTS: NonNullable<PrintTemplateSettings['documents']> =
+  Object.fromEntries(
+    PRINT_DOCUMENT_TYPE_IDS.map((id) => [
+      id,
+      {
+        headerText: '',
+        footerText: '',
+        customLines: [],
+        fields: defaultFieldsForDocument(id),
+      },
+    ]),
+  ) as NonNullable<PrintTemplateSettings['documents']>;
+
 export const DEFAULT_PRINT_TEMPLATE: PrintTemplateSettings = {
   logoUrl: '',
   headerText: 'مؤسسة المغربي',
@@ -208,12 +225,15 @@ export const DEFAULT_PRINT_TEMPLATE: PrintTemplateSettings = {
   marginLeftMm: 10,
   printBackground: true,
   decimalPlaces: 0,
+  printFontFamily: 'Cairo',
+  printFontSizePt: 10,
   showWaste: true,
   showEmployee: true,
   showQRCode: false,
   showCosts: true,
   showWorkOrder: true,
   showSellingPrice: true,
+  documents: DEFAULT_PRINT_DOCUMENTS,
 };
 
 export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
@@ -293,24 +313,23 @@ export const DEFAULT_THEME: ThemeSettings = {
   successColor: '#059669',
   warningColor: '#D97706',
   dangerColor: '#DC2626',
-  backgroundColor: '#F7F9FC',
+  backgroundColor: '#F8FAFC',
   cssVars: {
     '--primary': '239 84% 60%',
     '--primary-foreground': '0 0% 100%',
     '--secondary': '240 5% 96%',
     '--secondary-foreground': '240 6% 10%',
-    '--background': '214 40% 98%',
+    '--background': '210 40% 98%',
     '--foreground': '222 84% 5%',
-    '--muted': '214 32% 96%',
+    '--muted': '210 40% 96%',
     '--muted-foreground': '215 16% 47%',
     '--accent': '239 84% 97%',
     '--accent-foreground': '239 84% 30%',
-    '--border': '220 13% 91%',
-    '--input': '220 13% 91%',
+    '--border': '214 32% 91%',
+    '--input': '214 32% 91%',
     '--ring': '239 84% 60%',
     '--card': '0 0% 100%',
     '--card-foreground': '222 84% 5%',
-    '--radius': '0.75rem',
   },
   darkMode: 'light',
   baseFontFamily: 'IBM Plex Sans Arabic',

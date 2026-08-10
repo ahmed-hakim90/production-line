@@ -104,9 +104,9 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
         type="button"
         disabled={disabled}
         onClick={onToggle}
-        className={`relative w-12 h-7 rounded-full shrink-0 disabled:opacity-60 disabled:cursor-not-allowed ${checked ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
+        className={`relative w-12 h-7 rounded-full shrink-0 disabled:opacity-60 disabled:cursor-not-allowed ${checked ? 'bg-primary' : 'bg-[var(--color-border)]'}`}
       >
-        <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full transition-all ${checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
+        <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
       </button>
     </div>
   );
@@ -119,7 +119,7 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
             هذه القواعد تقرأها شاشة الإدخال السريع، صفحة التقارير، مودال إنشاء التقرير، والاستيراد عبر نفس منطق الحفظ.
           </p>
         </div>
-        {message && <p className="text-sm font-medium text-slate-600">{message}</p>}
+        {message && <p className="text-sm font-medium text-[var(--color-text-muted)]">{message}</p>}
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">schedule</span>
@@ -155,14 +155,14 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
           {toggle('عمالة التغليف اختيارية', 'عند التشغيل يسمح لتقرير التغليف أو خط التغليف بالحفظ بدون عمالة.', behavior.allowPackagingLaborOptional, () => patchBehavior({ allowPackagingLaborOptional: !behavior.allowPackagingLaborOptional }))}
           {toggle('ربط دورة التوريد تلقائيًا', 'عند التشغيل يحاول النظام ربط التقرير بدورة توريد مناسبة أثناء الحفظ.', behavior.autoLinkSupplyCycleOnReportSave, () => patchBehavior({ autoLinkSupplyCycleOnReportSave: !behavior.autoLinkSupplyCycleOnReportSave }))}
           {toggle('تنفيذ أثر المخزون عند الحفظ', 'عند التشغيل ينشئ النظام حركات/طلبات المخزون الآلية المرتبطة بالتقرير.', behavior.autoApplyInventoryOnReportSave, () => patchBehavior({ autoApplyInventoryOnReportSave: !behavior.autoApplyInventoryOnReportSave }))}
-          <div className="flex items-start gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-emerald-200 dark:border-emerald-900/50">
+          <div className="flex items-start gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] dark:border-[rgb(var(--color-success))]/50">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">ترحيل التقرير إلى الخطة وأمر الشغل</p>
               <p className="text-xs text-[var(--color-text-muted)] mt-0.5 leading-5">
                 تلقائي دائمًا: يحدّث التقرير الخطة وأمر الشغل المطابقين، أو المتاح منهما.
               </p>
             </div>
-            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+            <span className="rounded-full bg-[rgb(var(--color-success)/0.1)] px-2.5 py-1 text-xs font-bold text-[rgb(var(--color-success))] dark:bg-[rgb(var(--color-success)/0.2)] dark:text-[rgb(var(--color-success))]">
               تلقائي
             </span>
           </div>
@@ -178,7 +178,7 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
           })))}
         </div>
         {conflictBomAndIssue && (
-          <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
+          <div className="rounded-lg border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-danger))]">
             <p className="font-bold">تعارض إعدادات</p>
             <p className="mt-1 text-xs leading-relaxed">
               لا تجمع بين «إلزام صرف إنتاج» و«خصم BOM من التقرير» حتى لا يحدث خصم مزدوج.

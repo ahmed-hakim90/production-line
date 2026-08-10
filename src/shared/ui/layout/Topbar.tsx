@@ -242,7 +242,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {!isInstalled && !canPromptInstall && (
             <Link
               to="/download"
-              className="sm:hidden inline-flex items-center gap-1 p-1.5 rounded-[var(--border-radius-sm)] text-emerald-700 hover:bg-emerald-50 transition-colors"
+              className="sm:hidden inline-flex items-center gap-1 p-1.5 rounded-[var(--border-radius-sm)] text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.1)] transition-colors"
               title={t('topbar.install')}
             >
               <Download size={18} />
@@ -251,7 +251,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
 
           {/* Read-only badge */}
           {isReadOnly && (
-            <span className="hidden xl:inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-sm)] text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="hidden xl:inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-sm)] text-[11px] font-semibold bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]">
               <Lock size={13} />
               {t('topbar.readOnly')}
             </span>

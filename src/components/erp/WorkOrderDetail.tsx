@@ -344,7 +344,7 @@ export function WorkOrderDetail({
               type="button"
               variant="outline"
               onClick={onReopenCompleted}
-              className="border-amber-600/50 text-amber-800 hover:bg-amber-500/10 dark:text-amber-600"
+              className="border-[rgb(var(--color-warning))]/50 text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.1)]0/10 dark:text-[rgb(var(--color-warning))]"
             >
               {t("erpComponents.workOrderDetail.actions.reopen")}
             </Button>

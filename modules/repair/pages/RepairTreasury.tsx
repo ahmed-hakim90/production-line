@@ -16,6 +16,8 @@ import {
   repairTreasuryEntryTypeChip,
 } from '../lib/repairSemanticStatus';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import {
@@ -43,33 +45,49 @@ const PAGE_SIZE = 20;
 const entryTypeOptions = ['INCOME', 'EXPENSE', 'TRANSFER_OUT', 'TRANSFER_IN'] as const;
 type TreasuryEntryType = (typeof entryTypeOptions)[number];
 
+type TreasuryEntryFormDraft = {
+  entryType: TreasuryEntryType;
+  entryAmount: string;
+  entryNote: string;
+  entryPaymentMethod: 'cash' | 'card' | 'bank_transfer';
+  entryExpenseType: RepairTreasuryExpenseTypeKey | '';
+};
+
+const isTreasuryEntryFormDraftEmpty = (draft: TreasuryEntryFormDraft): boolean => (
+  !String(draft.entryAmount || '').trim()
+  && !String(draft.entryNote || '').trim()
+  && !draft.entryExpenseType
+  && draft.entryType === 'EXPENSE'
+  && draft.entryPaymentMethod === 'cash'
+);
+
 const entryTypeMeta: Record<string, { amountClass: string; signed: (n: number) => string }> = {
   OPENING: {
-    amountClass: 'text-sky-700',
+    amountClass: 'text-[rgb(var(--color-primary))]',
     signed: (n) => fmt(n),
   },
   INCOME: {
-    amountClass: 'text-emerald-700',
+    amountClass: 'text-[rgb(var(--color-success))]',
     signed: (n) => `+${fmt(n)}`,
   },
   EXPENSE: {
-    amountClass: 'text-rose-700',
+    amountClass: 'text-[rgb(var(--color-danger))]',
     signed: (n) => `−${fmt(n)}`,
   },
   TRANSFER_OUT: {
-    amountClass: 'text-amber-700',
+    amountClass: 'text-[rgb(var(--color-warning))]',
     signed: (n) => `−${fmt(n)}`,
   },
   TRANSFER_IN: {
-    amountClass: 'text-violet-700',
+    amountClass: 'text-[rgb(var(--color-secondary))]',
     signed: (n) => `+${fmt(n)}`,
   },
   SETTLEMENT_OUT: {
-    amountClass: 'text-orange-700',
+    amountClass: 'text-[rgb(var(--color-warning))]',
     signed: (n) => `−${fmt(n)}`,
   },
   SETTLEMENT_IN: {
-    amountClass: 'text-emerald-800',
+    amountClass: 'text-[rgb(var(--color-success))]',
     signed: (n) => `+${fmt(n)}`,
   },
   CLOSING: {
@@ -122,6 +140,45 @@ export const RepairTreasury: React.FC = () => {
   const [entryPaymentMethod, setEntryPaymentMethod] = useState<'cash' | 'card' | 'bank_transfer'>('cash');
   const [entryExpenseType, setEntryExpenseType] = useState<RepairTreasuryExpenseTypeKey | ''>('');
   const [showPrevDayCloseModal, setShowPrevDayCloseModal] = useState(false);
+
+  const treasuryDraftValue = useMemo<TreasuryEntryFormDraft>(() => ({
+    entryType,
+    entryAmount,
+    entryNote,
+    entryPaymentMethod,
+    entryExpenseType,
+  }), [entryType, entryAmount, entryNote, entryPaymentMethod, entryExpenseType]);
+
+  const { hasDraft: hasEntryDraft, clearDraft: clearEntryDraft } = useLocalFormDraft<TreasuryEntryFormDraft>({
+    formKey: 'repair:treasuryEntry',
+    tenantId: getCurrentTenantIdOrNull() || user?.tenantId,
+    userId: user?.id,
+    value: treasuryDraftValue,
+    isEmpty: isTreasuryEntryFormDraftEmpty,
+    onRestore: (draft) => {
+      const nextType = draft.entryType;
+      setEntryType(entryTypeOptions.includes(nextType as TreasuryEntryType) ? (nextType as TreasuryEntryType) : 'EXPENSE');
+      setEntryAmount(String(draft.entryAmount || ''));
+      setEntryNote(String(draft.entryNote || ''));
+      const nextPay = draft.entryPaymentMethod;
+      setEntryPaymentMethod(nextPay === 'card' || nextPay === 'bank_transfer' ? nextPay : 'cash');
+      setEntryExpenseType(
+        draft.entryExpenseType
+        && REPAIR_TREASURY_EXPENSE_TYPES.some((row) => row.key === draft.entryExpenseType)
+          ? draft.entryExpenseType
+          : '',
+      );
+    },
+  });
+
+  const resetEntryDraftForm = () => {
+    clearEntryDraft();
+    setEntryType('EXPENSE');
+    setEntryAmount('');
+    setEntryNote('');
+    setEntryPaymentMethod('cash');
+    setEntryExpenseType('');
+  };
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [monthClosed, setMonthClosed] = useState(false);
@@ -528,6 +585,7 @@ export const RepairTreasury: React.FC = () => {
         createdBy: user?.id || '',
         createdByName: user?.displayName || user?.email || 'system',
       });
+      clearEntryDraft();
       setEntryNote('');
       setEntryAmount('');
       setEntryExpenseType('');
@@ -654,7 +712,7 @@ export const RepairTreasury: React.FC = () => {
     >
 
       {monthClosed && (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 flex flex-wrap items-center justify-between gap-3">
+        <div className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-danger))] flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="font-semibold">شهر {currentMonthKey} مقفول لهذا الفرع</div>
             <p className="text-xs mt-0.5">لا يمكن فتح جلسة أو تسجيل حركات أو تقفيل يومي حتى إعادة فتح الشهر من التقرير الشهري.</p>
@@ -671,7 +729,7 @@ export const RepairTreasury: React.FC = () => {
             {pendingSettlements.map((row) => (
               <div
                 key={row.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50/50 p-3"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--color-warning)/0.25)]/80 bg-[rgb(var(--color-warning)/0.1)]/50 p-3"
               >
                 <div className="min-w-0 text-sm">
                   <p className="font-semibold">
@@ -768,7 +826,7 @@ export const RepairTreasury: React.FC = () => {
                 <ErpStatusBadge label="شهر مقفول" type={repairMonthCloseChipType(true)} />
               )}
               {openSession?.needsManualClose && (
-                <span className="text-xs text-amber-700">فرق رصيد</span>
+                <span className="text-xs text-[rgb(var(--color-warning))]">فرق رصيد</span>
               )}
             </div>
           </div>
@@ -827,13 +885,13 @@ export const RepairTreasury: React.FC = () => {
                         disabled={!canMutate || busy}
                       />
                       {missingDifferenceReason && (
-                        <div className="mt-1 text-xs text-amber-700">سبب الفرق مطلوب قبل التقفيل.</div>
+                        <div className="mt-1 text-xs text-[rgb(var(--color-warning))]">سبب الفرق مطلوب قبل التقفيل.</div>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center justify-between rounded-lg border bg-muted/20 px-3 py-2 text-sm">
                     <span className="text-muted-foreground">فرق الإقفال</span>
-                    <span className={`font-bold tabular-nums ${closingDifference > 0.01 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                    <span className={`font-bold tabular-nums ${closingDifference > 0.01 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-success))]'}`}>
                       {hasClosingBalanceInput && Number.isFinite(parsedClosingBalance) ? fmt(closingDifference) : '—'}
                     </span>
                   </div>
@@ -846,7 +904,7 @@ export const RepairTreasury: React.FC = () => {
                 <p className="text-xs text-muted-foreground">عرض فقط — لا تملك صلاحية إدارة الخزينة.</p>
               )}
               {canManage && monthClosed && (
-                <p className="text-xs text-rose-700">الشهر مقفول — أعد فتحه من التقرير الشهري لتسجيل حركات.</p>
+                <p className="text-xs text-[rgb(var(--color-danger))]">الشهر مقفول — أعد فتحه من التقرير الشهري لتسجيل حركات.</p>
               )}
             </div>
           </OpsDashPanel>
@@ -940,9 +998,16 @@ export const RepairTreasury: React.FC = () => {
                       disabled={!canMutate || busy}
                     />
                   </div>
-                  <Button className="w-full" onClick={() => void handleAddEntry()} disabled={!canMutate || busy || !branchId}>
-                    {busy ? 'جارٍ التسجيل...' : 'تسجيل الحركة'}
-                  </Button>
+                  <div className="flex flex-col gap-2">
+                    {hasEntryDraft ? (
+                      <Button type="button" variant="ghost" onClick={resetEntryDraftForm} disabled={!canMutate || busy}>
+                        مسح المسودة
+                      </Button>
+                    ) : null}
+                    <Button className="w-full" onClick={() => void handleAddEntry()} disabled={!canMutate || busy || !branchId}>
+                      {busy ? 'جارٍ التسجيل...' : 'تسجيل الحركة'}
+                    </Button>
+                  </div>
                 </>
               )}
             </div>
@@ -1195,7 +1260,7 @@ export const RepairTreasury: React.FC = () => {
                   </div>
                   <div>
                     <dt className="text-[10px] text-muted-foreground">إقفال</dt>
-                    <dd className={`font-mono font-semibold tabular-nums ${session.status === 'closed' ? 'text-emerald-700' : 'text-muted-foreground'}`}>
+                    <dd className={`font-mono font-semibold tabular-nums ${session.status === 'closed' ? 'text-[rgb(var(--color-success))]' : 'text-muted-foreground'}`}>
                       {session.status === 'closed' && Number.isFinite(Number(session.closingBalance))
                         ? fmt(Number(session.closingBalance || 0))
                         : '—'}
@@ -1279,7 +1344,7 @@ export const RepairTreasury: React.FC = () => {
                         />
                       </td>
                       <td className="px-4 py-2.5 text-center font-mono tabular-nums">{fmt(Number(session.openingBalance || 0))}</td>
-                      <td className={`px-4 py-2.5 text-center font-mono font-semibold tabular-nums ${session.status === 'closed' ? 'text-emerald-700' : 'text-muted-foreground'}`}>
+                      <td className={`px-4 py-2.5 text-center font-mono font-semibold tabular-nums ${session.status === 'closed' ? 'text-[rgb(var(--color-success))]' : 'text-muted-foreground'}`}>
                         {session.status === 'closed' && Number.isFinite(Number(session.closingBalance))
                           ? fmt(Number(session.closingBalance || 0))
                           : '—'}

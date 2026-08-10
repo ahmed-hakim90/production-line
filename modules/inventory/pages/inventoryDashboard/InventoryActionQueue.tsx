@@ -21,7 +21,7 @@ type Props = {
 };
 
 function QueueEmpty({ text }: { text: string }) {
-  return <p className="text-sm text-slate-400 py-2">{text}</p>;
+  return <p className="text-sm text-[var(--color-text-muted)] py-2">{text}</p>;
 }
 
 export const InventoryActionQueue: React.FC<Props> = ({
@@ -73,13 +73,13 @@ export const InventoryActionQueue: React.FC<Props> = ({
               <Link
                 key={row.id || row.referenceNo}
                 to={tenantPath('/inventory/transfer-approvals')}
-                className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 hover:bg-[var(--color-surface-hover)] transition-colors"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[var(--color-text)] truncate">
                     {row.referenceNo}
                   </p>
-                  <p className="text-xs text-slate-500 truncate">
+                  <p className="text-xs text-[var(--color-text-muted)] truncate">
                     {(row.fromWarehouseName || '—')} → {(row.toWarehouseName || '—')}
                   </p>
                 </div>
@@ -110,13 +110,13 @@ export const InventoryActionQueue: React.FC<Props> = ({
               <Link
                 key={row.id || row.referenceNo}
                 to={tenantPath('/inventory/production-issues')}
-                className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 hover:bg-[var(--color-surface-hover)] transition-colors"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[var(--color-text)] truncate">
                     {row.referenceNo} · {row.productName}
                   </p>
-                  <p className="text-xs text-slate-500 truncate">
+                  <p className="text-xs text-[var(--color-text-muted)] truncate">
                     {row.sourceWarehouseName || '—'} · كمية {row.quantity}
                   </p>
                 </div>
@@ -150,13 +150,13 @@ export const InventoryActionQueue: React.FC<Props> = ({
               <Link
                 key={row.id || row.referenceNo}
                 to={tenantPath('/inventory/raw-materials/receive')}
-                className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 hover:bg-slate-50 transition-colors"
+                className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 hover:bg-[var(--color-surface-hover)] transition-colors"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-[var(--color-text)] truncate">
                     {row.referenceNo}
                   </p>
-                  <p className="text-xs text-slate-500 truncate">
+                  <p className="text-xs text-[var(--color-text-muted)] truncate">
                     {row.warehouseName || '—'}
                     {row.containerRef ? ` · ${row.containerRef}` : ''}
                   </p>

@@ -692,8 +692,8 @@ export const Employees: React.FC = () => {
       sortKey: (emp) => emp.code || getEmployeeDisplayName(emp),
       render: (emp) => (
         <div className="flex items-center gap-2">
-          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${emp.isActive !== false ? 'bg-primary/10' : 'bg-[#f0f2f5]'}`}>
-            <EmployeeIcon name="person" className={`text-base ${emp.isActive !== false ? 'text-primary' : 'text-slate-400'}`} />
+          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${emp.isActive !== false ? 'bg-primary/10' : 'bg-[var(--color-surface-hover)]'}`}>
+            <EmployeeIcon name="person" className={`text-base ${emp.isActive !== false ? 'text-primary' : 'text-[var(--color-text-muted)]'}`} />
           </div>
           <div className="min-w-0">
             <span className="font-bold text-[var(--color-text)] block truncate">{getEmployeeDisplayName(emp)}</span>
@@ -776,7 +776,7 @@ export const Employees: React.FC = () => {
       render: (emp) => can('employees.edit') ? (
         <button
           onClick={(e) => { e.stopPropagation(); handleSystemAccessToggle(emp.id!); }}
-          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${emp.hasSystemAccess ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'}`}
+          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${emp.hasSystemAccess ? 'bg-primary/10 text-primary hover:bg-primary/20' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'}`}
         >
           <EmployeeIcon name={emp.hasSystemAccess ? 'check' : 'close'} className="text-xs" />
           {emp.hasSystemAccess ? 'نعم' : 'لا'}
@@ -821,7 +821,7 @@ export const Employees: React.FC = () => {
       {can('employees.edit') && emp.isActive !== false && (
         <button
           onClick={() => setDeleteConfirmId(emp.id!)}
-          className="p-2 text-[var(--color-text-muted)] hover:text-amber-500 hover:bg-amber-500/10 rounded-[var(--border-radius-base)] transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.1)]0/10 rounded-[var(--border-radius-base)] transition-all"
           title="تعطيل"
         >
           <EmployeeIcon name="person_off" className="text-lg" />
@@ -830,7 +830,7 @@ export const Employees: React.FC = () => {
       {can('employees.edit') && emp.isActive === false && (
         <button
           onClick={() => setToggleConfirmId(emp.id!)}
-          className="p-2 text-[var(--color-text-muted)] hover:text-emerald-500 hover:bg-emerald-500/10 rounded-[var(--border-radius-base)] transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.1)]0/10 rounded-[var(--border-radius-base)] transition-all"
           title="إعادة تفعيل"
         >
           <EmployeeIcon name="person_add" className="text-lg" />
@@ -839,7 +839,7 @@ export const Employees: React.FC = () => {
       {can('employees.delete') && emp.isActive === false && (
         <button
           onClick={() => setPermanentDeleteId(emp.id!)}
-          className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 rounded-[var(--border-radius-base)] transition-all"
+          className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]0/10 rounded-[var(--border-radius-base)] transition-all"
           title="حذف نهائي"
         >
           <EmployeeIcon name="delete_forever" className="text-lg" />
@@ -910,13 +910,13 @@ export const Employees: React.FC = () => {
   if (dataLoading && departments.length === 0) {
     return (
       <div className="space-y-6">
-        <div className="h-8 w-64 bg-slate-200 rounded-[var(--border-radius-base)] animate-pulse" />
+        <div className="h-8 w-64 bg-[var(--color-border)] rounded-[var(--border-radius-base)] animate-pulse" />
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />
+            <div key={i} className="h-24 bg-[var(--color-border)] rounded-[var(--border-radius-lg)] animate-pulse" />
           ))}
         </div>
-        <div className="h-96 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] animate-pulse" />
+        <div className="h-96 bg-[var(--color-surface-hover)] rounded-[var(--border-radius-lg)] animate-pulse" />
       </div>
     );
   }
@@ -1090,7 +1090,7 @@ export const Employees: React.FC = () => {
       {/* 6. Create/Edit Modal — Professional HR Panel */}
       {showModal && (can('employees.create') || can('employees.edit')) && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0 bg-gradient-to-l from-primary/5 to-transparent">
@@ -1100,10 +1100,10 @@ export const Employees: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-[var(--color-text)]">{editId ? 'تعديل موظف' : 'إضافة موظف جديد'}</h3>
-                  <p className="text-xs text-slate-500">ملء البيانات الأساسية والوظيفية</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">ملء البيانات الأساسية والوظيفية</p>
                 </div>
               </div>
-              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="p-2 text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] rounded-[var(--border-radius-lg)] transition-all">
+              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="p-2 text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] rounded-[var(--border-radius-lg)] transition-all">
                 <EmployeeIcon name="close" />
               </button>
             </div>
@@ -1121,7 +1121,7 @@ export const Employees: React.FC = () => {
                   className={`flex items-center gap-1.5 px-4 py-3 text-sm font-bold border-b-2 transition-all ${
                     formTab === tab.id
                       ? 'border-primary text-primary'
-                      : 'border-transparent text-[var(--color-text-muted)] hover:text-slate-600 dark:hover:text-[var(--color-text-muted)]'
+                      : 'border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] dark:hover:text-[var(--color-text-muted)]'
                   }`}
                 >
                   <EmployeeIcon name={tab.icon} className="text-base" />
@@ -1133,11 +1133,11 @@ export const Employees: React.FC = () => {
             <div className="p-6 overflow-y-auto space-y-6">
               {/* Validation errors */}
               {validationErrors.length > 0 && (
-                <div className="flex items-start gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] bg-amber-50 border border-amber-200">
-                  <EmployeeIcon name="warning" className="text-amber-500 text-lg mt-0.5 shrink-0" />
+                <div className="flex items-start gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)]">
+                  <EmployeeIcon name="warning" className="text-[rgb(var(--color-warning))] text-lg mt-0.5 shrink-0" />
                   <div className="space-y-1">
                     {validationErrors.map((err, i) => (
-                      <p key={i} className="text-sm font-bold text-amber-700">{err}</p>
+                      <p key={i} className="text-sm font-bold text-[rgb(var(--color-warning))]">{err}</p>
                     ))}
                   </div>
                 </div>
@@ -1150,7 +1150,7 @@ export const Employees: React.FC = () => {
                     <div className="space-y-1.5 sm:col-span-2">
                       <label className="block text-xs font-bold text-[var(--color-text-muted)]">الاسم *</label>
                       <input
-                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium transition-colors ${!form.name.trim() ? 'border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-900/10' : 'border-[var(--color-border)]'} focus:border-primary focus:ring-1 focus:ring-primary/20`}
+                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium transition-colors ${!form.name.trim() ? 'border-[rgb(var(--color-danger)/0.35)] dark:border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]' : 'border-[var(--color-border)]'} focus:border-primary focus:ring-1 focus:ring-primary/20`}
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })}
                         placeholder="اسم الموظف"
@@ -1169,7 +1169,7 @@ export const Employees: React.FC = () => {
                     <div className="space-y-1.5">
                       <label className="block text-xs font-bold text-[var(--color-text-muted)]">رمز الموظف</label>
                       <input
-                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium font-mono transition-colors ${validationErrors.some((e) => e.includes('رمز')) ? 'border-rose-300 dark:border-rose-700 bg-rose-50/50 dark:bg-rose-900/10' : 'border-[var(--color-border)]'}`}
+                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium font-mono transition-colors ${validationErrors.some((e) => e.includes('رمز')) ? 'border-[rgb(var(--color-danger)/0.35)] dark:border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]' : 'border-[var(--color-border)]'}`}
                         value={form.code}
                         onChange={(e) => setForm({ ...form, code: e.target.value })}
                         placeholder="اختياري — فريد"
@@ -1179,7 +1179,7 @@ export const Employees: React.FC = () => {
                       <label className="block text-xs font-bold text-[var(--color-text-muted)]">القسم *</label>
                       <div className="flex gap-2">
                         <select
-                          className={`flex-1 border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium ${!form.departmentId ? 'border-rose-300 dark:border-rose-700' : 'border-[var(--color-border)]'}`}
+                          className={`flex-1 border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium ${!form.departmentId ? 'border-[rgb(var(--color-danger)/0.35)] dark:border-[rgb(var(--color-danger)/0.25)]' : 'border-[var(--color-border)]'}`}
                           value={form.departmentId}
                           onChange={(e) => setForm({ ...form, departmentId: e.target.value, jobPositionId: '' })}
                         >
@@ -1226,7 +1226,7 @@ export const Employees: React.FC = () => {
                         المستوى
                         {selectedPosition && <span className="text-primary mr-1">(تلقائي من المنصب)</span>}
                       </label>
-                      <div className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 font-bold ${selectedPosition ? 'bg-[#f8f9fa]/80 border-[var(--color-border)] text-primary' : 'border-[var(--color-border)]'}`}>
+                      <div className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 font-bold ${selectedPosition ? 'bg-[var(--color-bg)]/80 border-[var(--color-border)] text-primary' : 'border-[var(--color-border)]'}`}>
                         {selectedPosition ? (
                           <div className="flex items-center gap-2">
                             <EmployeeIcon name="lock" className="text-sm text-primary/50" />
@@ -1264,30 +1264,30 @@ export const Employees: React.FC = () => {
                   <div className="space-y-3 pt-2">
                     <h4 className="text-xs font-bold text-[var(--color-text-muted)]">حالة الموظف</h4>
                     <div className="flex gap-3">
-                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border transition-all ${form.isActive ? 'border-emerald-300 dark:border-emerald-700 bg-emerald-50 ring-1 ring-emerald-200 dark:ring-emerald-800' : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'}`}>
+                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border transition-all ${form.isActive ? 'border-[rgb(var(--color-success)/0.35)] dark:border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] ring-1 ring-[rgb(var(--color-success))] dark:ring-[rgb(var(--color-success))]' : 'border-[var(--color-border)] hover:bg-[var(--color-bg)]'}`}>
                         <input
                           type="radio"
                           name="isActive"
                           checked={form.isActive === true}
                           onChange={() => setForm({ ...form, isActive: true })}
-                          className="text-emerald-500 focus:ring-emerald-500"
+                          className="text-[rgb(var(--color-success))] focus:ring-[rgb(var(--color-success))]"
                         />
                         <div>
                           <span className="text-sm font-bold block">نشط</span>
-                          <span className="text-xs text-slate-500">الموظف يعمل حالياً</span>
+                          <span className="text-xs text-[var(--color-text-muted)]">الموظف يعمل حالياً</span>
                         </div>
                       </label>
-                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border transition-all ${!form.isActive ? 'border-rose-300 dark:border-rose-700 bg-rose-50 ring-1 ring-rose-200 dark:ring-rose-800' : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'}`}>
+                      <label className={`flex-1 flex items-center gap-3 cursor-pointer p-3 rounded-[var(--border-radius-lg)] border transition-all ${!form.isActive ? 'border-[rgb(var(--color-danger)/0.35)] dark:border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] ring-1 ring-[rgb(var(--color-danger))] dark:ring-[rgb(var(--color-danger))]' : 'border-[var(--color-border)] hover:bg-[var(--color-bg)]'}`}>
                         <input
                           type="radio"
                           name="isActive"
                           checked={form.isActive === false}
                           onChange={() => setForm({ ...form, isActive: false })}
-                          className="text-rose-500 focus:ring-rose-500"
+                          className="text-[rgb(var(--color-danger))] focus:ring-[rgb(var(--color-danger))]"
                         />
                         <div>
                           <span className="text-sm font-bold block">غير نشط</span>
-                          <span className="text-xs text-slate-500">موقوف أو منتهي</span>
+                          <span className="text-xs text-[var(--color-text-muted)]">موقوف أو منتهي</span>
                         </div>
                       </label>
                     </div>
@@ -1340,7 +1340,7 @@ export const Employees: React.FC = () => {
                         type="number"
                         min={0}
                         step={0.01}
-                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium transition-colors ${form.baseSalary <= 0 && form.employmentType !== 'daily' ? 'border-rose-300 dark:border-rose-700' : 'border-[var(--color-border)]'}`}
+                        className={`w-full border rounded-[var(--border-radius-lg)] text-sm p-3 outline-none font-medium transition-colors ${form.baseSalary <= 0 && form.employmentType !== 'daily' ? 'border-[rgb(var(--color-danger)/0.35)] dark:border-[rgb(var(--color-danger)/0.25)]' : 'border-[var(--color-border)]'}`}
                         value={form.baseSalary || ''}
                         onChange={(e) => setForm({ ...form, baseSalary: Number(e.target.value) })}
                         placeholder="0.00"
@@ -1375,36 +1375,36 @@ export const Employees: React.FC = () => {
 
                   {/* Salary change indicator */}
                   {salaryChanged && (
-                    <div className="flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] bg-amber-50 border border-amber-200">
-                      <EmployeeIcon name="trending_up" className="text-amber-500" />
+                    <div className="flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)]">
+                      <EmployeeIcon name="trending_up" className="text-[rgb(var(--color-warning))]" />
                       <div className="flex-1">
-                        <p className="text-xs font-bold text-amber-700">تغيير في الراتب</p>
-                        <p className="text-sm text-amber-600">
+                        <p className="text-xs font-bold text-[rgb(var(--color-warning))]">تغيير في الراتب</p>
+                        <p className="text-sm text-[rgb(var(--color-warning))]">
                           <span className="line-through opacity-60">{originalSalary?.toLocaleString()}</span>
                           <span className="mx-2">â†گ</span>
                           <span className="font-bold">{Number(form.baseSalary).toLocaleString()}</span>
                           <span className="text-xs mr-1">ج.م</span>
                         </p>
                       </div>
-                      <EmployeeIcon name="history" className="text-xs text-amber-500" />
-                      <span className="text-[10px] text-amber-600 font-bold">سيتم تسجيل التغيير</span>
+                      <EmployeeIcon name="history" className="text-xs text-[rgb(var(--color-warning))]" />
+                      <span className="text-[10px] text-[rgb(var(--color-warning))] font-bold">سيتم تسجيل التغيير</span>
                     </div>
                   )}
 
                   {/* Live Net Salary Preview */}
                   {form.baseSalary > 0 && (
-                    <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-gradient-to-l from-emerald-50 to-white dark:from-emerald-900/20 dark:to-slate-900 p-4">
+                    <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-gradient-to-l from-[rgb(var(--color-success))] to-white dark:from-[rgb(var(--color-success))]/20 dark:to-[var(--color-text)] p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <EmployeeIcon name="account_balance_wallet" className="text-emerald-600 text-lg" />
-                          <span className="text-xs font-bold text-emerald-700">صافي الراتب التقديري</span>
+                          <EmployeeIcon name="account_balance_wallet" className="text-[rgb(var(--color-success))] text-lg" />
+                          <span className="text-xs font-bold text-[rgb(var(--color-success))]">صافي الراتب التقديري</span>
                         </div>
                         <div className="text-left">
-                          <p className="text-2xl font-bold text-emerald-700">
+                          <p className="text-2xl font-bold text-[rgb(var(--color-success))]">
                             {Number(form.baseSalary).toLocaleString()}
                             <span className="text-xs font-bold mr-1">ج.م</span>
                           </p>
-                          <p className="text-[10px] text-emerald-600/60/60">الراتب الأساسي قبل البدلات والخصومات</p>
+                          <p className="text-[10px] text-[rgb(var(--color-success))]/60/60">الراتب الأساسي قبل البدلات والخصومات</p>
                         </div>
                       </div>
                     </div>
@@ -1415,12 +1415,12 @@ export const Employees: React.FC = () => {
               {/* â•گâ•گâ•گ Tab 3: System Access â•گâ•گâ•گ */}
               {formTab === 'access' && (
                 <div className="space-y-5 min-h-[360px]">
-                  <div className="border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-blue-50/50 dark:bg-blue-900/10">
+                  <div className="border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)] rounded-[var(--border-radius-lg)] p-4 space-y-4 bg-[rgb(var(--color-primary)/0.1)]/50 dark:bg-[rgb(var(--color-primary)/0.15)]">
                     <div className="flex items-start gap-2">
-                      <EmployeeIcon name="info" className="text-blue-600" />
+                      <EmployeeIcon name="info" className="text-[rgb(var(--color-primary))]" />
                       <div>
-                        <p className="text-sm font-bold text-blue-700">إدارة حسابات الدخول أصبحت من صفحة المستخدمين</p>
-                        <p className="text-xs text-blue-700/80 mt-1">
+                        <p className="text-sm font-bold text-[rgb(var(--color-primary))]">إدارة حسابات الدخول أصبحت من صفحة المستخدمين</p>
+                        <p className="text-xs text-[rgb(var(--color-primary))]/80 mt-1">
                           لإنشاء/ربط/فك ربط/تغيير دور/حذف نهائي للمستخدم، استخدم صفحة النظام -&gt; المستخدمون.
                         </p>
                       </div>
@@ -1438,7 +1438,7 @@ export const Employees: React.FC = () => {
 
             {/* Footer messages & actions */}
             {saveMsg && (
-              <div className={`mx-6 mb-2 flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+              <div className={`mx-6 mb-2 flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
                 <EmployeeIcon name={saveMsg.type === 'success' ? 'check_circle' : 'error'} className="text-lg" />
                 {saveMsg.text}
               </div>
@@ -1451,9 +1451,9 @@ export const Employees: React.FC = () => {
               </div>
             )}
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between gap-3 shrink-0">
-              <div className="text-xs text-slate-400">
+              <div className="text-xs text-[var(--color-text-muted)]">
                 {validationErrors.length > 0 && (
-                  <span className="text-rose-500 font-bold">{validationErrors.length} خطأ في البيانات</span>
+                  <span className="text-[rgb(var(--color-danger))] font-bold">{validationErrors.length} خطأ في البيانات</span>
                 )}
               </div>
               <div className="flex items-center gap-3">
@@ -1471,10 +1471,10 @@ export const Employees: React.FC = () => {
       {/* Deactivate confirmation (soft delete) */}
       {deleteConfirmId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <EmployeeIcon name="person_off" className="text-amber-500 text-3xl" />
+            <div className="w-16 h-16 bg-[rgb(var(--color-warning)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <EmployeeIcon name="person_off" className="text-[rgb(var(--color-warning))] text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">تعطيل موظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
@@ -1495,22 +1495,22 @@ export const Employees: React.FC = () => {
       {/* Permanent delete confirmation (hard delete - only for inactive employees) */}
       {permanentDeleteId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setPermanentDeleteId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setPermanentDeleteId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <EmployeeIcon name="delete_forever" className="text-rose-500 text-3xl" />
+            <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <EmployeeIcon name="delete_forever" className="text-[rgb(var(--color-danger))] text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">حذف نهائي</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-2">
-              سيتم حذف <span className="font-bold text-rose-600">{getEmployeeDisplayName(resolveEmployeeById(permanentDeleteId))}</span> نهائياً مع بيانات حسابه.
+              سيتم حذف <span className="font-bold text-[rgb(var(--color-danger))]">{getEmployeeDisplayName(resolveEmployeeById(permanentDeleteId))}</span> نهائياً مع بيانات حسابه.
             </p>
-            <div className="bg-rose-50 dark:bg-rose-900/10 border border-rose-200 rounded-[var(--border-radius-lg)] p-3 mb-4 text-right">
-              <p className="text-xs font-bold text-rose-600 flex items-center gap-1">
+            <div className="bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-3 mb-4 text-right">
+              <p className="text-xs font-bold text-[rgb(var(--color-danger))] flex items-center gap-1">
                 <EmployeeIcon name="warning" className="text-sm" />
                 لا يمكن التراجع عن هذا الإجراء
               </p>
               {resolveEmployeeById(permanentDeleteId)?.userId && (
-                <p className="text-xs text-rose-500 mt-1">سيتم حذف حساب المستخدم المرتبط. حساب Firebase Auth يحتاج حذف يدوي من الظ€ Console.</p>
+                <p className="text-xs text-[rgb(var(--color-danger))] mt-1">سيتم حذف حساب المستخدم المرتبط. حساب Firebase Auth يحتاج حذف يدوي من الظ€ Console.</p>
               )}
             </div>
             <div className="flex items-center justify-center gap-3">
@@ -1527,10 +1527,10 @@ export const Employees: React.FC = () => {
       {/* Reactivate confirmation */}
       {toggleConfirmId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setToggleConfirmId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setToggleConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <EmployeeIcon name="person_add" className="text-emerald-500 text-3xl" />
+            <div className="w-16 h-16 bg-[rgb(var(--color-success)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <EmployeeIcon name="person_add" className="text-[rgb(var(--color-success))] text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">إعادة تفعيل موظف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">
@@ -1551,7 +1551,7 @@ export const Employees: React.FC = () => {
       {/* Quick-Add Modal (Department / Position / Shift) */}
       {quickAddType && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4" onClick={() => setQuickAddType(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setQuickAddType(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-base font-bold">
@@ -1559,7 +1559,7 @@ export const Employees: React.FC = () => {
                 {quickAddType === 'position' && 'إضافة منصب جديد'}
                 {quickAddType === 'shift' && 'إضافة وردية جديدة'}
               </h3>
-              <button onClick={() => setQuickAddType(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+              <button onClick={() => setQuickAddType(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                 <EmployeeIcon name="close" />
               </button>
             </div>
@@ -1594,7 +1594,7 @@ export const Employees: React.FC = () => {
                 </div>
               )}
               {quickAddType === 'position' && !form.departmentId && (
-                <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-[var(--border-radius-base)]">
+                <p className="text-xs text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] p-2 rounded-[var(--border-radius-base)]">
                   <EmployeeIcon name="info" className="text-xs align-middle ml-1 inline" />
                   لم تختر قسم بعد — سيتم ربط المنصب بالقسم المختار لاحقاً
                 </p>

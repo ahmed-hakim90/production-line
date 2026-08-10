@@ -352,8 +352,8 @@ export const ExecutionPage: React.FC = () => {
       >
 
         {shareToast && (
-          <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
-            <span className="material-icons-round shrink-0 text-lg text-emerald-600 dark:text-emerald-400">share</span>
+          <div className="flex items-start gap-3 rounded-lg border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-success))] dark:border-[rgb(var(--color-success))]/40 dark:bg-[rgb(var(--color-success)/0.2)] dark:text-[rgb(var(--color-success))]">
+            <span className="material-icons-round shrink-0 text-lg text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">share</span>
             <p className="min-w-0 flex-1 leading-relaxed">{shareToast}</p>
             <button
               type="button"
@@ -366,11 +366,11 @@ export const ExecutionPage: React.FC = () => {
           </div>
         )}
 
-        <div className="flex items-center gap-3 rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-          <span className="material-icons-round text-2xl text-emerald-600 dark:text-emerald-400">check_circle</span>
+        <div className="flex items-center gap-3 rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] px-4 py-3 dark:border-[rgb(var(--color-success))]/40 dark:bg-[rgb(var(--color-success)/0.2)]">
+          <span className="material-icons-round text-2xl text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">check_circle</span>
           <div>
-            <p className="font-bold text-emerald-800 dark:text-emerald-200">تم حفظ التنفيذ بنجاح</p>
-            <p className="text-sm text-emerald-700/90 dark:text-emerald-300/90">يمكنك تصدير التقرير أو مشاركته عبر واتساب.</p>
+            <p className="font-bold text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">تم حفظ التنفيذ بنجاح</p>
+            <p className="text-sm text-[rgb(var(--color-success))]/90 dark:text-[rgb(var(--color-success))]/90">يمكنك تصدير التقرير أو مشاركته عبر واتساب.</p>
           </div>
         </div>
 
@@ -399,7 +399,7 @@ export const ExecutionPage: React.FC = () => {
               </div>
               <div className="rounded-lg border bg-muted/40 p-3">
                 <p className="text-[10px] font-semibold text-muted-foreground">كفاءة الزمن</p>
-                <p className="mt-1 font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                <p className="mt-1 font-semibold tabular-nums text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">
                   {execution.timeEfficiency != null ? `${(execution.timeEfficiency * 100).toFixed(1)}%` : '—'}
                 </p>
               </div>
@@ -508,7 +508,7 @@ export const ExecutionPage: React.FC = () => {
               المنتج: <span className="font-bold text-primary">{pickedProductLabel}</span>
             </p>
             {!previewPlan && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-sm text-amber-950 dark:text-amber-100">
+              <div className="rounded-lg border border-[rgb(var(--color-warning))]/40 bg-[rgb(var(--color-warning)/0.1)]0/5 px-3 py-2.5 text-sm text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
                 لا توجد خطة مسار نشطة لهذا المنتج. أنشئ مساراً من «مسارات الإنتاج» أولاً.
               </div>
             )}
@@ -588,7 +588,7 @@ export const ExecutionPage: React.FC = () => {
                 </div>
               </div>
               {liveCalculation && liveCalculation.warnings.length > 0 && (
-                <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] px-3 py-2 text-xs text-[rgb(var(--color-warning))]">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
                   <p>{liveCalculation.warnings.map(routingWarningLabel).join(' ')}</p>
                 </div>
@@ -616,9 +616,9 @@ export const ExecutionPage: React.FC = () => {
               <div
                 className={`rounded-2xl border-2 bg-[var(--color-muted)]/30 px-4 py-6 text-center mb-3 ${
                   timeBetter === false
-                    ? 'border-rose-400/80'
+                    ? 'border-[rgb(var(--color-danger))]/80'
                     : timeBetter === true
-                      ? 'border-emerald-400/80'
+                      ? 'border-[rgb(var(--color-success))]/80'
                       : 'border-[var(--color-border)]'
                 }`}
               >
@@ -627,7 +627,7 @@ export const ExecutionPage: React.FC = () => {
                 </div>
                 <div className="text-xs text-[var(--color-text-muted)] mt-1 tabular-nums">{elapsedSeconds} ثانية</div>
                 {isRunning && (
-                  <div className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 mt-2 animate-pulse">
+                  <div className="text-xs font-semibold text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))] mt-2 animate-pulse">
                     القياس قيد التشغيل
                   </div>
                 )}
@@ -660,7 +660,7 @@ export const ExecutionPage: React.FC = () => {
                 type="number"
                 min={0}
                 disabled={isRunning}
-                className={`h-12 text-lg tabular-nums ${timeBetter === false ? 'border-rose-400 ring-rose-200' : ''} ${timeBetter === true ? 'border-emerald-400 ring-emerald-200' : ''}`}
+                className={`h-12 text-lg tabular-nums ${timeBetter === false ? 'border-[rgb(var(--color-danger))] ring-[rgb(var(--color-danger))]' : ''} ${timeBetter === true ? 'border-[rgb(var(--color-success))] ring-[rgb(var(--color-success))]' : ''}`}
                 value={elapsedSeconds}
                 onChange={(e) => syncFromSeconds(Math.max(0, Number(e.target.value) || 0))}
               />
@@ -670,7 +670,7 @@ export const ExecutionPage: React.FC = () => {
               <Input
                 type="number"
                 min={0}
-                className={`h-14 text-xl tabular-nums ${workerBetter === false ? 'border-rose-400' : ''} ${workerBetter === true ? 'border-emerald-400' : ''}`}
+                className={`h-14 text-xl tabular-nums ${workerBetter === false ? 'border-[rgb(var(--color-danger))]' : ''} ${workerBetter === true ? 'border-[rgb(var(--color-success))]' : ''}`}
                 value={actualWorkers}
                 onChange={(e) => setActualWorkers(Math.max(0, Number(e.target.value) || 0))}
               />

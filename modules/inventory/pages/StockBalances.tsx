@@ -356,13 +356,13 @@ export const StockBalances: React.FC = () => {
       )}
 
       {loadError && (
-        <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+        <p className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] px-4 py-3 text-sm font-medium text-[rgb(var(--color-danger))]">
           تعذر تحميل الأرصدة. حدّث الصفحة أو أعد المحاولة.
         </p>
       )}
 
       {isStagingQuickFilter && !loading && rows.length === 0 && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="rounded-lg border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-warning))]">
           أرصدة «بانتظار التغليف» تظهر هنا بعد تأكيد مشرف التغليف للكمية الفعلية.
           تقارير الإنتاج المعلّقة تُدار من{' '}
           <Link
@@ -468,7 +468,7 @@ export const StockBalances: React.FC = () => {
             <Skeleton key={`bal-m-sk-${i}`} className="h-28 w-full rounded-xl" />
           ))}
           {!loading && rows.length === 0 && (
-            <p className="py-10 text-center text-sm text-slate-400">لا توجد بيانات مطابقة.</p>
+            <p className="py-10 text-center text-sm text-[var(--color-text-muted)]">لا توجد بيانات مطابقة.</p>
           )}
           {!loading && pagedRows.map((row) => {
             const isLow = row.minStock > 0 && row.quantity <= row.minStock;
@@ -498,7 +498,7 @@ export const StockBalances: React.FC = () => {
                 <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
                   <div>
                     <dt className="text-[10px] text-[var(--color-text-muted)]">الرصيد</dt>
-                    <dd className={`text-sm font-bold tabular-nums ${isNegative ? 'text-rose-600' : ''}`}>{formatNumber(row.quantity)}</dd>
+                    <dd className={`text-sm font-bold tabular-nums ${isNegative ? 'text-[rgb(var(--color-danger))]' : ''}`}>{formatNumber(row.quantity)}</dd>
                   </div>
                   <div>
                     <dt className="text-[10px] text-[var(--color-text-muted)]">متاح</dt>
@@ -573,7 +573,7 @@ export const StockBalances: React.FC = () => {
               {!loading && rows.length === 0 && (
                 <tr>
                   <td
-                    className="px-4 py-12 text-center text-slate-400"
+                    className="px-4 py-12 text-center text-[var(--color-text-muted)]"
                     colSpan={12}
                   >
                     لا توجد بيانات مطابقة.
@@ -595,7 +595,7 @@ export const StockBalances: React.FC = () => {
                   ? Number((Number(row.quantity || 0) / unitsPerCarton).toFixed(2))
                   : null;
                 return (
-                  <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                  <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                     <td className="px-4 py-3">
                       <p className="text-sm font-bold text-[var(--color-text)]">{row.itemName}</p>
                       <p className="text-xs text-[var(--color-text-muted)] font-mono">{row.itemCode}</p>
@@ -603,14 +603,14 @@ export const StockBalances: React.FC = () => {
                     <td className="px-4 py-3 text-sm">{itemTypeLabel(row.itemType)}</td>
                     <td className="px-4 py-3 text-sm">{warehouseNameById.get(row.warehouseId) ?? row.warehouseId}</td>
                     <td className="px-4 py-3 text-xs">{WAREHOUSE_ROLE_LABELS[role as WarehouseRole] ?? role}</td>
-                    <td className={`px-4 py-3 text-sm text-center font-bold tabular-nums ${isNegative ? 'text-rose-600' : ''}`}>{formatNumber(row.quantity)}</td>
-                    <td className="px-4 py-3 text-sm text-center tabular-nums text-slate-500">{formatNumber(reserved)}</td>
+                    <td className={`px-4 py-3 text-sm text-center font-bold tabular-nums ${isNegative ? 'text-[rgb(var(--color-danger))]' : ''}`}>{formatNumber(row.quantity)}</td>
+                    <td className="px-4 py-3 text-sm text-center tabular-nums text-[var(--color-text-muted)]">{formatNumber(reserved)}</td>
                     <td className="px-4 py-3 text-sm text-center font-bold tabular-nums">{formatNumber(available)}</td>
                     <td className="px-4 py-3 text-sm text-center font-bold tabular-nums">
                       {cartonBalance == null ? '—' : new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(cartonBalance)}
                     </td>
                     <td className="px-4 py-3 text-sm text-center font-bold tabular-nums">{formatNumber(row.minStock || 0)}</td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
+                    <td className="px-4 py-3 text-xs text-[var(--color-text-muted)]">
                       {lastAt ? new Date(lastAt).toLocaleString('ar-EG') : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">

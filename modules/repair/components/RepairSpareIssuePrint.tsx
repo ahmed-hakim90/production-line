@@ -2,6 +2,8 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { Factory_REPAIR_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
@@ -9,6 +11,7 @@ import {
 import { REPAIR_SPARE_ISSUE_STATUS_LABELS } from '../lib/repairSpareIssue';
 import { normalizeRepairSpareIssueAllocations } from '../lib/repairSpareIssueAllocation';
 import type { RepairSpareIssue } from '../types';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 const formatQty = (value: number, digits = 3) =>
   new Intl.NumberFormat('ar-EG', {
@@ -34,7 +37,9 @@ export const RepairSpareIssuePrint = React.forwardRef<HTMLDivElement, Props>(
     if (!issue) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-    const accent = ps.primaryColor || undefined;
+    const doc = resolvePrintDocumentConfig(ps, 'repairSpareIssue');
+    const accent = resolvePrintAccentHex(ps.primaryColor);
+    const font = resolvePrintFont(ps);
     const isA5 = paperSize === 'a5' || ps.paperSize === 'a5';
     const printedAt = new Date().toLocaleString('ar-EG');
     const totalQty = (issue.lines || []).reduce((sum, line) => sum + Number(line.quantity || 0), 0);
@@ -43,33 +48,48 @@ export const RepairSpareIssuePrint = React.forwardRef<HTMLDivElement, Props>(
     return (
       <FactoryPrintShell
         ref={ref}
-        companyName={ps.headerText || 'مركز الصيانة'}
+        companyName={doc.headerText || 'مركز الصيانة'}
         documentType="سند صرف قطع غيار"
         printDate={printedAt}
         logoUrl={ps.logoUrl}
         brandAccent={accent}
-        footerTagline={ps.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        footerTagline={doc.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        extraLines={doc.customLines}
         paperWidth={isA5 ? '148mm' : '210mm'}
         minHeight={isA5 ? '210mm' : '297mm'}
         padding={isA5 ? '7mm 8mm' : '10mm 12mm'}
         dense={isA5}
-        metaCards={[
-          { label: 'رقم السند', value: issue.referenceNo || '—' },
-          { label: 'التاريخ', value: formatPrintDate(issue.createdAt) },
-          { label: 'المخزن', value: issue.warehouseName || issue.warehouseId || '—' },
-          { label: 'الحالة', value: statusLabel },
-        ]}
-        kpis={[
-          { label: 'الفرع', value: issue.branchName || '—', tone: 'default' },
-          { label: 'طلب الصيانة', value: issue.jobCode || issue.jobId || '—', tone: 'indigo' },
-          { label: 'إجمالي الكمية', value: formatQty(totalQty), tone: 'green' },
-          { label: 'عدد البنود', value: (issue.lines || []).length, tone: 'default' },
-        ]}
-        signatures={[
-          { title: 'أمين المخزن' },
-          { title: 'مستلم الصيانة' },
-          { title: 'اعتماد الإدارة' },
-        ]}
+        fontFamily={font.fontFamily}
+        fontSize={isA5 ? font.denseFontSize : font.fontSize}
+        metaCards={
+          doc.isFieldVisible('meta')
+            ? [
+                { label: 'رقم السند', value: issue.referenceNo || '—' },
+                { label: 'التاريخ', value: formatPrintDate(issue.createdAt) },
+                { label: 'المخزن', value: issue.warehouseName || issue.warehouseId || '—' },
+                { label: 'الحالة', value: statusLabel },
+              ]
+            : undefined
+        }
+        kpis={
+          doc.isFieldVisible('kpis')
+            ? [
+                { label: 'الفرع', value: issue.branchName || '—', tone: 'default' },
+                { label: 'طلب الصيانة', value: issue.jobCode || issue.jobId || '—', tone: 'indigo' },
+                { label: 'إجمالي الكمية', value: formatQty(totalQty), tone: 'green' },
+                { label: 'عدد البنود', value: (issue.lines || []).length, tone: 'default' },
+              ]
+            : undefined
+        }
+        signatures={
+          doc.isFieldVisible('signatures')
+            ? [
+                { title: 'أمين المخزن' },
+                { title: 'مستلم الصيانة' },
+                { title: 'اعتماد الإدارة' },
+              ]
+            : undefined
+        }
       >
         <section className="mb-4">
           <FactoryPrintSectionTitle title="تفاصيل الصرف" accent={accent} />

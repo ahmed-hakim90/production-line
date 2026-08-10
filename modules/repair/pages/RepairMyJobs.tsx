@@ -55,7 +55,7 @@ function TechnicianJobMobileCard({
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <StatusBadge status={job.status} />
         {job.dueAt ? (
-          <span className={`text-xs tabular-nums ${overdue ? 'font-semibold text-rose-600' : 'text-muted-foreground'}`}>
+          <span className={`text-xs tabular-nums ${overdue ? 'font-semibold text-[rgb(var(--color-danger))]' : 'text-muted-foreground'}`}>
             استحقاق {new Date(job.dueAt).toLocaleDateString('ar-EG')}
           </span>
         ) : null}

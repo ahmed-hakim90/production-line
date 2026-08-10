@@ -2,12 +2,10 @@ import { forwardRef, type CSSProperties, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import {
   Factory_DEFAULT_FOOTER_TAGLINE,
-  Factory_IMAGE_PRIMARY,
-  Factory_IMAGE_PRIMARY_BADGE_BG,
-  Factory_IMAGE_PRIMARY_BADGE_TEXT,
-  Factory_IMAGE_PROGRESS_TRACK,
-  Factory_IMAGE_WORKERS_STRIP,
+  resolveImageExportPalette,
 } from "@/utils/imageExportTheme"
+import { resolvePrintAccentHex } from "@/utils/printTheme"
+import { PrintExtraLines } from "./PrintExtraLines"
 
 export interface ReportMetaCard {
   label: string
@@ -60,6 +58,12 @@ export interface PrintReportLayoutProps {
   orientation?: string
   /** When true, card fills a share wrapper (variance banner) instead of fixed 640 root. */
   nestedInShareWrapper?: boolean
+  /** Tenant custom lines from print document settings */
+  extraLines?: string[]
+  /** CSS font-family stack from print settings */
+  fontFamily?: string
+  /** CSS font-size (e.g. 10pt) */
+  fontSize?: string
 }
 
 const gridColsClass = (count: number) => {
@@ -94,15 +98,20 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       version = __APP_VERSION__,
       exportRootId = "print-root",
       logoUrl,
-      brandAccent = Factory_IMAGE_PRIMARY,
+      brandAccent,
       footerTagline = Factory_DEFAULT_FOOTER_TAGLINE,
       nestedInShareWrapper = false,
+      extraLines,
+      fontFamily = "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
+      fontSize = "10pt",
     },
     ref,
   ) => {
-    const accent = brandAccent
+    const palette = resolveImageExportPalette(resolvePrintAccentHex(brandAccent))
+    const accent = palette.primary
     const cardWidth = nestedInShareWrapper ? ("100%" as const) : (640 as const)
     const headerBorderStyle: CSSProperties = { borderBottomColor: accent }
+    const customLines = extraLines ?? []
     const metaCells: ReportMetaCard[] =
       metaCards && metaCards.length > 0
         ? metaCards
@@ -118,7 +127,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       if (kpi.color === "indigo") return accent
       if (kpi.color === "green") return "#059669"
       if (kpi.color === "red") return "#dc2626"
-      if (kpi.color === "sky") return Factory_IMAGE_WORKERS_STRIP
+      if (kpi.color === "sky") return palette.workersStrip
       return "#cbd5e1"
     }
 
@@ -135,13 +144,14 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
         ref={ref}
         dir="rtl"
         lang="ar"
+        data-print-font={fontFamily}
         className={cn(
-          "print-root print-report bg-white mx-auto p-9 print:p-0 print:w-full print:max-w-none print:min-w-0 print:mx-0 [font-feature-settings:normal] arabic-export-root",
+          "print-root print-report bg-[var(--color-card)] mx-auto p-9 print:p-0 print:w-full print:max-w-none print:min-w-0 print:mx-0 [font-feature-settings:normal] arabic-export-root",
           !nestedInShareWrapper && "w-[640px]",
         )}
         style={{
-          fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
-          fontSize: "13px",
+          fontFamily,
+          fontSize,
           letterSpacing: "normal",
           wordSpacing: "normal",
           width: nestedInShareWrapper ? "100%" : cardWidth,
@@ -157,7 +167,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
               <img src={logoUrl} alt="" className="h-10 w-auto object-contain shrink-0" />
             ) : null}
             <div className="min-w-0">
-              <h1 className="text-[18px] font-bold text-slate-900" style={{ letterSpacing: "normal" }}>
+              <h1 className="text-[18px] font-bold text-[var(--color-text)]" style={{ letterSpacing: "normal" }}>
                 {companyName}
               </h1>
               <p className="text-[10px] font-semibold mt-0.5" style={{ color: accent, letterSpacing: "normal" }}>
@@ -172,8 +182,8 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                 fontSize: "14px",
                 lineHeight: 1.3,
                 padding: "5px 10px",
-                background: Factory_IMAGE_PRIMARY_BADGE_BG,
-                color: Factory_IMAGE_PRIMARY_BADGE_TEXT,
+                background: palette.badgeBg,
+                color: palette.badgeText,
                 letterSpacing: "normal",
                 maxWidth: "220px",
                 textAlign: "center",
@@ -181,25 +191,27 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
             >
               {reportType}
             </span>
-            <span className="text-[12px] text-slate-500" style={{ letterSpacing: "normal" }}>
+            <span className="text-[12px] text-[var(--color-text-muted)]" style={{ letterSpacing: "normal" }}>
               {printDate}
             </span>
           </div>
         </div>
 
+        <PrintExtraLines lines={customLines} />
+
         <div
-          className={cn("grid mb-4 border border-slate-200 rounded-lg overflow-hidden", gridColsClass(metaCells.length))}
+          className={cn("grid mb-4 border border-[var(--color-border)] rounded-lg overflow-hidden", gridColsClass(metaCells.length))}
           style={{ display: "grid", gridTemplateColumns: gridTemplateColumns(metaCells.length) }}
         >
           {metaCells.map((item, i) => (
             <div
               key={`${item.label}-${i}`}
-              className={cn("px-3 py-2 bg-slate-50", i < metaCells.length - 1 && "border-l border-slate-200")}
+              className={cn("px-3 py-2 bg-[var(--color-bg)]", i < metaCells.length - 1 && "border-l border-[var(--color-border)]")}
             >
-              <p className="text-[9px] text-slate-400 mb-1" style={{ letterSpacing: "normal" }}>
+              <p className="text-[9px] text-[var(--color-text-muted)] mb-1" style={{ letterSpacing: "normal" }}>
                 {item.label}
               </p>
-              <p className="text-[11px] font-semibold text-slate-800 leading-tight" style={{ wordBreak: "break-word" }}>
+              <p className="text-[11px] font-semibold text-[var(--color-text)] leading-tight" style={{ wordBreak: "break-word" }}>
                 {item.value}
               </p>
             </div>
@@ -213,7 +225,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
           {kpis.map((kpi, i) => (
             <div
               key={i}
-              className="flex min-h-[5.25rem] overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+              className="flex min-h-[5.25rem] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"
               style={{ display: "flex", flexDirection: "row", minHeight: "5.25rem" }}
             >
               {/* في RTL الشريط أول العناصر فيُرسَم يمين البطاقة (بداية القراءة) */}
@@ -249,7 +261,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                   ) : null}
                 </div>
                 <p
-                  className="mt-2 text-center font-semibold leading-snug text-slate-500"
+                  className="mt-2 text-center font-semibold leading-snug text-[var(--color-text-muted)]"
                   style={{ fontSize: "11px", letterSpacing: "normal", maxWidth: "100%" }}
                 >
                   {kpi.label}
@@ -266,20 +278,20 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                 className="w-[3px] h-[12px] rounded-full flex-shrink-0"
                 style={{ backgroundColor: accent }}
               />
-              <p className="text-[9px] font-bold text-slate-400" style={{ letterSpacing: "normal" }}>
+              <p className="text-[9px] font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: "normal" }}>
                 {section.title}
               </p>
             </div>
 
-            <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+            <div className="rounded-lg border border-[var(--color-border)] overflow-hidden bg-[var(--color-card)]">
               {section.rows.map((row, ri) => (
                 row.fullWidth ? (
                   <div
                     key={ri}
-                    className={cn("px-3 py-2.5", ri < section.rows.length - 1 && "border-b border-slate-100")}
+                    className={cn("px-3 py-2.5", ri < section.rows.length - 1 && "border-b border-[var(--color-border)]")}
                   >
                     {row.label ? (
-                      <p className="mb-1.5 text-[10px] font-bold text-slate-500">
+                      <p className="mb-1.5 text-[10px] font-bold text-[var(--color-text-muted)]">
                         {row.label}
                       </p>
                     ) : null}
@@ -290,14 +302,14 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                     key={ri}
                     className={cn(
                       "grid grid-cols-[38%_1fr] gap-3 px-3 py-2.5 items-start",
-                      ri < section.rows.length - 1 && "border-b border-slate-100",
+                      ri < section.rows.length - 1 && "border-b border-[var(--color-border)]",
                     )}
                   >
-                    <p className="text-[11px] font-semibold text-slate-500 pt-0.5">{row.label}</p>
+                    <p className="text-[11px] font-semibold text-[var(--color-text-muted)] pt-0.5">{row.label}</p>
                     <div
                       className={cn(
                         "text-[13px] text-right min-w-0",
-                        row.highlight ? "font-bold" : "font-semibold text-slate-800",
+                        row.highlight ? "font-bold" : "font-semibold text-[var(--color-text)]",
                       )}
                       style={row.highlight ? { color: accent } : undefined}
                     >
@@ -308,12 +320,12 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
               ))}
 
               {section.progress && (
-                <div className="grid grid-cols-[38%_1fr] gap-3 px-3 py-2.5 border-t border-slate-100 items-center">
-                  <p className="text-[11px] font-semibold text-slate-500">{section.progress.label}</p>
+                <div className="grid grid-cols-[38%_1fr] gap-3 px-3 py-2.5 border-t border-[var(--color-border)] items-center">
+                  <p className="text-[11px] font-semibold text-[var(--color-text-muted)]">{section.progress.label}</p>
                   <div className="flex items-center gap-2">
                     <div
                       className="flex-1 h-1.5 rounded-full overflow-hidden"
-                      style={{ background: Factory_IMAGE_PROGRESS_TRACK }}
+                      style={{ background: palette.progressTrack }}
                     >
                       <div
                         className="h-full rounded-full"
@@ -334,7 +346,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
               )}
             </div>
 
-            {si < sections.length - 1 && <div className="h-px bg-slate-100 mt-3" />}
+            {si < sections.length - 1 && <div className="h-px bg-[var(--color-surface-hover)] mt-3" />}
           </div>
         ))}
 
@@ -342,11 +354,11 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
           <div className={cn("grid gap-5 mt-6", gridColsClass(signatures.length))}>
             {signatures.map((sig, i) => (
               <div key={i} className="flex flex-col items-center">
-                <p className="text-xs font-bold text-slate-700 mb-5" style={{ letterSpacing: "normal" }}>
+                <p className="text-xs font-bold text-[var(--color-text)] mb-5" style={{ letterSpacing: "normal" }}>
                   {sig.title}
                 </p>
-                <div className="w-full h-px bg-slate-300" />
-                <p className="text-[10px] text-slate-400 mt-1" style={{ letterSpacing: "normal" }}>
+                <div className="w-full h-px bg-[var(--color-border)]" />
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-1" style={{ letterSpacing: "normal" }}>
                   الاسم / التوقيع
                 </p>
               </div>
@@ -354,8 +366,8 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
           </div>
         )}
 
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-200">
-          <p className="text-[10px] text-slate-400" style={{ letterSpacing: "normal" }}>
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-[var(--color-border)]">
+          <p className="text-[10px] text-[var(--color-text-muted)]" style={{ letterSpacing: "normal" }}>
             {footerTagline} — {printDate}
           </p>
           <p className="text-[10px] font-bold" style={{ color: accent, letterSpacing: "normal" }}>

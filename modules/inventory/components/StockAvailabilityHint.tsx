@@ -27,12 +27,12 @@ export const StockAvailabilityHint: React.FC<Props> = ({
   if (!warehouseId || !itemId) return null;
 
   return (
-    <p className={`text-[11px] font-semibold text-slate-500 ${className}`}>
+    <p className={`text-[11px] font-semibold text-[var(--color-text-muted)] ${className}`}>
       {loading ? 'جاري تحميل الرصيد...' : (
         <>
-          الرصيد: <span className="text-slate-800">{formatNumber(onHand ?? 0)}</span>
-          {' · '}محجوز: <span className="text-slate-800">{formatNumber(reserved)}</span>
-          {' · '}المتاح: <span className="text-slate-800">{formatNumber(available ?? 0)}</span>
+          الرصيد: <span className="text-[var(--color-text)]">{formatNumber(onHand ?? 0)}</span>
+          {' · '}محجوز: <span className="text-[var(--color-text)]">{formatNumber(reserved)}</span>
+          {' · '}المتاح: <span className="text-[var(--color-text)]">{formatNumber(available ?? 0)}</span>
         </>
       )}
     </p>

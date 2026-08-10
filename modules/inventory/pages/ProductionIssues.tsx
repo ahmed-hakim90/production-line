@@ -106,13 +106,13 @@ const IssuePrint = React.forwardRef<HTMLDivElement, { order: ProductionIssueOrde
   const totalBase = order.lines.reduce((sum, line) => sum + Number(line.baseRequiredQty || 0), 0);
   const totalWaste = order.lines.reduce((sum, line) => sum + Number(line.plannedWasteQty || 0), 0);
   const totalRequired = order.lines.reduce((sum, line) => sum + Number(line.requiredQty || 0), 0);
-  const cell: React.CSSProperties = { border: '1px solid #cbd5e1', padding: '5.5px 6.5px', verticalAlign: 'top' };
-  const headCell: React.CSSProperties = { ...cell, background: '#0f172a', color: '#fff', fontWeight: 800, textAlign: 'center' };
+  const cell: React.CSSProperties = { border: '1px solid var(--color-border)', padding: '5.5px 6.5px', verticalAlign: 'top' };
+  const headCell: React.CSSProperties = { ...cell, background: 'var(--color-text)', color: '#fff', fontWeight: 800, textAlign: 'center' };
   const numericCell: React.CSSProperties = { ...cell, textAlign: 'center', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
   const avoidBreak: React.CSSProperties = { breakInside: 'avoid', pageBreakInside: 'avoid' };
-  const infoBox: React.CSSProperties = { border: '1px solid #cbd5e1', borderRadius: 7, padding: '6px 8px', minHeight: 40 };
-  const infoLabel: React.CSSProperties = { margin: 0, color: '#64748b', fontSize: 9.5, fontWeight: 800 };
-  const infoValue: React.CSSProperties = { margin: '2px 0 0', color: '#0f172a', fontSize: 11.5, fontWeight: 900, overflowWrap: 'anywhere', lineHeight: 1.35 };
+  const infoBox: React.CSSProperties = { border: '1px solid var(--color-border)', borderRadius: 7, padding: '6px 8px', minHeight: 40 };
+  const infoLabel: React.CSSProperties = { margin: 0, color: 'var(--color-text-muted)', fontSize: 9.5, fontWeight: 800 };
+  const infoValue: React.CSSProperties = { margin: '2px 0 0', color: 'var(--color-text)', fontSize: 11.5, fontWeight: 900, overflowWrap: 'anywhere', lineHeight: 1.35 };
 
   return (
     <div
@@ -122,28 +122,28 @@ const IssuePrint = React.forwardRef<HTMLDivElement, { order: ProductionIssueOrde
         width: '190mm',
         minHeight: isA5 ? '128mm' : '270mm',
         boxSizing: 'border-box',
-        background: '#fff',
-        color: '#0f172a',
+        background: 'var(--color-card)',
+        color: 'var(--color-text)',
         padding: '7mm 9mm',
         fontFamily: '"Cairo", "Tahoma", "Arial", sans-serif',
         fontSize: 12,
         lineHeight: 1.45,
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, borderBottom: '2px solid #0f172a', paddingBottom: 8, marginBottom: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, borderBottom: '2px solid var(--color-text)', paddingBottom: 8, marginBottom: 8 }}>
         <div>
-          <p style={{ margin: 0, color: '#64748b', fontSize: 10.5, fontWeight: 800 }}>مخازن الإنتاج</p>
-          <h1 style={{ margin: '1px 0', color: '#0f172a', fontSize: 22, fontWeight: 900, lineHeight: 1.1 }}>إذن صرف إنتاج</h1>
+          <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: 10.5, fontWeight: 800 }}>مخازن الإنتاج</p>
+          <h1 style={{ margin: '1px 0', color: 'var(--color-text)', fontSize: 22, fontWeight: 900, lineHeight: 1.1 }}>إذن صرف إنتاج</h1>
           <p style={{ margin: 0, direction: 'ltr', textAlign: 'right', fontFamily: 'monospace', fontSize: 12.5, fontWeight: 800 }}>{order.referenceNo}</p>
         </div>
-        <div style={{ width: 210, border: '1px solid #cbd5e1', borderRadius: 7, overflow: 'hidden', fontSize: 10 }}>
+        <div style={{ width: 210, border: '1px solid var(--color-border)', borderRadius: 7, overflow: 'hidden', fontSize: 10 }}>
           {[
             ['الحالة', statusLabel(order.status)],
             ['التاريخ', formatPrintDate(order.createdAt)],
             ['المخزن', order.sourceWarehouseName || order.sourceWarehouseId],
           ].map(([label, value], index) => (
-            <div key={label} style={{ display: 'grid', gridTemplateColumns: '66px 1fr', borderBottom: index === 2 ? 'none' : '1px solid #e2e8f0' }}>
-              <span style={{ background: '#f1f5f9', padding: '4px 6px', fontWeight: 800 }}>{label}</span>
+            <div key={label} style={{ display: 'grid', gridTemplateColumns: '66px 1fr', borderBottom: index === 2 ? 'none' : '1px solid var(--color-border)' }}>
+              <span style={{ background: 'var(--color-bg)', padding: '4px 6px', fontWeight: 800 }}>{label}</span>
               <span style={{ padding: '4px 6px', overflowWrap: 'anywhere' }}>{value}</span>
             </div>
           ))}
@@ -199,7 +199,7 @@ const IssuePrint = React.forwardRef<HTMLDivElement, { order: ProductionIssueOrde
               <td style={{ ...numericCell, fontWeight: 900 }}>{formatQty(line.requiredQty)} {line.unit}</td>
             </tr>
           ))}
-          <tr style={{ background: '#f1f5f9', fontWeight: 900, ...avoidBreak }}>
+          <tr style={{ background: 'var(--color-bg)', fontWeight: 900, ...avoidBreak }}>
             <td style={cell} colSpan={3}>الإجمالي</td>
             <td style={numericCell}>{formatQty(totalBase)}</td>
             <td style={numericCell}>{formatQty(totalWaste)}</td>
@@ -218,7 +218,7 @@ const IssuePrint = React.forwardRef<HTMLDivElement, { order: ProductionIssueOrde
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 34, textAlign: 'center', fontSize: 11, fontWeight: 800 }}>
           {['أمين المخزن', 'مستلم الإنتاج', 'اعتماد الإدارة'].map((label) => (
-            <div key={label} style={{ borderTop: '1.5px solid #0f172a', paddingTop: 5 }}>{label}</div>
+            <div key={label} style={{ borderTop: '1.5px solid var(--color-text)', paddingTop: 5 }}>{label}</div>
           ))}
         </div>
       </div>
@@ -914,7 +914,7 @@ export const ProductionIssues: React.FC = () => {
     }
   };
 
-  if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+  if (!can('inventory.view')) return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
 
   return (
     <ModuleOpsPageShell
@@ -931,23 +931,23 @@ export const ProductionIssues: React.FC = () => {
       <OpsDashPanel title="إنشاء أمر صرف (من المستودع)" accent="production">
         <div className="grid grid-cols-1 lg:grid-cols-[150px_minmax(240px,1fr)_180px_180px_110px] gap-3 p-4 items-end">
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">نوع المصدر</span>
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">نوع المصدر</span>
             <select className="w-full rounded-lg border px-3 py-2 text-sm" value={sourceKind} onChange={(e) => { setSourceKind(e.target.value as typeof sourceKind); setSourceId(''); }}>
               <option value="work_order">أمر شغل</option>
               <option value="production_plan">خطة إنتاج</option>
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">أمر الشغل / الخطة</span>
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">أمر الشغل / الخطة</span>
             <select className="w-full rounded-lg border px-3 py-2 text-sm" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
               <option value="">اختر المصدر</option>
               {sourceOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">مخزن المستلزمات</span>
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">مخزن المستلزمات</span>
             <select
-              className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-700"
+              className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-[var(--color-bg)] disabled:text-[var(--color-text)]"
               value={warehouseId}
               disabled={warehouseSelectLocked || warehouses.length === 0}
               onChange={(e) => setWarehouseId(e.target.value)}
@@ -961,7 +961,7 @@ export const ProductionIssues: React.FC = () => {
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">كمية الصرف للإنتاج</span>
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">كمية الصرف للإنتاج</span>
             <input
               className="w-full rounded-lg border px-3 py-2 text-sm tabular-nums"
               type="number"
@@ -974,7 +974,7 @@ export const ProductionIssues: React.FC = () => {
             />
           </label>
           <Button variant="primary" disabled={busy || !can('productionIssue.create')} onClick={() => void createOrder()}>إنشاء إذن</Button>
-          <div className="lg:col-start-4 text-xs font-semibold text-slate-500">
+          <div className="lg:col-start-4 text-xs font-semibold text-[var(--color-text-muted)]">
             {issueQuantity.trim()
               ? `عدّل الكمية إن لزم ثم أنشئ الإذن (حد المصدر: ${formatQty(selectedSourceQuantity || Number(issueQuantity) || 0, 3)}).`
               : selectedSourceQuantity > 0
@@ -1015,7 +1015,7 @@ export const ProductionIssues: React.FC = () => {
               <div className="flex flex-wrap gap-2 p-4 border-b">
                 {isProductionRequestFlow ? (
                   <>
-                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                    <label className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-muted)]">
                       كمية الاعتماد
                       <input
                         type="number"
@@ -1098,43 +1098,43 @@ export const ProductionIssues: React.FC = () => {
                 >
                   طباعة PDF
                 </Button>
-                <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white text-xs font-bold">
+                <div className="inline-flex overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-xs font-bold">
                   {(['a4', 'a5'] as PaperSize[]).map((size) => (
                     <button
                       key={size}
                       type="button"
                       onClick={() => setIssuePaperSize(size)}
-                      className={`px-3 py-2 ${issuePaperSize === size ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      className={`px-3 py-2 ${issuePaperSize === size ? 'bg-primary text-white' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'}`}
                     >
                       {size.toUpperCase()}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b bg-slate-50/60">
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">المنتج</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b bg-[var(--color-bg)]">
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">المنتج</p>
                   <p className="mt-1 text-sm font-black">{selectedOrder.productName}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">كمية الصرف للإنتاج</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">كمية الصرف للإنتاج</p>
                   <p className="mt-1 text-sm font-black tabular-nums">{formatQty(selectedOrder.quantity, 3)}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">مخزن الصرف (من)</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">مخزن الصرف (من)</p>
                   <p className="mt-1 text-sm font-black">{selectedOrder.sourceWarehouseName || selectedOrder.sourceWarehouseId}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">صالة الإنتاج (إلى)</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">صالة الإنتاج (إلى)</p>
                   <p className="mt-1 text-sm font-black">{selectedOrder.targetWarehouseName || selectedOrder.targetWarehouseId || '—'}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">الحالة</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">الحالة</p>
                   <p className="mt-1 text-sm font-black">{statusLabel(selectedOrder.status)}</p>
                 </div>
               </div>
               {isProductionRequestFlow && selectedOrder.lines.length === 0 && (
-                <p className="px-4 py-3 text-sm font-semibold text-amber-800 bg-amber-50 border-b border-amber-100">
+                <p className="px-4 py-3 text-sm font-semibold text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border-b border-[rgb(var(--color-warning)/0.25)]">
                   {preparingLines
                     ? 'جاري حساب بنود المكونات…'
                     : 'اضغط «تحديث المكونات» لعرض البنود قبل الاعتماد والطباعة.'}
@@ -1144,7 +1144,7 @@ export const ProductionIssues: React.FC = () => {
                 </p>
               )}
               {isProductionRequestFlow && selectedOrder.lines.length > 0 && (
-                <p className="px-4 py-3 text-sm font-semibold text-emerald-800 bg-emerald-50 border-b border-emerald-100">
+                <p className="px-4 py-3 text-sm font-semibold text-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)] border-b border-[rgb(var(--color-success)/0.25)]">
                   بنود المكونات جاهزة للمراجعة والطباعة.
                   {selectedOrder.status === 'requested'
                     ? ' احفظ مسودة إن أردت، ثم اعتمد ورحّل الصرف.'
@@ -1154,7 +1154,7 @@ export const ProductionIssues: React.FC = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50 border-b">
+                    <tr className="bg-[var(--color-bg)] border-b">
                       <th className="p-3 text-start">المكون</th>
                       <th className="p-3 text-center">طبيعي</th>
                       <th className="p-3 text-center">هالك قياسي</th>
@@ -1168,13 +1168,13 @@ export const ProductionIssues: React.FC = () => {
                   <tbody>
                     {preparingLines && selectedOrder.lines.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-6 text-center text-sm text-slate-400">
+                        <td colSpan={8} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
                           جاري حساب بنود المكونات…
                         </td>
                       </tr>
                     ) : selectedOrder.lines.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-6 text-center text-sm text-slate-400">
+                        <td colSpan={8} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
                           لا توجد بنود مكونات بعد.
                         </td>
                       </tr>
@@ -1185,7 +1185,7 @@ export const ProductionIssues: React.FC = () => {
                         <td className="p-3 text-center tabular-nums">{formatQty(line.baseRequiredQty)}</td>
                         <td className="p-3 text-center tabular-nums">{formatQty(line.plannedWasteQty)}</td>
                         <td className="p-3 text-center font-bold tabular-nums">{formatQty(line.requiredQty)}</td>
-                        <td className={`p-3 text-center tabular-nums ${line.shortageQty > 0 ? 'text-rose-600 font-bold' : ''}`}>{formatQty(line.availableQty)}</td>
+                        <td className={`p-3 text-center tabular-nums ${line.shortageQty > 0 ? 'text-[rgb(var(--color-danger))] font-bold' : ''}`}>{formatQty(line.availableQty)}</td>
                         <td className="p-3 text-xs">
                           <div className="space-y-1">
                             <p>{line.allocations.map((a) => `${a.locationCode}: ${formatQty(a.quantity)}`).join('، ') || '—'}</p>
@@ -1242,7 +1242,7 @@ export const ProductionIssues: React.FC = () => {
                   setOrdersPage(1);
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
-                  listTab === key ? 'bg-primary text-white border-primary' : 'bg-white border-slate-200 text-slate-600'
+                  listTab === key ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'
                 }`}
               >
                 {label}
@@ -1250,7 +1250,7 @@ export const ProductionIssues: React.FC = () => {
             ))}
           </div>
           {listOrders.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-slate-400">
+            <p className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
               {listTab === 'requests' ? 'لا توجد طلبات إنتاج معلّقة.' : 'لا توجد أوامر صرف بعد.'}
             </p>
           ) : (
@@ -1265,8 +1265,8 @@ export const ProductionIssues: React.FC = () => {
                   }}
                 >
                   <p className="font-bold">{order.referenceNo}</p>
-                  <p className="text-xs text-slate-500">{order.productName} - {statusLabel(order.status)}</p>
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-xs text-[var(--color-text-muted)]">{order.productName} - {statusLabel(order.status)}</p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
                     {order.status === 'requested' ? 'كمية الطلب' : 'كمية الصرف'}: {formatQty(order.quantity, 3)}
                     {order.requestedBy ? ` · من ${order.requestedBy}` : ''}
                   </p>
@@ -1306,21 +1306,21 @@ export const ProductionIssues: React.FC = () => {
       </div>
       {shortageModalOpen && shortageRows.length > 0 && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShortageModalOpen(false)}>
-          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4" onClick={() => setShortageModalOpen(false)}>
+          <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-lg bg-[var(--color-card)] shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
               <div>
-                <h3 className="text-base font-black text-rose-700">لا يمكن اعتماد الصرف</h3>
-                <p className="mt-1 text-xs font-semibold text-slate-500">
+                <h3 className="text-base font-black text-[rgb(var(--color-danger))]">لا يمكن اعتماد الصرف</h3>
+                <p className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">
                   الأصناف التالية بدون رصيد كافٍ — المطلوب مقابل المتاح حالياً.
                 </p>
               </div>
-              <button type="button" className="text-xl leading-none text-slate-500" onClick={() => setShortageModalOpen(false)}>×</button>
+              <button type="button" className="text-xl leading-none text-[var(--color-text-muted)]" onClick={() => setShortageModalOpen(false)}>×</button>
             </div>
             <div className="overflow-auto p-4">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-slate-50 text-slate-600">
+                  <tr className="border-b bg-[var(--color-bg)] text-[var(--color-text-muted)]">
                     <th className="p-3 text-start">المكون</th>
                     <th className="p-3 text-center">تحاول تصرف</th>
                     <th className="p-3 text-center">المتاح</th>
@@ -1335,21 +1335,21 @@ export const ProductionIssues: React.FC = () => {
                       <tr key={`${row.itemCode}-${row.locationCode || 'all'}-${index}`} className="border-b align-top">
                         <td className="p-3">
                           <p className="font-bold">{row.itemName}</p>
-                          <p className="mt-0.5 font-mono text-xs text-slate-500">{row.itemCode}</p>
+                          <p className="mt-0.5 font-mono text-xs text-[var(--color-text-muted)]">{row.itemCode}</p>
                           {row.locationCode && (
-                            <p className="mt-1 text-xs font-semibold text-slate-500">لوكيشن: {row.locationCode}</p>
+                            <p className="mt-1 text-xs font-semibold text-[var(--color-text-muted)]">لوكيشن: {row.locationCode}</p>
                           )}
                         </td>
-                        <td className="p-3 text-center font-black tabular-nums text-slate-900">
+                        <td className="p-3 text-center font-black tabular-nums text-[var(--color-text)]">
                           {formatQty(row.requiredQty)} {row.unit}
                         </td>
-                        <td className="p-3 text-center font-bold tabular-nums text-amber-700">
+                        <td className="p-3 text-center font-bold tabular-nums text-[rgb(var(--color-warning))]">
                           {formatQty(row.availableQty)} {row.unit}
                         </td>
-                        <td className="p-3 text-center font-black tabular-nums text-rose-600">
+                        <td className="p-3 text-center font-black tabular-nums text-[rgb(var(--color-danger))]">
                           {formatQty(shortage)} {row.unit}
                         </td>
-                        <td className="p-3 text-xs font-semibold text-slate-600">{shortageReasonLabel(row)}</td>
+                        <td className="p-3 text-xs font-semibold text-[var(--color-text-muted)]">{shortageReasonLabel(row)}</td>
                       </tr>
                     );
                   })}
@@ -1365,18 +1365,18 @@ export const ProductionIssues: React.FC = () => {
       )}
       {lineAction && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeLineAction}>
-          <div className="w-full max-w-xl rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4" onClick={closeLineAction}>
+          <div className="w-full max-w-xl rounded-lg bg-[var(--color-card)] shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
               <h3 className="text-base font-black">
                 {lineAction.kind === 'return' ? 'تسجيل مرتجع مكون' : lineAction.kind === 'compensate' ? 'طلب تعويض مكون' : 'تسجيل هالك فعلي'}
               </h3>
-              <button className="text-xl leading-none text-slate-500" onClick={closeLineAction}>x</button>
+              <button className="text-xl leading-none text-[var(--color-text-muted)]" onClick={closeLineAction}>x</button>
             </div>
             <div className="space-y-4 p-5">
-              <div className="rounded-lg bg-slate-50 p-3 text-sm">
+              <div className="rounded-lg bg-[var(--color-bg)] p-3 text-sm">
                 <p className="font-bold">{lineAction.line.itemName}</p>
-                <p className="text-xs text-slate-500">{lineAction.order.referenceNo} - {lineAction.line.itemCode}</p>
+                <p className="text-xs text-[var(--color-text-muted)]">{lineAction.order.referenceNo} - {lineAction.line.itemCode}</p>
               </div>
               <input
                 className="w-full rounded-lg border px-3 py-2 text-sm"

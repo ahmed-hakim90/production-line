@@ -64,9 +64,9 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
         <p className="page-subtitle mb-3">الترتيب هنا هو نفس ترتيب الأزرار في لوحة مدير المصنع</p>
         <div className="space-y-3">
           {localQuickActions.length === 0 && (
-            <div className="text-center py-10 bg-[#f8f9fa]/50 border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
-              <span className="material-icons-round text-3xl text-[var(--color-text-muted)] dark:text-slate-600">bolt</span>
-              <p className="mt-2 text-sm font-bold text-slate-500">لا توجد إجراءات سريعة حتى الآن</p>
+            <div className="text-center py-10 bg-[var(--color-bg)]/50 border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)]">
+              <span className="material-icons-round text-3xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)]">bolt</span>
+              <p className="mt-2 text-sm font-bold text-[var(--color-text-muted)]">لا توجد إجراءات سريعة حتى الآن</p>
             </div>
           )}
           {localQuickActions.map((item, index) => {
@@ -78,7 +78,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                     <span className="material-icons-round text-base">{item.icon}</span>
                     <span className="text-sm font-bold">{item.label || 'بدون اسم'}</span>
                   </div>
-                  <span className="text-[11px] font-bold text-[var(--color-text-muted)] bg-[#f0f2f5] px-2 py-1 rounded-full sm:mr-auto">
+                  <span className="text-[11px] font-bold text-[var(--color-text-muted)] bg-[var(--color-surface-hover)] px-2 py-1 rounded-full sm:mr-auto">
                     ترتيب #{index + 1}
                   </span>
                   <div className="flex items-center gap-1">
@@ -107,7 +107,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                     </button>
                     <button
                       onClick={() => removeQuickAction(item.id)}
-                      className="w-8 h-8 rounded-[var(--border-radius-base)] border border-rose-200 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 transition-all"
+                      className="w-8 h-8 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/10 transition-all"
                       title="حذف"
                     >
                       <span className="material-icons-round text-sm">delete</span>
@@ -115,9 +115,9 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                   </div>
                 </div>
                 {editingQuickActionId === item.id && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/40 border border-[var(--color-border)]">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/40 border border-[var(--color-border)]">
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500">اسم الزر</label>
+                      <label className="text-xs font-bold text-[var(--color-text-muted)]">اسم الزر</label>
                       <input
                         type="text"
                         value={item.label}
@@ -127,7 +127,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500">الإجراء</label>
+                      <label className="text-xs font-bold text-[var(--color-text-muted)]">الإجراء</label>
                       <select
                         value={getQuickActionMatch(item)}
                         onChange={(e) => {
@@ -150,7 +150,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500">الأيقونة</label>
+                      <label className="text-xs font-bold text-[var(--color-text-muted)]">الأيقونة</label>
                       <select
                         value={item.icon}
                         onChange={(e) => updateQuickAction(item.id, { icon: e.target.value })}
@@ -162,7 +162,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                       </select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500">اللون</label>
+                      <label className="text-xs font-bold text-[var(--color-text-muted)]">اللون</label>
                       <div className="flex flex-wrap gap-2">
                         {quickActionColors.map((color) => (
                           <button

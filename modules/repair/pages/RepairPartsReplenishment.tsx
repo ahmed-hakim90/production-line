@@ -299,7 +299,7 @@ export const RepairPartsReplenishment: React.FC = () => {
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-amber-700 sm:ms-auto">
+          <span className="text-xs font-semibold text-[rgb(var(--color-warning))] sm:ms-auto">
             {awaitingReceiptCount > 0
               ? `${awaitingReceiptCount} بانتظار استلامك`
               : 'لا يوجد استلام معلّق'}
@@ -359,23 +359,23 @@ export const RepairPartsReplenishment: React.FC = () => {
                     ) : null}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 border-b bg-slate-50/60 p-3 sm:gap-3 sm:p-4 md:grid-cols-4">
-                    <div className="rounded-lg border bg-white p-2.5 sm:p-3">
-                      <p className="text-[11px] font-bold text-slate-500 sm:text-xs">من مخزن</p>
+                  <div className="grid grid-cols-2 gap-2 border-b bg-[var(--color-bg)] p-3 sm:gap-3 sm:p-4 md:grid-cols-4">
+                    <div className="rounded-lg border bg-[var(--color-card)] p-2.5 sm:p-3">
+                      <p className="text-[11px] font-bold text-[var(--color-text-muted)] sm:text-xs">من مخزن</p>
                       <p className="mt-1 break-words text-sm font-black">{selectedRequest.fromWarehouseName || '—'}</p>
                     </div>
-                    <div className="rounded-lg border bg-white p-2.5 sm:p-3">
-                      <p className="text-[11px] font-bold text-slate-500 sm:text-xs">إلى مخزن</p>
+                    <div className="rounded-lg border bg-[var(--color-card)] p-2.5 sm:p-3">
+                      <p className="text-[11px] font-bold text-[var(--color-text-muted)] sm:text-xs">إلى مخزن</p>
                       <p className="mt-1 break-words text-sm font-black">{selectedRequest.toWarehouseName || '—'}</p>
                     </div>
-                    <div className="rounded-lg border bg-white p-2.5 sm:p-3">
-                      <p className="text-[11px] font-bold text-slate-500 sm:text-xs">الحالة</p>
+                    <div className="rounded-lg border bg-[var(--color-card)] p-2.5 sm:p-3">
+                      <p className="text-[11px] font-bold text-[var(--color-text-muted)] sm:text-xs">الحالة</p>
                       <p className="mt-1 text-sm font-black">
                         {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[selectedRequest.status]}
                       </p>
                     </div>
-                    <div className="rounded-lg border bg-white p-2.5 sm:p-3">
-                      <p className="text-[11px] font-bold text-slate-500 sm:text-xs">بنود</p>
+                    <div className="rounded-lg border bg-[var(--color-card)] p-2.5 sm:p-3">
+                      <p className="text-[11px] font-bold text-[var(--color-text-muted)] sm:text-xs">بنود</p>
                       <p className="mt-1 text-sm font-black tabular-nums">
                         {(selectedRequest.lines || []).length}
                       </p>
@@ -439,7 +439,7 @@ export const RepairPartsReplenishment: React.FC = () => {
                     className={`min-h-9 flex-1 rounded-lg border px-2 py-1.5 text-xs font-bold sm:flex-none sm:px-3 ${
                       listTab === key
                         ? 'border-primary bg-primary text-white'
-                        : 'border-slate-200 bg-white text-slate-600'
+                        : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)]'
                     }`}
                   >
                     {label}
@@ -462,7 +462,7 @@ export const RepairPartsReplenishment: React.FC = () => {
                         key={id}
                         type="button"
                         className={`block w-full border-b px-4 py-3 text-start ${
-                          selected ? 'bg-primary/10' : 'hover:bg-slate-50'
+                          selected ? 'bg-primary/10' : 'hover:bg-[var(--color-surface-hover)]'
                         }`}
                         onClick={() => selectRequest(id)}
                       >
@@ -473,7 +473,7 @@ export const RepairPartsReplenishment: React.FC = () => {
                           {(row.lines || []).length} بند
                         </p>
                         {row.note ? (
-                          <p className="mt-1 line-clamp-1 text-xs text-slate-500">{row.note}</p>
+                          <p className="mt-1 line-clamp-1 text-xs text-[var(--color-text-muted)]">{row.note}</p>
                         ) : null}
                       </button>
                     );

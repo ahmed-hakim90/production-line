@@ -316,11 +316,11 @@ export const Warehouses: React.FC = () => {
                           <p className="text-sm font-semibold">{w.name}</p>
                         )}
                         <p className="mt-0.5 font-mono text-xs text-muted-foreground">{w.code}</p>
-                        <p className="mt-1 text-xs text-slate-600">{ROLE_LABELS[w.warehouseRole || 'general']}</p>
+                        <p className="mt-1 text-xs text-[var(--color-text-muted)]">{ROLE_LABELS[w.warehouseRole || 'general']}</p>
                       </div>
                       <span className="text-xs font-bold">{w.isActive === false ? 'غير نشط' : 'نشط'}</span>
                     </div>
-                    <dl className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-600">
+                    <dl className="mt-2 grid grid-cols-1 gap-1 text-xs text-[var(--color-text-muted)]">
                       <div>الفرع: {branchMeta?.branchName || '—'}</div>
                       <div>توجيه الإنتاج: {(w.id && routingUsageByWarehouseId.get(w.id)?.join('، ')) || '—'}</div>
                     </dl>
@@ -378,8 +378,8 @@ export const Warehouses: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-3 font-mono text-xs">{w.code}</td>
                         <td className="py-2.5 px-3 text-xs">{ROLE_LABELS[w.warehouseRole || 'general']}</td>
-                        <td className="py-2.5 px-3 text-xs text-slate-600">{branchMeta?.branchName || '—'}</td>
-                        <td className="py-2.5 px-3 text-xs text-slate-600">
+                        <td className="py-2.5 px-3 text-xs text-[var(--color-text-muted)]">{branchMeta?.branchName || '—'}</td>
+                        <td className="py-2.5 px-3 text-xs text-[var(--color-text-muted)]">
                           {(w.id && routingUsageByWarehouseId.get(w.id)?.join('، ')) || '—'}
                         </td>
                         <td className="py-2.5 px-3">{w.isActive === false ? 'غير نشط' : 'نشط'}</td>

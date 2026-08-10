@@ -101,7 +101,7 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
             <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
             {job.id && (
               <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}>
-                <Button type="button" variant="secondary">التفاصيل / إيصال</Button>
+                <Button type="button" variant="secondary">التفاصيل / إسناد الفني</Button>
               </Link>
             )}
             {job.id && showWorkshopLink ? (

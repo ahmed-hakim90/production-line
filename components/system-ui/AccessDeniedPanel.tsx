@@ -26,7 +26,7 @@ export function AccessDeniedPanel({
       <div className="erp-auth-container flex items-center justify-center min-h-[calc(100vh-2rem)] py-8 px-4">
         <div className="erp-auth-card text-center p-8 max-w-md w-full">
           <div className="flex justify-center mb-4">
-            <div className="rounded-full bg-rose-500/10 p-3 text-rose-600">
+            <div className="rounded-full bg-[rgb(var(--color-danger)/0.1)]0/10 p-3 text-[rgb(var(--color-danger))]">
               <ShieldOff size={28} strokeWidth={2} aria-hidden />
             </div>
           </div>

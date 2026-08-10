@@ -355,7 +355,7 @@ export const LoanRequests: React.FC = () => {
     >
 
       {/* Tabs */}
-      <div className="flex gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
+      <div className="flex gap-2 bg-[var(--color-surface-hover)] p-1 rounded-[var(--border-radius-lg)] w-fit">
         {(['monthly_advance', 'installment'] as LoanType[]).map((tab) => (
           <button
             key={tab}
@@ -363,7 +363,7 @@ export const LoanRequests: React.FC = () => {
             className={`px-5 py-2.5 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
               activeTab === tab
                 ? 'bg-[var(--color-card)] text-primary'
-                : 'text-slate-500 hover:text-[var(--color-text)]'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
             }`}
           >
             <span className="material-icons-round text-sm ml-1.5 align-middle">
@@ -378,17 +378,17 @@ export const LoanRequests: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {activeTab === 'monthly_advance' ? (
           <>
-            <StatCard icon="receipt_long" color="text-blue-500" label="إجمالي السلف" value={stats.total} />
-            <StatCard icon="check_circle" color="text-emerald-500" label="تم الصرف" value={stats.disbursed} />
-            <StatCard icon="hourglass_top" color="text-amber-500" label="لم يُصرف" value={stats.total - stats.disbursed} />
+            <StatCard icon="receipt_long" color="text-[rgb(var(--color-primary))]" label="إجمالي السلف" value={stats.total} />
+            <StatCard icon="check_circle" color="text-[rgb(var(--color-success))]" label="تم الصرف" value={stats.disbursed} />
+            <StatCard icon="hourglass_top" color="text-[rgb(var(--color-warning))]" label="لم يُصرف" value={stats.total - stats.disbursed} />
             <StatCard icon="payments" color="text-primary" label="إجمالي المبالغ" value={formatCurrency(stats.amount)} />
           </>
         ) : (
           <>
-            <StatCard icon="receipt_long" color="text-blue-500" label="إجمالي السلف" value={stats.total} />
-            <StatCard icon="trending_up" color="text-emerald-500" label="سلف مصروفة" value={stats.disbursed} />
-            <StatCard icon="account_balance" color="text-amber-500" label="إجمالي المتبقي" value={formatCurrency(stats.amount)} />
-            <StatCard icon="payments" color="text-rose-500" label="القسط الشهري" value={formatCurrency(stats.monthly)} />
+            <StatCard icon="receipt_long" color="text-[rgb(var(--color-primary))]" label="إجمالي السلف" value={stats.total} />
+            <StatCard icon="trending_up" color="text-[rgb(var(--color-success))]" label="سلف مصروفة" value={stats.disbursed} />
+            <StatCard icon="account_balance" color="text-[rgb(var(--color-warning))]" label="إجمالي المتبقي" value={formatCurrency(stats.amount)} />
+            <StatCard icon="payments" color="text-[rgb(var(--color-danger))]" label="القسط الشهري" value={formatCurrency(stats.monthly)} />
           </>
         )}
       </div>
@@ -415,14 +415,14 @@ export const LoanRequests: React.FC = () => {
                 <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                   {activeTab === 'monthly_advance' ? 'مبلغ السلفة' : 'إجمالي المبلغ'}
                 </label>
-                <input type="number" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                <input type="number" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                   value={formAmount} onChange={(e) => setFormAmount(e.target.value)} placeholder="0.00" min="0" step="100" />
               </div>
 
               {activeTab === 'installment' && (
                 <div>
                   <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">عدد الأقساط (أشهر)</label>
-                  <input type="number" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                  <input type="number" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                     value={formInstallments} onChange={(e) => setFormInstallments(e.target.value)} placeholder="12" min="2" max="60" />
                 </div>
               )}
@@ -431,7 +431,7 @@ export const LoanRequests: React.FC = () => {
                 <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                   {activeTab === 'monthly_advance' ? 'الشهر' : 'شهر البداية'}
                 </label>
-                <input type="month" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                <input type="month" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                   value={formStartMonth} onChange={(e) => setFormStartMonth(e.target.value)} />
               </div>
 
@@ -446,7 +446,7 @@ export const LoanRequests: React.FC = () => {
 
               <div className={activeTab === 'monthly_advance' ? '' : 'sm:col-span-2'}>
                 <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">السبب (اختياري)</label>
-                <input type="text" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                <input type="text" className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                   value={formReason} onChange={(e) => setFormReason(e.target.value)} placeholder="سبب السلفة..." />
               </div>
             </div>
@@ -514,8 +514,8 @@ export const LoanRequests: React.FC = () => {
         />
         {filtered.length === 0 ? (
           <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">money_off</span>
-            <p className="text-sm font-bold text-slate-500">لا توجد سُلف</p>
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">money_off</span>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد سُلف</p>
           </div>
         ) : activeTab === 'monthly_advance' ? (
           <MonthlyAdvanceTable
@@ -545,10 +545,10 @@ export const LoanRequests: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10050] p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
-              <span className="material-icons-round text-5xl text-rose-500 mb-2">warning</span>
+              <span className="material-icons-round text-5xl text-[rgb(var(--color-danger))] mb-2">warning</span>
               <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">تأكيد الحذف</h3>
               <p className="text-sm text-[var(--color-text-muted)] mb-4">هل تريد حذف هذه السلفة نهائياً؟</p>
             </div>
@@ -566,7 +566,7 @@ export const LoanRequests: React.FC = () => {
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 left-6 z-50 px-5 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold text-white flex items-center gap-2 animate-slide-up ${
-          toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
+          toast.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)]0' : 'bg-[rgb(var(--color-danger)/0.1)]0'
         }`}>
           <span className="material-icons-round text-lg">{toast.type === 'success' ? 'check_circle' : 'error'}</span>
           {toast.message}
@@ -603,12 +603,12 @@ const MonthlyAdvanceTable: React.FC<{
         return (
           <div
             key={`m-${loan.id}`}
-            className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}
+            className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${loan.disbursed ? 'bg-[rgb(var(--color-success)/0.1)]/30 dark:bg-[rgb(var(--color-success))]/5' : ''}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-bold truncate">{loan.employeeName || emp?.name || loan.employeeId}</p>
-                <p className="font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</p>
+                <p className="font-mono text-xs text-[var(--color-text-muted)]">{loan.employeeCode || emp?.code || '—'}</p>
               </div>
               {loan.disbursed ? <Badge variant="success">تم الصرف</Badge> : <Badge variant="warning">لم يُصرف</Badge>}
             </div>
@@ -636,7 +636,7 @@ const MonthlyAdvanceTable: React.FC<{
                 <button
                   type="button"
                   onClick={() => onDelete(loan.id!)}
-                  className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                  className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                 >
                   <span className="material-icons-round text-base">delete</span>
                   حذف
@@ -666,8 +666,8 @@ const MonthlyAdvanceTable: React.FC<{
             const emp = employeeMap.get(loan.employeeId);
             const isProcessing = actionLoading === loan.id;
             return (
-              <tr key={loan.id} className={`border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30 ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
-                <td className="py-3 px-3 font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</td>
+              <tr key={loan.id} className={`border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30 ${loan.disbursed ? 'bg-[rgb(var(--color-success)/0.1)]/30 dark:bg-[rgb(var(--color-success))]/5' : ''}`}>
+                <td className="py-3 px-3 font-mono text-xs text-[var(--color-text-muted)]">{loan.employeeCode || emp?.code || '—'}</td>
                 <td className="py-3 px-3 font-bold">{loan.employeeName || emp?.name || loan.employeeId}</td>
                 <td className="py-3 px-3 font-bold text-primary">{formatCurrency(loan.loanAmount)}</td>
                 <td className="py-3 px-3 font-mono text-xs" dir="ltr">{loan.month || loan.startMonth}</td>
@@ -695,7 +695,7 @@ const MonthlyAdvanceTable: React.FC<{
                   <td className="py-3 px-3 text-center">
                     <button
                       onClick={() => onDelete(loan.id!)}
-                      className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
+                      className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/30 text-[rgb(var(--color-danger))] hover:text-[rgb(var(--color-danger))] transition-colors"
                       title="حذف السلفة"
                     >
                       <span className="material-icons-round text-lg">delete</span>
@@ -733,12 +733,12 @@ const InstallmentTable: React.FC<{
         return (
           <div
             key={`m-${loan.id}`}
-            className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}
+            className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${loan.disbursed ? 'bg-[rgb(var(--color-success)/0.1)]/30 dark:bg-[rgb(var(--color-success))]/5' : ''}`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-sm font-bold truncate">{loan.employeeName || emp?.name || loan.employeeId}</p>
-                <p className="font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</p>
+                <p className="font-mono text-xs text-[var(--color-text-muted)]">{loan.employeeCode || emp?.code || '—'}</p>
               </div>
               <Badge variant={LOAN_STATUS_VARIANT[loan.status]}>{LOAN_STATUS_LABELS[loan.status]}</Badge>
             </div>
@@ -753,7 +753,7 @@ const InstallmentTable: React.FC<{
               </div>
               <div>
                 <dt className="text-[10px] text-[var(--color-text-muted)]">المتبقي</dt>
-                <dd className={`font-bold ${loan.remainingInstallments === 0 ? 'text-emerald-500' : 'text-amber-600'}`}>
+                <dd className={`font-bold ${loan.remainingInstallments === 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-warning))]'}`}>
                   {loan.remainingInstallments}
                 </dd>
               </div>
@@ -767,7 +767,7 @@ const InstallmentTable: React.FC<{
                 <span className="text-[var(--color-text-muted)]">التقدم</span>
                 <span className="text-primary">{progress}%</span>
               </div>
-              <div className="w-full bg-slate-200 rounded-full h-2">
+              <div className="w-full bg-[var(--color-border)] rounded-full h-2">
                 <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
               </div>
             </div>
@@ -783,7 +783,7 @@ const InstallmentTable: React.FC<{
                 <button
                   type="button"
                   onClick={() => onDelete(loan.id!)}
-                  className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                  className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                 >
                   <span className="material-icons-round text-base">delete</span>
                   حذف
@@ -799,7 +799,7 @@ const InstallmentTable: React.FC<{
               </button>
             </div>
             {isExpanded && loan.reason && (
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
                 <span className="font-bold">السبب: </span>{loan.reason}
               </p>
             )}
@@ -834,14 +834,14 @@ const InstallmentTable: React.FC<{
 
           return (
             <React.Fragment key={loan.id}>
-              <tr className={`border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30 ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
-                <td className="py-3 px-3 font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</td>
+              <tr className={`border-b border-[var(--color-border)] hover:bg-[var(--color-bg)]/30 ${loan.disbursed ? 'bg-[rgb(var(--color-success)/0.1)]/30 dark:bg-[rgb(var(--color-success))]/5' : ''}`}>
+                <td className="py-3 px-3 font-mono text-xs text-[var(--color-text-muted)]">{loan.employeeCode || emp?.code || '—'}</td>
                 <td className="py-3 px-3 font-bold">{loan.employeeName || emp?.name || loan.employeeId}</td>
                 <td className="py-3 px-3 font-bold">{formatCurrency(loan.loanAmount)}</td>
                 <td className="py-3 px-3">{formatCurrency(loan.installmentAmount)}</td>
                 <td className="py-3 px-3 font-mono text-xs">{loan.totalInstallments}</td>
                 <td className="py-3 px-3">
-                  <span className={`font-bold ${loan.remainingInstallments === 0 ? 'text-emerald-500' : 'text-amber-600'}`}>
+                  <span className={`font-bold ${loan.remainingInstallments === 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-warning))]'}`}>
                     {loan.remainingInstallments}
                   </span>
                 </td>
@@ -867,7 +867,7 @@ const InstallmentTable: React.FC<{
                   <td className="py-3 px-3 text-center">
                     <button
                       onClick={() => onDelete(loan.id!)}
-                      className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
+                      className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/30 text-[rgb(var(--color-danger))] hover:text-[rgb(var(--color-danger))] transition-colors"
                       title="حذف السلفة"
                     >
                       <span className="material-icons-round text-lg">delete</span>
@@ -883,14 +883,14 @@ const InstallmentTable: React.FC<{
 
               {isExpanded && (
                 <tr>
-                  <td colSpan={12} className="p-4 bg-[#f8f9fa]/30">
+                  <td colSpan={12} className="p-4 bg-[var(--color-bg)]/30">
                     <div className="space-y-3">
                       <div>
                         <div className="flex items-center justify-between text-xs font-bold mb-1">
                           <span className="text-[var(--color-text-muted)]">التقدم في السداد</span>
                           <span className="text-primary">{progress}%</span>
                         </div>
-                        <div className="w-full bg-slate-200 rounded-full h-2">
+                        <div className="w-full bg-[var(--color-border)] rounded-full h-2">
                           <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
                         </div>
                         <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)] mt-1">
@@ -924,12 +924,12 @@ const InstallmentTable: React.FC<{
                       )}
 
                       {loan.reason && (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-[var(--color-text-muted)]">
                           <span className="font-bold">السبب: </span>{loan.reason}
                         </div>
                       )}
                       {loan.disbursedByName && (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-[var(--color-text-muted)]">
                           <span className="font-bold">تم الصرف بواسطة: </span>{loan.disbursedByName}
                         </div>
                       )}

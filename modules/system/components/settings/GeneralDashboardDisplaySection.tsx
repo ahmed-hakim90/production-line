@@ -31,7 +31,7 @@ export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySec
           { key: 'showAlertsWidget' as keyof DashboardDisplaySettings, label: 'عرض عنصر التنبيهات', icon: 'notifications_active', desc: 'إظهار قسم التنبيهات السريعة في لوحات التحكم' },
           { key: 'enableDragReorder' as keyof DashboardDisplaySettings, label: 'تفعيل السحب لإعادة الترتيب', icon: 'drag_indicator', desc: 'السماح بإعادة ترتيب العناصر في لوحات التحكم بالسحب والإفلات' },
         ]).map((setting) => (
-          <div key={setting.key} className="flex items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <div key={setting.key} className="flex items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
               <DashboardDisplayIcon name={setting.icon} />
             </div>
@@ -41,20 +41,20 @@ export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySec
             </div>
             <button
               onClick={() => setLocalDashboardDisplay((prev) => ({ ...prev, [setting.key]: !prev[setting.key] }))}
-              className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${(localDashboardDisplay as any)[setting.key] ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'}`}
+              className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${(localDashboardDisplay as any)[setting.key] ? 'bg-[rgb(var(--color-success)/0.1)]0' : 'bg-[var(--color-border)]'}`}
             >
               <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${(localDashboardDisplay as any)[setting.key] ? 'right-0.5' : 'right-[22px]'}`} />
             </button>
           </div>
         ))}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
               <DashboardDisplayIcon name="view_column" />
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-[var(--color-text)]">عدد العناصر في الصف</p>
-              <p className="text-xs text-slate-400">عدد الأعمدة في شبكة لوحة التحكم</p>
+              <p className="text-xs text-[var(--color-text-muted)]">عدد الأعمدة في شبكة لوحة التحكم</p>
             </div>
           </div>
           <div className="flex gap-2 shrink-0">

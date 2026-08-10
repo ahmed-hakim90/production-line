@@ -205,15 +205,15 @@ export const AssetDetails: React.FC = () => {
       <OpsDashPanel title="ملخص مالي" accent="costs">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className={cn('space-y-1 p-4', NESTED_TILE)}>
-            <div className="text-xs text-slate-600 dark:text-muted-foreground">الإهلاك الشهري</div>
+            <div className="text-xs text-[var(--color-text-muted)] dark:text-muted-foreground">الإهلاك الشهري</div>
             <div className="text-lg font-bold tabular-nums">{monthlyDepreciationComputed.toFixed(2)}</div>
           </div>
           <div className={cn('space-y-1 p-4', NESTED_TILE)}>
-            <div className="text-xs text-slate-600 dark:text-muted-foreground">إجمالي الإهلاك المسجل</div>
+            <div className="text-xs text-[var(--color-text-muted)] dark:text-muted-foreground">إجمالي الإهلاك المسجل</div>
             <div className="text-lg font-bold tabular-nums">{yearlyTotal.toFixed(2)}</div>
           </div>
           <div className={cn('space-y-1 p-4', NESTED_TILE)}>
-            <div className="text-xs text-slate-600 dark:text-muted-foreground">القيمة الدفترية الحالية</div>
+            <div className="text-xs text-[var(--color-text-muted)] dark:text-muted-foreground">القيمة الدفترية الحالية</div>
             <div className="text-lg font-bold tabular-nums text-primary">{currentValueComputed.toFixed(2)}</div>
           </div>
         </div>
@@ -223,7 +223,7 @@ export const AssetDetails: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
-              <tr className="bg-[#f8f9fa]/50 text-[var(--color-text-muted)]">
+              <tr className="bg-[var(--color-bg)]/50 text-[var(--color-text-muted)]">
                 <th className="erp-th">الفترة</th>
                 <th className="erp-th">قيمة الإهلاك</th>
                 <th className="erp-th">الإهلاك المتراكم</th>

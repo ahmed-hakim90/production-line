@@ -20,10 +20,10 @@ const STATUS_LABELS: Record<QualityReworkOrder['status'], string> = {
   scrap: 'سكراب',
 };
 const STATUS_BADGE_CLASS: Record<QualityReworkOrder['status'], string> = {
-  open: 'bg-amber-50 text-amber-700 border-amber-200',
-  in_progress: 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800',
-  done: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  scrap: 'bg-rose-50 text-rose-700 border-rose-200',
+  open: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border-[rgb(var(--color-warning)/0.25)]',
+  in_progress: 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] border-[rgb(var(--color-primary)/0.25)] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))] dark:border-[rgb(var(--color-primary)/0.25)]',
+  done: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border-[rgb(var(--color-success)/0.25)]',
+  scrap: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border-[rgb(var(--color-danger)/0.25)]',
 };
 
 export const ReworkOrders: React.FC = () => {
@@ -102,7 +102,7 @@ export const ReworkOrders: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
-              <tr className="border-b border-[var(--color-border)] text-slate-500">
+              <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)]">
                 <th className="erp-th">أمر الشغل</th>
                 <th className="erp-th">العيب</th>
                 <th className="erp-th">السيريال</th>
@@ -113,7 +113,7 @@ export const ReworkOrders: React.FC = () => {
             <tbody>
               {displayRows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-6 px-2 text-center text-slate-500">
+                  <td colSpan={5} className="py-6 px-2 text-center text-[var(--color-text-muted)]">
                     لا توجد أوامر إعادة تشغيل حالياً.
                   </td>
                 </tr>
@@ -121,7 +121,7 @@ export const ReworkOrders: React.FC = () => {
                 <tr key={row.id} className="border-b border-[var(--color-border)]">
                   <td className="py-2 px-2 font-mono">
                     <div>{row.workOrderNumber}</div>
-                    <div className="text-xs text-slate-500">{row.lineName} — {row.productName}</div>
+                    <div className="text-xs text-[var(--color-text-muted)]">{row.lineName} — {row.productName}</div>
                   </td>
                   <td className="py-2 px-2 font-mono">{row.defectId}</td>
                   <td className="py-2 px-2">{row.serialBarcode ?? '—'}</td>

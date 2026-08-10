@@ -187,8 +187,8 @@ export const EmployeeFinancialOverview: React.FC = () => {
           onApply={() => void loadData()}
           applyLabel={loading ? 'جار التحميل...' : 'تطبيق'}
           extra={(
-            <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
-              <span className="ml-2 text-xs text-slate-500">الشهر</span>
+            <div className="inline-flex h-[34px] items-center rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-2.5">
+              <span className="ml-2 text-xs text-[var(--color-text-muted)]">الشهر</span>
               <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
             </div>
           )}
@@ -197,7 +197,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
       </OpsDashPanel>
 
       {error && (
-        <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 text-rose-700 text-sm font-bold">
+        <div className="bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] p-4 text-[rgb(var(--color-danger))] text-sm font-bold">
           {error}
         </div>
       )}
@@ -252,7 +252,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
                       <td className="p-3">{deptNameById[r.departmentId] || r.departmentId || '—'}</td>
                       <td className="p-3 font-mono font-bold">{formatMoney(r.baseSalary)}</td>
                       <td className="p-3">
-                        <div className="font-bold text-emerald-700 mb-1">+ {formatMoney(r.allowancesTotal + r.employeeAllowancesTotal)}</div>
+                        <div className="font-bold text-[rgb(var(--color-success))] mb-1">+ {formatMoney(r.allowancesTotal + r.employeeAllowancesTotal)}</div>
                         <div className="text-xs text-[var(--color-text-muted)]">
                           {r.allowancesBreakdown.map((a) => `${a.name}: ${formatMoney(a.amount)}`).join(' | ') || 'بدلات عامة: —'}
                         </div>
@@ -261,7 +261,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
                         </div>
                       </td>
                       <td className="p-3">
-                        <div className="font-bold text-rose-700 mb-1">- {formatMoney(r.totalDeductions)}</div>
+                        <div className="font-bold text-[rgb(var(--color-danger))] mb-1">- {formatMoney(r.totalDeductions)}</div>
                         <div className="text-xs text-[var(--color-text-muted)]">
                           {r.employeeDeductionsBreakdown.map((d) => `${d.name}: ${formatMoney(d.amount)}`).join(' | ') || 'خصومات مخصصة: —'}
                         </div>

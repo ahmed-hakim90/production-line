@@ -54,9 +54,9 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
         type="button"
         disabled={!isAdmin || disabled}
         onClick={onToggle}
-        className={`relative w-12 h-7 rounded-full shrink-0 disabled:opacity-50 ${checked ? 'bg-primary' : 'bg-slate-300'}`}
+        className={`relative w-12 h-7 rounded-full shrink-0 disabled:opacity-50 ${checked ? 'bg-primary' : 'bg-[var(--color-border)]'}`}
       >
-        <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full transition-all ${checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
+        <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
       </button>
     </div>
   );

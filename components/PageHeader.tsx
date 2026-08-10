@@ -315,14 +315,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                     {group.items.map((action, ai) => (
                       <DropdownMenuItem
                         key={`${action.label}-${ai}`}
-                        className={action.danger ? 'text-rose-600 focus:text-rose-700' : undefined}
+                        className={action.danger ? 'text-[rgb(var(--color-danger))] focus:text-[rgb(var(--color-danger))]' : undefined}
                         onClick={action.onClick}
                         disabled={action.disabled}
                         data-modal-key={action.dataModalKey}
                       >
                         {renderActionIcon(
                           action.icon,
-                          action.danger ? 'text-rose-500' : 'text-[var(--color-text-muted)]',
+                          action.danger ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]',
                         )}
                         {action.label}
                       </DropdownMenuItem>

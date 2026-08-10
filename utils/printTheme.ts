@@ -1,4 +1,6 @@
 import type { PrintTemplateSettings, PrintThemePreset } from '../types';
+import { DEFAULT_THEME } from './dashboardConfig';
+import { resolveImageExportPalette } from './imageExportTheme';
 
 export interface PrintThemePalette {
   preset: PrintThemePreset;
@@ -70,21 +72,51 @@ export const getPrintThemePresetDefaults = (preset: PrintThemePreset): Omit<Prin
   PRESET_PALETTES[preset] ?? PRESET_PALETTES.erpnext
 );
 
+function readCssColor(varName: string): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  return value || undefined;
+}
+
+/** UI theme colors as print fallbacks when printTemplate omits a field. */
+export function readUiThemePrintFallbacks(): Partial<PrintThemePalette> {
+  return {
+    primary: readCssColor('--color-primary-hex') || DEFAULT_THEME.primaryColor,
+    text: readCssColor('--color-text') || DEFAULT_THEME.textColor || '#0f172a',
+    mutedText: readCssColor('--color-text-muted') || DEFAULT_THEME.mutedTextColor || '#64748b',
+    border: readCssColor('--color-border') || '#e2e8f0',
+    success: readCssColor('--color-success-hex') || DEFAULT_THEME.successColor,
+    warning: readCssColor('--color-warning-hex') || DEFAULT_THEME.warningColor,
+    danger: readCssColor('--color-danger-hex') || DEFAULT_THEME.dangerColor,
+  };
+}
+
+/**
+ * Accent for PNG / WhatsApp / print chrome:
+ * printTemplate.primaryColor → live UI theme → Factory default indigo.
+ */
+export function resolvePrintAccentHex(printPrimary?: string | null): string {
+  const raw = String(printPrimary || '').trim();
+  if (raw) return resolveImageExportPalette(raw).primary;
+  const ui = readCssColor('--color-primary-hex') || DEFAULT_THEME.primaryColor;
+  return resolveImageExportPalette(ui).primary;
+}
+
 export const getPrintThemePalette = (settings?: PrintTemplateSettings): PrintThemePalette => {
   const preset = settings?.printThemePreset ?? 'erpnext';
   const base = getPrintThemePresetDefaults(preset);
+  const ui = readUiThemePrintFallbacks();
   return {
     preset,
-    primary: settings?.primaryColor || base.primary,
-    text: settings?.textColor || base.text,
-    mutedText: settings?.mutedTextColor || base.mutedText,
-    border: settings?.borderColor || base.border,
+    primary: settings?.primaryColor || ui.primary || base.primary,
+    text: settings?.textColor || ui.text || base.text,
+    mutedText: settings?.mutedTextColor || ui.mutedText || base.mutedText,
+    border: settings?.borderColor || ui.border || base.border,
     tableHeaderBg: settings?.tableHeaderBgColor || base.tableHeaderBg,
     tableHeaderText: settings?.tableHeaderTextColor || base.tableHeaderText,
     tableRowAltBg: settings?.tableRowAltBgColor || base.tableRowAltBg,
-    success: settings?.accentSuccessColor || base.success,
-    warning: settings?.accentWarningColor || base.warning,
-    danger: settings?.accentDangerColor || base.danger,
+    success: settings?.accentSuccessColor || ui.success || base.success,
+    warning: settings?.accentWarningColor || ui.warning || base.warning,
+    danger: settings?.accentDangerColor || ui.danger || base.danger,
   };
 };
-

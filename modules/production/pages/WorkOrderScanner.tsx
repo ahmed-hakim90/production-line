@@ -440,7 +440,7 @@ export const WorkOrderScanner: React.FC = () => {
     return (
       <ModuleOpsPageShell eyebrow="الإنتاج" rangeLabel="ماسح أمر الشغل">
         <OpsDashPanel accent="production">
-          <p className="text-sm font-bold text-rose-600">رقم أمر الشغل غير صحيح.</p>
+          <p className="text-sm font-bold text-[rgb(var(--color-danger))]">رقم أمر الشغل غير صحيح.</p>
         </OpsDashPanel>
       </ModuleOpsPageShell>
     );
@@ -451,7 +451,7 @@ export const WorkOrderScanner: React.FC = () => {
       <ModuleOpsPageShell eyebrow="الإنتاج" rangeLabel="ماسح أمر الشغل">
         <OpsDashPanel accent="production">
           <div className="space-y-3">
-            <p className="text-sm font-bold text-slate-500">جاري تحميل أمر الشغل...</p>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">جاري تحميل أمر الشغل...</p>
             <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع لأوامر الشغل</Button>
           </div>
         </OpsDashPanel>
@@ -464,7 +464,7 @@ export const WorkOrderScanner: React.FC = () => {
       <ModuleOpsPageShell eyebrow="الإنتاج" rangeLabel="ماسح أمر الشغل">
         <OpsDashPanel accent="production">
           <div className="space-y-3">
-            <p className="text-sm font-bold text-rose-600">لا يمكنك فتح أمر شغل غير مرتبط بك كمشرف.</p>
+            <p className="text-sm font-bold text-[rgb(var(--color-danger))]">لا يمكنك فتح أمر شغل غير مرتبط بك كمشرف.</p>
             <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع لأوامر الشغل</Button>
           </div>
         </OpsDashPanel>
@@ -506,12 +506,12 @@ export const WorkOrderScanner: React.FC = () => {
       <p className="text-xs text-[var(--color-text-muted)] -mt-2 mb-2">المشرف: {supervisorName}</p>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-        <KPIBox label="وحدات مكتملة" value={summary.completedUnits} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600" />
-        <KPIBox label="وحدات قيد التشغيل" value={summary.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 text-amber-600" />
-        <KPIBox label="عمالة فعالة" value={summary.activeWorkers} icon="groups" colorClass="bg-blue-100 text-blue-600" />
-        <KPIBox label="متوسط السيكل تايم" value={summary.avgCycleSeconds} icon="timer" unit="ث" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
-        <KPIBox label={breakCountdown.label} value={breakCountdown.value} icon="free_breakfast" colorClass="bg-rose-100 text-rose-600" />
-        <KPIBox label="متبقي على نهاية الوردية اليوم" value={workEndCountdown} icon="event_available" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
+        <KPIBox label="وحدات مكتملة" value={summary.completedUnits} icon="check_circle" colorClass="bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]" />
+        <KPIBox label="وحدات قيد التشغيل" value={summary.inProgressUnits} icon="hourglass_top" colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]" />
+        <KPIBox label="عمالة فعالة" value={summary.activeWorkers} icon="groups" colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]" />
+        <KPIBox label="متوسط السيكل تايم" value={summary.avgCycleSeconds} icon="timer" unit="ث" colorClass="bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary))]/30 dark:text-[rgb(var(--color-secondary))]" />
+        <KPIBox label={breakCountdown.label} value={breakCountdown.value} icon="free_breakfast" colorClass="bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]" />
+        <KPIBox label="متبقي على نهاية الوردية اليوم" value={workEndCountdown} icon="event_available" colorClass="bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]" />
       </div>
 
       <OpsDashPanel title="تسجيل الاسكان" accent="production">
@@ -546,20 +546,20 @@ export const WorkOrderScanner: React.FC = () => {
             </div>
           </div>
         ) : (
-          <p className="text-sm font-bold text-slate-500">تم إغلاق أمر الشغل — عرض السجل فقط.</p>
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">تم إغلاق أمر الشغل — عرض السجل فقط.</p>
         )}
         {scanMsg && (
-          <p className="mt-3 text-sm font-bold text-emerald-600">{scanMsg}</p>
+          <p className="mt-3 text-sm font-bold text-[rgb(var(--color-success))]">{scanMsg}</p>
         )}
         {scanError && (
-          <p className="mt-3 text-sm font-bold text-rose-600">{scanError}</p>
+          <p className="mt-3 text-sm font-bold text-[rgb(var(--color-danger))]">{scanError}</p>
         )}
       </OpsDashPanel>
 
       <OpsDashPanel
         title="سجل الوحدات"
         accent="production"
-        action={<span className="text-xs text-slate-400">آخر {sessions.length} جلسة</span>}
+        action={<span className="text-xs text-[var(--color-text-muted)]">آخر {sessions.length} جلسة</span>}
         bodyClassName="p-0 overflow-hidden"
       >
         <div className="overflow-x-auto p-4 pt-0">
@@ -578,7 +578,7 @@ export const WorkOrderScanner: React.FC = () => {
             <tbody>
               {sessions.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">لا توجد جلسات اسكان بعد</td>
+                  <td colSpan={7} className="py-8 text-center text-[var(--color-text-muted)]">لا توجد جلسات اسكان بعد</td>
                 </tr>
               )}
               {sessions.map((session) => (
@@ -594,7 +594,7 @@ export const WorkOrderScanner: React.FC = () => {
                   <td className="py-3 px-3 text-[var(--color-text-muted)] font-mono text-xs">{formatTs(session.outAt)}</td>
                   <td className="py-3 px-3 font-mono text-xs font-bold">
                     {session.status === 'open' ? (
-                      <span className="text-amber-600">
+                      <span className="text-[rgb(var(--color-warning))]">
                         {formatElapsed(scanEventService.computeEffectiveCycleSeconds({
                           inAt: session.inAt,
                           outAtMs: timerNow,
@@ -634,15 +634,15 @@ export const WorkOrderScanner: React.FC = () => {
 
       {closeModalOpen && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !closeBusy && setCloseModalOpen(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => !closeBusy && setCloseModalOpen(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-bold mb-1">تأكيد إنهاء أمر الشغل</h3>
             <p className="text-xs text-[var(--color-text-muted)] mb-4">{workOrder.workOrderNumber} — {productName}</p>
 
             <div className="space-y-3">
-              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/50 p-3">
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/50 p-3">
                 <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">كمية الاسكان الحالية (لحظي)</p>
-                <p className="text-xl font-bold text-emerald-600">{formatNumber(summary.completedUnits)}</p>
+                <p className="text-xl font-bold text-[rgb(var(--color-success))]">{formatNumber(summary.completedUnits)}</p>
               </div>
 
               <div>

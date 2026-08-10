@@ -99,35 +99,35 @@ function activityVisual(activity: CustomerActivity): {
   if (action.startsWith('repair.')) {
     return {
       Icon: Wrench,
-      tone: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
-      dot: 'bg-sky-500',
+      tone: 'bg-[rgb(var(--color-primary)/0.1)]0/15 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]',
+      dot: 'bg-[rgb(var(--color-primary)/0.1)]0',
     };
   }
   if (action === 'customer.created') {
     return {
       Icon: UserPlus,
-      tone: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-      dot: 'bg-emerald-500',
+      tone: 'bg-[rgb(var(--color-success)/0.1)]0/15 text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]',
+      dot: 'bg-[rgb(var(--color-success)/0.1)]0',
     };
   }
   if (action.includes('import') || action.includes('metrics')) {
     return {
       Icon: Upload,
-      tone: 'bg-violet-500/15 text-violet-700 dark:text-violet-300',
-      dot: 'bg-violet-500',
+      tone: 'bg-[rgb(var(--color-secondary)/0.1)]0/15 text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]',
+      dot: 'bg-[rgb(var(--color-secondary)/0.1)]0',
     };
   }
   if (action.includes('follow_up')) {
     return {
       Icon: PhoneCall,
-      tone: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
-      dot: 'bg-amber-500',
+      tone: 'bg-[rgb(var(--color-warning)/0.1)]0/15 text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]',
+      dot: 'bg-[rgb(var(--color-warning)/0.1)]0',
     };
   }
   return {
     Icon: Activity,
-    tone: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
-    dot: 'bg-slate-400',
+    tone: 'bg-[var(--color-surface-hover)] text-[var(--color-text)] dark:text-[var(--color-text-muted)]',
+    dot: 'bg-[var(--color-text-muted)]',
   };
 }
 
@@ -144,7 +144,7 @@ function DataRow({
 }) {
   return (
     <div className="flex items-start gap-3 rounded-lg px-1 py-2">
-      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 dark:bg-muted dark:text-muted-foreground">
+      <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] dark:bg-muted dark:text-muted-foreground">
         <Icon className="size-4" aria-hidden />
       </span>
       <div className="min-w-0 flex-1 space-y-0.5">
@@ -520,7 +520,7 @@ export const CustomerDetail: React.FC = () => {
       <ModuleOpsPageShell eyebrow="بطاقة العميل" actions={backAction}>
         <OpsDashPanel title="تعذر عرض البيانات" accent="customers">
           <div className="flex flex-col items-start gap-3">
-            <p className="text-sm text-rose-700">{error || 'العميل غير موجود.'}</p>
+            <p className="text-sm text-[rgb(var(--color-danger))]">{error || 'العميل غير موجود.'}</p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={() => void load()}>
                 إعادة المحاولة
@@ -542,9 +542,9 @@ export const CustomerDetail: React.FC = () => {
     balance == null
       ? 'text-muted-foreground'
       : balance > 0
-        ? 'text-amber-700 dark:text-amber-400'
+        ? 'text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]'
         : balance < 0
-          ? 'text-emerald-700 dark:text-emerald-400'
+          ? 'text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]'
           : 'text-foreground';
 
   const filterChips: Array<{ key: ActivityFilter; label: string; count: number }> = [
@@ -638,7 +638,7 @@ export const CustomerDetail: React.FC = () => {
           </DialogHeader>
           <div className="space-y-2 text-sm text-muted-foreground">
             <p>العميل لديه PIN ثابت ومفعل بالفعل، ولا يحتاج إلى PIN جديد عند كل دخول.</p>
-            <p className="font-medium text-rose-700">
+            <p className="font-medium text-[rgb(var(--color-danger))]">
               إعادة التعيين ستلغي الرقم الحالي فورًا، وتغلق جلسات البورتال السابقة، ثم تنشئ رقمًا ثابتًا جديدًا.
             </p>
           </div>
@@ -721,16 +721,16 @@ export const CustomerDetail: React.FC = () => {
               }}>السنة الحالية</Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => { setFinancialFrom(''); setFinancialTo(''); }}>كل التاريخ</Button>
             </div>
-          {financialError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{financialError}</div> : null}
+          {financialError ? <div className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] p-3 text-sm text-[rgb(var(--color-danger))]">{financialError}</div> : null}
           {financialLoading ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)}</div>
           ) : financial ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <MetricTile label="إجمالي ما دفعه العميل" value={fmtMoney(financial.summary.totalCustomerPaid)} hint="صيانة + فواتير بضاعة مرحّلة" valueClassName="text-emerald-700" />
+                <MetricTile label="إجمالي ما دفعه العميل" value={fmtMoney(financial.summary.totalCustomerPaid)} hint="صيانة + فواتير بضاعة مرحّلة" valueClassName="text-[rgb(var(--color-success))]" />
                 <MetricTile label="مدفوعات الصيانة" value={fmtMoney(financial.summary.repairPaid)} hint={`${financial.summary.repairJobs} طلب صيانة`} />
                 <MetricTile label="صافي البضاعة المحصل" value={fmtMoney(financial.summary.salesNetPaid)} hint={`${financial.summary.salesInvoices} فاتورة مرحّلة`} />
-                <MetricTile label="متبقي الصيانة" value={fmtMoney(financial.summary.repairBalanceDue)} valueClassName={financial.summary.repairBalanceDue > 0 ? 'text-amber-700' : 'text-foreground'} />
+                <MetricTile label="متبقي الصيانة" value={fmtMoney(financial.summary.repairBalanceDue)} valueClassName={financial.summary.repairBalanceDue > 0 ? 'text-[rgb(var(--color-warning))]' : 'text-foreground'} />
               </div>
 
               <div className="grid gap-3 lg:grid-cols-3">
@@ -744,17 +744,17 @@ export const CustomerDetail: React.FC = () => {
                   </div>
                 </div>
                 <div className={cn('space-y-2 p-3', NESTED_TILE)}>
-                  <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-4 text-violet-600" />الضمان</div>
+                  <div className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-4 text-[rgb(var(--color-secondary))]" />الضمان</div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>القيمة المعفاة<br /><strong>{fmtMoney(financial.summary.warrantyAllowances)}</strong></div>
                     <div>التكلفة الفعلية<br /><strong>{fmtMoney(financial.summary.warrantyActualCost)}</strong></div>
                     <div>تكلفة القطع<br /><strong>{fmtMoney(financial.summary.warrantyPartsCost)}</strong></div>
                     <div>تكلفة الخدمات<br /><strong>{fmtMoney(financial.summary.warrantyServiceCost)}</strong></div>
                   </div>
-                  {financial.summary.legacyIncompleteWarrantyJobs > 0 ? <p className="text-xs text-amber-700">{financial.summary.legacyIncompleteWarrantyJobs} طلب ضمان قديم به قيم غير متاحة ولم يتم تخمينها.</p> : null}
+                  {financial.summary.legacyIncompleteWarrantyJobs > 0 ? <p className="text-xs text-[rgb(var(--color-warning))]">{financial.summary.legacyIncompleteWarrantyJobs} طلب ضمان قديم به قيم غير متاحة ولم يتم تخمينها.</p> : null}
                 </div>
                 <div className={cn('space-y-2 p-3', NESTED_TILE)}>
-                  <div className="flex items-center gap-2 font-semibold"><ReceiptText className="size-4 text-sky-600" />فواتير البضاعة</div>
+                  <div className="flex items-center gap-2 font-semibold"><ReceiptText className="size-4 text-[rgb(var(--color-primary))]" />فواتير البضاعة</div>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>قبل الخصم<br /><strong>{fmtMoney(financial.summary.salesGross)}</strong></div>
                     <div>الخصومات<br /><strong>{fmtMoney(financial.summary.salesDiscounts)}</strong></div>
@@ -784,8 +784,8 @@ export const CustomerDetail: React.FC = () => {
                         return <tr key={String(raw.id)} className="border-b align-top">
                           <td className="p-2"><Link className="font-medium text-primary hover:underline" to={withTenantPath(tenantSlug, `/repair/jobs/${String(raw.id)}`)}>{String(raw.receiptNo)}</Link><div className="text-xs text-muted-foreground">{String(raw.status)}</div></td>
                           <td className="p-2 whitespace-nowrap">{String(raw.createdAt || '').slice(0, 10) || '—'}</td>
-                          <td className="p-2"><div>{services.map((r) => `${String(r.name)} × ${Number(r.quantity || 0)} (قيمة ${fmtMoney(r.lineTotal)}${raw.warranty ? ` · تكلفة ${fmtMoney(r.internalCostTotal)}` : ''})`).join('، ') || '—'}</div>{parts.length ? <div className="text-xs text-muted-foreground">قطع: {parts.map((r) => `${String(r.name)} × ${Number(r.quantity || 0)} (قيمة ${fmtMoney(r.lineTotal)})`).join('، ')}</div> : null}{raw.warranty && partsUsed.length ? <div className="text-xs text-violet-700">تكلفة فعلية للقطع: {partsUsed.map((r) => `${String(r.partName || 'قطعة')} ${fmtMoney(r.totalCostSnapshot)}`).join('، ')}</div> : null}</td>
-                          <td className="p-2">{raw.warranty ? 'داخل الضمان' : 'خارج الضمان'}{raw.legacyIncomplete ? <div className="text-xs text-amber-700">بيانات قديمة ناقصة</div> : null}</td>
+                          <td className="p-2"><div>{services.map((r) => `${String(r.name)} × ${Number(r.quantity || 0)} (قيمة ${fmtMoney(r.lineTotal)}${raw.warranty ? ` · تكلفة ${fmtMoney(r.internalCostTotal)}` : ''})`).join('، ') || '—'}</div>{parts.length ? <div className="text-xs text-muted-foreground">قطع: {parts.map((r) => `${String(r.name)} × ${Number(r.quantity || 0)} (قيمة ${fmtMoney(r.lineTotal)})`).join('، ')}</div> : null}{raw.warranty && partsUsed.length ? <div className="text-xs text-[rgb(var(--color-secondary))]">تكلفة فعلية للقطع: {partsUsed.map((r) => `${String(r.partName || 'قطعة')} ${fmtMoney(r.totalCostSnapshot)}`).join('، ')}</div> : null}</td>
+                          <td className="p-2">{raw.warranty ? 'داخل الضمان' : 'خارج الضمان'}{raw.legacyIncomplete ? <div className="text-xs text-[rgb(var(--color-warning))]">بيانات قديمة ناقصة</div> : null}</td>
                           <td className="p-2 whitespace-nowrap">{fmtMoney(raw.grossAmount)}</td><td className="p-2 whitespace-nowrap">{fmtMoney(raw.warranty ? raw.warrantyAllowance : raw.discountAmount)}</td><td className="p-2 whitespace-nowrap">{fmtMoney(raw.paidAmount)}</td><td className="p-2 whitespace-nowrap">{fmtMoney(raw.balanceDue)}</td><td className="p-2 whitespace-nowrap">{raw.warranty ? fmtMoney(raw.warrantyActualCost) : '—'}</td>
                         </tr>;
                       })}
@@ -793,7 +793,7 @@ export const CustomerDetail: React.FC = () => {
                   </table>
                 ) : financialTab === 'invoices' ? (
                   <table className="w-full min-w-[850px] text-sm"><thead><tr className="border-b text-right text-xs text-muted-foreground"><th className="p-2">الفاتورة</th><th className="p-2">التاريخ</th><th className="p-2">البنود</th><th className="p-2">الحالة</th><th className="p-2">الإجمالي</th><th className="p-2">الخصم</th><th className="p-2">الصافي</th></tr></thead><tbody>
-                    {financialVisibleRows.map((raw) => { const lines = Array.isArray(raw.lines) ? raw.lines as Array<Record<string, unknown>> : []; return <tr key={String(raw.id)} className="border-b align-top"><td className="p-2"><Link className="font-medium text-primary hover:underline" to={withTenantPath(tenantSlug, `/repair/sales-invoice?invoice=${encodeURIComponent(String(raw.invoiceNo))}`)}>{String(raw.invoiceNo)}</Link></td><td className="p-2">{String(raw.postedAt || raw.createdAt || '').slice(0, 10)}</td><td className="p-2">{lines.map((r) => `${String(r.partName || r.name)} × ${Number(r.quantity || 0)}`).join('، ')}</td><td className="p-2">{String(raw.status)}{raw.fullDiscount ? <div className="text-xs text-violet-700">خصم كامل</div> : null}</td><td className="p-2">{fmtMoney(raw.grossAmount)}</td><td className="p-2">{fmtMoney(raw.discountAmount)}</td><td className="p-2">{fmtMoney(raw.netAmount)}</td></tr>; })}
+                    {financialVisibleRows.map((raw) => { const lines = Array.isArray(raw.lines) ? raw.lines as Array<Record<string, unknown>> : []; return <tr key={String(raw.id)} className="border-b align-top"><td className="p-2"><Link className="font-medium text-primary hover:underline" to={withTenantPath(tenantSlug, `/repair/sales-invoice?invoice=${encodeURIComponent(String(raw.invoiceNo))}`)}>{String(raw.invoiceNo)}</Link></td><td className="p-2">{String(raw.postedAt || raw.createdAt || '').slice(0, 10)}</td><td className="p-2">{lines.map((r) => `${String(r.partName || r.name)} × ${Number(r.quantity || 0)}`).join('، ')}</td><td className="p-2">{String(raw.status)}{raw.fullDiscount ? <div className="text-xs text-[rgb(var(--color-secondary))]">خصم كامل</div> : null}</td><td className="p-2">{fmtMoney(raw.grossAmount)}</td><td className="p-2">{fmtMoney(raw.discountAmount)}</td><td className="p-2">{fmtMoney(raw.netAmount)}</td></tr>; })}
                   </tbody></table>
                 ) : (
                   <table className="w-full min-w-[700px] text-sm"><thead><tr className="border-b text-right text-xs text-muted-foreground"><th className="p-2">رقم الدفعة</th><th className="p-2">طلب الصيانة</th><th className="p-2">التاريخ</th><th className="p-2">الوسيلة</th><th className="p-2">المبلغ</th><th className="p-2">الحالة</th></tr></thead><tbody>
@@ -880,7 +880,7 @@ export const CustomerDetail: React.FC = () => {
           accent="customers"
           className="lg:col-span-2"
           action={(
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium tabular-nums text-slate-700 dark:bg-muted dark:text-muted-foreground">
+            <span className="rounded-full bg-[var(--color-surface-hover)] px-2.5 py-1 text-xs font-medium tabular-nums text-[var(--color-text)] dark:bg-muted dark:text-muted-foreground">
               {activityCounts.all} حركة
             </span>
           )}
@@ -912,7 +912,7 @@ export const CustomerDetail: React.FC = () => {
               })}
             </div>
             {filteredActivities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-slate-50/80 px-4 py-12 text-center dark:bg-muted/30">
+              <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-[var(--color-bg)] px-4 py-12 text-center dark:bg-muted/30">
                 <Activity className="size-8 text-muted-foreground/70" aria-hidden />
                 <p className="text-sm font-medium text-foreground">
                   {activities.length === 0 ? 'لا توجد حركات مسجّلة بعد' : 'لا نتائج لهذا الفلتر'}
@@ -952,7 +952,7 @@ export const CustomerDetail: React.FC = () => {
                         <Icon className="size-4" aria-hidden />
                         <span className={cn('absolute -end-0.5 -top-0.5 size-2 rounded-full ring-2 ring-background', dot)} />
                       </span>
-                      <div className="min-w-0 flex-1 rounded-xl border bg-slate-50/50 px-3 py-2.5 dark:bg-muted/25">
+                      <div className="min-w-0 flex-1 rounded-xl border bg-[var(--color-bg)] px-3 py-2.5 dark:bg-muted/25">
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                           <time className="tabular-nums" dateTime={activity.at}>
                             {activity.at ? new Date(activity.at).toLocaleString('ar-EG') : '—'}

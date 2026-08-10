@@ -2,11 +2,14 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { Factory_TRANSFER_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
 import type { SuppliesReceiptOrder } from '../types';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 export interface SuppliesReceiptPrintProps {
   order: SuppliesReceiptOrder | null;
@@ -35,9 +38,11 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
     if (!order) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'suppliesReceipt');
     const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
-    const accent = ps.primaryColor || undefined;
+    const accent = resolvePrintAccentHex(ps.primaryColor);
+    const font = resolvePrintFont(ps);
     const groups = order.groups || [];
     const standalone = order.standaloneLines || [];
     const totalLines =
@@ -111,28 +116,43 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
     return (
       <FactoryPrintShell
         ref={ref}
-        companyName={ps.headerText || 'مؤسسة المغربي'}
+        companyName={doc.headerText || 'مؤسسة المغربي'}
         documentType="إذن استلام مستلزمات"
         printDate={printedAt}
         logoUrl={ps.logoUrl}
         brandAccent={accent}
-        footerTagline={ps.footerText?.trim() || Factory_TRANSFER_FOOTER_TAGLINE}
+        footerTagline={doc.footerText?.trim() || Factory_TRANSFER_FOOTER_TAGLINE}
+        extraLines={doc.customLines}
         paperWidth={paper.width}
         minHeight={paper.minHeight}
         padding={isThermal ? '4mm 3mm' : '10mm 12mm'}
         dense={isThermal}
-        metaCards={[
-          { label: 'رقم الإذن', value: order.referenceNo || '—' },
-          { label: 'التاريخ', value: createdAt },
-          ...(supplyOrderNo ? [{ label: 'رقم أمر التوريد', value: supplyOrderNo }] : []),
-          { label: 'الحالة', value: statusLabel },
-        ]}
-        kpis={[
-          { label: 'المخزن', value: order.warehouseName || order.warehouseId || '—', tone: 'indigo' },
-          { label: 'عدد الأسطر', value: totalLines, tone: 'default' },
-          { label: 'إجمالي الكميات', value: fmtQty(totalQty), tone: 'green' },
-        ]}
-        signatures={[{ title: 'المستلم' }, { title: 'المعتمد' }, { title: 'المخازن' }]}
+        fontFamily={font.fontFamily}
+        fontSize={isThermal ? font.denseFontSize : font.fontSize}
+        metaCards={
+          doc.isFieldVisible('meta')
+            ? [
+                { label: 'رقم الإذن', value: order.referenceNo || '—' },
+                { label: 'التاريخ', value: createdAt },
+                ...(supplyOrderNo ? [{ label: 'رقم أمر التوريد', value: supplyOrderNo }] : []),
+                { label: 'الحالة', value: statusLabel },
+              ]
+            : undefined
+        }
+        kpis={
+          doc.isFieldVisible('kpis')
+            ? [
+                { label: 'المخزن', value: order.warehouseName || order.warehouseId || '—', tone: 'indigo' },
+                { label: 'عدد الأسطر', value: totalLines, tone: 'default' },
+                { label: 'إجمالي الكميات', value: fmtQty(totalQty), tone: 'green' },
+              ]
+            : undefined
+        }
+        signatures={
+          doc.isFieldVisible('signatures')
+            ? [{ title: 'المستلم' }, { title: 'المعتمد' }, { title: 'المخازن' }]
+            : undefined
+        }
       >
         {!order.id ? (
           <div className="mb-4 rounded-lg border border-dashed border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-extrabold text-amber-800">
@@ -140,7 +160,7 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
           </div>
         ) : null}
 
-        {order.note?.trim() ? (
+        {doc.isFieldVisible('notes') && order.note?.trim() ? (
           <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
             <p className="text-[10px] font-bold text-slate-500">ملاحظة</p>
             <p className="mt-1 text-[12px] font-extrabold text-slate-800">{order.note}</p>

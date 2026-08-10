@@ -54,6 +54,15 @@ export const buildGlobalPrintPageStyle = (settings?: PrintTemplateSettings): str
         margin-inline: 0 !important;
         box-sizing: border-box !important;
       }
+      .print-root > div,
+      .print-report > div,
+      .arabic-export-root > div {
+        width: 100% !important;
+        max-width: none !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        box-sizing: border-box !important;
+      }
     }
   `;
 };

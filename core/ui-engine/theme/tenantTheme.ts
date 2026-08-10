@@ -4,6 +4,7 @@ import type { ThemeSettings } from '@/types';
 import { DEFAULT_THEME } from '@/utils/dashboardConfig';
 import { applyUiDensity, writeUiDensity } from '@/core/ui-engine/density/uiDensity';
 import { buildThemeSettingsCssVars, toRgbChannels } from '@/core/ui-engine/theme/themeCssVars';
+import { darkenHex, lightenHex } from '@/utils/imageExportTheme';
 
 export type { ThemePresetForCss } from '@/core/ui-engine/theme/themeCssVars';
 export { buildThemeSettingsCssVars, toRgbChannels } from '@/core/ui-engine/theme/themeCssVars';
@@ -385,7 +386,16 @@ export function applyTenantTheme(theme: TenantTheme, themeSettings?: ThemeSettin
   root.style.setProperty('--color-text', theme.colorText);
   root.style.setProperty('--color-primary', toRgbChannels(theme.primaryColor));
   root.style.setProperty('--color-primary-hex', theme.primaryColor);
+  root.style.setProperty('--splash-brand', theme.primaryColor);
+  root.style.setProperty('--splash-brand-dark', darkenHex(theme.primaryColor, 0.22));
+  root.style.setProperty('--splash-brand-light', lightenHex(theme.primaryColor, 0.12));
   root.style.setProperty('--color-background', theme.colorBg);
+  try {
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) themeColorMeta.setAttribute('content', theme.primaryColor);
+  } catch {
+    /* ignore */
+  }
   root.style.setProperty('--color-sidebar-bg', theme.colorSidebarBg);
   root.style.setProperty('--color-sidebar-text', theme.colorSidebarText);
   root.style.setProperty('--color-sidebar-border', theme.colorBorder);

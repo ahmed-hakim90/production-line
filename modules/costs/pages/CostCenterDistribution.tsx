@@ -539,7 +539,7 @@ export const CostCenterDistribution: React.FC = () => {
     return (
       <ModuleOpsPageShell eyebrow="توزيع مركز التكلفة">
         <OpsDashPanel title="مركز غير موجود" accent="costs">
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">error_outline</span>
             <p className="font-bold">مركز التكلفة غير موجود</p>
             <Button variant="ghost" className="mt-4" onClick={() => navigate('/accounting/cost-centers')}>العودة</Button>
@@ -592,7 +592,7 @@ export const CostCenterDistribution: React.FC = () => {
                 onValueChange={(v) => setSourceMonth(v === 'none' ? '' : v)}
                 disabled={availableSourceMonths.length === 0}
               >
-                <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] rounded-lg border border-slate-200 bg-white text-sm">
+                <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] text-sm">
                   <SelectValue placeholder="اختر شهرًا سابقًا" />
                 </SelectTrigger>
                 <SelectContent>
@@ -660,7 +660,7 @@ export const CostCenterDistribution: React.FC = () => {
           <button
             key={m}
             onClick={() => setSelectedMonth(m)}
-            className={`erp-date-seg-btn${m === selectedMonth ? ' active bg-[#4F46E5] text-white hover:bg-[#4338CA]' : ''}`}
+            className={`erp-date-seg-btn${m === selectedMonth ? ' active bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary))]' : ''}`}
           >
             {new Date(m + '-01').toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
           </button>
@@ -718,7 +718,7 @@ export const CostCenterDistribution: React.FC = () => {
                 </div>
               )}
           </div>
-          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center lg:col-span-2">
+          <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-4 text-center lg:col-span-2">
             <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">يومي ({appliedWorkingDays} يوم)</p>
             <p className="text-lg font-bold text-primary">
               {effectiveMonthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(effectiveMonthlyAmount / appliedWorkingDays) : '—'}
@@ -748,22 +748,22 @@ export const CostCenterDistribution: React.FC = () => {
         </p>
       </OpsDashPanel>
   {/* Summary */}
-  <div className="mt-4 flex items-center justify-between flex-wrap gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)]">
+  <div className="mt-4 flex items-center justify-between flex-wrap gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)]">
                 <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
                   <div>
-                    <p className="text-[11px] font-bold text-slate-400">إجمالي التوزيع</p>
-                    <p className={`text-lg font-bold ${totalPercentage > 100 ? 'text-rose-500' : 'text-slate-800'}`}>
+                    <p className="text-[11px] font-bold text-[var(--color-text-muted)]">إجمالي التوزيع</p>
+                    <p className={`text-lg font-bold ${totalPercentage > 100 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text)]'}`}>
                       {totalPercentage.toFixed(1)}%
                     </p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-bold text-slate-400">المتبقي</p>
-                    <p className={`text-lg font-bold ${remainingPercentage < 0 ? 'text-rose-500' : 'text-emerald-600'}`}>
+                    <p className="text-[11px] font-bold text-[var(--color-text-muted)]">المتبقي</p>
+                    <p className={`text-lg font-bold ${remainingPercentage < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
                       {remainingPercentage.toFixed(1)}%
                     </p>
                   </div>
                   <div>
-                    <p className="text-[11px] font-bold text-slate-400">المبلغ الموزع</p>
+                    <p className="text-[11px] font-bold text-[var(--color-text-muted)]">المبلغ الموزع</p>
                     <p className="text-lg font-bold text-primary">
                       {formatCost(effectiveMonthlyAmount * (totalPercentage / 100))} ج.م
                     </p>
@@ -771,7 +771,7 @@ export const CostCenterDistribution: React.FC = () => {
                 </div>
               </div>
       {copyNotice && (
-        <p className="text-xs font-bold text-emerald-600 -mt-2 flex items-center gap-1">
+        <p className="text-xs font-bold text-[rgb(var(--color-success))] -mt-2 flex items-center gap-1">
           <span className="material-icons-round text-sm">check_circle</span>
           {copyNotice}
         </p>
@@ -902,7 +902,7 @@ export const CostCenterDistribution: React.FC = () => {
 
              
               {totalPercentage > 100 && (
-                <p className="mt-2 text-xs font-bold text-rose-500 flex items-center gap-1">
+                <p className="mt-2 text-xs font-bold text-[rgb(var(--color-danger))] flex items-center gap-1">
                   <span className="material-icons-round text-sm">error</span>
                   إجمالي النسب يتجاوز 100% — يرجى تعديل القيم
                 </p>

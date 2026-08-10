@@ -179,7 +179,7 @@ export const DelegationManagement: React.FC = () => {
                 <select
                   value={toEmployeeId}
                   onChange={(e) => setToEmployeeId(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
                   <option value="">اختر موظفاً...</option>
                   {eligibleDelegatees.map((emp: FirestoreEmployee) => (
@@ -195,7 +195,7 @@ export const DelegationManagement: React.FC = () => {
                     type="button"
                     onClick={() => setRequestTypes('all')}
                     className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
-                      requestTypes === 'all' ? 'bg-primary text-white' : 'bg-[#f0f2f5] text-slate-500'
+                      requestTypes === 'all' ? 'bg-primary text-white' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
                     }`}
                   >الكل</button>
                   {(Object.entries(REQUEST_TYPE_LABELS) as [ApprovalRequestType, string][]).map(([key, label]) => (
@@ -206,7 +206,7 @@ export const DelegationManagement: React.FC = () => {
                       className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
                         requestTypes !== 'all' && requestTypes.includes(key)
                           ? 'bg-primary text-white'
-                          : 'bg-[#f0f2f5] text-slate-500'
+                          : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
                       }`}
                     >{label}</button>
                   ))}
@@ -219,7 +219,7 @@ export const DelegationManagement: React.FC = () => {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div className="space-y-1.5">
@@ -228,7 +228,7 @@ export const DelegationManagement: React.FC = () => {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </div>
             </div>
@@ -244,8 +244,8 @@ export const DelegationManagement: React.FC = () => {
       {delegations.length === 0 ? (
         <OpsDashPanel accent="hr">
           <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">swap_horiz</span>
-            <p className="text-sm font-bold text-slate-500">لا توجد تفويضات حالياً</p>
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">swap_horiz</span>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد تفويضات حالياً</p>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">أنشئ تفويضاً لتمكين شخص آخر من الموافقة نيابةً عنك</p>
           </div>
         </OpsDashPanel>
@@ -258,14 +258,14 @@ export const DelegationManagement: React.FC = () => {
 
             return (
               <div key={d.id} className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border p-5 ${
-                active ? 'border-emerald-200' : 'border-[var(--color-border)] opacity-70'
+                active ? 'border-[rgb(var(--color-success)/0.25)]' : 'border-[var(--color-border)] opacity-70'
               }`}>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center ${
-                      active ? 'bg-emerald-100' : 'bg-[#f0f2f5]'
+                      active ? 'bg-[rgb(var(--color-success)/0.1)]' : 'bg-[var(--color-surface-hover)]'
                     }`}>
-                      <span className={`material-icons-round ${active ? 'text-emerald-500' : 'text-slate-400'}`}>swap_horiz</span>
+                      <span className={`material-icons-round ${active ? 'text-[rgb(var(--color-success))]' : 'text-[var(--color-text-muted)]'}`}>swap_horiz</span>
                     </div>
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -292,7 +292,7 @@ export const DelegationManagement: React.FC = () => {
                     <Button
                       variant="outline"
                       onClick={() => handleDeactivate(d.id!)}
-                      className="!text-rose-500 !border-rose-200 hover:!bg-rose-50"
+                      className="!text-[rgb(var(--color-danger))] !border-[rgb(var(--color-danger)/0.25)] hover:!bg-[rgb(var(--color-danger)/0.1)]"
                     >
                       <span className="material-icons-round text-sm">block</span>
                       إلغاء التفويض

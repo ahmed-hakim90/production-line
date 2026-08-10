@@ -165,15 +165,15 @@ function StarRating({
             disabled={disabled}
             onClick={() => onChange(star)}
             className={`relative inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors sm:h-5 sm:w-5 sm:rounded-none ${
-              disabled ? 'cursor-default opacity-80' : 'hover:text-amber-500'
+              disabled ? 'cursor-default opacity-80' : 'hover:text-[rgb(var(--color-warning))]'
             }`}
             aria-label={`تقييم ${star} من 5`}
             title={`تقييم ${star} من 5`}
           >
-            <Star aria-hidden="true" className="h-5 w-5 text-slate-300 sm:h-4 sm:w-4" strokeWidth={2.2} />
+            <Star aria-hidden="true" className="h-5 w-5 text-[var(--color-text-muted)] sm:h-4 sm:w-4" strokeWidth={2.2} />
             <span
               aria-hidden="true"
-              className="absolute inset-0 inline-flex items-center justify-center overflow-hidden text-amber-400"
+              className="absolute inset-0 inline-flex items-center justify-center overflow-hidden text-[rgb(var(--color-warning))]"
               style={{ clipPath: `inset(0 0 0 ${100 - fillPercent}%)` }}
             >
               <Star className="h-5 w-5 fill-current sm:h-4 sm:w-4" strokeWidth={2.2} />
@@ -765,15 +765,15 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
         </div>
 
         <div className="grid grid-cols-1 gap-3 border-b border-[var(--color-border)] p-4 sm:grid-cols-3">
-          <div className="rounded-xl bg-slate-50 p-3 text-center">
+          <div className="rounded-xl bg-[var(--color-bg)] p-3 text-center">
             <div className="text-xs font-bold text-[var(--color-text-muted)]">العمالة المعروضة</div>
             <div className="mt-1 text-xl font-black text-[var(--color-text)]">{teamWorkerRows.length}</div>
           </div>
-          <div className="rounded-xl bg-slate-50 p-3 text-center">
+          <div className="rounded-xl bg-[var(--color-bg)] p-3 text-center">
             <div className="text-xs font-bold text-[var(--color-text-muted)]">تقارير الفترة</div>
             <div className="mt-1 text-xl font-black text-[var(--color-text)]">{periodReports.length}</div>
           </div>
-          <div className="rounded-xl bg-slate-50 p-3 text-center">
+          <div className="rounded-xl bg-[var(--color-bg)] p-3 text-center">
             <div className="text-xs font-bold text-[var(--color-text-muted)]">خطط الفترة</div>
             <div className="mt-1 text-xl font-black text-[var(--color-text)]">{periodPlans.length}</div>
           </div>
@@ -799,15 +799,15 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
                       <div className="min-w-0">
                         <h4 className="truncate text-base font-bold text-[var(--color-text)]">{row.workerName}</h4>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-[var(--color-text-muted)]">
-                          {row.workerCode && <span className="rounded-full bg-slate-100 px-2 py-1">{row.workerCode}</span>}
+                          {row.workerCode && <span className="rounded-full bg-[var(--color-surface-hover)] px-2 py-1">{row.workerCode}</span>}
                           {row.laborRole && (
                             <span className="rounded-full bg-primary/10 px-2 py-1 text-primary">
                               {LINE_WORKER_LABOR_ROLE_LABELS[row.laborRole]}
                             </span>
                           )}
-                          {row.lineId && <span className="rounded-full bg-slate-100 px-2 py-1">{row.lineName || getLineName(row.lineId)}</span>}
+                          {row.lineId && <span className="rounded-full bg-[var(--color-surface-hover)] px-2 py-1">{row.lineName || getLineName(row.lineId)}</span>}
                           {row.isPresent !== undefined && (
-                            <span className={`rounded-full px-2 py-1 ${row.isPresent ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                            <span className={`rounded-full px-2 py-1 ${row.isPresent ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
                               {getPresenceLabel(row.isPresent)}
                             </span>
                           )}
@@ -818,10 +818,10 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
                       </Badge>
                     </div>
                     {!row.worker?.id && (
-                      <p className="mt-2 text-xs font-bold text-amber-600">سيتم إنشاء/ربط ملف العامل عند الحفظ</p>
+                      <p className="mt-2 text-xs font-bold text-[rgb(var(--color-warning))]">سيتم إنشاء/ربط ملف العامل عند الحفظ</p>
                     )}
                     <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[var(--color-bg)] p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">حالة الهدف</div>
                         <div className="mt-1">
                           <Badge variant={row.isPresent === false ? 'danger' : !row.productionTargetApplicable ? 'neutral' : row.achieved ? 'success' : 'warning'}>
@@ -829,7 +829,7 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
                           </Badge>
                         </div>
                       </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[var(--color-bg)] p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">نسبة الهدف</div>
                         <div className="mt-1 text-lg font-bold text-[var(--color-text)]">
                           {row.productionTargetApplicable ? `${row.achievementPercent}%` : '-'}
@@ -883,7 +883,7 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
                       </Button>
                     </div>
                     {actionError && (
-                      <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                      <div className="mt-2 rounded-lg bg-[rgb(var(--color-danger)/0.1)] px-3 py-2 text-xs font-bold text-[rgb(var(--color-danger))]">
                         {actionError}
                       </div>
                     )}
@@ -930,11 +930,11 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
                             )}
                             {row.lineId && <span>{row.lineName || getLineName(row.lineId)}</span>}
                             {row.isPresent !== undefined && (
-                              <span className={row.isPresent ? 'text-emerald-700' : 'text-rose-700'}>
+                              <span className={row.isPresent ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'}>
                                 {getPresenceLabel(row.isPresent)}
                               </span>
                             )}
-                            {!row.worker?.id && <span className="text-amber-600">سيتم إنشاء/ربط ملف العامل عند الحفظ</span>}
+                            {!row.worker?.id && <span className="text-[rgb(var(--color-warning))]">سيتم إنشاء/ربط ملف العامل عند الحفظ</span>}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -974,7 +974,7 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
                             {savingRatingWorkerId === (row.worker?.id || row.workerId) ? 'جارٍ الحفظ...' : 'حفظ الملاحظة'}
                           </Button>
                           {actionError && (
-                            <div className="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] font-bold text-rose-700">
+                            <div className="mt-2 rounded-lg bg-[rgb(var(--color-danger)/0.1)] px-2 py-1.5 text-[11px] font-bold text-[rgb(var(--color-danger))]">
                               {actionError}
                             </div>
                           )}

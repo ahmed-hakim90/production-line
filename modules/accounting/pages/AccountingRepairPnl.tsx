@@ -175,19 +175,19 @@ export const AccountingRepairPnl: React.FC = () => {
               <div className="rounded-xl border p-3"><Skeleton className="h-5 w-full" /></div>
             ) : (
               [
-                { label: "إيراد خدمات الصيانة", value: pnl.serviceRevenue, tone: "text-emerald-700" },
-                { label: "إيراد قطع الغيار", value: pnl.partsRevenue, tone: "text-emerald-700" },
+                { label: "إيراد خدمات الصيانة", value: pnl.serviceRevenue, tone: "text-[rgb(var(--color-success))]" },
+                { label: "إيراد قطع الغيار", value: pnl.partsRevenue, tone: "text-[rgb(var(--color-success))]" },
                 ...(pnl.miscIncome > 0
-                  ? [{ label: "إيرادات متنوعة", value: pnl.miscIncome, tone: "text-emerald-700" }]
+                  ? [{ label: "إيرادات متنوعة", value: pnl.miscIncome, tone: "text-[rgb(var(--color-success))]" }]
                   : []),
-                { label: "خصومات", value: pnl.discounts, tone: "text-rose-700" },
+                { label: "خصومات", value: pnl.discounts, tone: "text-[rgb(var(--color-danger))]" },
                 { label: "صافي الإيراد", value: pnl.netRevenue, tone: "font-semibold" },
-                { label: "تكلفة قطع الغيار", value: pnl.partsCogs, tone: "text-rose-700" },
-                { label: "مصروفات تشغيل الخزينة", value: pnl.operatingExpenses, tone: "text-rose-700" },
+                { label: "تكلفة قطع الغيار", value: pnl.partsCogs, tone: "text-[rgb(var(--color-danger))]" },
+                { label: "مصروفات تشغيل الخزينة", value: pnl.operatingExpenses, tone: "text-[rgb(var(--color-danger))]" },
                 {
                   label: "ربح تشغيل الصيانة",
                   value: pnl.operatingProfit,
-                  tone: pnl.operatingProfit >= 0 ? "font-bold text-emerald-700" : "font-bold text-rose-700",
+                  tone: pnl.operatingProfit >= 0 ? "font-bold text-[rgb(var(--color-success))]" : "font-bold text-[rgb(var(--color-danger))]",
                 },
               ].map((row) => (
                 <div
@@ -219,27 +219,27 @@ export const AccountingRepairPnl: React.FC = () => {
                   <>
                     <tr>
                       <td className="px-4 py-2.5">إيراد خدمات الصيانة</td>
-                      <td className="px-4 py-2.5 text-center tabular-nums text-emerald-700">
+                      <td className="px-4 py-2.5 text-center tabular-nums text-[rgb(var(--color-success))]">
                         {formatAccountingMoney(pnl.serviceRevenue)}
                       </td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2.5">إيراد قطع الغيار</td>
-                      <td className="px-4 py-2.5 text-center tabular-nums text-emerald-700">
+                      <td className="px-4 py-2.5 text-center tabular-nums text-[rgb(var(--color-success))]">
                         {formatAccountingMoney(pnl.partsRevenue)}
                       </td>
                     </tr>
                     {pnl.miscIncome > 0 ? (
                       <tr>
                         <td className="px-4 py-2.5">إيرادات متنوعة</td>
-                        <td className="px-4 py-2.5 text-center tabular-nums text-emerald-700">
+                        <td className="px-4 py-2.5 text-center tabular-nums text-[rgb(var(--color-success))]">
                           {formatAccountingMoney(pnl.miscIncome)}
                         </td>
                       </tr>
                     ) : null}
                     <tr>
                       <td className="px-4 py-2.5">خصومات</td>
-                      <td className="px-4 py-2.5 text-center tabular-nums text-rose-700">
+                      <td className="px-4 py-2.5 text-center tabular-nums text-[rgb(var(--color-danger))]">
                         {formatAccountingMoney(pnl.discounts)}
                       </td>
                     </tr>
@@ -251,13 +251,13 @@ export const AccountingRepairPnl: React.FC = () => {
                     </tr>
                     <tr>
                       <td className="px-4 py-2.5">تكلفة قطع الغيار</td>
-                      <td className="px-4 py-2.5 text-center tabular-nums text-rose-700">
+                      <td className="px-4 py-2.5 text-center tabular-nums text-[rgb(var(--color-danger))]">
                         {formatAccountingMoney(pnl.partsCogs)}
                       </td>
                     </tr>
                     <tr>
                       <td className="px-4 py-2.5">مصروفات تشغيل الخزينة</td>
-                      <td className="px-4 py-2.5 text-center tabular-nums text-rose-700">
+                      <td className="px-4 py-2.5 text-center tabular-nums text-[rgb(var(--color-danger))]">
                         {formatAccountingMoney(pnl.operatingExpenses)}
                       </td>
                     </tr>
@@ -266,8 +266,8 @@ export const AccountingRepairPnl: React.FC = () => {
                       <td
                         className={`px-4 py-2.5 text-center tabular-nums ${
                           pnl.operatingProfit >= 0
-                            ? "text-emerald-700"
-                            : "text-rose-700"
+                            ? "text-[rgb(var(--color-success))]"
+                            : "text-[rgb(var(--color-danger))]"
                         }`}
                       >
                         {formatAccountingMoney(pnl.operatingProfit)}
@@ -305,7 +305,7 @@ export const AccountingRepairPnl: React.FC = () => {
                       <p className="text-sm font-semibold">{row.label}</p>
                       <p className="font-mono text-xs text-muted-foreground">{row.accountCode || "—"}</p>
                     </div>
-                    <p className="font-semibold tabular-nums text-rose-700">
+                    <p className="font-semibold tabular-nums text-[rgb(var(--color-danger))]">
                       {formatAccountingMoney(row.amount)}
                     </p>
                   </div>
@@ -345,7 +345,7 @@ export const AccountingRepairPnl: React.FC = () => {
                       <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
                         {row.accountCode || "—"}
                       </td>
-                      <td className="px-4 py-2.5 text-center tabular-nums text-rose-700">
+                      <td className="px-4 py-2.5 text-center tabular-nums text-[rgb(var(--color-danger))]">
                         {formatAccountingMoney(row.amount)}
                       </td>
                     </tr>

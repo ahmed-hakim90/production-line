@@ -87,7 +87,7 @@ export const ProductionComponentRecords: React.FC = () => {
     [scraps, safeScrapsPage],
   );
 
-  if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+  if (!can('inventory.view')) return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
 
   if (loading && !data) {
     return (
@@ -122,11 +122,11 @@ export const ProductionComponentRecords: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {returns.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">لا توجد مرتجعات.</td>
+                  <td colSpan={6} className="px-4 py-10 text-center text-[var(--color-text-muted)]">لا توجد مرتجعات.</td>
                 </tr>
               ) : (
                 pagedReturns.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                  <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                     <td className="px-4 py-3 font-mono text-xs">{row.referenceNo}</td>
                     <td className="px-4 py-3 font-semibold">{row.line.itemName}</td>
                     <td className="px-4 py-3 text-center tabular-nums">{row.quantity}</td>
@@ -164,11 +164,11 @@ export const ProductionComponentRecords: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {scraps.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">لا توجد سجلات هالك.</td>
+                  <td colSpan={6} className="px-4 py-10 text-center text-[var(--color-text-muted)]">لا توجد سجلات هالك.</td>
                 </tr>
               ) : (
                 pagedScraps.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                  <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                     <td className="px-4 py-3 font-mono text-xs">{row.referenceNo}</td>
                     <td className="px-4 py-3 font-semibold">{row.line.itemName}</td>
                     <td className="px-4 py-3 text-center tabular-nums">{row.quantity}</td>

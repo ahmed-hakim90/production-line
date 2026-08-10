@@ -1281,6 +1281,56 @@ export type PaperOrientation = "portrait" | "landscape";
 export type PrintThemePreset =
   "erpnext" | "classic" | "high_contrast" | "minimal";
 
+/** Allowlisted Arabic-capable print fonts (loaded in index.html). */
+export type PrintFontFamily =
+  | "Cairo"
+  | "Tajawal"
+  | "Noto Sans Arabic"
+  | "IBM Plex Sans Arabic"
+  | "Tahoma"
+  | "Arial";
+
+/** Document kinds with per-template field visibility + custom lines (print v1). */
+export type PrintDocumentTypeId =
+  | "productionReport"
+  | "repairSalesInvoice"
+  | "stockTransfer"
+  | "itemCard"
+  | "accountingReport"
+  | "qualityReport"
+  | "payslip"
+  | "suppliesReceipt"
+  | "repairPayment"
+  | "repairSpareIssue"
+  | "repairTreasuryMonthly"
+  | "routingExecution"
+  | "productionWorkerReport"
+  | "missingComponentsReport"
+  | "supervisorPerformance"
+  | "productBomCountCard"
+  | "repairJobReceipt"
+  | "repairJobCard"
+  | "repairDeliveryReceipt"
+  | "catalogProductDetail";
+
+export type PrintCustomLine = {
+  id: string;
+  text: string;
+  enabled: boolean;
+};
+
+/** Per-document overrides on top of shared print chrome (logo / paper / theme). */
+export type PrintDocumentOverride = {
+  /** Empty / omitted → use global headerText */
+  headerText?: string;
+  /** Empty / omitted → use global footerText */
+  footerText?: string;
+  /** Up to 5 freeform lines rendered on the print surface */
+  customLines?: PrintCustomLine[];
+  /** Field keys from printDocumentRegistry → visible */
+  fields?: Record<string, boolean>;
+};
+
 export interface PrintTemplateSettings {
   logoUrl: string;
   headerText: string;
@@ -1305,12 +1355,24 @@ export interface PrintTemplateSettings {
   marginLeftMm: number;
   printBackground: boolean;
   decimalPlaces: number;
+  /** Print body font family (shared across document types). */
+  printFontFamily?: PrintFontFamily;
+  /** Base body size in pt (8–14). Thermal templates scale down slightly. */
+  printFontSizePt?: number;
+  /** @deprecated Prefer documents.productionReport.fields.waste — kept for migrate + sync */
   showWaste: boolean;
+  /** @deprecated Prefer documents.productionReport.fields.employee */
   showEmployee: boolean;
+  /** @deprecated Prefer documents.productionReport.fields.qrCode */
   showQRCode: boolean;
+  /** @deprecated Prefer documents.productionReport.fields.costs */
   showCosts: boolean;
+  /** @deprecated Prefer documents.productionReport.fields.workOrder */
   showWorkOrder: boolean;
+  /** @deprecated Prefer documents.productionReport.fields.sellingPrice */
   showSellingPrice: boolean;
+  /** Per-document visibility + custom copy (print control framework v1) */
+  documents?: Partial<Record<PrintDocumentTypeId, PrintDocumentOverride>>;
 }
 
 /** Nested inventory warehouse routing (canonical after migrateInventoryRoutingV1). */

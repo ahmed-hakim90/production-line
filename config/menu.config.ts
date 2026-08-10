@@ -181,6 +181,15 @@ export const MENU_CONFIG: MenuGroup[] = [
     label: 'الكتالوج',
     icon: 'category',
     children: [
+      {
+        key: 'catalog-dashboard',
+        label: 'لوحة الكتالوج',
+        icon: 'dashboard',
+        path: '/catalog',
+        permission: 'products.view',
+        anyOfPermissions: ['products.view', 'materials.view', 'catalog.categories.view'],
+        exact: true,
+      },
       { key: 'catalog-products', label: 'المنتجات', icon: 'inventory_2', path: '/products', permission: 'products.view', activePatterns: ['/products/'] },
       { key: 'catalog-categories', label: 'الفئات', icon: 'category', path: '/catalog/categories', permission: 'catalog.categories.view' },
       {

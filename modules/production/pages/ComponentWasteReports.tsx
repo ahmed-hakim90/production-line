@@ -392,7 +392,7 @@ export const ComponentWasteReports: React.FC = () => {
             </div>
 
             {!materialsLoading && productId && materialOptions.length === 0 && (
-              <p className="text-xs text-amber-600">لا توجد مكونات في BOM هذا المنتج.</p>
+              <p className="text-xs text-[rgb(var(--color-warning))]">لا توجد مكونات في BOM هذا المنتج.</p>
             )}
 
             <div className="space-y-3">
@@ -449,7 +449,7 @@ export const ComponentWasteReports: React.FC = () => {
             </div>
 
             {hasDuplicate && (
-              <p className="text-xs font-bold text-rose-600">لا يمكن اختيار نفس المكون أكثر من مرة.</p>
+              <p className="text-xs font-bold text-[rgb(var(--color-danger))]">لا يمكن اختيار نفس المكون أكثر من مرة.</p>
             )}
           </div>
 
@@ -492,7 +492,7 @@ export const ComponentWasteReports: React.FC = () => {
                   {selectedComponents.map((item) => (
                     <div key={item.materialId} className="flex items-center justify-between gap-3 text-xs">
                       <span className="font-semibold text-end">{item.materialName}</span>
-                      <span className="font-bold tabular-nums text-rose-600">{formatNumber(item.quantity)}</span>
+                      <span className="font-bold tabular-nums text-[rgb(var(--color-danger))]">{formatNumber(item.quantity)}</span>
                     </div>
                   ))}
                 </div>
@@ -502,7 +502,7 @@ export const ComponentWasteReports: React.FC = () => {
               <span className="text-[var(--color-text-muted)]">إجمالي الهالك</span>
               <span className="font-bold tabular-nums">{formatNumber(totalScrapQty)}</span>
             </div>
-            <div className="rounded-[var(--border-radius-lg)] bg-rose-50 border border-rose-100 text-rose-700 p-3 text-xs leading-relaxed">
+            <div className="rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] p-3 text-xs leading-relaxed">
               التقرير لا يضيف إنتاج ولا ساعات عمل، لكنه يسجل الهالك ويحدث المخزون تلقائياً.
             </div>
           </div>
@@ -547,7 +547,7 @@ export const ComponentWasteReports: React.FC = () => {
                           )}
                         </div>
                       </td>
-                      <td className="py-2.5 px-3 text-center font-bold tabular-nums text-rose-600">{formatNumber(qty)}</td>
+                      <td className="py-2.5 px-3 text-center font-bold tabular-nums text-[rgb(var(--color-danger))]">{formatNumber(qty)}</td>
                       <td className="py-2.5 px-3">{lineNameById.get(report.lineId) || '—'}</td>
                       <td className="py-2.5 px-3">{employeeNameById.get(report.employeeId) || '—'}</td>
                       <td className="py-2.5 px-3 text-center">
@@ -572,53 +572,53 @@ export const ComponentWasteReports: React.FC = () => {
 
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl' }}>
         {shareReport && (
-          <div ref={shareRef} className="arabic-export-root w-[520px] bg-white text-slate-900 rounded-2xl border border-slate-200 p-5" dir="rtl">
-            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3 mb-4">
+          <div ref={shareRef} className="arabic-export-root w-[520px] bg-[var(--color-card)] text-[var(--color-text)] rounded-2xl border border-[var(--color-border)] p-5" dir="rtl">
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] pb-3 mb-4">
               <div>
-                <p className="text-xs text-slate-500">تقرير</p>
+                <p className="text-xs text-[var(--color-text-muted)]">تقرير</p>
                 <h2 className="text-xl font-bold">هالك مكونات</h2>
               </div>
               <Badge variant="danger">هالك</Badge>
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between gap-4">
-                <span className="text-slate-500">التاريخ</span>
+                <span className="text-[var(--color-text-muted)]">التاريخ</span>
                 <span className="font-bold">{shareReport.date}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-slate-500">المنتج</span>
+                <span className="text-[var(--color-text-muted)]">المنتج</span>
                 <span className="font-bold text-end">{productNameById.get(shareReport.productId) || '—'}</span>
               </div>
               <div className="space-y-2">
-                <span className="text-slate-500">المكونات</span>
-                <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                <span className="text-[var(--color-text-muted)]">المكونات</span>
+                <div className="rounded-xl border border-[var(--color-border)] divide-y divide-[var(--color-border)] overflow-hidden">
                   {shareItems.length === 0 ? (
                     <div className="px-3 py-2 font-bold">—</div>
                   ) : (
                     shareItems.map((item) => (
                       <div key={item.materialId} className="px-3 py-2 flex justify-between gap-3">
                         <span className="font-semibold text-end">{item.materialName || '—'}</span>
-                        <span className="font-bold tabular-nums text-rose-700">{formatNumber(Number(item.quantity || 0))}</span>
+                        <span className="font-bold tabular-nums text-[rgb(var(--color-danger))]">{formatNumber(Number(item.quantity || 0))}</span>
                       </div>
                     ))
                   )}
                 </div>
               </div>
-              <div className="rounded-xl bg-rose-50 border border-rose-100 px-4 py-3 flex justify-between gap-4">
-                <span className="text-rose-700 font-semibold">إجمالي الهالك</span>
-                <span className="text-2xl font-black text-rose-700 tabular-nums">{formatNumber(shareTotalQty)}</span>
+              <div className="rounded-xl bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] px-4 py-3 flex justify-between gap-4">
+                <span className="text-[rgb(var(--color-danger))] font-semibold">إجمالي الهالك</span>
+                <span className="text-2xl font-black text-[rgb(var(--color-danger))] tabular-nums">{formatNumber(shareTotalQty)}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-slate-500">الخط</span>
+                <span className="text-[var(--color-text-muted)]">الخط</span>
                 <span className="font-bold">{lineNameById.get(shareReport.lineId) || '—'}</span>
               </div>
               <div className="flex justify-between gap-4">
-                <span className="text-slate-500">الموظف</span>
+                <span className="text-[var(--color-text-muted)]">الموظف</span>
                 <span className="font-bold">{employeeNameById.get(shareReport.employeeId) || '—'}</span>
               </div>
               {shareReport.notes && (
-                <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
-                  <p className="text-xs text-slate-500 mb-1">ملاحظات</p>
+                <div className="rounded-xl bg-[var(--color-bg)] border border-[var(--color-border)] p-3">
+                  <p className="text-xs text-[var(--color-text-muted)] mb-1">ملاحظات</p>
                   <p className="font-semibold leading-relaxed">{shareReport.notes}</p>
                 </div>
               )}

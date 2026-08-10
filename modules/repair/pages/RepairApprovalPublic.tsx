@@ -105,7 +105,7 @@ export const RepairApprovalPublic: React.FC = () => {
   const canDecide = Boolean(estimate && estimate.approvalStatus === 'pending' && !done);
 
   return (
-    <div className="min-h-screen bg-slate-50" dir={dir}>
+    <div className="min-h-screen bg-[var(--color-bg)]" dir={dir}>
       <RepairOpsPageShell
         className="max-w-lg mx-auto"
         eyebrow="الصيانة"
@@ -119,7 +119,7 @@ export const RepairApprovalPublic: React.FC = () => {
 
           {estimate ? (
             <div className="space-y-4 text-sm">
-              <div className="rounded-lg border bg-white p-3 space-y-2">
+              <div className="rounded-lg border bg-[var(--color-card)] p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="font-medium">بيانات العميل</span>
                   <Badge variant="outline">{approvalStatusLabel(estimate.approvalStatus)}</Badge>
@@ -154,7 +154,7 @@ export const RepairApprovalPublic: React.FC = () => {
               </div>
 
               {estimate.parts.length > 0 ? (
-                <div className="rounded-lg border bg-white p-3 space-y-2">
+                <div className="rounded-lg border bg-[var(--color-card)] p-3 space-y-2">
                   <div className="font-medium">قطع الغيار المقترحة</div>
                   <div className="divide-y rounded-md border">
                     {estimate.parts.map((part, idx) => (
@@ -166,7 +166,7 @@ export const RepairApprovalPublic: React.FC = () => {
                             {part.unitPrice > 0 ? ` · ${fmtMoney(part.unitPrice)} للوحدة` : ''}
                           </div>
                           {part.inWarranty ? (
-                            <div className="text-xs font-medium text-sky-700">
+                            <div className="text-xs font-medium text-[rgb(var(--color-primary))]">
                               {part.warrantyLabel || 'داخل الضمان'}
                             </div>
                           ) : null}
@@ -185,7 +185,7 @@ export const RepairApprovalPublic: React.FC = () => {
               )}
 
               {estimate.products.length > 0 ? (
-                <div className="rounded-lg border bg-white p-3 space-y-2">
+                <div className="rounded-lg border bg-[var(--color-card)] p-3 space-y-2">
                   <div className="font-medium">تفصيل المنتجات</div>
                   <div className="divide-y rounded-md border">
                     {estimate.products.map((row, idx) => (
@@ -195,7 +195,7 @@ export const RepairApprovalPublic: React.FC = () => {
                             {row.name}
                             <span className="text-muted-foreground text-xs ms-1">×{row.quantity}</span>
                           </div>
-                          <div className={`text-xs font-medium ${row.inWarranty ? 'text-sky-700' : 'text-muted-foreground'}`}>
+                          <div className={`text-xs font-medium ${row.inWarranty ? 'text-[rgb(var(--color-primary))]' : 'text-muted-foreground'}`}>
                             {row.warrantyLabel || (row.inWarranty ? 'داخل الضمان' : 'بدون ضمان')}
                           </div>
                         </div>
@@ -208,7 +208,7 @@ export const RepairApprovalPublic: React.FC = () => {
                 </div>
               ) : null}
 
-              <div className="rounded-lg border bg-slate-50 p-3 space-y-2">
+              <div className="rounded-lg border bg-[var(--color-bg)] p-3 space-y-2">
                 <div className="font-medium">تفصيل الحساب</div>
                 <div className="flex justify-between gap-2 text-xs text-muted-foreground">
                   <span>إذن الدفع</span>
@@ -239,13 +239,13 @@ export const RepairApprovalPublic: React.FC = () => {
                   </div>
                 ) : null}
                 {Number(estimate.warrantyProductsCost || 0) > 0 ? (
-                  <div className="flex justify-between gap-2 text-sky-800">
+                  <div className="flex justify-between gap-2 text-[rgb(var(--color-primary))]">
                     <span>منتجات داخل الضمان</span>
                     <span className="tabular-nums">مجاني</span>
                   </div>
                 ) : null}
                 {estimate.discountAmount > 0 ? (
-                  <div className="flex justify-between gap-2 text-rose-700">
+                  <div className="flex justify-between gap-2 text-[rgb(var(--color-danger))]">
                     <span>الخصم المعتمد</span>
                     <span className="tabular-nums">- {fmtMoney(estimate.discountAmount)}</span>
                   </div>
@@ -258,10 +258,10 @@ export const RepairApprovalPublic: React.FC = () => {
             </div>
           ) : null}
 
-          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {error ? <p className="text-sm text-[rgb(var(--color-danger))]">{error}</p> : null}
 
           {done ? (
-            <p className="text-emerald-700 font-medium">
+            <p className="text-[rgb(var(--color-success))] font-medium">
               {done === 'approved' ? 'تم تسجيل موافقتكم. شكراً لكم.' : 'تم تسجيل الرفض. يمكنكم التواصل مع الفرع.'}
             </p>
           ) : canDecide ? (

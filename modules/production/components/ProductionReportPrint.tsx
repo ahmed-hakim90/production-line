@@ -7,9 +7,12 @@ import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ProductionReport, PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
-import { getPrintThemePalette } from '../../../utils/printTheme';
+import { getPrintThemePalette, resolvePrintAccentHex } from '../../../utils/printTheme';
 import { getReportWaste } from '../../../utils/calculations';
 import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { resolvePrintFont } from '@/utils/print/printFont';
 import { cn } from '@/lib/utils';
 import type { ShareStandardVarianceTone } from '../../../utils/productionReportStandardVariance';
 import { shareVarianceTailwindToneClass } from '../../../utils/productionReportStandardVariance';
@@ -43,6 +46,8 @@ export interface ReportPrintRow {
   workHours: number;
   notes?: string;
   costPerUnit?: number;
+  /** Optional selling price when page is allowed to include it */
+  sellingPrice?: number;
   workOrderNumber?: string;
   /** Finished/injection: pieces per carton from product card (for share cartons KPI). */
   unitsPerCarton?: number;
@@ -295,6 +300,8 @@ export function totalWorkersForPrintRow(row: ReportPrintRow): number {
 export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrintProps>(
   ({ title, subtitle, generatedAt, rows, totals, printSettings }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'productionReport');
+    const font = resolvePrintFont(ps);
     const palette = getPrintThemePalette(ps);
     const dp = ps.decimalPlaces;
     const t = totals ?? computePrintTotals(rows, dp);
@@ -303,10 +310,12 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
     const isThermal = ps.paperSize === 'thermal';
     const spacing = isThermal ? PRINT_SPACING.thermal : PRINT_SPACING.regular;
 
-    const showWaste    = ps.showWaste;
-    const showEmployee = ps.showEmployee;
-    const showCosts    = ps.showCosts && rows.some((r) => r.costPerUnit != null && r.costPerUnit > 0);
-    const showWO       = ps.showWorkOrder && rows.some((r) => !!r.workOrderNumber);
+    const showWaste    = doc.isFieldVisible('waste');
+    const showEmployee = doc.isFieldVisible('employee');
+    const showCosts    = doc.isFieldVisible('costs') && rows.some((r) => r.costPerUnit != null && r.costPerUnit > 0);
+    const showWO       = doc.isFieldVisible('workOrder') && rows.some((r) => !!r.workOrderNumber);
+    const showSignatures = doc.isFieldVisible('signatures');
+    const showQR       = doc.isFieldVisible('qrCode');
     const showNotes    = rows.some((r) => !!r.notes?.trim());
     const headerColSpan =
       4 +
@@ -319,8 +328,9 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
         ref={ref}
         className="print-root print-report"
         dir="rtl"
+        data-print-font={font.fontFamily}
         style={{
-          fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
+          fontFamily: font.fontFamily,
           width: paper.width,
           minHeight: paper.minHeight,
           padding: spacing.pagePadding,
@@ -332,7 +342,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
           ['--print-th-bg' as any]: palette.tableHeaderBg,
           ['--print-th-text' as any]: palette.tableHeaderText,
           ['--print-row-alt' as any]: palette.tableRowAltBg,
-          fontSize: isThermal ? '8pt' : '10.5pt',
+          fontSize: isThermal ? font.denseFontSize : font.fontSize,
           lineHeight: 1.55,
           boxSizing: 'border-box',
         }}
@@ -347,12 +357,14 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
             />
           )}
           <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
-            {ps.headerText}
+            {doc.headerText}
           </h1>
           <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
            مؤسسة المغربي
           </p>
         </div>
+
+        <PrintExtraLines lines={doc.customLines} dense={isThermal} />
 
         {/* ── Report Title ── */}
         <div style={{ marginBottom: spacing.sectionGap }}>
@@ -465,7 +477,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
         </table>
 
         {/* ── Signature Section ── */}
-        {!isThermal && (
+        {!isThermal && showSignatures && (
           <div style={{ marginTop: spacing.signatureTopMargin, display: 'flex', justifyContent: 'space-between', gap: '14mm' }}>
             <SignatureBlock label="مدير المصنع" />
             {showEmployee && <SignatureBlock label="مدير الخط" />}
@@ -475,7 +487,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
 
         {/* ── Footer ── */}
         <div style={{ marginTop: isThermal ? '2.8mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '2.8mm', textAlign: 'center' }}>
-          {ps.showQRCode && (
+          {showQR && (
             <div style={{ marginBottom: '3mm' }}>
               <QRCodeSVG
                 value={`report-batch|${now}|count:${rows.length}|produced:${t.totalProduced}`}
@@ -488,7 +500,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
             </div>
           )}
           <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
-            {ps.footerText} — {now}
+            {doc.footerText} — {now}
           </p>
         </div>
       </div>
@@ -514,6 +526,8 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     if (!report) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'productionReport');
+    const font = resolvePrintFont(ps);
     const dp = ps.decimalPlaces ?? 0;
     const now = new Date().toLocaleString('ar-EG');
     const total = Number(report.quantityProduced || 0) + Number(report.wasteQuantity || 0);
@@ -525,14 +539,19 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         ? 'تقرير تغليف'
         : 'تقرير إنتاج';
     const qtyKpiLabel = rt === 'packaging' ? 'الكمية المغلفة' : 'الكمية المنتجة';
-    const hideWasteUi = rt === 'packaging' || rt === 'component_injection';
+    const hideWasteUi = rt === 'packaging' || rt === 'component_injection' || !doc.isFieldVisible('waste');
+    const showEmployee = doc.isFieldVisible('employee');
+    const showCosts = doc.isFieldVisible('costs');
+    const showWorkOrder = doc.isFieldVisible('workOrder');
+    const showSellingPrice = doc.isFieldVisible('sellingPrice') && report.sellingPrice != null && report.sellingPrice > 0;
+    const showSignatures = doc.isFieldVisible('signatures');
     const shareOuterCapture = Boolean(report.shareStandardVariance || report.packagingShareImage);
     const isShareImage = Boolean(report.shareStandardVariance);
     const printMeta = {
       reportNumber: report.reportCode?.trim() || formatReportNumber(report.reportId),
       reportDate: report.date || '—',
       lineName: report.lineName || '—',
-      supervisorName: report.employeeName || '—',
+      supervisorName: showEmployee ? (report.employeeName || '—') : '—',
     };
 
     const presenceValue = `حاضر: ${report.presentAssignments ?? 0} | غائب: ${report.absentAssignments ?? 0}`;
@@ -543,6 +562,9 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         ? [{ label: 'الوردية', value: getInjectionShiftLabel(report.shift) }]
         : []),
       ...(hideWasteUi ? [] : [{ label: 'نسبة الهالك', value: `${wasteRatio}%` }]),
+      ...(showSellingPrice
+        ? [{ label: 'سعر البيع', value: `${Number(report.sellingPrice).toFixed(2)} ج.م` }]
+        : []),
       ...(rt === 'packaging'
         ? []
         : (isShareImage && rt === 'component_injection'
@@ -571,12 +593,14 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           value: totalWorkersForPrintRow(report),
           color: hideWasteUi ? 'sky' as const : 'default' as const,
         }]),
-      {
-        label: 'تكلفة الوحدة',
-        value: report.costPerUnit != null && report.costPerUnit > 0 ? report.costPerUnit.toFixed(2) : '—',
-        unit: 'ج.م',
-        color: 'green' as const,
-      },
+      ...(showCosts
+        ? [{
+          label: 'تكلفة الوحدة',
+          value: report.costPerUnit != null && report.costPerUnit > 0 ? report.costPerUnit.toFixed(2) : '—',
+          unit: 'ج.م',
+          color: 'green' as const,
+        }]
+        : []),
     ];
 
     const productSectionTitle = rt === 'packaging'
@@ -592,30 +616,40 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         ? [{ label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const }]
         : [
           { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const },
-          { label: 'أمر الشغل', value: report.workOrderNumber || '—' },
+          ...(showWorkOrder ? [{ label: 'أمر الشغل', value: report.workOrderNumber || '—' }] : []),
         ];
+
+    const metaCards = rt === 'packaging' ? [
+      { label: 'رقم التقرير', value: printMeta.reportNumber },
+      { label: 'تاريخ التقرير', value: printMeta.reportDate },
+      { label: 'خط التغليف', value: printMeta.lineName },
+      ...(showEmployee ? [{ label: 'مشرف التغليف', value: printMeta.supervisorName }] : []),
+    ] : showEmployee ? undefined : [
+      { label: 'رقم التقرير', value: printMeta.reportNumber },
+      { label: 'تاريخ التقرير', value: printMeta.reportDate },
+      { label: 'خط الإنتاج', value: printMeta.lineName },
+    ];
 
     const layout = (
       <PrintReportLayout
         ref={shareOuterCapture ? undefined : ref}
         nestedInShareWrapper={shareOuterCapture}
         exportRootId={exportRootId}
-        companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
+        companyName={doc.headerText || 'مؤسسة المغربي للإستيراد'}
         reportType={reportTypeHeading}
         printDate={now}
         logoUrl={ps.logoUrl}
-        brandAccent={ps.primaryColor}
-        footerTagline={ps.footerText?.trim() || undefined}
+        brandAccent={resolvePrintAccentHex(ps.primaryColor)}
+        footerTagline={doc.footerText?.trim() || undefined}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
         meta={printMeta}
-        metaCards={rt === 'packaging' ? [
-          { label: 'رقم التقرير', value: printMeta.reportNumber },
-          { label: 'تاريخ التقرير', value: printMeta.reportDate },
-          { label: 'خط التغليف', value: printMeta.lineName },
-          { label: 'مشرف التغليف', value: printMeta.supervisorName },
-        ] : undefined}
+        metaCards={metaCards}
         kpis={kpiItems}
+        extraLines={doc.customLines}
+        fontFamily={font.fontFamily}
+        fontSize={font.fontSize}
+        signatures={showSignatures ? [{ title: 'المشرف' }, { title: 'مدير الخط' }] : undefined}
         sections={[
           {
             title: productSectionTitle,
@@ -721,7 +755,7 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
         reportType="أمر شغل"
         printDate={now}
         logoUrl={ps.logoUrl}
-        brandAccent={ps.primaryColor}
+        brandAccent={resolvePrintAccentHex(ps.primaryColor)}
         footerTagline={ps.footerText?.trim() || undefined}
         paperSize={ps.paperSize}
         orientation={ps.orientation}

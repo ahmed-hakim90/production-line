@@ -214,8 +214,8 @@ export const Vehicles: React.FC = () => {
 
       {filtered.length === 0 ? (
         <div className="text-center py-12 p-4">
-          <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">directions_bus</span>
-          <p className="text-sm font-bold text-slate-500">لا توجد مركبات{searchQuery ? ' تطابق البحث' : ''}</p>
+          <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">directions_bus</span>
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد مركبات{searchQuery ? ' تطابق البحث' : ''}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
@@ -232,13 +232,13 @@ export const Vehicles: React.FC = () => {
                 className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border transition-all ${
                   v.isActive
                     ? 'border-[var(--color-border)]'
-                    : 'border-rose-200 dark:border-rose-900 opacity-70'
+                    : 'border-[rgb(var(--color-danger)/0.25)] dark:border-[rgb(var(--color-danger))] opacity-70'
                 }`}
               >
                 {/* Card Header */}
                 <div className="p-4 flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-[var(--border-radius-lg)] flex items-center justify-center ${v.isActive ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-[#f0f2f5] text-slate-400'}`}>
+                    <div className={`w-12 h-12 rounded-[var(--border-radius-lg)] flex items-center justify-center ${v.isActive ? 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary))]/30 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'}`}>
                       <span className="material-icons-round text-2xl">directions_bus</span>
                     </div>
                     <div>
@@ -248,10 +248,10 @@ export const Vehicles: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     <Badge variant={v.isActive ? 'success' : 'danger'}>{v.isActive ? 'نشط' : 'متوقفة'}</Badge>
-                    <button onClick={() => openEdit(v)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary transition-colors rounded-[var(--border-radius-base)] hover:bg-[#f0f2f5]">
+                    <button onClick={() => openEdit(v)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary transition-colors rounded-[var(--border-radius-base)] hover:bg-[var(--color-surface-hover)]">
                       <span className="material-icons-round text-lg">edit</span>
                     </button>
-                    <button onClick={() => handleDelete(v.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 transition-colors rounded-[var(--border-radius-base)] hover:bg-[#f0f2f5]">
+                    <button onClick={() => handleDelete(v.id!)} className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] transition-colors rounded-[var(--border-radius-base)] hover:bg-[var(--color-surface-hover)]">
                       <span className="material-icons-round text-lg">delete</span>
                     </button>
                   </div>
@@ -259,20 +259,20 @@ export const Vehicles: React.FC = () => {
 
                 {/* Stats Grid */}
                 <div className="px-4 grid grid-cols-4 gap-2 text-center">
-                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
+                  <div className="p-2 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-base)]">
                     <p className="text-lg font-bold text-[var(--color-text)]">{v.capacity}</p>
                     <p className="text-[10px] text-[var(--color-text-muted)] font-medium">السعة</p>
                   </div>
-                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
-                    <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400">{assignedEmployeeIds.length}</p>
+                  <div className="p-2 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-base)]">
+                    <p className="text-lg font-bold text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]">{assignedEmployeeIds.length}</p>
                     <p className="text-[10px] text-[var(--color-text-muted)] font-medium">مرتبطون</p>
                   </div>
-                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
-                    <p className="text-lg font-bold text-emerald-600">{formatNumber(v.dailyRate)}</p>
+                  <div className="p-2 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-base)]">
+                    <p className="text-lg font-bold text-[rgb(var(--color-success))]">{formatNumber(v.dailyRate)}</p>
                     <p className="text-[10px] text-[var(--color-text-muted)] font-medium">يومي ج.م</p>
                   </div>
-                  <div className="p-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
-                    <p className="text-lg font-bold text-amber-600">{v.workingDaysPerMonth}</p>
+                  <div className="p-2 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-base)]">
+                    <p className="text-lg font-bold text-[rgb(var(--color-warning))]">{v.workingDaysPerMonth}</p>
                     <p className="text-[10px] text-[var(--color-text-muted)] font-medium">يوم/شهر</p>
                   </div>
                 </div>
@@ -283,10 +283,10 @@ export const Vehicles: React.FC = () => {
                     <span className="text-xs text-[var(--color-text-muted)] font-medium">الإشغال</span>
                     <span className="text-xs font-bold text-[var(--color-text-muted)]">{Math.round(occupancy)}%</span>
                   </div>
-                  <div className="bg-[#f0f2f5] rounded-full h-2 overflow-hidden">
+                  <div className="bg-[var(--color-surface-hover)] rounded-full h-2 overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
-                        occupancy >= 90 ? 'bg-rose-500' : occupancy >= 60 ? 'bg-amber-500' : 'bg-emerald-500'
+                        occupancy >= 90 ? 'bg-[rgb(var(--color-danger)/0.1)]0' : occupancy >= 60 ? 'bg-[rgb(var(--color-warning)/0.1)]0' : 'bg-[rgb(var(--color-success)/0.1)]0'
                       }`}
                       style={{ width: `${Math.min(occupancy, 100)}%` }}
                     />
@@ -296,20 +296,20 @@ export const Vehicles: React.FC = () => {
                 {/* Cost Summary */}
                 <div className="px-4 mt-3 flex items-center justify-between">
                   <div>
-                    <span className="text-xs text-slate-500">تكلفة شهرية: </span>
-                    <span className="text-sm font-bold text-emerald-600">{formatCurrency(monthlyCost)}</span>
+                    <span className="text-xs text-[var(--color-text-muted)]">تكلفة شهرية: </span>
+                    <span className="text-sm font-bold text-[rgb(var(--color-success))]">{formatCurrency(monthlyCost)}</span>
                   </div>
                   {costPerEmp > 0 && (
                     <div>
-                      <span className="text-xs text-slate-500">تكلفة/موظف: </span>
-                      <span className="text-sm font-bold text-sky-600 dark:text-sky-400">{formatCurrency(costPerEmp)}</span>
+                      <span className="text-xs text-[var(--color-text-muted)]">تكلفة/موظف: </span>
+                      <span className="text-sm font-bold text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]">{formatCurrency(costPerEmp)}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Driver Info */}
                 {v.driverName && (
-                  <div className="px-4 mt-2 flex items-center gap-2 text-xs text-slate-500">
+                  <div className="px-4 mt-2 flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
                     <span className="material-icons-round text-sm">person</span>
                     <span>{v.driverName}</span>
                     {v.driverPhone && <span dir="ltr">({v.driverPhone})</span>}
@@ -328,10 +328,10 @@ export const Vehicles: React.FC = () => {
                   {isExpanded && (
                     <div className="mt-2 space-y-1">
                       {assignedEmployeeIds.length === 0 ? (
-                        <p className="text-xs text-slate-400">لا يوجد موظفون معيّنون</p>
+                        <p className="text-xs text-[var(--color-text-muted)]">لا يوجد موظفون معيّنون</p>
                       ) : (
                         assignedEmployeeIds.map((empId) => (
-                          <div key={empId} className="flex items-center gap-2 py-1.5 px-2 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)] text-sm">
+                          <div key={empId} className="flex items-center gap-2 py-1.5 px-2 bg-[var(--color-bg)]/50 rounded-[var(--border-radius-base)] text-sm">
                             <span className="material-icons-round text-[var(--color-text-muted)] text-sm">person</span>
                             <span className="font-medium text-[var(--color-text)]">{getEmpName(empId)}</span>
                             {getEmpCode(empId) && (

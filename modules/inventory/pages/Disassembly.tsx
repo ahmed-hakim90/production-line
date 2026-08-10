@@ -226,7 +226,7 @@ export const Disassembly: React.FC = () => {
   };
 
   if (!can('inventory.disassembly.manage')) {
-    return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية إدارة التفكيك.</p>;
+    return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية إدارة التفكيك.</p>;
   }
 
   return (
@@ -266,7 +266,7 @@ export const Disassembly: React.FC = () => {
         <OpsDashPanel title="مكونات التفكيك" accent="inventory" bodyClassName="p-0 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b">
+              <tr className="bg-[var(--color-bg)] border-b">
                 <th className="p-3 text-start">المكون</th>
                 <th className="p-3 text-center">الكمية الراجعة</th>
                 <th className="p-3 text-center">هالك التفكيك</th>
@@ -279,10 +279,10 @@ export const Disassembly: React.FC = () => {
                   <td className="p-3">
                     {line.itemName}
                     {line.defaultLocationCode && (
-                      <p className="text-[11px] font-bold text-emerald-700">افتراضي: {line.defaultLocationCode}</p>
+                      <p className="text-[11px] font-bold text-[rgb(var(--color-success))]">افتراضي: {line.defaultLocationCode}</p>
                     )}
                     {!line.defaultLocationCode && (
-                      <p className="text-[11px] font-bold text-amber-700">لا يوجد افتراضي، تم اقتراح أول رف نشط</p>
+                      <p className="text-[11px] font-bold text-[rgb(var(--color-warning))]">لا يوجد افتراضي، تم اقتراح أول رف نشط</p>
                     )}
                   </td>
                   <td className="p-3 text-center">{line.quantity.toFixed(2)} {line.unit}</td>
@@ -314,7 +314,7 @@ export const Disassembly: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50 border-b">
+              <tr className="bg-[var(--color-bg)] border-b">
                 <th className="p-3 text-start">الطلب</th>
                 <th className="p-3 text-start">المنتج</th>
                 <th className="p-3 text-center">الكمية</th>

@@ -258,7 +258,7 @@ export const CustomerPortal: React.FC = () => {
 
   if (!token || !home) {
     return (
-      <div className="min-h-screen bg-slate-50 p-4" dir="rtl">
+      <div className="min-h-screen bg-[var(--color-bg)] p-4" dir="rtl">
         <RepairOpsPageShell className="mx-auto flex min-h-[80vh] max-w-md items-center" eyebrow="الصيانة" rangeLabel="بوابة العميل">
           <OpsDashPanel title="بوابة العميل" accent="repair">
             <div className="space-y-4">
@@ -300,7 +300,7 @@ export const CustomerPortal: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.5rem+env(safe-area-inset-bottom))]" dir="rtl">
+    <div className="min-h-screen bg-[var(--color-bg)] p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.5rem+env(safe-area-inset-bottom))]" dir="rtl">
       <RepairOpsPageShell
         className="mx-auto max-w-5xl"
         eyebrow="الصيانة"
@@ -319,7 +319,7 @@ export const CustomerPortal: React.FC = () => {
             action={<PackagePlus className="size-5 text-muted-foreground" aria-hidden />}
           >
             <div className="space-y-4">
-              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+              <div className="rounded-lg border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] p-3 text-sm text-[rgb(var(--color-primary))]">
                 امسح كل منتجاتك وأضفها هنا، ثم اضغط «حفظ وإرسال الطلب» مرة واحدة. كل المنتجات ستُحفظ داخل نفس الطلب.
               </div>
               <div className="flex gap-2">
@@ -407,7 +407,7 @@ export const CustomerPortal: React.FC = () => {
                       aria-label="حذف المنتج"
                       onClick={() => setLines((rows) => rows.filter((r) => r.productId !== line.productId))}
                     >
-                      <Trash2 className="size-4 text-rose-600" />
+                      <Trash2 className="size-4 text-[rgb(var(--color-danger))]" />
                     </Button>
                   </div>
                 ))}
@@ -474,7 +474,7 @@ export const CustomerPortal: React.FC = () => {
                 <p className="py-6 text-center text-sm text-muted-foreground">لا توجد تحديثات بعد.</p>
               ) : (
                 home.events.map((event) => (
-                  <div key={event.id} className="border-r-2 border-sky-500 pr-3">
+                  <div key={event.id} className="border-r-2 border-[rgb(var(--color-primary))] pr-3">
                     <div className="font-medium">{event.title}</div>
                     <div className="text-sm text-muted-foreground">{event.message}</div>
                     <div className="text-xs text-muted-foreground">{formatRepairOpsDate(event.createdAt)}</div>

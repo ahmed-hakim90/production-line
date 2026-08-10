@@ -5,6 +5,8 @@ export const MODAL_KEYS = {
   PRODUCTION_PLAN_FOLLOW_UP_CREATE: 'productionPlans.followUp.create',
   WORK_ORDERS_CREATE: 'workOrders.create',
   PRODUCTS_CREATE: 'products.create',
+  /** Product BOM only — add / edit / delete components (not full product form). */
+  PRODUCTS_BOM_MANAGE: 'products.bom.manage',
   LINES_CREATE: 'lines.create',
   EMPLOYEES_CREATE: 'employees.create',
   ORGANIZATION_CREATE: 'organization.create',

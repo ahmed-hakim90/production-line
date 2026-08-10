@@ -146,7 +146,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
       onClick={handleClose}
     >
       <div
@@ -155,8 +155,8 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
       >
         <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-              <FileUp size={20} className="text-emerald-600" />
+            <div className="w-10 h-10 bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+              <FileUp size={20} className="text-[rgb(var(--color-success))]" />
             </div>
             <div>
               <h3 className="text-lg font-bold">{t('modalManager.importProductionPlans.title')}</h3>
@@ -167,7 +167,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
               )}
             </div>
           </div>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -190,9 +190,9 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
 
           {result && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-bold">
-              <div className="rounded-[var(--border-radius-base)] bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-blue-700 dark:text-blue-300">{t('modalManager.importProductionPlans.totalLabel', { total: result.totalRows })}</div>
-              <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-3 py-2 text-emerald-700">{t('modalManager.importProductionPlans.validLabel', { valid: result.validCount })}</div>
-              <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-3 py-2 text-rose-700">{t('modalManager.importProductionPlans.errorsLabel', { errors: result.errorCount })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] px-3 py-2 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]">{t('modalManager.importProductionPlans.totalLabel', { total: result.totalRows })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-[rgb(var(--color-success)/0.1)] px-3 py-2 text-[rgb(var(--color-success))]">{t('modalManager.importProductionPlans.validLabel', { valid: result.validCount })}</div>
+              <div className="rounded-[var(--border-radius-base)] bg-[rgb(var(--color-danger)/0.1)] px-3 py-2 text-[rgb(var(--color-danger))]">{t('modalManager.importProductionPlans.errorsLabel', { errors: result.errorCount })}</div>
             </div>
           )}
 
@@ -222,9 +222,9 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
                         <td className="px-3 py-2 text-sm">{row.startDate || '—'}</td>
                         <td className="px-3 py-2 text-sm">
                           {row.errors.length === 0 ? (
-                            <span className="text-emerald-600 font-bold">{t('modalManager.importProductionPlans.valid')}</span>
+                            <span className="text-[rgb(var(--color-success))] font-bold">{t('modalManager.importProductionPlans.valid')}</span>
                           ) : (
-                            <span className="text-rose-600 font-bold">{row.errors.join(' | ')}</span>
+                            <span className="text-[rgb(var(--color-danger))] font-bold">{row.errors.join(' | ')}</span>
                           )}
                         </td>
                       </tr>
@@ -237,7 +237,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
 
           {saving && (
             <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
+              <div className="flex-1 h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-300"
                   style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
@@ -248,7 +248,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
           )}
 
           {message && (
-            <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs font-bold text-amber-700">
+            <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/80 px-3 py-2 text-xs font-bold text-[rgb(var(--color-warning))]">
               {message}
             </div>
           )}

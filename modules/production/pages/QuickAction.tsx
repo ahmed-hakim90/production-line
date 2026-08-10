@@ -1584,17 +1584,17 @@ export const QuickAction: React.FC = () => {
     >
 
       {forceInjectionOnly && (
-        <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-amber-500">warning</span>
-          <p className="text-sm font-bold text-amber-700">
+        <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+          <span className="material-icons-round text-[rgb(var(--color-warning))]">warning</span>
+          <p className="text-sm font-bold text-[rgb(var(--color-warning))]">
             هذا المستخدم مخصص لتقارير الحقن فقط.
           </p>
         </div>
       )}
       {forcePackagingOnly && (
-        <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-amber-500">warning</span>
-          <p className="text-sm font-bold text-amber-700">
+        <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
+          <span className="material-icons-round text-[rgb(var(--color-warning))]">warning</span>
+          <p className="text-sm font-bold text-[rgb(var(--color-warning))]">
             هذا المستخدم مخصص لتقارير التغليف فقط.
           </p>
         </div>
@@ -1611,7 +1611,7 @@ export const QuickAction: React.FC = () => {
                   ? 'أمر شغل موجّه للمشرف (إلزامي)'
                   : 'أمر شغل (اختياري)'}
                 {reportBehavior.requireWorkOrderOnQuickAction && (
-                  <span className="text-rose-600" aria-hidden>*</span>
+                  <span className="text-[rgb(var(--color-danger))]" aria-hidden>*</span>
                 )}
               </label>
               <Select
@@ -1626,7 +1626,7 @@ export const QuickAction: React.FC = () => {
                   handleSelectWO(value);
                 }}
               >
-                <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
+                <SelectTrigger className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
                   <SelectValue
                     placeholder={
                       reportBehavior.requireWorkOrderOnQuickAction
@@ -1652,7 +1652,7 @@ export const QuickAction: React.FC = () => {
                 </SelectContent>
               </Select>
               {scopedActiveWOs.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-rose-600 font-medium">
+                <p className="mt-1.5 text-[11px] text-[rgb(var(--color-danger))] font-medium">
                   {reportBehavior.requireWorkOrderOnQuickAction
                     ? 'لا توجد أوامر شغل نشطة موجّهة لهذا المشرف — أنشئ أمر شغل أو راجع التوجيه قبل الحفظ.'
                     : 'لا توجد أوامر شغل مرتبطة بالمشرف المختار.'}
@@ -1687,7 +1687,7 @@ export const QuickAction: React.FC = () => {
                     }
                   }}
                 >
-                  <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
+                  <SelectTrigger className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
                     <SelectValue placeholder="نوع التقرير" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1707,7 +1707,7 @@ export const QuickAction: React.FC = () => {
                   type="text"
                   readOnly
                   value={currentEmployee.name}
-                  className="w-full px-4 py-2.5 bg-[#f0f2f5]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-[var(--color-text-muted)]"
+                  className="w-full px-4 py-2.5 bg-[var(--color-surface-hover)]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
                 <SearchableSelect
@@ -1739,12 +1739,12 @@ export const QuickAction: React.FC = () => {
                 className={cn(
                   'w-full px-4 py-2.5 border rounded-[var(--border-radius-lg)] text-sm font-bold focus:border-primary focus:ring-2 focus:ring-primary/12',
                   today !== operationalDate
-                    ? 'bg-amber-50 border-amber-300 text-amber-800'
-                    : 'bg-[#f8f9fa] border-[var(--color-border)]',
+                    ? 'bg-[rgb(var(--color-warning)/0.1)] border-[rgb(var(--color-warning)/0.35)] text-[rgb(var(--color-warning))]'
+                    : 'bg-[var(--color-bg)] border-[var(--color-border)]',
                 )}
               />
               {today !== operationalDate && (
-                <p className="mt-1.5 text-[11px] font-bold text-amber-600 leading-relaxed flex items-center gap-1">
+                <p className="mt-1.5 text-[11px] font-bold text-[rgb(var(--color-warning))] leading-relaxed flex items-center gap-1">
                   <span className="material-icons-round text-sm">history</span>
                   تقرير ليوم سابق ({today}) — سيُسجَّل الحضور والغياب على هذا التاريخ.
                 </p>
@@ -1757,7 +1757,7 @@ export const QuickAction: React.FC = () => {
                   value={injectionShift || undefined}
                   onValueChange={(value) => setInjectionShift(value as ProductionReportShift)}
                 >
-                  <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
+                  <SelectTrigger className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
                     <SelectValue placeholder="اختر الوردية" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1803,7 +1803,7 @@ export const QuickAction: React.FC = () => {
                   return (
                     <div
                       key={idx}
-                      className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-end rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[#f8f9fa]/40"
+                      className="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-end rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 bg-[var(--color-bg)]/40"
                     >
                       <div className={cn('space-y-2', productSpan)}>
                         <label className="text-xs font-bold text-[var(--color-text-muted)]">المنتج *</label>
@@ -1849,7 +1849,7 @@ export const QuickAction: React.FC = () => {
                                   return next;
                                 });
                               }}
-                              className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                              className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                               placeholder="0"
                             />
                           </div>
@@ -1876,7 +1876,7 @@ export const QuickAction: React.FC = () => {
                                     return next;
                                   });
                                 }}
-                                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                                className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                                 placeholder="0"
                               />
                             </div>
@@ -1899,7 +1899,7 @@ export const QuickAction: React.FC = () => {
                                 return next;
                               });
                             }}
-                            className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                            className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                             placeholder="0"
                           />
                         </div>
@@ -1908,7 +1908,7 @@ export const QuickAction: React.FC = () => {
                         <Button
                           type="button"
                           disabled={(packagingLines || []).length <= 1}
-                          className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
+                          className="text-sm font-bold text-[rgb(var(--color-danger))] disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
                           onClick={() => setPackagingLines((prev) => prev.filter((_, i) => i !== idx))}
                         >
                           حذف
@@ -1951,7 +1951,7 @@ export const QuickAction: React.FC = () => {
                     readOnly={quantityDerivedFromWorkerOutputs}
                     className={cn(
                       'w-full px-4 py-2.5 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12',
-                      quantityDerivedFromWorkerOutputs ? 'bg-[#f0f2f5]/70 text-primary font-black' : 'bg-[#f8f9fa]',
+                      quantityDerivedFromWorkerOutputs ? 'bg-[var(--color-surface-hover)]/70 text-primary font-black' : 'bg-[var(--color-bg)]',
                     )}
                     placeholder="0"
                     min="0"
@@ -1979,7 +1979,7 @@ export const QuickAction: React.FC = () => {
                     }
                     setComponentScrapItems([]);
                   }}
-                  className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                  className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                   placeholder="0"
                 />
             </div>
@@ -1990,7 +1990,7 @@ export const QuickAction: React.FC = () => {
                 type="number"
                 value={hours}
                 onChange={(e) => setHours(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
                 min="0"
                 step="0.5"
@@ -2004,7 +2004,7 @@ export const QuickAction: React.FC = () => {
                 min="0"
                 value={injectionWorkersCount}
                 onChange={(e) => setInjectionWorkersCount(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
               />
             </div>
@@ -2016,7 +2016,7 @@ export const QuickAction: React.FC = () => {
                 min="0"
                 value={packagingWorkersCount}
                 onChange={(e) => setPackagingWorkersCount(e.target.value)}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                 placeholder="0"
               />
             </div>
@@ -2029,7 +2029,7 @@ export const QuickAction: React.FC = () => {
                   variant="ghost"
                   onClick={openLineWorkersModal}
                   disabled={loadingWorkersCount}
-                  className="text-xs font-bold text-primary hover:text-primary/80 disabled:text-slate-400 disabled:cursor-not-allowed inline-flex items-center gap-1 h-auto p-0"
+                  className="text-xs font-bold text-primary hover:text-primary/80 disabled:text-[var(--color-text-muted)] disabled:cursor-not-allowed inline-flex items-center gap-1 h-auto p-0"
                 >
                   عرض عمالة الخط
                 </Button>
@@ -2041,7 +2041,7 @@ export const QuickAction: React.FC = () => {
                     type="number"
                     readOnly
                     value={workersTotal || ''}
-                    className="w-full px-3 py-2.5 bg-[#f0f2f5]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-black text-primary"
+                    className="w-full px-3 py-2.5 bg-[var(--color-surface-hover)]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-black text-primary"
                     placeholder="0"
                   />
                 </div>
@@ -2051,7 +2051,7 @@ export const QuickAction: React.FC = () => {
                     type="number"
                     value={workersProduction}
                     onChange={(e) => setWorkersProduction(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    className="w-full px-3 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                     placeholder="0"
                     min="0"
                   />
@@ -2062,7 +2062,7 @@ export const QuickAction: React.FC = () => {
                     type="number"
                     value={workersPackaging}
                     onChange={(e) => setWorkersPackaging(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    className="w-full px-3 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                     placeholder="0"
                     min="0"
                   />
@@ -2073,7 +2073,7 @@ export const QuickAction: React.FC = () => {
                     type="number"
                     value={workersQuality}
                     onChange={(e) => setWorkersQuality(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    className="w-full px-3 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                     placeholder="0"
                     min="0"
                   />
@@ -2084,7 +2084,7 @@ export const QuickAction: React.FC = () => {
                     type="number"
                     value={workersMaintenance}
                     onChange={(e) => setWorkersMaintenance(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    className="w-full px-3 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                     placeholder="0"
                     min="0"
                   />
@@ -2095,7 +2095,7 @@ export const QuickAction: React.FC = () => {
                     type="number"
                     value={workersExternal}
                     onChange={(e) => setWorkersExternal(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    className="w-full px-3 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
                     placeholder="0"
                     min="0"
                   />
@@ -2112,7 +2112,7 @@ export const QuickAction: React.FC = () => {
                 </button>
               )}
               {lineId && lineWorkers.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-slate-400">لا توجد عمالة مسجلة على هذا الخط اليوم.</p>
+                <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">لا توجد عمالة مسجلة على هذا الخط اليوم.</p>
               )}
             </div>
             )}
@@ -2137,9 +2137,9 @@ export const QuickAction: React.FC = () => {
                 />
               </div>
             ) : reportType === 'finished_product' && lineId && productId && workerOutputTargetsEligible ? (
-              <div className="md:col-span-2 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 p-4 space-y-2">
-                <p className="text-sm font-bold text-amber-800 dark:text-amber-300">إنتاج العمال غير مفعّل</p>
-                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+              <div className="md:col-span-2 rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] dark:border-[rgb(var(--color-warning)/0.25)] p-4 space-y-2">
+                <p className="text-sm font-bold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">إنتاج العمال غير مفعّل</p>
+                <p className="text-xs text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))] leading-relaxed">
                   لإظهار أسماء العمال وإدخال إنتاج كل عامل، فعّل
                   {' '}
                   <strong>«تفعيل إدخال إنتاج العمال في تقرير الإنتاج»</strong>
@@ -2162,7 +2162,7 @@ export const QuickAction: React.FC = () => {
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
-                className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12 resize-y"
+                className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12 resize-y"
                 placeholder="اكتب أي ملاحظات إضافية للتقرير..."
               />
             </div>
@@ -2201,11 +2201,11 @@ export const QuickAction: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {/* Success Banner */}
-          <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] px-5 py-4 flex items-center gap-3">
-            <span className="material-icons-round text-emerald-500 text-2xl">check_circle</span>
+          <div className="bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] px-5 py-4 flex items-center gap-3">
+            <span className="material-icons-round text-[rgb(var(--color-success))] text-2xl">check_circle</span>
             <div>
-              <p className="font-bold text-emerald-700">تم حفظ التقرير بنجاح!</p>
-              <p className="text-sm text-emerald-600 dark:text-emerald-500">يمكنك الآن التصدير أو المشاركة.</p>
+              <p className="font-bold text-[rgb(var(--color-success))]">تم حفظ التقرير بنجاح!</p>
+              <p className="text-sm text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">يمكنك الآن التصدير أو المشاركة.</p>
             </div>
           </div>
 
@@ -2233,65 +2233,65 @@ export const QuickAction: React.FC = () => {
           {/* Preview (visible on screen) */}
           {printReport && (
             <OpsDashPanel title="معاينة التقرير" accent="production" bodyClassName="p-0 overflow-hidden">
-              <div className="px-5 py-3 bg-[#f8f9fa]/50 border-b border-[var(--color-border)] flex items-center gap-2">
-                <span className="material-icons-round text-sm text-slate-400">visibility</span>
-                <span className="text-xs font-bold text-slate-500">معاينة التقرير</span>
+              <div className="px-5 py-3 bg-[var(--color-bg)]/50 border-b border-[var(--color-border)] flex items-center gap-2">
+                <span className="material-icons-round text-sm text-[var(--color-text-muted)]">visibility</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">معاينة التقرير</span>
               </div>
               <div className="p-5 space-y-3">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-blue-100 dark:border-blue-900/20">
+                  <div className="bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
-                    <p className="text-sm font-bold text-blue-600">{printReport.lineName}</p>
+                    <p className="text-sm font-bold text-[rgb(var(--color-primary))]">{printReport.lineName}</p>
                   </div>
-                  <div className="bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-violet-100 dark:border-violet-900/20">
+                  <div className="bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary)/0.15)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[rgb(var(--color-secondary)/0.25)] dark:border-[rgb(var(--color-secondary))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
-                    <p className="text-sm font-bold text-violet-600 dark:text-violet-400">{printReport.productName}</p>
+                    <p className="text-sm font-bold text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">{printReport.productName}</p>
                   </div>
-                  <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-emerald-100 dark:border-emerald-900/20">
+                  <div className="bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[rgb(var(--color-success)/0.25)] dark:border-[rgb(var(--color-success))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">الكمية المنتجة</p>
-                    <p className="text-sm font-bold text-emerald-600">{printReport.quantityProduced}</p>
+                    <p className="text-sm font-bold text-[rgb(var(--color-success))]">{printReport.quantityProduced}</p>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                  <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملاحظات</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{printReport.employeeName}</p>
                   </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                  <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">عدد العمال</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersCount}</p>
                   </div>
-                  <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                  <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ساعات العمل</p>
                     <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workHours}</p>
                   </div>
                 </div>
                 {reportType !== 'component_injection' && (
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                       <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إنتاج</p>
                       <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersProductionCount || 0}</p>
                     </div>
-                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                       <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">تغليف</p>
                       <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersPackagingCount || 0}</p>
                     </div>
-                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                       <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">جودة</p>
                       <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersQualityCount || 0}</p>
                     </div>
-                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                       <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">صيانة</p>
                       <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersMaintenanceCount || 0}</p>
                     </div>
-                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
+                    <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[var(--color-border)]">
                       <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">خارجية</p>
                       <p className="text-sm font-bold text-[var(--color-text)]">{printReport.workersExternalCount || 0}</p>
                     </div>
                   </div>
                 )}
                 {printReport.notes?.trim() && (
-                  <div className="bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-lg)] p-3 border border-amber-100 dark:border-amber-900/20">
+                  <div className="bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] rounded-[var(--border-radius-lg)] p-3 border border-[rgb(var(--color-warning)/0.25)] dark:border-[rgb(var(--color-warning))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">ملاحظات</p>
                     <p className="text-sm font-medium text-[var(--color-text)]">{printReport.notes}</p>
                   </div>
@@ -2305,7 +2305,7 @@ export const QuickAction: React.FC = () => {
       {/* Line Workers Modal */}
       {showLineWorkers && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-2 sm:p-4" onClick={() => setShowLineWorkers(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-end sm:items-center justify-center p-2 sm:p-4" onClick={() => setShowLineWorkers(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[calc(100dvh-1rem)] sm:max-h-[80vh] border border-[var(--color-border)] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 sm:px-5 py-4 border-b border-[var(--color-border)] flex items-start justify-between gap-3 shrink-0">
               <div className="min-w-0 flex flex-wrap items-center gap-2">
@@ -2313,11 +2313,11 @@ export const QuickAction: React.FC = () => {
                 <h3 className="font-bold">حضور عمالة الخط اليوم</h3>
                 <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded-[var(--border-radius-base)]">{lineWorkers.length}</span>
               </div>
-              <button onClick={() => setShowLineWorkers(false)} className="shrink-0 text-[var(--color-text-muted)] hover:text-slate-600">
+              <button onClick={() => setShowLineWorkers(false)} className="shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="px-4 sm:px-5 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60">
+            <div className="px-4 sm:px-5 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]/60">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="font-bold text-[var(--color-text-muted)]">الخط: </span>
@@ -2372,10 +2372,10 @@ export const QuickAction: React.FC = () => {
                 </div>
               </div>
               {workerActionError && (
-                <p className="text-xs font-bold text-rose-500">{workerActionError}</p>
+                <p className="text-xs font-bold text-[rgb(var(--color-danger))]">{workerActionError}</p>
               )}
               {!lineId && (
-                <p className="text-xs font-bold text-amber-600">اختر خط الإنتاج أولاً لعرض حضور عمالة الخط.</p>
+                <p className="text-xs font-bold text-[rgb(var(--color-warning))]">اختر خط الإنتاج أولاً لعرض حضور عمالة الخط.</p>
               )}
             </div>
             <div className="p-3 sm:p-4 overflow-y-auto space-y-3 min-w-0">
@@ -2403,14 +2403,14 @@ export const QuickAction: React.FC = () => {
                       className={cn(
                         'rounded-[var(--border-radius-lg)] border p-3 shadow-sm transition-colors',
                         isPresent
-                          ? 'border-emerald-100 bg-white dark:bg-transparent dark:border-emerald-900/30'
-                          : 'border-rose-100 bg-rose-50/50 dark:bg-rose-900/10 dark:border-rose-900/30',
+                          ? 'border-[rgb(var(--color-success)/0.25)] bg-[var(--color-card)] dark:bg-transparent dark:border-[rgb(var(--color-success))]/30'
+                          : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)] dark:border-[rgb(var(--color-danger))]/30',
                       )}
                     >
                       <div className="flex items-start gap-3">
                         <div className={cn(
                           'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
-                          isPresent ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500',
+                          isPresent ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]',
                         )}>
                           <span className="material-icons-round text-lg">person</span>
                         </div>
@@ -2419,7 +2419,7 @@ export const QuickAction: React.FC = () => {
                             <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
                             <span className={cn(
                               'rounded-full px-2 py-0.5 text-[11px] font-black',
-                              isPresent ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600',
+                              isPresent ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]',
                             )}>
                               {isPresent ? 'حاضر' : 'غائب'}
                             </span>
@@ -2438,7 +2438,7 @@ export const QuickAction: React.FC = () => {
                       <div className="mt-3 grid grid-cols-1 sm:grid-cols-[minmax(180px,220px)_minmax(160px,200px)_auto] gap-2 sm:items-end">
                         <div className="space-y-1.5">
                           <p className="text-[11px] font-black text-[var(--color-text-muted)]">الحضور</p>
-                          <div className="grid grid-cols-2 gap-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-1">
+                          <div className="grid grid-cols-2 gap-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-1">
                             <Button
                               type="button"
                               disabled={(!w.id && !w.permanentAssignmentId) || presenceUpdating}

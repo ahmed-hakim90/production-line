@@ -37,8 +37,8 @@ export function calculateGrade(overallScore: number): PerformanceGrade {
 }
 
 export const GRADE_CONFIG: Record<PerformanceGrade, { label: string; color: string; bg: string }> = {
-  A: { label: 'ممتاز', color: 'text-emerald-700 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/20' },
-  B: { label: 'جيد جداً', color: 'text-blue-700 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/20' },
-  C: { label: 'جيد', color: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/20' },
-  D: { label: 'يحتاج تحسين', color: 'text-rose-700 dark:text-rose-400', bg: 'bg-rose-100 dark:bg-rose-900/20' },
+  A: { label: 'ممتاز', color: 'text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]', bg: 'bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.2)]' },
+  B: { label: 'جيد جداً', color: 'text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]', bg: 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.2)]' },
+  C: { label: 'جيد', color: 'text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]', bg: 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.2)]' },
+  D: { label: 'يحتاج تحسين', color: 'text-[rgb(var(--color-danger))] dark:text-[rgb(var(--color-danger))]', bg: 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.2)]' },
 };

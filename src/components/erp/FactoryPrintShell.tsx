@@ -3,9 +3,10 @@ import { cn } from '@/lib/utils'
 import {
   Factory_DEFAULT_FOOTER_TAGLINE,
   Factory_IMAGE_PRIMARY,
-  Factory_IMAGE_PRIMARY_BADGE_BG,
-  Factory_IMAGE_PRIMARY_BADGE_TEXT,
+  resolveImageExportPalette,
 } from '@/utils/imageExportTheme'
+import { resolvePrintAccentHex } from '@/utils/printTheme'
+import { PrintExtraLines } from './PrintExtraLines'
 
 export type FactoryPrintMetaCard = {
   label: string
@@ -32,6 +33,8 @@ export type FactoryPrintShellProps = {
   metaCards?: FactoryPrintMetaCard[]
   kpis?: FactoryPrintKpi[]
   signatures?: { title: string; detail?: string }[]
+  /** Tenant custom lines from print document settings */
+  extraLines?: string[]
   children?: ReactNode
   /** Root id for capture / clone hooks */
   exportRootId?: string
@@ -44,6 +47,10 @@ export type FactoryPrintShellProps = {
   className?: string
   /** Compact thermal / A5 density */
   dense?: boolean
+  /** CSS font-family stack from print settings */
+  fontFamily?: string
+  /** CSS font-size (e.g. 10pt) */
+  fontSize?: string
 }
 
 const gridColsClass = (count: number) => {
@@ -62,11 +69,11 @@ const gridColsClass = (count: number) => {
 const gridTemplateColumns = (count: number) =>
   `repeat(${Math.max(1, Math.min(4, count))}, minmax(0, 1fr))`
 
-const kpiStripColor = (tone: FactoryPrintKpi['tone'], accent: string): string => {
+const kpiStripColor = (tone: FactoryPrintKpi['tone'], accent: string, workersStrip: string): string => {
   if (tone === 'indigo') return accent
   if (tone === 'green') return '#059669'
   if (tone === 'red') return '#dc2626'
-  if (tone === 'sky') return '#60a5fa'
+  if (tone === 'sky') return workersStrip
   return '#cbd5e1'
 }
 
@@ -89,13 +96,14 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
       documentType,
       printDate,
       logoUrl,
-      brandAccent = Factory_IMAGE_PRIMARY,
+      brandAccent,
       footerTagline = Factory_DEFAULT_FOOTER_TAGLINE,
       version = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '',
       showVersion = true,
       metaCards,
       kpis,
       signatures,
+      extraLines,
       children,
       exportRootId = 'print-root',
       width = 640,
@@ -104,10 +112,13 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
       padding,
       className,
       dense = false,
+      fontFamily = "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
+      fontSize,
     },
     ref,
   ) => {
-    const accent = brandAccent
+    const palette = resolveImageExportPalette(resolvePrintAccentHex(brandAccent))
+    const accent = palette.primary
     // Screen / PDF capture keep an explicit preview width.
     // @media print (printManager + index.css) forces 100% of the printable area.
     const resolvedWidth = paperWidth ?? width
@@ -115,6 +126,8 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
     const headerBorderStyle: CSSProperties = { borderBottomColor: accent }
     const meta = metaCards ?? []
     const kpiList = kpis ?? []
+    const customLines = extraLines ?? []
+    const resolvedFontSize = fontSize ?? (dense ? '9pt' : '10pt')
 
     return (
       <div
@@ -122,14 +135,15 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
         ref={ref}
         dir="rtl"
         lang="ar"
+        data-print-font={fontFamily}
         className={cn(
-          'print-root print-report arabic-export-root bg-white mx-auto print:mx-0 print:w-full print:max-w-none print:min-w-0',
+          'print-root print-report arabic-export-root bg-[var(--color-card)] mx-auto print:mx-0 print:w-full print:max-w-none print:min-w-0',
           !paperWidth && 'w-[640px]',
           className,
         )}
         style={{
-          fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
-          fontSize: dense ? '11px' : '13px',
+          fontFamily,
+          fontSize: resolvedFontSize,
           letterSpacing: 'normal',
           wordSpacing: 'normal',
           width: resolvedWidth,
@@ -149,7 +163,7 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
             ) : null}
             <div className="min-w-0">
               <h1
-                className={cn('font-extrabold text-slate-900 leading-tight', dense ? 'text-[15px]' : 'text-[18px]')}
+                className={cn('font-extrabold text-[var(--color-text)] leading-tight', dense ? 'text-[15px]' : 'text-[18px]')}
                 style={{ letterSpacing: 'normal' }}
               >
                 {companyName}
@@ -166,8 +180,8 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
                 fontSize: dense ? '12px' : '13px',
                 lineHeight: 1.3,
                 padding: dense ? '4px 8px' : '5px 10px',
-                background: Factory_IMAGE_PRIMARY_BADGE_BG,
-                color: Factory_IMAGE_PRIMARY_BADGE_TEXT,
+                background: palette.badgeBg,
+                color: palette.badgeText,
                 letterSpacing: 'normal',
                 maxWidth: '220px',
                 textAlign: 'center',
@@ -175,16 +189,18 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
             >
               {documentType}
             </span>
-            <span className="text-[11px] text-slate-500" style={{ letterSpacing: 'normal' }}>
+            <span className="text-[11px] text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
               {printDate}
             </span>
           </div>
         </header>
 
+        <PrintExtraLines lines={customLines} dense={dense} />
+
         {meta.length > 0 ? (
           <div
             className={cn(
-              'mb-4 grid overflow-hidden rounded-lg border border-slate-200',
+              'mb-4 grid overflow-hidden rounded-lg border border-[var(--color-border)]',
               gridColsClass(meta.length),
             )}
             style={{ display: 'grid', gridTemplateColumns: gridTemplateColumns(meta.length) }}
@@ -192,13 +208,13 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
             {meta.map((item, i) => (
               <div
                 key={`${item.label}-${i}`}
-                className={cn('bg-slate-50 px-3 py-2', i < meta.length - 1 && 'border-l border-slate-200')}
+                className={cn('bg-[var(--color-bg)] px-3 py-2', i < meta.length - 1 && 'border-l border-[var(--color-border)]')}
               >
-                <p className="mb-1 text-[9px] font-bold text-slate-400" style={{ letterSpacing: 'normal' }}>
+                <p className="mb-1 text-[9px] font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
                   {item.label}
                 </p>
                 <p
-                  className="text-[11px] font-extrabold leading-tight text-slate-800"
+                  className="text-[11px] font-extrabold leading-tight text-[var(--color-text)]"
                   style={{ wordBreak: 'break-word' }}
                 >
                   {item.value}
@@ -216,12 +232,12 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
             {kpiList.map((kpi, i) => (
               <div
                 key={`${kpi.label}-${i}`}
-                className="flex min-h-[4.5rem] overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                className="flex min-h-[4.5rem] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"
                 style={{ display: 'flex', flexDirection: 'row', minHeight: dense ? '3.75rem' : '4.5rem' }}
               >
                 <div
                   className="w-[3px] shrink-0 self-stretch"
-                  style={{ backgroundColor: kpiStripColor(kpi.tone, accent) }}
+                  style={{ backgroundColor: kpiStripColor(kpi.tone, accent, palette.workersStrip) }}
                 />
                 <div className="flex min-w-0 flex-1 flex-col items-center justify-center px-2 py-2.5 text-center">
                   <div className="flex flex-wrap items-baseline justify-center gap-x-1" dir="rtl">
@@ -237,10 +253,10 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
                       {typeof kpi.value === 'number' ? kpi.value.toLocaleString('ar-EG') : kpi.value}
                     </span>
                     {kpi.unit ? (
-                      <span className="text-[12px] font-semibold text-slate-500">{kpi.unit}</span>
+                      <span className="text-[12px] font-semibold text-[var(--color-text-muted)]">{kpi.unit}</span>
                     ) : null}
                   </div>
-                  <p className="mt-1.5 text-[11px] font-bold leading-snug text-slate-500">{kpi.label}</p>
+                  <p className="mt-1.5 text-[11px] font-bold leading-snug text-[var(--color-text-muted)]">{kpi.label}</p>
                 </div>
               </div>
             ))}
@@ -256,17 +272,17 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
           >
             {signatures.map((sig) => (
               <div key={sig.title} className="flex flex-col items-center">
-                <p className="mb-8 text-[12px] font-extrabold text-slate-700">{sig.title}</p>
-                <div className="w-full border-t border-slate-300 pt-1 text-center">
-                  <p className="text-[10px] text-slate-400">{sig.detail || 'الاسم / التوقيع'}</p>
+                <p className="mb-8 text-[12px] font-extrabold text-[var(--color-text)]">{sig.title}</p>
+                <div className="w-full border-t border-[var(--color-border)] pt-1 text-center">
+                  <p className="text-[10px] text-[var(--color-text-muted)]">{sig.detail || 'الاسم / التوقيع'}</p>
                 </div>
               </div>
             ))}
           </section>
         ) : null}
 
-        <footer className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
-          <p className="text-[10px] text-slate-400" style={{ letterSpacing: 'normal' }}>
+        <footer className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-3">
+          <p className="text-[10px] text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
             {footerTagline} — {printDate}
           </p>
           {showVersion && version ? (
@@ -293,7 +309,7 @@ export function FactoryPrintSectionTitle({
   return (
     <div className="mb-2 mt-1 flex items-center gap-2">
       <div className="h-3 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
-      <p className="text-[11px] font-extrabold text-slate-600" style={{ letterSpacing: 'normal' }}>
+      <p className="text-[11px] font-extrabold text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
         {title}
       </p>
     </div>

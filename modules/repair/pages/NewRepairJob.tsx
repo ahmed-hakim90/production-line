@@ -6,9 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Camera, ScanBarcode, Trash2 } from 'lucide-react';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
 import { RepairOpsPageShell } from '@/modules/repair/components/RepairOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SearchableSelect } from '@/components/UI';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
@@ -48,6 +50,31 @@ type JobProductRow = {
   accessories: string;
   diagnosis: string;
   inWarranty: boolean;
+};
+
+type NewRepairJobDraft = {
+  form: {
+    branchId: string;
+    customerName: string;
+    customerPhone: string;
+    customerAddress: string;
+  };
+  customerId: string;
+  jobProducts: JobProductRow[];
+};
+
+const isNewRepairJobDraftEmpty = (draft: NewRepairJobDraft): boolean => {
+  const hasCustomer = Boolean(draft.customerId || draft.form.customerName.trim() || draft.form.customerPhone.trim() || draft.form.customerAddress.trim());
+  const hasProductWork = draft.jobProducts.some((row) => (
+    Boolean(row.productId)
+    || Boolean(row.serialNo.trim())
+    || Boolean(row.diagnosis.trim())
+    || Boolean(row.accessories.trim())
+    || row.accessoryIds.length > 0
+    || row.inWarranty
+    || String(row.quantity || '1') !== '1'
+  ));
+  return !hasCustomer && !hasProductWork;
 };
 
 const toggleCatalogId = (ids: string[], id: string): string[] => (
@@ -115,6 +142,54 @@ export const NewRepairJob: React.FC = () => {
     customerAddress: '',
   });
 
+  const callCenterPrefill = (location.state as { callCenterPrefill?: RepairCallCenterPrefill } | null)?.callCenterPrefill;
+  const draftValue = useMemo<NewRepairJobDraft>(
+    () => ({ form, customerId, jobProducts }),
+    [form, customerId, jobProducts],
+  );
+  const { hasDraft, clearDraft } = useLocalFormDraft<NewRepairJobDraft>({
+    formKey: 'repair:newJob',
+    tenantId: getCurrentTenantIdOrNull() || user?.tenantId,
+    userId: user?.id,
+    value: draftValue,
+    enabled: !callCenterPrefill,
+    isEmpty: isNewRepairJobDraftEmpty,
+    onRestore: (draft) => {
+      setForm({
+        branchId: String(draft.form?.branchId || ''),
+        customerName: String(draft.form?.customerName || ''),
+        customerPhone: String(draft.form?.customerPhone || ''),
+        customerAddress: String(draft.form?.customerAddress || ''),
+      });
+      setCustomerId(String(draft.customerId || ''));
+      const rows = Array.isArray(draft.jobProducts) && draft.jobProducts.length > 0
+        ? draft.jobProducts.map((row) => ({
+            itemId: String(row.itemId || createEmptyProductRow().itemId),
+            productId: String(row.productId || ''),
+            quantity: String(row.quantity || '1'),
+            serialNo: String(row.serialNo || ''),
+            accessoryIds: Array.isArray(row.accessoryIds) ? row.accessoryIds.map(String) : [],
+            accessories: String(row.accessories || ''),
+            diagnosis: String(row.diagnosis || ''),
+            inWarranty: Boolean(row.inWarranty),
+          }))
+        : [createEmptyProductRow()];
+      setJobProducts(rows);
+    },
+  });
+
+  const resetLocalDraftForm = () => {
+    clearDraft();
+    setCustomerId('');
+    setForm((prev) => ({
+      branchId: prev.branchId,
+      customerName: '',
+      customerPhone: '',
+      customerAddress: '',
+    }));
+    setJobProducts([createEmptyProductRow()]);
+    setBarcodeInputs({});
+  };
   const selectProductForRow = useCallback((rowId: string, productId: string) => {
     const selected = products.find((product) => String(product.id) === String(productId));
     const nextAccessories = accessoriesForProductCategory(
@@ -220,7 +295,7 @@ export const NewRepairJob: React.FC = () => {
 
   const callCenterAppliedRef = React.useRef(false);
   useEffect(() => {
-    const prefill = (location.state as { callCenterPrefill?: RepairCallCenterPrefill } | null)?.callCenterPrefill;
+    const prefill = callCenterPrefill;
     if (!prefill || callCenterAppliedRef.current || allowedBranches.length === 0) return;
     callCenterAppliedRef.current = true;
     setForm((prev) => ({
@@ -247,7 +322,7 @@ export const NewRepairJob: React.FC = () => {
     } else if (prefill.diagnosis) {
       setJobProducts((prev) => prev.map((row, idx) => (idx === 0 ? { ...row, diagnosis: prefill.diagnosis || row.diagnosis } : row)));
     }
-  }, [location.state, allowedBranches]);
+  }, [callCenterPrefill, allowedBranches]);
 
   useEffect(() => {
     if (!form.branchId) {
@@ -358,6 +433,7 @@ export const NewRepairJob: React.FC = () => {
         userName: String(user?.displayName || user?.email || 'مستخدم'),
       }));
       if (!result.jobId) throw new Error('تعذر إنشاء الطلب.');
+      clearDraft();
       toast.success('تم تسجيل طلب الصيانة. يمكنك طباعة نسختي الإيصال والكارت الداخلي.');
       if (result.usedFallbackReceipt) {
         toast.info('تم استخدام رقم إيصال بديل تلقائيًا بسبب صلاحيات عداد الإيصالات.');
@@ -386,7 +462,7 @@ export const NewRepairJob: React.FC = () => {
     >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
         <div className="space-y-4 lg:order-1">
-          <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+          <div className="rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-3 py-2 text-sm text-[rgb(var(--color-primary))]">
             مسار الاستقبال: سجّل العميل والجهاز فقط. التشخيص وقطع الغيار والتكلفة تتم من شاشة الورشة بعد إسناد الفني.
           </div>
 
@@ -442,7 +518,7 @@ export const NewRepairJob: React.FC = () => {
                   </p>
                 </div>
                 <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
-                  <Label>المنتجات <span className="text-rose-600">*</span></Label>
+                  <Label>المنتجات <span className="text-[rgb(var(--color-danger))]">*</span></Label>
                   <div className="space-y-2">
                     {jobProducts.map((row, idx) => (
                       <div key={row.itemId} className="rounded-md border p-2 space-y-2">
@@ -458,7 +534,7 @@ export const NewRepairJob: React.FC = () => {
                             disabled={jobProducts.length <= 1}
                             aria-label={`حذف منتج ${idx + 1}`}
                           >
-                            <Trash2 className="h-4 w-4 text-rose-500" />
+                            <Trash2 className="h-4 w-4 text-[rgb(var(--color-danger))]" />
                           </Button>
                         </div>
                         <div className="space-y-2">
@@ -470,7 +546,7 @@ export const NewRepairJob: React.FC = () => {
                                 value={row.productId}
                                 onChange={(value) => selectProductForRow(row.itemId, value)}
                                 placeholder="ابحث بالاسم أو الكود أو الباركود"
-                                className={!row.productId ? 'border-rose-300' : ''}
+                                className={!row.productId ? 'border-[rgb(var(--color-danger)/0.35)]' : ''}
                               />
                             </div>
                             <div className="w-full shrink-0 space-y-1.5 sm:w-28">
@@ -641,6 +717,11 @@ export const NewRepairJob: React.FC = () => {
           </OpsDashPanel>
 
           <div className="flex items-center justify-end gap-2">
+            {hasDraft ? (
+              <Button variant="ghost" type="button" onClick={resetLocalDraftForm} disabled={loading}>
+                مسح المسودة
+              </Button>
+            ) : null}
             <Button variant="outline" type="button" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
               إلغاء
             </Button>

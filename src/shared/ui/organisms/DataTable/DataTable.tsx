@@ -317,7 +317,7 @@ export function DataTable<T>({
               className={[
                 'inline-flex items-center gap-1.5 h-8 px-3 text-[12px] font-semibold',
                 action.variant === 'danger'
-                  ? 'bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100'
+                  ? 'bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.15)]'
                   : action.variant === 'primary'
                     ? 'bg-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary))] text-white hover:opacity-90'
                     : 'bg-[var(--color-card)] border border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-surface-hover)]',
@@ -536,7 +536,7 @@ export function DataTable<T>({
                     style={{
                       borderBottom: '1px solid var(--color-border)',
                       backgroundColor: highlightRowId === rowId
-                        ? '#fffbeb'
+                        ? 'rgb(var(--color-warning) / 0.12)'
                         : isSelected
                           ? 'rgb(var(--color-primary) / 0.06)'
                           : undefined,
@@ -546,7 +546,7 @@ export function DataTable<T>({
                     }}
                     onMouseEnter={(e) => {
                       if (highlightRowId !== rowId && !isSelected)
-                        (e.currentTarget as HTMLTableRowElement).style.backgroundColor = '#f8f9fa';
+                        (e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'var(--color-bg)';
                     }}
                     onMouseLeave={(e) => {
                       if (highlightRowId !== rowId && !isSelected)

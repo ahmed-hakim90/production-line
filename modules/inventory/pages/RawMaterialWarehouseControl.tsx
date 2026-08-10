@@ -584,7 +584,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
       >
         <OpsDashPanel accent="inventory">
           <div className="py-10 text-center space-y-4">
-            <p className="text-sm text-rose-700">تعذر تحميل بيانات مخزن المستلزمات. حاول مرة أخرى.</p>
+            <p className="text-sm text-[rgb(var(--color-danger))]">تعذر تحميل بيانات مخزن المستلزمات. حاول مرة أخرى.</p>
             <GhostButton iconName="refresh" onClick={() => void loadData()}>
               إعادة المحاولة
             </GhostButton>
@@ -605,7 +605,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         <div className="flex flex-wrap gap-2 items-center">
           {canSwitchWarehouse && (
             <select
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+              className="rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm font-semibold text-[var(--color-text)]"
               value={warehouseId}
               onChange={(e) => setWarehouseId(e.target.value)}
               aria-label="تبديل مخزن المستلزمات"
@@ -629,13 +629,13 @@ export const RawMaterialWarehouseControl: React.FC = () => {
       )}
     >
       {kpis.negative > 0 && (
-        <p className="text-sm font-medium text-red-700 bg-red-50 border border-red-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-lg px-4 py-3">
           يوجد {kpis.negative} رصيد سالب في مخزن المستلزمات. راجع شاشة التنبيهات.
         </p>
       )}
 
       {countCardMessage && (
-        <p className="text-sm font-medium text-rose-800 bg-rose-50 border border-rose-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-lg px-4 py-3">
           {countCardMessage}
         </p>
       )}
@@ -659,12 +659,12 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                   className="flex flex-col gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-4 py-3"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700">
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[rgb(var(--color-primary)/0.1)] text-xs font-bold text-[rgb(var(--color-primary))]">
                       {card.step}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="material-icons-round text-[18px] text-indigo-600">{card.icon}</span>
+                        <span className="material-icons-round text-[18px] text-[rgb(var(--color-primary))]">{card.icon}</span>
                         <p className="text-sm font-bold text-[var(--color-text)]">{card.label}</p>
                       </div>
                       <p className="text-xs text-[var(--color-text-muted)] mt-1">{card.description}</p>
@@ -708,7 +708,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
           action={(
             <button
               type="button"
-              className="flex items-center gap-2 text-xs text-slate-500"
+              className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]"
               onClick={() => setToolsOpen((open) => !open)}
               aria-expanded={toolsOpen}
             >
@@ -725,9 +725,9 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                   <Link
                     key={item.key}
                     to={withTenantPath(tenantSlug, item.path)}
-                    className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                    className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-4 py-3 transition-colors hover:bg-[var(--color-surface-hover)] dark:hover:bg-[var(--color-surface-hover)]"
                   >
-                    <span className="material-icons-round text-[22px] text-indigo-600 mt-0.5">{item.icon}</span>
+                    <span className="material-icons-round text-[22px] text-[rgb(var(--color-primary))] mt-0.5">{item.icon}</span>
                     <span>
                       <span className="block text-sm font-bold text-[var(--color-text)]">{item.label}</span>
                       <span className="block text-xs text-[var(--color-text-muted)] mt-0.5">{item.description}</span>
@@ -749,7 +749,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         action={(
           <button
             type="button"
-            className="flex items-center gap-2 text-xs text-slate-500"
+            className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]"
             onClick={() => setAssemblableOpen((open) => !open)}
             aria-expanded={assemblableOpen}
           >
@@ -766,7 +766,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
               <p className="mx-4 mb-3 text-sm text-[var(--color-text-muted)]">جاري حساب المتاح للتجميع…</p>
             )}
             {assemblableError && (
-              <p className="mx-4 mb-3 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+              <p className="mx-4 mb-3 text-sm font-medium text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-4 py-3">
                 {assemblableError}
               </p>
             )}
@@ -821,7 +821,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={`sk-${i}`} className="border-b border-[var(--color-border)]">
                         <td className="px-4 py-3" colSpan={7}>
-                          <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                          <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface-hover)]" />
                         </td>
                       </tr>
                     ))
@@ -843,7 +843,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                             <td className="px-2 py-3 text-center">
                               <button
                                 type="button"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]"
                                 aria-label={expanded ? 'إخفاء المكوّنات' : 'عرض المكوّنات'}
                                 onClick={() =>
                                   setExpandedProductId((prev) => (prev === row.productId ? null : row.productId))
@@ -856,11 +856,11 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                             </td>
                             <td className="px-4 py-3">
                               <p className="text-sm font-medium text-[var(--color-text)]">{row.productName}</p>
-                              <p className="text-xs text-slate-400 font-mono">{row.productCode || '—'}</p>
+                              <p className="text-xs text-[var(--color-text-muted)] font-mono">{row.productCode || '—'}</p>
                             </td>
                             <td className="px-4 py-3 text-center text-sm tabular-nums">{row.componentCount}</td>
                             <td className="px-4 py-3 text-center">
-                              <span className="text-base font-bold tabular-nums text-indigo-700">
+                              <span className="text-base font-bold tabular-nums text-[rgb(var(--color-primary))]">
                                 {formatNumber(row.maxAssemblable)}
                               </span>
                             </td>
@@ -868,19 +868,19 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                               {bn ? (
                                 <>
                                   <p className="text-sm text-[var(--color-text)]">{bn.materialName}</p>
-                                  <p className="text-xs text-slate-400 font-mono">{bn.materialCode || '—'}</p>
+                                  <p className="text-xs text-[var(--color-text-muted)] font-mono">{bn.materialCode || '—'}</p>
                                 </>
                               ) : (
-                                <span className="text-sm text-slate-400">—</span>
+                                <span className="text-sm text-[var(--color-text-muted)]">—</span>
                               )}
                             </td>
-                            <td className="px-4 py-3 text-center text-sm tabular-nums text-slate-600">
+                            <td className="px-4 py-3 text-center text-sm tabular-nums text-[var(--color-text-muted)]">
                               {bn ? formatNumber(bn.availableQty) : '—'}
                             </td>
                             <td className="px-2 py-3 text-center">
                               <button
                                 type="button"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-indigo-600 hover:bg-indigo-50 disabled:opacity-40"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)] disabled:opacity-40"
                                 title="معاينة كارت جرد"
                                 disabled={countCardPreviewBusy || !warehouseId}
                                 onClick={() => void openCountCardPreview([row.productId])}
@@ -894,12 +894,12 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                             </td>
                           </tr>
                           {expanded && (
-                            <tr className="border-b border-[var(--color-border)] bg-slate-50/80 dark:bg-slate-900/30">
+                            <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg)] dark:bg-[var(--color-surface-hover)]">
                               <td colSpan={7} className="px-4 py-3">
-                                <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-white dark:bg-slate-950">
+                                <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] dark:bg-[var(--color-card)]">
                                   <table className="w-full text-sm">
                                     <thead>
-                                      <tr className="border-b bg-slate-50 dark:bg-slate-900">
+                                      <tr className="border-b bg-[var(--color-bg)] dark:bg-[var(--color-card)]">
                                         <th className="px-3 py-2 text-start font-medium">المكوّن</th>
                                         <th className="px-3 py-2 text-center font-medium">مطلوب/وحدة</th>
                                         <th className="px-3 py-2 text-center font-medium">متاح</th>
@@ -912,14 +912,14 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                                         return (
                                           <tr
                                             key={`${row.productId}-${component.materialId}`}
-                                            className={isBottleneck ? 'bg-amber-50/80 dark:bg-amber-950/20' : ''}
+                                            className={isBottleneck ? 'bg-[rgb(var(--color-warning)/0.1)]/80 dark:bg-[rgb(var(--color-warning)/0.2)]' : ''}
                                           >
                                             <td className="px-3 py-2">
                                               <span className="font-medium">{component.materialName}</span>
                                               {isBottleneck && (
                                                 <StatusBadge label="عنق زجاجي" type="warning" className="ms-2" />
                                               )}
-                                              <p className="text-xs text-slate-400 font-mono">{component.materialCode || '—'}</p>
+                                              <p className="text-xs text-[var(--color-text-muted)] font-mono">{component.materialCode || '—'}</p>
                                             </td>
                                             <td className="px-3 py-2 text-center tabular-nums">
                                               {formatNumber(component.requiredPerUnit)}
@@ -961,16 +961,16 @@ export const RawMaterialWarehouseControl: React.FC = () => {
       <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-2">
         <OpsDashPanel title="آخر حركات المخزن" accent="inventory">
             {loading ? (
-              <p className="text-sm text-slate-400">جاري التحميل…</p>
+              <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل…</p>
             ) : transactions.length === 0 ? (
-              <p className="text-sm text-slate-400">لا توجد حركات حتى الآن.</p>
+              <p className="text-sm text-[var(--color-text-muted)]">لا توجد حركات حتى الآن.</p>
             ) : (
               <div className="space-y-3">
                 {transactions.map((tx) => (
                   <div key={tx.id} className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                     <div>
                       <p className="text-sm font-medium text-[var(--color-text)]">{tx.itemName}</p>
-                      <p className="text-xs text-slate-400">{new Date(tx.createdAt).toLocaleString('ar-EG')}</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{new Date(tx.createdAt).toLocaleString('ar-EG')}</p>
                     </div>
                     <div className="text-left">
                       <StatusBadge
@@ -991,25 +991,25 @@ export const RawMaterialWarehouseControl: React.FC = () => {
           title="أصناف تحت الحد الأدنى"
           accent="inventory"
           action={(
-            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')} className="text-xs font-bold text-indigo-600">
+            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')} className="text-xs font-bold text-[rgb(var(--color-primary))]">
               عرض الكل
             </Link>
           )}
         >
             {lowPreview.length === 0 ? (
-              <p className="text-sm font-medium text-emerald-600">لا توجد أصناف تحت الحد الأدنى.</p>
+              <p className="text-sm font-medium text-[rgb(var(--color-success))]">لا توجد أصناف تحت الحد الأدنى.</p>
             ) : (
               <div className="space-y-3">
                 {lowPreview.map((row) => (
                   <div
                     key={row.id}
-                    className="flex items-center justify-between rounded-[var(--border-radius-lg)] bg-amber-50 dark:bg-amber-900/10 px-3 py-2 border border-amber-100"
+                    className="flex items-center justify-between rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] px-3 py-2 border border-[rgb(var(--color-warning)/0.25)]"
                   >
                     <div>
                       <p className="text-sm font-medium text-[var(--color-text)]">{row.itemName}</p>
-                      <p className="text-xs text-slate-500">{row.itemCode}</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{row.itemCode}</p>
                     </div>
-                    <div className="text-left text-sm font-medium text-amber-700 tabular-nums">
+                    <div className="text-left text-sm font-medium text-[rgb(var(--color-warning))] tabular-nums">
                       {formatNumber(row.quantity)} / {formatNumber(row.minStock)}
                     </div>
                   </div>

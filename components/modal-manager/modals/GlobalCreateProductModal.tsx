@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedModalController } from '../GlobalModalManager';
+import { useManagedModalController, useGlobalModalManager } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreProduct } from '../../../types';
 import { CategoryTreeSelect } from '../../../modules/catalog/components/CategoryTreeSelect';
@@ -41,7 +41,6 @@ import {
   isOperationPathEnabled,
 } from '../../../modules/system/lib/operationPathSettings';
 import { DUPLICATE_ENTITY_CODE } from '../../../modules/shared/services/entityCodeSequenceService';
-import { ProductModalMaterialsSection } from '../../../modules/production/components/ProductModalMaterialsSection';
 
 function isDuplicateEntityCodeError(e: unknown): boolean {
   return (
@@ -86,10 +85,13 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
 export const GlobalCreateProductModal: React.FC = () => {
   const { t } = useTranslation();
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.PRODUCTS_CREATE);
+  const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const canCreate = can('products.create');
   const canEditPerm = can('products.edit');
   const canViewCosts = can('costs.view');
+  const canViewSellingPrice = can('products.sellingPrice.view');
+  const canOpenBomModal = can('bom.view') || can('bom.manage') || can('products.edit');
   const createProduct = useAppStore((s) => s.createProduct);
   const updateProduct = useAppStore((s) => s.updateProduct);
   const products = useAppStore((s) => s.products);
@@ -116,9 +118,6 @@ export const GlobalCreateProductModal: React.FC = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [categoryBreadcrumb, setCategoryBreadcrumb] = useState('');
   const [saving, setSaving] = useState(false);
-  /** بعد حفظ منتج جديد — لاستكمال قائمة المواد داخل نفس المودال */
-  const [justCreatedProductId, setJustCreatedProductId] = useState<string | null>(null);
-  const [justCreatedProductName, setJustCreatedProductName] = useState('');
 
   const peekProduct = useCallback(() => productService.peekNextCode(), []);
 
@@ -147,8 +146,6 @@ export const GlobalCreateProductModal: React.FC = () => {
     setForm(emptyForm);
     setSelectedCategoryId(null);
     setCategoryBreadcrumb('');
-    setJustCreatedProductId(null);
-    setJustCreatedProductName('');
     setChineseUnitPriceYuan('');
   }, [isOpen, isEditFlow]);
 
@@ -209,13 +206,6 @@ export const GlobalCreateProductModal: React.FC = () => {
     };
   }, [isOpen, selectedCategoryId]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      setJustCreatedProductId(null);
-      setJustCreatedProductName('');
-    }
-  }, [isOpen]);
-
   const cnyToEgpRate = Number(laborSettings?.cnyToEgpRate ?? 0);
 
   if (!isOpen) return null;
@@ -230,8 +220,6 @@ export const GlobalCreateProductModal: React.FC = () => {
     return null;
   }
 
-  const materialsProductId = justCreatedProductId ?? (isEditFlow ? editProductId : null);
-
   const resolveChineseUnitCost = (): number => {
     if (!canViewCosts) return form.chineseUnitCost ?? 0;
     if (cnyToEgpRate > 0) {
@@ -243,20 +231,21 @@ export const GlobalCreateProductModal: React.FC = () => {
 
   const handleClose = () => {
     if (saving) return;
-    setJustCreatedProductId(null);
-    setJustCreatedProductName('');
     setForm(emptyForm);
     close();
   };
 
-  const startAnotherProduct = () => {
-    setJustCreatedProductId(null);
-    setJustCreatedProductName('');
-    setSelectedCategoryId(null);
-    setCategoryBreadcrumb('');
-    setForm(emptyForm);
-    setChineseUnitPriceYuan('');
-    void refreshProductCodePreview();
+  const openBomForProduct = (
+    productId: string,
+    productName: string,
+    source: string = 'products.create.afterSave',
+  ) => {
+    if (!canOpenBomModal || !productId) return;
+    openModal(MODAL_KEYS.PRODUCTS_BOM_MANAGE, {
+      productId,
+      productName,
+      source,
+    });
   };
 
   const handleSave = async () => {
@@ -316,6 +305,16 @@ export const GlobalCreateProductModal: React.FC = () => {
           code: codeForSave,
           chineseUnitCost: resolveChineseUnitCost(),
         };
+        if (!canViewCosts) {
+          delete payloadUpdate.chineseUnitCost;
+          delete payloadUpdate.innerBoxCost;
+          delete payloadUpdate.outerCartonCost;
+          delete payloadUpdate.unitsPerCarton;
+          delete payloadUpdate.productionOverheadPerUnit;
+        }
+        if (!canViewSellingPrice) {
+          delete payloadUpdate.sellingPrice;
+        }
         payloadUpdate.routingTargetUnitSeconds = hasTarget ? Math.round(tSec) : deleteField();
         await updateProduct(
           editProductId,
@@ -341,6 +340,15 @@ export const GlobalCreateProductModal: React.FC = () => {
             const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
             createData.chineseUnitCost = chineseUnitCostEgpFromYuanUnitPrice(yuan, cnyToEgpRate);
           }
+        } else {
+          delete (createData as { chineseUnitCost?: number }).chineseUnitCost;
+          delete (createData as { innerBoxCost?: number }).innerBoxCost;
+          delete (createData as { outerCartonCost?: number }).outerCartonCost;
+          delete (createData as { unitsPerCarton?: number }).unitsPerCarton;
+          delete (createData as { productionOverheadPerUnit?: number }).productionOverheadPerUnit;
+        }
+        if (!canViewSellingPrice) {
+          delete (createData as { sellingPrice?: number }).sellingPrice;
         }
         if (
           typeof createData.routingTargetUnitSeconds !== 'number' ||
@@ -355,9 +363,10 @@ export const GlobalCreateProductModal: React.FC = () => {
           createData,
           { path: PRODUCT_CREATE_PATHS.globalModal },
         );
-        setJustCreatedProductId(id);
-        setJustCreatedProductName(normalizedName);
         toast.success(t('modalManager.createProduct.createSuccess'));
+        setForm(emptyForm);
+        close();
+        openBomForProduct(id, normalizedName);
       }
     } catch (e) {
       if (isDuplicateEntityCodeError(e)) {
@@ -386,20 +395,14 @@ export const GlobalCreateProductModal: React.FC = () => {
       >
         <DialogHeader className="shrink-0 border-b px-5 py-4 text-right sm:text-right">
           <DialogTitle>
-            {justCreatedProductId && !isEditFlow
-              ? t('modalManager.createProduct.bomTitle')
-              : isEditFlow
-                ? t('modalManager.createProduct.editTitle')
-                : t('modalManager.createProduct.title')}
+            {isEditFlow
+              ? t('modalManager.createProduct.editTitle')
+              : t('modalManager.createProduct.title')}
           </DialogTitle>
           <DialogDescription>
-            {justCreatedProductId && !isEditFlow
-              ? t('modalManager.createProduct.bomAfterCreateDescription', {
-                  name: justCreatedProductName,
-                })
-              : isEditFlow
-                ? t('modalManager.createProduct.editDescription')
-                : t('modalManager.createProduct.createDescription')}
+            {isEditFlow
+              ? t('modalManager.createProduct.editDescription')
+              : t('modalManager.createProduct.createDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -417,23 +420,7 @@ export const GlobalCreateProductModal: React.FC = () => {
             </div>
           )}
 
-          {justCreatedProductId && !isEditFlow ? (
-            <section className="space-y-4" aria-labelledby="product-bom-heading">
-              <div>
-                <h4 id="product-bom-heading" className="text-sm font-semibold">
-                  {t('modalManager.createProduct.bomSection')}
-                </h4>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t('modalManager.createProduct.bomHelp')}
-                </p>
-              </div>
-              <ProductModalMaterialsSection
-                productId={materialsProductId}
-                enabled={isOpen}
-              />
-            </section>
-          ) : (
-            !editMissing &&
+          {!editMissing &&
             !(isEditFlow && !editingProduct && productsLoading) && (
               <div className="space-y-5">
                 <section className="space-y-3" aria-labelledby="product-identity-heading">
@@ -665,6 +652,7 @@ export const GlobalCreateProductModal: React.FC = () => {
                   </div>
                 </section>
 
+                {(canViewSellingPrice || canViewCosts) ? (
                 <section className="space-y-3 border-t pt-4" aria-labelledby="product-pricing-heading">
                   <div>
                     <h4 id="product-pricing-heading" className="text-sm font-semibold">
@@ -676,6 +664,7 @@ export const GlobalCreateProductModal: React.FC = () => {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
+                    {canViewSellingPrice ? (
                     <div className="space-y-1.5">
                       <Label htmlFor="product-selling-price">
                         {t('modalManager.createProduct.sellingPrice')}
@@ -696,6 +685,7 @@ export const GlobalCreateProductModal: React.FC = () => {
                         }
                       />
                     </div>
+                    ) : null}
 
                     {canViewCosts && cnyToEgpRate > 0 && (
                       <div className="space-y-1.5">
@@ -746,7 +736,7 @@ export const GlobalCreateProductModal: React.FC = () => {
                             }))
                           }
                         />
-                        <p className="text-xs text-amber-700">
+                        <p className="text-xs text-[var(--color-warning-hex)]">
                           {t('modalManager.createProduct.cnyRateMissingHint')}
                         </p>
                       </div>
@@ -818,70 +808,50 @@ export const GlobalCreateProductModal: React.FC = () => {
                     )}
                   </div>
                 </section>
+                ) : null}
 
-                {(!isEditFlow || (editingProduct && editingRaw)) && (
-                  <section className="space-y-3 border-t pt-4" aria-labelledby="product-bom-form-heading">
-                    <div>
-                      <h4 id="product-bom-form-heading" className="text-sm font-semibold">
-                        {t('modalManager.createProduct.bomSection')}
-                      </h4>
-                      {isEditFlow && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {t('modalManager.createProduct.bomHelp')}
-                        </p>
-                      )}
-                    </div>
-                    {isEditFlow ? (
-                      <ProductModalMaterialsSection
-                        productId={materialsProductId}
-                        enabled={isOpen && !editMissing}
-                      />
-                    ) : (
-                      <p className="rounded-lg border border-dashed bg-muted/30 px-4 py-5 text-center text-sm text-muted-foreground">
-                        {t('modalManager.createProduct.bomBeforeSave')}
-                      </p>
-                    )}
-                  </section>
-                )}
               </div>
             )
-          )}
+          }
         </div>
 
         <DialogFooter className="shrink-0 gap-2 border-t px-5 py-4 sm:space-x-0">
-          {justCreatedProductId && !isEditFlow ? (
-            <>
-              <Button type="button" variant="outline" onClick={startAnotherProduct}>
-                {t('modalManager.createProduct.addAnotherProduct')}
-              </Button>
-              <Button type="button" onClick={handleClose}>
-                {t('modalManager.createProduct.finish')}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button type="button" variant="outline" disabled={saving} onClick={handleClose}>
-                {t('ui.cancel')}
-              </Button>
-              <Button
-                type="button"
-                onClick={() => void handleSave()}
-                disabled={
-                  saving ||
-                  editMissing ||
-                  (isEditFlow && (!editingProduct || !editingRaw)) ||
-                  !form.name.trim() ||
-                  !selectedCategoryId ||
-                  (!isEditFlow && !codeLocked && !productCode.trim())
-                }
-              >
-                {saving && <Loader2 className="animate-spin" />}
-                {isEditFlow
-                  ? t('modalManager.createProduct.saveEdits')
-                  : t('modalManager.createProduct.addProduct')}
-              </Button>
-            </>
-          )}
+          <Button type="button" variant="outline" disabled={saving} onClick={handleClose}>
+            {t('ui.cancel')}
+          </Button>
+          {isEditFlow && editProductId && canOpenBomModal ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving || editMissing}
+              onClick={() =>
+                openBomForProduct(
+                  editProductId,
+                  editingProduct?.name || form.name || '',
+                  'products.edit.bom',
+                )
+              }
+            >
+              مكونات
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={
+              saving ||
+              editMissing ||
+              (isEditFlow && (!editingProduct || !editingRaw)) ||
+              !form.name.trim() ||
+              !selectedCategoryId ||
+              (!isEditFlow && !codeLocked && !productCode.trim())
+            }
+          >
+            {saving && <Loader2 className="animate-spin" />}
+            {isEditFlow
+              ? t('modalManager.createProduct.saveEdits')
+              : t('modalManager.createProduct.addProduct')}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

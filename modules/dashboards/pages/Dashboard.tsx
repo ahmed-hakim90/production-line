@@ -78,8 +78,8 @@ const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
       <p className="text-xs font-bold text-[var(--color-text-muted)] mb-2 border-b border-[var(--color-border)] pb-1.5">{data.date}</p>
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between gap-6">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500 shrink-0"></span><span className="text-[var(--color-text-muted)] font-bold">الإنتاج</span></span>
-          <span className="font-bold text-blue-600">{formatNumber(data.production)} وحدة</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[rgb(var(--color-primary)/0.1)]0 shrink-0"></span><span className="text-[var(--color-text-muted)] font-bold">الإنتاج</span></span>
+          <span className="font-bold text-[rgb(var(--color-primary))]">{formatNumber(data.production)} وحدة</span>
         </div>
         <div className="flex justify-between gap-6">
           <span className="text-[var(--color-text-muted)] font-bold">تكلفة العمالة</span>
@@ -90,8 +90,8 @@ const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
           <span className="font-bold text-[var(--color-text)]">{formatCost(data.indirectCost)} ج.م</span>
         </div>
         <div className="flex justify-between gap-6 pt-1.5 border-t border-[var(--color-border)]">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500 shrink-0"></span><span className="text-[var(--color-text-muted)] font-bold">تكلفة الوحدة</span></span>
-          <span className="font-bold text-violet-600">{formatCost(data.costPerUnit)} ج.م</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[rgb(var(--color-secondary)/0.1)]0 shrink-0"></span><span className="text-[var(--color-text-muted)] font-bold">تكلفة الوحدة</span></span>
+          <span className="font-bold text-[rgb(var(--color-secondary))]">{formatCost(data.costPerUnit)} ج.م</span>
         </div>
       </div>
     </div>
@@ -654,14 +654,14 @@ export const Dashboard: React.FC = () => {
 
       {targetModal && can("lineStatus.edit") && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-bold">تعيين هدف اليوم</h3>
                 <p className="text-xs text-[var(--color-text-muted)] font-medium mt-0.5">{targetModal.lineName}</p>
               </div>
-              <button onClick={() => setTargetModal(null)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+              <button onClick={() => setTargetModal(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
                 <DashboardIcon name="close" />
               </button>
             </div>

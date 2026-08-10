@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/Toast";
 import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter";
 import { SmartFilterBar } from "@/src/components/erp/SmartFilterBar";
+import { useAppStore } from "@/store/useAppStore";
+import { useManagedPrint } from "@/utils/printManager";
 import { AccountingKpiStrip } from "../components/AccountingKpiStrip";
+import { AccountingReportPrint } from "../components/AccountingReportPrint";
 import {
   PAGE_SIZE,
   exportAccountingCsv,
@@ -17,6 +20,13 @@ import type { InventoryValuationResult } from "../types";
 import { accountingService } from "../services/accountingService";
 
 export const AccountingInventoryValuation: React.FC = () => {
+  const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
+  const printRef = useRef<HTMLDivElement>(null);
+  const handlePrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: "تقييم-المخزون",
+  });
   const [valuation, setValuation] = useState<InventoryValuationResult | null>(
     null,
   );
@@ -85,7 +95,12 @@ export const AccountingInventoryValuation: React.FC = () => {
       refreshing={loading}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => window.print()}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handlePrint()}
+            disabled={!filteredRows.length}
+          >
             طباعة
           </Button>
           <Button
@@ -203,7 +218,7 @@ export const AccountingInventoryValuation: React.FC = () => {
             paged.map((row) => (
               <div
                 key={`m-${row.id}`}
-                className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${!row.costKnown ? "bg-rose-50/60" : ""}`}
+                className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${!row.costKnown ? "bg-[rgb(var(--color-danger)/0.1)]/60" : ""}`}
               >
                 <p className="text-sm font-semibold truncate">{row.itemName}</p>
                 <p className="font-mono text-xs text-muted-foreground">{row.itemCode}</p>
@@ -254,7 +269,7 @@ export const AccountingInventoryValuation: React.FC = () => {
                 paged.map((row) => (
                   <tr
                     key={row.id}
-                    className={!row.costKnown ? "bg-rose-50/60" : undefined}
+                    className={!row.costKnown ? "bg-[rgb(var(--color-danger)/0.1)]/60" : undefined}
                   >
                     <td>{row.warehouseName}</td>
                     <td className="font-mono">{row.itemCode}</td>
@@ -293,6 +308,66 @@ export const AccountingInventoryValuation: React.FC = () => {
           itemLabel="صنف"
         />
       </OpsDashPanel>
+      <div className="fixed left-[-10000px] top-0" aria-hidden>
+        <AccountingReportPrint
+          ref={printRef}
+          title="تقييم المخزون"
+          subtitle={
+            warehouseFilter === "all"
+              ? "كل المخازن"
+              : warehouseOptions.find((o) => o.value === warehouseFilter)?.label || "—"
+          }
+          metaCards={[
+            {
+              label: "المخزن",
+              value:
+                warehouseFilter === "all"
+                  ? "كل المخازن"
+                  : warehouseOptions.find((o) => o.value === warehouseFilter)?.label || "—",
+            },
+            { label: "عدد الأصناف", value: String(filteredRows.length) },
+            {
+              label: "إجمالي القيمة",
+              value: formatAccountingMoney(
+                filteredRows.reduce((sum, row) => sum + Number(row.value || 0), 0),
+              ),
+            },
+            {
+              label: "ناقصة التكلفة",
+              value: String(
+                filteredRows.filter((row) => !Number(row.unitCost || 0)).length,
+              ),
+            },
+          ]}
+          kpis={[
+            {
+              label: "إجمالي القيمة",
+              value: formatAccountingMoney(
+                filteredRows.reduce((sum, row) => sum + Number(row.value || 0), 0),
+              ),
+              tone: "indigo",
+            },
+            { label: "عدد الأصناف", value: filteredRows.length, tone: "default" },
+          ]}
+          columns={[
+            { key: "warehouseName", label: "المخزن", width: "18%" },
+            { key: "itemCode", label: "الكود", width: "14%", mono: true },
+            { key: "itemName", label: "الصنف", width: "28%" },
+            { key: "quantity", label: "الكمية", width: "12%", align: "center", mono: true },
+            { key: "unitCost", label: "تكلفة الوحدة", width: "14%", align: "center", mono: true },
+            { key: "value", label: "القيمة", width: "14%", align: "center", mono: true },
+          ]}
+          rows={filteredRows.map((row) => ({
+            warehouseName: row.warehouseName || "—",
+            itemCode: row.itemCode || "—",
+            itemName: row.itemName || "—",
+            quantity: formatAccountingMoney(row.quantity),
+            unitCost: formatAccountingMoney(row.unitCost),
+            value: formatAccountingMoney(row.value),
+          }))}
+          printSettings={printTemplate}
+        />
+      </div>
     </ModuleOpsPageShell>
   );
 };

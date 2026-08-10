@@ -64,15 +64,15 @@ function StarRating({
             disabled={disabled}
             onClick={() => onChange(star)}
             className={`relative inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors sm:h-5 sm:w-5 sm:rounded-none ${
-              disabled ? 'cursor-default opacity-80' : 'hover:text-amber-500'
+              disabled ? 'cursor-default opacity-80' : 'hover:text-[rgb(var(--color-warning))]'
             }`}
             aria-label={`تقييم ${star} من 5`}
             title={`تقييم ${star} من 5`}
           >
-            <Star aria-hidden="true" className="h-5 w-5 text-slate-300 sm:h-4 sm:w-4" strokeWidth={2.2} />
+            <Star aria-hidden="true" className="h-5 w-5 text-[var(--color-text-muted)] sm:h-4 sm:w-4" strokeWidth={2.2} />
             <span
               aria-hidden="true"
-              className="absolute inset-0 inline-flex items-center justify-center overflow-hidden text-amber-400"
+              className="absolute inset-0 inline-flex items-center justify-center overflow-hidden text-[rgb(var(--color-warning))]"
               style={{ clipPath: `inset(0 0 0 ${100 - fillPercent}%)` }}
             >
               <Star className="h-5 w-5 fill-current sm:h-4 sm:w-4" strokeWidth={2.2} />
@@ -257,7 +257,7 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                       <div className="min-w-0">
                         <h4 className="truncate text-base font-bold text-[var(--color-text)]">{row.workerName || row.workerId}</h4>
                         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-[var(--color-text-muted)]">
-                          {row.workerCode && <span className="rounded-full bg-slate-100 px-2 py-1">{row.workerCode}</span>}
+                          {row.workerCode && <span className="rounded-full bg-[var(--color-surface-hover)] px-2 py-1">{row.workerCode}</span>}
                           {row.laborRole && (
                             <Badge variant="neutral">
                               {LINE_WORKER_LABOR_ROLE_LABELS[resolveLineWorkerLaborRole(row.laborRole)]}
@@ -270,11 +270,11 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                       </Badge>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[var(--color-bg)] p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">المشرف</div>
                         <div className="mt-1 font-bold text-[var(--color-text)]">{row.supervisorName || row.supervisorId}</div>
                       </div>
-                      <div className="rounded-xl bg-slate-50 p-3">
+                      <div className="rounded-xl bg-[var(--color-bg)] p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">التاريخ</div>
                         <div className="mt-1 font-bold text-[var(--color-text)]">{row.date}</div>
                       </div>
@@ -288,7 +288,7 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                         </div>
                       ))}
                     </div>
-                    <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs font-medium text-[var(--color-text-muted)]">
+                    <div className="mt-3 rounded-xl bg-[var(--color-bg)] p-3 text-xs font-medium text-[var(--color-text-muted)]">
                       <div className="mb-1 font-bold text-[var(--color-text)]">ملاحظات المشرف</div>
                       {row.notes || '—'}
                     </div>

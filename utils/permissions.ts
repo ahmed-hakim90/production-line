@@ -28,7 +28,7 @@ export {
 
 export type Permission =
   | 'dashboard.view'
-  | 'products.view' | 'products.create' | 'products.edit' | 'products.delete' | 'products.createRawMaterial' | 'products.rawMaterials.view'
+  | 'products.view' | 'products.create' | 'products.edit' | 'products.delete' | 'products.createRawMaterial' | 'products.rawMaterials.view' | 'products.sellingPrice.view'
   | 'materials.view' | 'materials.manage'
   | 'bom.view' | 'bom.manage'
   | 'planning.materialRequirements.view' | 'planning.materialRequirements.generate'
@@ -149,6 +149,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'products.createRawMaterial', label: 'إضافة مادة خام' },
       { key: 'products.edit', label: 'تعديل المنتجات' },
       { key: 'products.delete', label: 'حذف المنتجات' },
+      { key: 'products.sellingPrice.view', label: 'عرض سعر البيع (تفاصيل مالية)' },
       { key: 'catalog.categories.view', label: 'عرض فئات الكتالوج' },
       { key: 'catalog.categories.create', label: 'إنشاء فئة كتالوج' },
       { key: 'catalog.categories.edit', label: 'تعديل فئات الكتالوج' },
@@ -161,8 +162,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     permissions: [
       { key: 'materials.view', label: 'عرض المواد التصنيعية' },
       { key: 'materials.manage', label: 'إدارة المواد التصنيعية' },
-      { key: 'bom.view', label: 'عرض قوائم المواد (BOM)' },
-      { key: 'bom.manage', label: 'إدارة BOM' },
+      { key: 'bom.view', label: 'عرض مكونات المنتج (BOM)' },
+      { key: 'bom.manage', label: 'إدارة مكونات المنتج (زر المكونات / إضافة وتعديل)' },
       { key: 'planning.materialRequirements.view', label: 'عرض احتياجات المواد' },
       { key: 'planning.materialRequirements.generate', label: 'توليد احتياجات المواد' },
       { key: 'manufacturing.purchaseGap.view', label: 'تقرير فجوة الشراء' },
@@ -416,7 +417,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     key: 'costs',
     label: 'إدارة التكاليف',
     permissions: [
-      { key: 'costs.view', label: 'عرض التكاليف' },
+      { key: 'costs.view', label: 'عرض التكاليف وتفاصيل المنتج المالية' },
       { key: 'costs.manage', label: 'إدارة التكاليف' },
       { key: 'costs.closePeriod', label: 'إغلاق الفترة المحاسبية' },
       { key: 'assets.view', label: 'عرض الأصول' },
@@ -692,6 +693,13 @@ export function checkPermission(
       || permissions['approval.view'] === true
       || permissions['reports.create'] === true
       || permissions['production.workerReports.view'] === true;
+  }
+  if (permission === 'products.sellingPrice.view') {
+    // Legacy: selling price was gated by roles.manage before this key existed.
+    return permissions['roles.manage'] === true;
+  }
+  if (permission === 'bom.view') {
+    return permissions['bom.manage'] === true;
   }
   if (permission === 'catalog.categories.view') {
     return permissions['products.view'] === true;

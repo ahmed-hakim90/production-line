@@ -75,10 +75,10 @@ const STATUS_CONFIG: Record<string, { label: string; variant: 'success' | 'warni
 };
 
 const HEALTH_STATUS_CONFIG = {
-  on_track: { label: 'في الموعد', variant: 'success' as const, color: 'text-emerald-500', desc: 'سير العمل ضمن المسار' },
-  at_risk: { label: 'معرض للخطر', variant: 'warning' as const, color: 'text-amber-500', desc: 'يحتاج متابعة' },
-  delayed: { label: 'متأخر', variant: 'danger' as const, color: 'text-rose-500', desc: 'يحتاج تدخل' },
-  critical: { label: 'حرج', variant: 'danger' as const, color: 'text-rose-600', desc: 'يحتاج تدخل فوري' },
+  on_track: { label: 'في الموعد', variant: 'success' as const, color: 'text-[rgb(var(--color-success))]', desc: 'سير العمل ضمن المسار' },
+  at_risk: { label: 'معرض للخطر', variant: 'warning' as const, color: 'text-[rgb(var(--color-warning))]', desc: 'يحتاج متابعة' },
+  delayed: { label: 'متأخر', variant: 'danger' as const, color: 'text-[rgb(var(--color-danger))]', desc: 'يحتاج تدخل' },
+  critical: { label: 'حرج', variant: 'danger' as const, color: 'text-[rgb(var(--color-danger))]', desc: 'يحتاج تدخل فوري' },
 };
 
 // â”€â”€ Chart tab types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -743,7 +743,7 @@ export const LineDetails: React.FC = () => {
         </div>
         <OpsDashPanel title="الفترة" accent="production">
           <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
+            <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--color-border)]/90 bg-[var(--color-surface-hover)] p-1 dark:border-border dark:bg-muted/40">
               {PERIOD_OPTIONS.map((opt) => (
                 <Button
                   key={opt.value}
@@ -768,7 +768,7 @@ export const LineDetails: React.FC = () => {
           value={formatNumber(totalProduced)}
           unit={activePlan ? `/ ${formatNumber(activePlan.plannedQuantity)}` : 'وحدة'}
           icon="inventory"
-          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)]"
           trend={activePlan ? `${planProgress}% من الهدف` : undefined}
           trendUp={planProgress >= 50}
         />
@@ -778,10 +778,10 @@ export const LineDetails: React.FC = () => {
           icon="fact_check"
           colorClass={
             planProgress >= 80
-              ? 'bg-emerald-50 text-emerald-600'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
               : planProgress >= 50
-              ? 'bg-amber-50 text-amber-600'
-              : 'bg-[#f0f2f5] text-[var(--color-text-muted)]'
+              ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+              : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
           }
           trend={activePlan ? `${formatNumber(planActualProduced)} من ${formatNumber(activePlan.plannedQuantity)}` : 'لا توجد خطة'}
           trendUp={planProgress >= 50}
@@ -792,10 +792,10 @@ export const LineDetails: React.FC = () => {
           icon="bolt"
           colorClass={
             efficiency >= 90
-              ? 'bg-emerald-50 text-emerald-600'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
               : efficiency >= 70
-              ? 'bg-amber-50 text-amber-600'
-              : 'bg-rose-50 text-rose-600'
+              ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+              : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
           }
           trend={efficiency >= 90 ? 'ممتاز' : efficiency >= 70 ? 'جيد' : standardTime > 0 ? 'يحتاج تحسين' : undefined}
           trendUp={efficiency >= 70}
@@ -805,7 +805,7 @@ export const LineDetails: React.FC = () => {
           value={avgAssemblyTime}
           unit="دقيقة/وحدة"
           icon="timer"
-          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+          colorClass="bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] dark:bg-[rgb(var(--color-primary)/0.15)] dark:text-[rgb(var(--color-primary))]"
           trend={
             standardTime > 0
               ? `المعياري: ${standardTime} دقيقة${standardTimeSourceLabel ? ` · ${standardTimeSourceLabel}` : ''}`
@@ -818,7 +818,7 @@ export const LineDetails: React.FC = () => {
           value={formatNumber(totalHours)}
           unit="ساعة"
           icon="schedule"
-          colorClass="bg-amber-50 text-amber-600"
+          colorClass="bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]"
           trend={`${uniqueDays} يوم عمل`}
           trendUp
         />
@@ -828,10 +828,10 @@ export const LineDetails: React.FC = () => {
           icon="delete_sweep"
           colorClass={
             wasteRatio <= 2
-              ? 'bg-emerald-50 text-emerald-600'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
               : wasteRatio <= 5
-              ? 'bg-amber-50 text-amber-600'
-              : 'bg-rose-50 text-rose-600'
+              ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+              : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
           }
           trend={`${formatNumber(totalWaste)} وحدة هالك`}
           trendUp={wasteRatio <= alertCfg.wasteThreshold}
@@ -842,10 +842,10 @@ export const LineDetails: React.FC = () => {
           icon="speed"
           colorClass={
             utilization >= 80
-              ? 'bg-emerald-50 text-emerald-600'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
               : utilization >= 50
-              ? 'bg-amber-50 text-amber-600'
-              : 'bg-[#f0f2f5] text-[var(--color-text-muted)]'
+              ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+              : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
           }
           trend="ساعات فعلية / متاحة"
           trendUp={utilization >= 50}
@@ -856,7 +856,7 @@ export const LineDetails: React.FC = () => {
             value={costPerUnit > 0 ? formatCost(costPerUnit) : '—'}
             unit="ج.م"
             icon="payments"
-            colorClass="bg-violet-50 text-violet-600 dark:bg-violet-900/20 dark:text-violet-400"
+            colorClass="bg-[rgb(var(--color-secondary)/0.1)] text-[rgb(var(--color-secondary))] dark:bg-[rgb(var(--color-secondary)/0.15)] dark:text-[rgb(var(--color-secondary))]"
           />
         )}
       </div>
@@ -868,28 +868,28 @@ export const LineDetails: React.FC = () => {
         <OpsDashPanel accent="production">
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
-              <span className="material-icons-round text-violet-500">account_balance</span>
+              <span className="material-icons-round text-[rgb(var(--color-secondary))]">account_balance</span>
               <h3 className="text-lg font-bold">التكاليف المتوزعة على الخط</h3>
             </div>
-            <span className="text-xs font-bold text-violet-500">شهر التكلفة: {lineAllocatedCosts.month}</span>
+            <span className="text-xs font-bold text-[rgb(var(--color-secondary))]">شهر التكلفة: {lineAllocatedCosts.month}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-            <div className="rounded-[var(--border-radius-lg)] border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
-              <p className="text-xs text-slate-500">إجمالي شهري موزع</p>
-              <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
+            <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-secondary)/0.25)] dark:border-[rgb(var(--color-secondary))]/50 bg-[rgb(var(--color-secondary)/0.1)]/60 dark:bg-[rgb(var(--color-secondary)/0.15)] p-3">
+              <p className="text-xs text-[var(--color-text-muted)]">إجمالي شهري موزع</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">
                 {lineAllocatedCosts.totalMonthlyAllocated > 0 ? formatCost(lineAllocatedCosts.totalMonthlyAllocated) : '—'}
               </p>
             </div>
-            <div className="rounded-[var(--border-radius-lg)] border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
-              <p className="text-xs text-slate-500">موزع يومي</p>
-              <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
+            <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-secondary)/0.25)] dark:border-[rgb(var(--color-secondary))]/50 bg-[rgb(var(--color-secondary)/0.1)]/60 dark:bg-[rgb(var(--color-secondary)/0.15)] p-3">
+              <p className="text-xs text-[var(--color-text-muted)]">موزع يومي</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">
                 {lineAllocatedCosts.totalDailyAllocated > 0 ? formatCost(lineAllocatedCosts.totalDailyAllocated) : '—'}
               </p>
             </div>
-            <div className="rounded-[var(--border-radius-lg)] border border-violet-100 dark:border-violet-900/50 bg-violet-50/60 dark:bg-violet-900/10 p-3">
-              <p className="text-xs text-slate-500">عدد مراكز التكلفة</p>
-              <p className="text-xl font-bold text-violet-700 dark:text-violet-300">
+            <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-secondary)/0.25)] dark:border-[rgb(var(--color-secondary))]/50 bg-[rgb(var(--color-secondary)/0.1)]/60 dark:bg-[rgb(var(--color-secondary)/0.15)] p-3">
+              <p className="text-xs text-[var(--color-text-muted)]">عدد مراكز التكلفة</p>
+              <p className="text-xl font-bold text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">
                 {lineAllocatedCosts.centers.length}
               </p>
             </div>
@@ -910,7 +910,7 @@ export const LineDetails: React.FC = () => {
                   {lineAllocatedCosts.centers.map((center) => (
                     <tr key={center.costCenterId}>
                       <td className="px-4 py-2.5 font-bold text-[var(--color-text)]">{center.costCenterName}</td>
-                      <td className="px-4 py-2.5 text-center font-bold text-violet-600">{formatNumber(center.percentage)}%</td>
+                      <td className="px-4 py-2.5 text-center font-bold text-[rgb(var(--color-secondary))]">{formatNumber(center.percentage)}%</td>
                       <td className="px-4 py-2.5 text-center font-bold">{formatCost(center.monthlyAllocated)}</td>
                       <td className="px-4 py-2.5 text-center font-bold text-[var(--color-text-muted)]">{formatCost(center.dailyAllocated)}</td>
                     </tr>
@@ -919,7 +919,7 @@ export const LineDetails: React.FC = () => {
               </table>
             </div>
           ) : (
-            <div className="rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] px-4 py-5 text-center text-sm font-medium text-slate-500">
+            <div className="rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] px-4 py-5 text-center text-sm font-medium text-[var(--color-text-muted)]">
               لا توجد توزيعات تكلفة غير مباشرة على هذا الخط خلال الشهر الحالي.
             </div>
           )}
@@ -929,7 +929,7 @@ export const LineDetails: React.FC = () => {
         <OpsDashPanel accent="production">
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
-              <span className="material-icons-round text-emerald-500">manage_accounts</span>
+              <span className="material-icons-round text-[rgb(var(--color-success))]">manage_accounts</span>
               <h3 className="text-lg font-bold">تكلفة المشرف اليومية</h3>
             </div>
             <span className="text-xs text-[var(--color-text-muted)] font-bold">
@@ -957,7 +957,7 @@ export const LineDetails: React.FC = () => {
                       <td className="px-4 py-2.5 text-[var(--color-text-muted)]">{row.supervisorsText}</td>
                       <td className="px-4 py-2.5 text-center font-bold">{formatNumber(row.totalHours)}</td>
                       <td className="px-4 py-2.5 text-center font-bold">{formatNumber(row.produced)}</td>
-                      <td className="px-4 py-2.5 text-center font-bold text-emerald-600">{formatCost(row.totalCost)}</td>
+                      <td className="px-4 py-2.5 text-center font-bold text-[rgb(var(--color-success))]">{formatCost(row.totalCost)}</td>
                       <td className="px-4 py-2.5 text-center font-bold text-[var(--color-text)]">
                         {row.supervisorCostPerUnit > 0 ? formatCost(row.supervisorCostPerUnit) : '—'}
                       </td>
@@ -967,7 +967,7 @@ export const LineDetails: React.FC = () => {
               </table>
             </div>
           ) : (
-            <div className="rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] px-4 py-5 text-center text-sm font-medium text-slate-500">
+            <div className="rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] px-4 py-5 text-center text-sm font-medium text-[var(--color-text-muted)]">
               لا توجد تقارير كافية لحساب تكلفة المشرف على هذا الخط.
             </div>
           )}
@@ -980,7 +980,7 @@ export const LineDetails: React.FC = () => {
         <OpsDashPanel title="صحة الخطة" accent="production">
         <OpsDashPanel accent="production">
           <div className="flex items-center gap-2 mb-5">
-            <span className="material-icons-round text-violet-500">monitor_heart</span>
+            <span className="material-icons-round text-[rgb(var(--color-secondary))]">monitor_heart</span>
             <h3 className="text-lg font-bold">صحة الخطة</h3>
             <Badge variant={healthCfg.variant} pulse={planHealth.status === 'critical'}>
               {healthCfg.label}
@@ -990,9 +990,9 @@ export const LineDetails: React.FC = () => {
             {/* Elapsed time ratio */}
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">نسبة الوقت المنقضي</p>
-              <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden mb-1.5">
+              <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden mb-1.5">
                 <div
-                  className="h-full bg-blue-500 rounded-full transition-all"
+                  className="h-full bg-[rgb(var(--color-primary)/0.1)]0 rounded-full transition-all"
                   style={{ width: `${planHealth.elapsedRatio}%` }}
                 ></div>
               </div>
@@ -1004,10 +1004,10 @@ export const LineDetails: React.FC = () => {
             {/* Completion ratio */}
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">نسبة الإنجاز</p>
-              <div className="h-2 bg-[#f0f2f5] rounded-full overflow-hidden mb-1.5">
+              <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden mb-1.5">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    planHealth.completionRatio >= planHealth.elapsedRatio ? 'bg-emerald-500' : 'bg-amber-500'
+                    planHealth.completionRatio >= planHealth.elapsedRatio ? 'bg-[rgb(var(--color-success)/0.1)]0' : 'bg-[rgb(var(--color-warning)/0.1)]0'
                   }`}
                   style={{ width: `${planHealth.completionRatio}%` }}
                 ></div>
@@ -1020,7 +1020,7 @@ export const LineDetails: React.FC = () => {
             {/* Delay days */}
             <div>
               <p className="text-xs text-[var(--color-text-muted)] font-bold mb-2">أيام التأخير</p>
-              <p className={`text-3xl font-bold mt-1 ${planHealth.delayDays > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
+              <p className={`text-3xl font-bold mt-1 ${planHealth.delayDays > 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
                 {planHealth.delayDays}
               </p>
               <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
@@ -1054,7 +1054,7 @@ export const LineDetails: React.FC = () => {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
                   chartTab === tab.key
                     ? 'bg-primary text-white shadow-primary/20'
-                    : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
+                    : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
                 }`}
               >
                 <span className="material-icons-round text-sm">{tab.icon}</span>
@@ -1065,7 +1065,7 @@ export const LineDetails: React.FC = () => {
         </div>
 
         {enrichedChartData.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-4xl mb-2 block opacity-30">show_chart</span>
             <p className="font-bold">لا توجد بيانات بعد</p>
           </div>
@@ -1076,50 +1076,50 @@ export const LineDetails: React.FC = () => {
                 <AreaChart data={enrichedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorProduced" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#1392ec" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#1392ec" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorWaste" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                      <stop offset="5%" stopColor="var(--chart-4)" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="var(--chart-4)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend formatter={(val: string) => val === 'produced' ? 'الإنتاج' : 'الهالك'} />
-                  <Area type="monotone" dataKey="produced" name="produced" stroke="#1392ec" strokeWidth={2} fillOpacity={1} fill="url(#colorProduced)" />
-                  <Area type="monotone" dataKey="waste" name="waste" stroke="#ef4444" strokeWidth={1.5} fillOpacity={1} fill="url(#colorWaste)" />
+                  <Area type="monotone" dataKey="produced" name="produced" stroke="var(--chart-1)" strokeWidth={2} fillOpacity={1} fill="url(#colorProduced)" />
+                  <Area type="monotone" dataKey="waste" name="waste" stroke="var(--chart-4)" strokeWidth={1.5} fillOpacity={1} fill="url(#colorWaste)" />
                 </AreaChart>
               ) : chartTab === 'cost' ? (
                 <ComposedChart data={enrichedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                  <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend formatter={(val: string) => val === 'produced' ? 'الإنتاج' : 'تكلفة الوحدة'} />
-                  <Bar yAxisId="left" dataKey="produced" name="produced" fill="#1392ec" radius={[4, 4, 0, 0]} barSize={20} />
-                  <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} />
+                  <Bar yAxisId="left" dataKey="produced" name="produced" fill="var(--chart-1)" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Line yAxisId="right" type="monotone" dataKey="costPerUnit" name="costPerUnit" stroke="var(--chart-3)" strokeWidth={2.5} dot={{ r: 3 }} />
                 </ComposedChart>
               ) : chartTab === 'efficiency' ? (
                 <BarChart data={enrichedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} domain={[0, 'auto']} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} domain={[0, 'auto']} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend formatter={() => 'الكفاءة %'} />
-                  <Bar dataKey="efficiency" name="efficiency" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar dataKey="efficiency" name="efficiency" fill="var(--chart-2)" radius={[4, 4, 0, 0]} barSize={20} />
                 </BarChart>
               ) : (
                 <BarChart data={enrichedChartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend formatter={() => 'ساعات العمل'} />
-                  <Bar dataKey="hours" name="hours" fill="#8b5cf6" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Bar dataKey="hours" name="hours" fill="var(--chart-5)" radius={[4, 4, 0, 0]} barSize={20} />
                 </BarChart>
               )}
             </ResponsiveContainer>
@@ -1132,7 +1132,7 @@ export const LineDetails: React.FC = () => {
       <OpsDashPanel title="مؤشرات الإنتاجية" accent="production">
       <OpsDashPanel accent="production">
         <div className="flex items-center gap-2 mb-5">
-          <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
+          <span className="material-icons-round text-[rgb(var(--color-success))]">precision_manufacturing</span>
           <h3 className="text-lg font-bold">مؤشرات الإنتاجية</h3>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
@@ -1146,7 +1146,7 @@ export const LineDetails: React.FC = () => {
           <div className="text-center">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الحمل الحالي</p>
             <p className={`text-2xl font-bold ${
-              currentLoadPercent >= 80 ? 'text-emerald-500' : currentLoadPercent >= 40 ? 'text-amber-500' : 'text-slate-400'
+              currentLoadPercent >= 80 ? 'text-[rgb(var(--color-success))]' : currentLoadPercent >= 40 ? 'text-[rgb(var(--color-warning))]' : 'text-[var(--color-text-muted)]'
             }`}>
               {dailyCapacity > 0 ? `${currentLoadPercent}%` : '—'}
             </p>
@@ -1155,7 +1155,7 @@ export const LineDetails: React.FC = () => {
           <div className="text-center">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نسبة الاستخدام</p>
             <p className={`text-2xl font-bold ${
-              utilization >= 80 ? 'text-emerald-500' : utilization >= 50 ? 'text-amber-500' : 'text-slate-400'
+              utilization >= 80 ? 'text-[rgb(var(--color-success))]' : utilization >= 50 ? 'text-[rgb(var(--color-warning))]' : 'text-[var(--color-text-muted)]'
             }`}>
               {utilization}%
             </p>
@@ -1163,7 +1163,7 @@ export const LineDetails: React.FC = () => {
           </div>
           <div className="text-center">
             <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الأيام المتبقية</p>
-            <p className="text-2xl font-bold text-violet-500">
+            <p className="text-2xl font-bold text-[rgb(var(--color-secondary))]">
               {activePlan && remainingDays > 0 ? remainingDays : '—'}
             </p>
             <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
@@ -1175,10 +1175,10 @@ export const LineDetails: React.FC = () => {
           <div className="mt-5 pt-4 border-t border-[var(--color-border)]">
             <div className="flex items-center gap-3">
               <span className="text-xs text-[var(--color-text-muted)] font-bold shrink-0">حمل اليوم</span>
-              <div className="flex-1 h-3 bg-[#f0f2f5] rounded-full overflow-hidden">
+              <div className="flex-1 h-3 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all ${
-                    currentLoadPercent >= 80 ? 'bg-emerald-500' : currentLoadPercent >= 40 ? 'bg-amber-500' : 'bg-slate-300'
+                    currentLoadPercent >= 80 ? 'bg-[rgb(var(--color-success)/0.1)]0' : currentLoadPercent >= 40 ? 'bg-[rgb(var(--color-warning)/0.1)]0' : 'bg-[var(--color-border)]'
                   }`}
                   style={{ width: `${Math.min(currentLoadPercent, 100)}%` }}
                 ></div>
@@ -1206,7 +1206,7 @@ export const LineDetails: React.FC = () => {
       <OpsDashPanel title="التنبيهات" accent="production">
       <OpsDashPanel accent="production">
         <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-amber-500">notifications_active</span>
+          <span className="material-icons-round text-[rgb(var(--color-warning))]">notifications_active</span>
           <h3 className="text-lg font-bold">التنبيهات</h3>
         </div>
         <div className="space-y-2">
@@ -1215,10 +1215,10 @@ export const LineDetails: React.FC = () => {
               key={i}
               className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
                 alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
+                  ? 'bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))]'
                   : alert.type === 'warning'
-                  ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
-                  : 'bg-blue-50 dark:bg-blue-900/10 border-blue-200 dark:border-blue-800 text-blue-700'
+                  ? 'bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border-[rgb(var(--color-warning)/0.25)] text-[rgb(var(--color-warning))]'
+                  : 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)] text-[rgb(var(--color-primary))]'
               }`}
             >
               <span className="material-icons-round text-lg">{alert.icon}</span>
@@ -1244,7 +1244,7 @@ export const LineDetails: React.FC = () => {
               const supervisor = employees.find((e) => e.id === wo.supervisorId);
               const prog = wo.quantity > 0 ? Math.min((wo.producedQuantity / wo.quantity) * 100, 100) : 0;
               return (
-                <div key={wo.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer hover:ring-2 hover:ring-amber-200 dark:hover:ring-amber-800" onClick={() => navigate('/work-orders')}>
+                <div key={wo.id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-4 cursor-pointer hover:ring-2 hover:ring-[rgb(var(--color-warning))] dark:hover:ring-[rgb(var(--color-warning))]" onClick={() => navigate('/work-orders')}>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-mono text-xs font-bold text-primary">{wo.workOrderNumber}</span>
@@ -1253,22 +1253,22 @@ export const LineDetails: React.FC = () => {
                       </Badge>
                     </div>
                     <p className="text-sm font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
-                    <p className="text-xs text-slate-500">المشرف: {supervisor?.name ?? '—'} آ· الحد الأقصى: {wo.maxWorkers} عامل آ· التسليم: {wo.targetDate}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">المشرف: {supervisor?.name ?? '—'} آ· الحد الأقصى: {wo.maxWorkers} عامل آ· التسليم: {wo.targetDate}</p>
                   </div>
                   <div className="sm:w-48 space-y-1">
                     <div className="flex justify-between text-xs font-bold">
                       <span className="text-[var(--color-text-muted)]">{formatNumber(wo.producedQuantity)} / {formatNumber(wo.quantity)}</span>
                       <span className="text-primary">{prog.toFixed(0)}%</span>
                     </div>
-                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${prog >= 100 ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${prog}%` }} />
+                    <div className="h-2 bg-[var(--color-border)] rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${prog >= 100 ? 'bg-[rgb(var(--color-success)/0.1)]0' : 'bg-primary'}`} style={{ width: `${prog}%` }} />
                     </div>
                   </div>
                   {can('workOrders.viewCost') && (
                     <div className="sm:w-32 text-left">
                       <p className="text-[10px] text-[var(--color-text-muted)] font-bold">التكلفة</p>
                       <p className="text-sm font-bold text-[var(--color-text)]">{formatCost(wo.actualCost)}</p>
-                      <p className="text-[10px] text-slate-400">مقدرة: {formatCost(wo.estimatedCost)}</p>
+                      <p className="text-[10px] text-[var(--color-text-muted)]">مقدرة: {formatCost(wo.estimatedCost)}</p>
                     </div>
                   )}
                 </div>
@@ -1300,7 +1300,7 @@ export const LineDetails: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {periodReports.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={6} className="px-6 py-12 text-center text-[var(--color-text-muted)]">
                     <p className="font-bold">لا توجد تقارير لهذا الخط</p>
                   </td>
                 </tr>
@@ -1312,11 +1312,11 @@ export const LineDetails: React.FC = () => {
                     <td className="px-5 py-3 text-sm font-bold text-[var(--color-text)]">{r.date}</td>
                     <td className="px-5 py-3 text-sm font-medium">{productName}</td>
                     <td className="px-5 py-3 text-center">
-                      <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-emerald-50 text-emerald-600 text-sm font-bold ring-1 ring-emerald-500/20">
+                      <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] text-sm font-bold ring-1 ring-[rgb(var(--color-success))]/20">
                         {formatNumber(r.quantityProduced)}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-center text-rose-500 font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
+                    <td className="px-5 py-3 text-center text-[rgb(var(--color-danger))] font-bold text-sm">{formatNumber(getReportWaste(r))}</td>
                     <td className="px-5 py-3 text-center text-sm font-bold">
                       <button
                         onClick={() => handleViewWorkers(r.date)}
@@ -1335,7 +1335,7 @@ export const LineDetails: React.FC = () => {
           </table>
         </div>
         {periodReports.length > 0 && (
-          <div className="px-6 py-4 bg-[#f8f9fa]/50 border-t border-[var(--color-border)]">
+          <div className="px-6 py-4 bg-[var(--color-bg)]/50 border-t border-[var(--color-border)]">
             <span className="text-sm text-[var(--color-text-muted)] font-bold">
               إجمالي <span className="text-primary">{periodReports.length}</span> تقرير
             </span>
@@ -1347,7 +1347,7 @@ export const LineDetails: React.FC = () => {
       {/* View Workers Modal */}
       {viewWorkersData && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setViewWorkersData(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewWorkersData(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-md max-h-[90dvh] flex flex-col border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
@@ -1355,7 +1355,7 @@ export const LineDetails: React.FC = () => {
                 <h3 className="font-bold">عمالة {line?.name ?? ''}</h3>
                 <span className="text-xs text-[var(--color-text-muted)] font-medium">{viewWorkersData.date}</span>
               </div>
-              <button onClick={() => setViewWorkersData(null)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+              <button onClick={() => setViewWorkersData(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
@@ -1363,7 +1363,7 @@ export const LineDetails: React.FC = () => {
               {viewWorkersLoading ? (
                 <div className="text-center py-8">
                   <span className="material-icons-round text-3xl text-primary animate-spin block mb-2">refresh</span>
-                  <p className="text-sm text-slate-500">جاري التحميل...</p>
+                  <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل...</p>
                 </div>
               ) : viewWorkersData.workers.length === 0 ? (
                 <div className="text-center py-8">
@@ -1375,7 +1375,7 @@ export const LineDetails: React.FC = () => {
                   <div className="mb-3 px-3 py-2 bg-primary/5 rounded-[var(--border-radius-lg)] text-center">
                     <span className="text-sm font-bold text-primary">{viewWorkersData.workers.length} عامل</span>
                   </div>
-                  <div className="divide-y divide-slate-50">
+                  <div className="divide-y divide-[var(--color-border)]">
                     {viewWorkersData.workers.map((w, i) => (
                       <div key={w.id || i} className="flex items-center gap-3 py-2.5">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">

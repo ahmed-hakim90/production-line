@@ -1,16 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../UI';
 import { resolveContentMaxWidthForPath } from '@/core/ui-engine/theme/tenantTheme';
+import type { ThemePresetOption } from '@/core/ui-engine/theme/themePresets';
 import type { ThemeSettings } from '../../../../types';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-type ThemePresetOption = {
-  id: string;
-  name: string;
-  description: string;
-  colors: { primary: string; bg: string; card: string };
-  swatches?: [string, string, string];
-  partialTheme: Partial<ThemeSettings>;
-};
 type FontFamilyOption = {
   value: string;
   label: string;
@@ -36,6 +29,15 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
     () => resolveContentMaxWidthForPath(previewPath, localTheme),
     [previewPath, localTheme],
   );
+  const previewChrome = useMemo(() => {
+    const isDarkPreview = localTheme.darkMode === 'dark';
+    return {
+      surface: isDarkPreview ? '#0f172a' : '#ffffff',
+      border: isDarkPreview ? '#1e293b' : '#e2e8f0',
+      ink: localTheme.textColor || (isDarkPreview ? '#e2e8f0' : '#0f172a'),
+      muted: localTheme.mutedTextColor || (isDarkPreview ? '#94a3b8' : '#64748b'),
+    };
+  }, [localTheme.darkMode, localTheme.textColor, localTheme.mutedTextColor]);
   useEffect(() => {
     if (previewPath === '/') return;
     const keys = Object.keys(localTheme.pageLayoutOverrides ?? {});
@@ -54,9 +56,10 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {themePresets.map((preset) => {
               const isActive =
-                localTheme.primaryColor === preset.partialTheme.primaryColor &&
-                localTheme.darkMode === preset.partialTheme.darkMode;
-              const swatches = preset.swatches ?? [preset.colors.primary, preset.colors.bg, preset.colors.card];
+                localTheme.primaryColor.toLowerCase() === (preset.partialTheme.primaryColor ?? '').toLowerCase() &&
+                localTheme.darkMode === preset.partialTheme.darkMode &&
+                (localTheme.backgroundColor ?? '').toLowerCase() === (preset.partialTheme.backgroundColor ?? '').toLowerCase();
+              const swatches = preset.swatches ?? [preset.colors.bg, preset.colors.card, preset.colors.primary];
               return (
                 <button
                   key={preset.id}
@@ -98,9 +101,9 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-slate-200" />
+          <div className="flex-1 h-px bg-[var(--color-border)]" />
           <span className="text-xs text-[var(--color-text-muted)] font-bold">أو خصّص بنفسك</span>
-          <div className="flex-1 h-px bg-slate-200" />
+          <div className="flex-1 h-px bg-[var(--color-border)]" />
         </div>
         <div>
           <p className="text-sm font-bold text-[var(--color-text)] mb-3">الألوان</p>
@@ -189,6 +192,9 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">حجم الخط الأساسي</p>
+              <p className="text-[11px] text-[var(--color-text-muted)] mb-1.5">
+                يشمل نص الواجهة وأزرار الأكشن في الهيدر (ارتفاع + حجم الخط)
+              </p>
               <div className="erp-page-actions">
                 <input
                   type="range"
@@ -209,6 +215,9 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">استدارة الحواف</p>
+              <p className="text-[11px] text-[var(--color-text-muted)] mb-1.5">
+                يشمل الأزرار، الحقول، الشارات، الكروت، وأزرار الأكشن في الهيدر
+              </p>
               <div className="flex items-center gap-2 mb-2">
                 {[
                   { label: 'حاد', value: 0 },
@@ -241,6 +250,46 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                 onChange={(e) => setLocalTheme((p) => ({ ...p, borderRadius: Number(e.target.value) }))}
               />
             </div>
+          </div>
+        </div>
+        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 space-y-3">
+          <div>
+            <p className="text-xs font-bold text-[var(--color-text)]">معاينة أزرار الهيدر</p>
+            <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+              تتأثر فوراً بحجم الخط ونوع الخط واستدارة الحواف
+            </p>
+          </div>
+          <div className="ops-dash-toolbar ops-dash-toolbar--actions" role="toolbar" aria-label="معاينة إجراءات">
+            <div className="ops-dash-toolbar__actions">
+              <Button type="button" variant="outline" className="btn btn-secondary" solid={false}>
+                تصدير Excel
+              </Button>
+              <Button type="button" variant="outline" className="btn btn-secondary" solid={false}>
+                طباعة
+              </Button>
+              <Button type="button" className="btn btn-primary" solid>
+                إضافة
+              </Button>
+            </div>
+          </div>
+          <div className="erp-page-actions">
+            <Button type="button" variant="outline" className="btn btn-secondary" solid={false}>
+              رجوع
+            </Button>
+            <Button type="button" className="btn btn-primary" solid>
+              حفظ
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value="حقل معاينة"
+              className="h-[var(--control-height)] max-w-[12rem] rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 text-sm text-[var(--color-text)]"
+            />
+            <span className="inline-flex items-center rounded-md border border-[rgb(var(--color-success)/0.3)] bg-[rgb(var(--color-success)/0.1)] px-2.5 py-1 text-xs font-medium text-[rgb(var(--color-success))]">
+              شارة حالة
+            </span>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -477,7 +526,7 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                             return { ...p, pageLayoutOverrides: Object.keys(o).length ? o : {} };
                           })
                         }
-                        className="p-2 rounded-[var(--border-radius-base)] text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 shrink-0"
+                        className="p-2 rounded-[var(--border-radius-base)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger)/0.2)] shrink-0"
                       >
                         <span className="material-icons-round text-base">close</span>
                       </button>
@@ -522,14 +571,15 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               style={{ maxWidth: `min(100%, ${previewMaxWidth})` }}
             >
             <div className="rounded-[var(--border-radius-lg)] mb-3 px-4 py-2.5 flex items-center justify-between"
-              style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
+              style={{ backgroundColor: previewChrome.surface, border: `1px solid ${previewChrome.border}` }}>
               <div className="erp-page-actions">
                 <div className="w-6 h-6 rounded-[var(--border-radius-base)] flex items-center justify-center text-white text-[10px] font-bold"
                   style={{ backgroundColor: localTheme.primaryColor }}>م</div>
-                <span className="text-xs font-bold" style={{ color: '#0f172a' }}>مؤسسة المغربي</span>
+                <span className="text-xs font-bold" style={{ color: previewChrome.ink }}>مؤسسة المغربي</span>
               </div>
               <div className="flex gap-1.5">
-                <div className="w-6 h-6 rounded-full bg-[var(--color-bg)] flex items-center justify-center">
+                <div className="w-6 h-6 rounded-full flex items-center justify-center"
+                  style={{ backgroundColor: localTheme.backgroundColor }}>
                   <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 13 }}>notifications</span>
                 </div>
                 <div className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold"
@@ -543,14 +593,14 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                 { label: 'المهام', value: '٣٧', icon: 'assignment' },
               ].map((kpi) => (
                 <div key={kpi.label} className="rounded-[var(--border-radius-lg)] p-2.5 flex items-center gap-2"
-                  style={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0' }}>
+                  style={{ backgroundColor: previewChrome.surface, border: `1px solid ${previewChrome.border}` }}>
                   <div className="w-7 h-7 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0"
                     style={{ backgroundColor: `${localTheme.primaryColor}18` }}>
                     <span className="material-icons-round text-[14px]" style={{ color: localTheme.primaryColor }}>{kpi.icon}</span>
                   </div>
                   <div>
-                    <p className="text-[8px] text-[var(--color-text-muted)] font-medium">{kpi.label}</p>
-                    <p className="text-xs font-black" style={{ color: '#0f172a' }}>{kpi.value}</p>
+                    <p className="text-[8px] font-medium" style={{ color: previewChrome.muted }}>{kpi.label}</p>
+                    <p className="text-xs font-black" style={{ color: previewChrome.ink }}>{kpi.value}</p>
                   </div>
                 </div>
               ))}

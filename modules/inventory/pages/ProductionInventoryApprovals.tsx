@@ -276,7 +276,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
     handlePrint();
   };
 
-  if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+  if (!can('inventory.view')) return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
 
   const pageSubtitle =
     pendingApprovalCount > 0
@@ -297,7 +297,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       <OpsDashPanel title="تعويضات المكونات" accent="inventory" bodyClassName="p-0">
                 <div className="erp-mobile-card-list p-2">
           {compensations.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">لا توجد تعويضات.</p>
+            <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد تعويضات.</p>
           ) : (
             pagedCompensations.map((row) => (
               <div key={`m-c-${row.id}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm">
@@ -305,17 +305,17 @@ export const ProductionInventoryApprovals: React.FC = () => {
                   <div className="min-w-0">
                     <p className="font-mono text-xs">{row.referenceNo}</p>
                     <p className="mt-0.5 text-sm font-semibold">{row.line.itemName}</p>
-                    <p className="text-xs text-slate-500">{row.locationCode}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">{row.locationCode}</p>
                   </div>
                   <span className="text-xs font-bold">{STATUS_LABELS[row.status] || row.status}</span>
                 </div>
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
                   <div>
-                    <dt className="text-[10px] text-slate-500">الكمية</dt>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">الكمية</dt>
                     <dd className="tabular-nums">{row.quantity}</dd>
                   </div>
                   <div>
-                    <dt className="text-[10px] text-slate-500">السبب</dt>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">السبب</dt>
                     <dd>{row.reason}</dd>
                   </div>
                 </dl>
@@ -346,20 +346,20 @@ export const ProductionInventoryApprovals: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {compensations.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-400">لا توجد تعويضات.</td>
+                  <td colSpan={6} className="px-4 py-10 text-center text-[var(--color-text-muted)]">لا توجد تعويضات.</td>
                 </tr>
               ) : (
                 pagedCompensations.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                  <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                     <td className="px-4 py-3 font-mono text-xs">{row.referenceNo}</td>
                     <td className="px-4 py-3">
                       <p className="font-semibold">{row.line.itemName}</p>
-                      <p className="text-xs text-slate-500">{row.locationCode}</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">{row.locationCode}</p>
                       {row.origin === 'production_request' && (
-                        <p className="text-[11px] font-bold text-amber-700">طلب من الإنتاج</p>
+                        <p className="text-[11px] font-bold text-[rgb(var(--color-warning))]">طلب من الإنتاج</p>
                       )}
                       {row.issueReferenceNo && (
-                        <p className="text-[11px] text-slate-400 font-mono">{row.issueReferenceNo}</p>
+                        <p className="text-[11px] text-[var(--color-text-muted)] font-mono">{row.issueReferenceNo}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center tabular-nums">{row.quantity}</td>
@@ -403,7 +403,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       <OpsDashPanel title="استلام مستلزمات" accent="inventory" bodyClassName="p-0">
                 <div className="erp-mobile-card-list p-2">
           {receipts.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">لا توجد إذونات استلام.</p>
+            <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد إذونات استلام.</p>
           ) : (
             pagedReceipts.map((row) => (
               <div key={`m-r-${row.id}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm">
@@ -450,15 +450,15 @@ export const ProductionInventoryApprovals: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {receipts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-slate-400">لا توجد إذونات استلام.</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--color-text-muted)]">لا توجد إذونات استلام.</td>
                 </tr>
               ) : (
                 pagedReceipts.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                  <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                     <td className="px-4 py-3 font-mono text-xs">{row.referenceNo}</td>
                     <td className="px-4 py-3">
                       <p className="font-semibold">{row.warehouseName || row.warehouseId}</p>
-                      {row.containerRef && <p className="text-xs text-slate-500">{row.containerRef}</p>}
+                      {row.containerRef && <p className="text-xs text-[var(--color-text-muted)]">{row.containerRef}</p>}
                     </td>
                     <td className="px-4 py-3 text-center tabular-nums">{(row.groups?.length || 0) + (row.standaloneLines?.length || 0)}</td>
                     <td className="px-4 py-3 text-center">{STATUS_LABELS[row.status] || row.status}</td>
@@ -524,7 +524,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       <OpsDashPanel title="طلبات التفكيك" accent="inventory" bodyClassName="p-0">
                 <div className="erp-mobile-card-list p-2">
           {disassemblies.length === 0 ? (
-            <p className="py-8 text-center text-sm text-slate-400">لا توجد طلبات تفكيك.</p>
+            <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد طلبات تفكيك.</p>
           ) : (
             pagedDisassemblies.map((row) => (
               <div key={`m-d-${row.id}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm">
@@ -565,11 +565,11 @@ export const ProductionInventoryApprovals: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {disassemblies.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-slate-400">لا توجد طلبات تفكيك.</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--color-text-muted)]">لا توجد طلبات تفكيك.</td>
                 </tr>
               ) : (
                 pagedDisassemblies.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                  <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
                     <td className="px-4 py-3 font-mono text-xs">{row.referenceNo}</td>
                     <td className="px-4 py-3 font-semibold">{row.productName}</td>
                     <td className="px-4 py-3 text-center tabular-nums">{row.quantity}</td>

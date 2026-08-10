@@ -31,22 +31,22 @@ export const ListViewToggle: React.FC<ListViewToggleProps> = ({
       variant={value === 'kanban' ? 'default' : 'ghost'}
       size="sm"
       type="button"
-      className="h-8 gap-1"
+      className="gap-1.5"
       aria-pressed={value === 'kanban'}
       onClick={() => onChange('kanban')}
     >
-      <LayoutGrid className="h-3.5 w-3.5" />
+      <LayoutGrid className="h-4 w-4" />
       {compact ? null : 'كنبان'}
     </Button>
     <Button
       variant={value === 'table' ? 'default' : 'ghost'}
       size="sm"
       type="button"
-      className="h-8 gap-1"
+      className="gap-1.5"
       aria-pressed={value === 'table'}
       onClick={() => onChange('table')}
     >
-      <List className="h-3.5 w-3.5" />
+      <List className="h-4 w-4" />
       {compact ? null : 'جدول'}
     </Button>
   </div>

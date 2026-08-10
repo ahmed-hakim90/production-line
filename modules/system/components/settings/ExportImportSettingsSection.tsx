@@ -105,7 +105,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                       <button
                         onClick={() => updateExportImportControl(page.key, { exportEnabled: !control.exportEnabled })}
                         className={`w-12 h-7 rounded-full transition-all relative shrink-0 ${
-                          control.exportEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                          control.exportEnabled ? 'bg-[rgb(var(--color-success)/0.1)]0' : 'bg-[var(--color-border)]'
                         }`}
                       >
                         <span
@@ -131,7 +131,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                       <button
                         onClick={() => updateExportImportControl(page.key, { importEnabled: !control.importEnabled })}
                         className={`w-12 h-7 rounded-full transition-all relative shrink-0 ${
-                          control.importEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
+                          control.importEnabled ? 'bg-[rgb(var(--color-success)/0.1)]0' : 'bg-[var(--color-border)]'
                         }`}
                       >
                         <span
@@ -160,17 +160,17 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
       <OpsDashPanel title="التصدير (Excel Export)">
         <div className="space-y-3">
           {[
-            { section: 'تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'description', color: 'text-blue-500', features: ['تصدير التقارير بالتاريخ والخط والمنتج والتصفية', 'تكلفة الوحدة (حسب الصلاحية)', 'بيانات أمر الشغل (الكمية والعمالة المخططة)', 'صف إجمالي بالمجاميع'] },
-            { section: 'أوامر الشغل', page: 'صفحة التقارير / أوامر الشغل', path: '/work-orders', icon: 'assignment', color: 'text-amber-500', features: ['رقم الأمر، المنتج، الخط، المشرف', 'الكمية المخططة / المنتجة / المتبقية', 'عدد العمالة، التكلفة المقدرة والفعلية', 'الحالة والتفاصيل'] },
-            { section: 'بيانات المنتجات (للاستيراد)', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['تصدير بيانات أساسية (كود المنتج، باركود، منتج تصنيعي، تكاليف)', 'يُعاد رفعه من «رفع/تحديث بيانات المنتجات»', 'كود المنتج ثابت للمطابقة — لا يُعاد تسميته بالاستيراد'] },
-            { section: 'تقرير المنتجات (عرض)', page: 'صفحة المنتجات', path: '/products', icon: 'summarize', color: 'text-emerald-700', features: ['تصدير تقرير مع تخصيص الأعمدة والمخزن', 'تصدير بإنتاج الشهر المختار', 'للقراءة والتقارير — ليس مسار الاستيراد الرئيسي'] },
-            { section: 'مكونات المنتجات (BOM)', page: 'صفحة المنتجات', path: '/products', icon: 'account_tree', color: 'text-cyan-500', features: ['كل صف: كود المنتج + كود/اسم المادة + كمية استخدام اختيارية', 'فلتر فئة قبل التصدير', 'أرصدة اللوكيشنات + متوافق مع رفع/تحديث المكونات'] },
-            { section: 'المواد التصنيعية', page: 'صفحة المواد التصنيعية', path: '/manufacturing/materials', icon: 'precision_manufacturing', color: 'text-lime-600', features: ['الخطوة 1 في مسار الاستيراد', 'تصدير كل تفاصيل المادة + تظهر في قطع الغيار', 'عمود كود المادة ثابت للمطابقة (بدون إعادة تسمية)'] },
-            { section: 'منتج واحد (تفصيلي)', page: 'صفحة تفاصيل المنتج', path: '/products', icon: 'receipt_long', color: 'text-teal-500', features: ['شيت بيانات المنتج الأساسية', 'شيت تفصيل التكاليف مع سعر البيع وهامش الربح', 'شيت المواد المستخدمة (عرض)', 'شيت التكلفة حسب خط الإنتاج'] },
-            { section: 'الموظفون', page: 'صفحة الموظفين', path: '/hr/employees', icon: 'groups', color: 'text-purple-500', features: ['الكود والاسم والقسم المعروف', 'نوع التوظيف والمستوى والراتب', 'الوردية والبريد والحالة والصلاحيات'] },
-            { section: 'تقارير مشرف', page: 'صفحة تفاصيل المشرف', path: '/supervisors', icon: 'person', color: 'text-orange-500', features: ['تقارير الإنتاج الخاصة بالمشرف', 'تكلفة الوحدة (حسب الصلاحية)', 'صف إجمالي بالمجاميع'] },
-            { section: 'ملخص المنتجات', page: 'لوحة تحكم المصنع', path: '/', icon: 'summarize', color: 'text-indigo-500', features: ['اسم المنتج والكود والكمية', 'متوسط تكلفة الوحدة (حسب الصلاحية)'] },
-            { section: 'بيانات الموارد البشرية', page: 'وحدة HR', path: '/hr', icon: 'badge', color: 'text-rose-500', features: ['كشوف المرتبات والحضور', 'الإجازات والقروض', 'تصدير عام لأي بيانات HR'] },
+            { section: 'تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'description', color: 'text-[rgb(var(--color-primary))]', features: ['تصدير التقارير بالتاريخ والخط والمنتج والتصفية', 'تكلفة الوحدة (حسب الصلاحية)', 'بيانات أمر الشغل (الكمية والعمالة المخططة)', 'صف إجمالي بالمجاميع'] },
+            { section: 'أوامر الشغل', page: 'صفحة التقارير / أوامر الشغل', path: '/work-orders', icon: 'assignment', color: 'text-[rgb(var(--color-warning))]', features: ['رقم الأمر، المنتج، الخط، المشرف', 'الكمية المخططة / المنتجة / المتبقية', 'عدد العمالة، التكلفة المقدرة والفعلية', 'الحالة والتفاصيل'] },
+            { section: 'بيانات المنتجات (للاستيراد)', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-[rgb(var(--color-success))]', features: ['تصدير بيانات أساسية (كود المنتج، باركود، منتج تصنيعي، تكاليف)', 'يُعاد رفعه من «رفع/تحديث بيانات المنتجات»', 'كود المنتج ثابت للمطابقة — لا يُعاد تسميته بالاستيراد'] },
+            { section: 'تقرير المنتجات (عرض)', page: 'صفحة المنتجات', path: '/products', icon: 'summarize', color: 'text-[rgb(var(--color-success))]', features: ['تصدير تقرير مع تخصيص الأعمدة والمخزن', 'تصدير بإنتاج الشهر المختار', 'للقراءة والتقارير — ليس مسار الاستيراد الرئيسي'] },
+            { section: 'مكونات المنتجات (BOM)', page: 'صفحة المنتجات', path: '/products', icon: 'account_tree', color: 'text-[rgb(var(--color-secondary))]', features: ['كل صف: كود المنتج + كود/اسم المادة + كمية استخدام اختيارية', 'فلتر فئة قبل التصدير', 'أرصدة اللوكيشنات + متوافق مع رفع/تحديث المكونات'] },
+            { section: 'المواد التصنيعية', page: 'صفحة المواد التصنيعية', path: '/manufacturing/materials', icon: 'precision_manufacturing', color: 'text-[rgb(var(--color-success))]', features: ['الخطوة 1 في مسار الاستيراد', 'تصدير كل تفاصيل المادة + تظهر في قطع الغيار', 'عمود كود المادة ثابت للمطابقة (بدون إعادة تسمية)'] },
+            { section: 'منتج واحد (تفصيلي)', page: 'صفحة تفاصيل المنتج', path: '/products', icon: 'receipt_long', color: 'text-[rgb(var(--color-success))]', features: ['شيت بيانات المنتج الأساسية', 'شيت تفصيل التكاليف مع سعر البيع وهامش الربح', 'شيت المواد المستخدمة (عرض)', 'شيت التكلفة حسب خط الإنتاج'] },
+            { section: 'الموظفون', page: 'صفحة الموظفين', path: '/hr/employees', icon: 'groups', color: 'text-[rgb(var(--color-secondary))]', features: ['الكود والاسم والقسم المعروف', 'نوع التوظيف والمستوى والراتب', 'الوردية والبريد والحالة والصلاحيات'] },
+            { section: 'تقارير مشرف', page: 'صفحة تفاصيل المشرف', path: '/supervisors', icon: 'person', color: 'text-[rgb(var(--color-warning))]', features: ['تقارير الإنتاج الخاصة بالمشرف', 'تكلفة الوحدة (حسب الصلاحية)', 'صف إجمالي بالمجاميع'] },
+            { section: 'ملخص المنتجات', page: 'لوحة تحكم المصنع', path: '/', icon: 'summarize', color: 'text-[rgb(var(--color-primary))]', features: ['اسم المنتج والكود والكمية', 'متوسط تكلفة الوحدة (حسب الصلاحية)'] },
+            { section: 'بيانات الموارد البشرية', page: 'وحدة HR', path: '/hr', icon: 'badge', color: 'text-[rgb(var(--color-danger))]', features: ['كشوف المرتبات والحضور', 'الإجازات والقروض', 'تصدير عام لأي بيانات HR'] },
           ].map((item) => (
             <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[var(--color-bg)]/60 transition-all">
               <div className="flex items-start gap-3">
@@ -185,7 +185,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                   <ul className="space-y-0.5">
                     {item.features.map((f, i) => (
                       <li key={i} className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
-                        <SettingsIcon name="check" className="text-[10px] text-emerald-400" size={10} />
+                        <SettingsIcon name="check" className="text-[10px] text-[rgb(var(--color-success))]" size={10} />
                         {f}
                       </li>
                     ))}
@@ -199,12 +199,12 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
       <OpsDashPanel title="الاستيراد (Excel Import)">
         <div className="space-y-3">
           {[
-            { section: 'استيراد تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'upload_file', color: 'text-blue-500', features: ['رفع ملف Excel يحتوي على تقارير الإنتاج', 'مطابقة تلقائية للخط والمنتج والتصفية (بالاسم أو الكود)', 'كشف التكرار مع التقارير الموجودة', 'معاينة البيانات قبل الحفظ مع عرض الأخطاء', 'تحميل نموذج Excel فارغ مع قوائم الاختيار'] },
-            { section: 'ترتيب الاستيراد الصحيح', page: 'مواد ← منتجات ← مكونات', path: '/manufacturing/materials', icon: 'route', color: 'text-sky-600', features: ['1) المواد التصنيعية (ماستر المواد)', '2) بيانات المنتجات (بدون BOM)', '3) مكونات المنتجات: كود منتج + كود مادة (كمية فاضي = قطع صيانة)'] },
-            { section: 'استيراد بيانات المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['رفع ملف Excel بأسماء وأكواد المنتجات وعمود منتج تصنيعي', 'تكاليف التعبئة والتغليف وسعر البيع', 'كشف التكرار بالاسم والكود', 'لا يعتمد على شيت مواد خام داخل الملف'] },
-            { section: 'استيراد/تحديث مكونات المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'account_tree', color: 'text-cyan-500', features: ['تحديث كمية/تكلفة BOM للموجود وإضافة مكوّنات جديدة', 'كمية استخدام اختيارية (فاضي = كتالوج قطع صيانة)', 'رصيد/لوكيشن اختياري للجرد', 'إنشاء مواد جديدة تلقائياً عند كود + اسم جديد'] },
-            { section: 'استيراد/تحديث المواد التصنيعية', page: 'صفحة المواد التصنيعية', path: '/manufacturing/materials', icon: 'precision_manufacturing', color: 'text-lime-600', features: ['مطابقة بكود المادة بدون تغييره', 'عمود تظهر في قطع الغيار (نعم/لا)', 'الأعمدة الفارغة لا تمس القيم الأصلية', 'معاينة (جديد/تحديث/أخطاء) قبل الحفظ'] },
-            { section: 'استيراد الموظفين', page: 'وحدة HR', path: '/hr/employees/import', icon: 'person_add', color: 'text-purple-500', features: ['رفع بيانات الموظفين من Excel', 'إنشاء الأقسام المعروفة والورديات', 'بيانات الراتب ونوع التوظيف'] },
+            { section: 'استيراد تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'upload_file', color: 'text-[rgb(var(--color-primary))]', features: ['رفع ملف Excel يحتوي على تقارير الإنتاج', 'مطابقة تلقائية للخط والمنتج والتصفية (بالاسم أو الكود)', 'كشف التكرار مع التقارير الموجودة', 'معاينة البيانات قبل الحفظ مع عرض الأخطاء', 'تحميل نموذج Excel فارغ مع قوائم الاختيار'] },
+            { section: 'ترتيب الاستيراد الصحيح', page: 'مواد ← منتجات ← مكونات', path: '/manufacturing/materials', icon: 'route', color: 'text-[rgb(var(--color-primary))]', features: ['1) المواد التصنيعية (ماستر المواد)', '2) بيانات المنتجات (بدون BOM)', '3) مكونات المنتجات: كود منتج + كود مادة (كمية فاضي = قطع صيانة)'] },
+            { section: 'استيراد بيانات المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-[rgb(var(--color-success))]', features: ['رفع ملف Excel بأسماء وأكواد المنتجات وعمود منتج تصنيعي', 'تكاليف التعبئة والتغليف وسعر البيع', 'كشف التكرار بالاسم والكود', 'لا يعتمد على شيت مواد خام داخل الملف'] },
+            { section: 'استيراد/تحديث مكونات المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'account_tree', color: 'text-[rgb(var(--color-secondary))]', features: ['تحديث كمية/تكلفة BOM للموجود وإضافة مكوّنات جديدة', 'كمية استخدام اختيارية (فاضي = كتالوج قطع صيانة)', 'رصيد/لوكيشن اختياري للجرد', 'إنشاء مواد جديدة تلقائياً عند كود + اسم جديد'] },
+            { section: 'استيراد/تحديث المواد التصنيعية', page: 'صفحة المواد التصنيعية', path: '/manufacturing/materials', icon: 'precision_manufacturing', color: 'text-[rgb(var(--color-success))]', features: ['مطابقة بكود المادة بدون تغييره', 'عمود تظهر في قطع الغيار (نعم/لا)', 'الأعمدة الفارغة لا تمس القيم الأصلية', 'معاينة (جديد/تحديث/أخطاء) قبل الحفظ'] },
+            { section: 'استيراد الموظفين', page: 'وحدة HR', path: '/hr/employees/import', icon: 'person_add', color: 'text-[rgb(var(--color-secondary))]', features: ['رفع بيانات الموظفين من Excel', 'إنشاء الأقسام المعروفة والورديات', 'بيانات الراتب ونوع التوظيف'] },
           ].map((item) => (
             <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[var(--color-bg)]/60 transition-all">
               <div className="flex items-start gap-3">
@@ -219,7 +219,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                   <ul className="space-y-0.5">
                     {item.features.map((f, i) => (
                       <li key={i} className="text-xs text-[var(--color-text-muted)] flex items-center gap-1.5">
-                        <SettingsIcon name="check" className="text-[10px] text-emerald-400" size={10} />
+                        <SettingsIcon name="check" className="text-[10px] text-[rgb(var(--color-success))]" size={10} />
                         {f}
                       </li>
                     ))}

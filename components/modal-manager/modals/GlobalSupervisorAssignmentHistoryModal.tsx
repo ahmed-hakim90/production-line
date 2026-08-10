@@ -73,14 +73,14 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
     <ManagedModalPortal>
     <div
       dir={dir}
-      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/35 p-4"
+      className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/35 p-4"
       onClick={close}
     >
       <div
-        className="w-full max-w-4xl rounded-xl border border-gray-200 bg-white"
+        className="w-full max-w-4xl rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="relative border-b border-gray-200 p-4">
+        <div className="relative border-b border-[var(--color-border)] p-4">
           <Button
             type="button"
             variant="outline"
@@ -92,33 +92,33 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
           >
             {t('ui.close')}
           </Button>
-          <h3 className="text-base font-medium text-gray-800">{t('modalManager.supervisorAssignmentHistory.title', { lineName })}</h3>
+          <h3 className="text-base font-medium text-[var(--color-text)]">{t('modalManager.supervisorAssignmentHistory.title', { lineName })}</h3>
         </div>
 
         <div className="max-h-[60vh] overflow-auto p-4">
           {historyLoading ? (
-            <p className="py-8 text-center text-sm font-normal text-gray-500">{t('modalManager.supervisorAssignmentHistory.loading')}</p>
+            <p className="py-8 text-center text-sm font-normal text-[var(--color-text-muted)]">{t('modalManager.supervisorAssignmentHistory.loading')}</p>
           ) : historyError ? (
-            <p className="py-8 text-center text-sm font-normal text-red-700">{historyError}</p>
+            <p className="py-8 text-center text-sm font-normal text-[rgb(var(--color-danger))]">{historyError}</p>
           ) : history.length === 0 ? (
-            <p className="py-8 text-center text-sm font-normal text-gray-500">{t('modalManager.supervisorAssignmentHistory.empty')}</p>
+            <p className="py-8 text-center text-sm font-normal text-[var(--color-text-muted)]">{t('modalManager.supervisorAssignmentHistory.empty')}</p>
           ) : (
             <table className="erp-table w-full border-collapse text-sm">
               <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-right">
-                  <th className="px-3 py-2 text-xs font-medium text-gray-500">{t('modalManager.supervisorAssignmentHistory.table.date')}</th>
-                  <th className="px-3 py-2 text-xs font-medium text-gray-500">{t('modalManager.supervisorAssignmentHistory.table.supervisor')}</th>
-                  <th className="px-3 py-2 text-xs font-medium text-gray-500">{t('modalManager.supervisorAssignmentHistory.table.action')}</th>
-                  <th className="px-3 py-2 text-xs font-medium text-gray-500">{t('modalManager.supervisorAssignmentHistory.table.by')}</th>
+                <tr className="border-b border-[var(--color-border)] bg-[var(--color-bg)] text-right">
+                  <th className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)]">{t('modalManager.supervisorAssignmentHistory.table.date')}</th>
+                  <th className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)]">{t('modalManager.supervisorAssignmentHistory.table.supervisor')}</th>
+                  <th className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)]">{t('modalManager.supervisorAssignmentHistory.table.action')}</th>
+                  <th className="px-3 py-2 text-xs font-medium text-[var(--color-text-muted)]">{t('modalManager.supervisorAssignmentHistory.table.by')}</th>
                 </tr>
               </thead>
               <tbody>
                 {history.map((item) => (
-                  <tr key={item.id} className="border-b border-gray-100">
-                    <td className="px-3 py-2 font-normal text-gray-700">{formatDateTime(item.assignedAt)}</td>
-                    <td className="px-3 py-2 font-normal text-gray-700">{item.supervisorName || '—'}</td>
-                    <td className="px-3 py-2 font-normal text-gray-700">{actionLabelMap[item.action] || item.action}</td>
-                    <td className="px-3 py-2 font-normal text-gray-700">{item.assignedBy || '—'}</td>
+                  <tr key={item.id} className="border-b border-[var(--color-border)]">
+                    <td className="px-3 py-2 font-normal text-[var(--color-text)]">{formatDateTime(item.assignedAt)}</td>
+                    <td className="px-3 py-2 font-normal text-[var(--color-text)]">{item.supervisorName || '—'}</td>
+                    <td className="px-3 py-2 font-normal text-[var(--color-text)]">{actionLabelMap[item.action] || item.action}</td>
+                    <td className="px-3 py-2 font-normal text-[var(--color-text)]">{item.assignedBy || '—'}</td>
                   </tr>
                 ))}
               </tbody>

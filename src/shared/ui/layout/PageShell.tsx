@@ -17,10 +17,11 @@ export interface PageShellProps {
 }
 
 const maxWidthClass: Record<PageShellMaxWidth, string> = {
-  /** AppLayout already constrains to max-w-screen-2xl — default is a no-op width class. */
+  /** AppLayout already applies theme `contentMaxWidth` — default is full width inside that wrapper. */
   default: 'w-full min-w-0',
   full: 'w-full max-w-none min-w-0',
-  narrow: 'w-full max-w-4xl mx-auto min-w-0',
+  /** Prefer theme content width; avoid hard-coded Tailwind max-w on authenticated pages. */
+  narrow: 'w-full max-w-[min(100%,var(--content-max-width,56rem))] mx-auto min-w-0',
 };
 
 /**

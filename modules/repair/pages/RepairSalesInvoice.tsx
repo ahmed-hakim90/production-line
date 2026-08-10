@@ -41,11 +41,38 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { RepairSalesInvoicePrint } from '../components/RepairSalesInvoicePrint';
 import { useManagedPrint } from '../../../utils/printManager';
 import { exportToPDF } from '../../../utils/reportExport';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const PAGE_SIZE = 20;
 
 type DraftLine = RepairSalesInvoiceLine & { key: string; materialId?: string };
+
+type SalesInvoiceFormDraft = {
+  branchId: string;
+  customerId: string;
+  customerName: string;
+  customerPhone: string;
+  notes: string;
+  discountType: 'none' | 'amount' | 'percent';
+  discountValue: string;
+  paymentMethod: 'cash' | 'card' | 'bank_transfer' | 'credit';
+  lines: DraftLine[];
+};
+
+const isSalesInvoiceFormDraftEmpty = (draft: SalesInvoiceFormDraft): boolean => {
+  const hasHeader = Boolean(
+    draft.customerId
+    || draft.customerName.trim()
+    || draft.customerPhone.trim()
+    || draft.notes.trim()
+    || draft.discountType !== 'none'
+    || Number(draft.discountValue || 0) > 0
+    || draft.paymentMethod !== 'cash',
+  );
+  return !hasHeader && (!Array.isArray(draft.lines) || draft.lines.length === 0);
+};
 
 export const RepairSalesInvoicePage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -104,6 +131,54 @@ export const RepairSalesInvoicePage: React.FC = () => {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const printRef = useRef<HTMLDivElement | null>(null);
+
+  const salesDraftValue = useMemo<SalesInvoiceFormDraft>(() => ({
+    branchId,
+    customerId,
+    customerName,
+    customerPhone,
+    notes,
+    discountType,
+    discountValue,
+    paymentMethod,
+    lines,
+  }), [branchId, customerId, customerName, customerPhone, notes, discountType, discountValue, paymentMethod, lines]);
+
+  const { hasDraft, clearDraft } = useLocalFormDraft<SalesInvoiceFormDraft>({
+    formKey: 'repair:salesInvoice',
+    tenantId: getCurrentTenantIdOrNull() || user?.tenantId,
+    userId: user?.id,
+    value: salesDraftValue,
+    enabled: !editingInvoiceId,
+    isEmpty: isSalesInvoiceFormDraftEmpty,
+    onRestore: (draft) => {
+      if (draft.branchId) setBranchId(String(draft.branchId));
+      setCustomerId(String(draft.customerId || ''));
+      setCustomerName(String(draft.customerName || ''));
+      setCustomerPhone(String(draft.customerPhone || ''));
+      setNotes(String(draft.notes || ''));
+      const nextDiscount = draft.discountType;
+      setDiscountType(nextDiscount === 'amount' || nextDiscount === 'percent' ? nextDiscount : 'none');
+      setDiscountValue(String(draft.discountValue ?? '0'));
+      const nextPay = draft.paymentMethod;
+      setPaymentMethod(
+        nextPay === 'card' || nextPay === 'bank_transfer' || nextPay === 'credit' ? nextPay : 'cash',
+      );
+      setLines(
+        Array.isArray(draft.lines)
+          ? draft.lines.map((line, index) => ({
+              key: String(line.key || `${line.partId}-${index}`),
+              partId: String(line.partId || ''),
+              partName: String(line.partName || ''),
+              ...(line.materialId ? { materialId: String(line.materialId) } : {}),
+              quantity: Number(line.quantity || 0),
+              unitPrice: Number(line.unitPrice || 0),
+              lineTotal: Number(line.lineTotal || 0),
+            }))
+          : [],
+      );
+    },
+  });
 
   useEffect(() => {
     const invoice = String(searchParams.get('invoice') || '').trim();
@@ -450,6 +525,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
   );
 
   const resetDraft = () => {
+    clearDraft();
     setEditingInvoiceId(null);
     setLines([]);
     setCustomerId('');
@@ -868,8 +944,8 @@ export const RepairSalesInvoicePage: React.FC = () => {
       <div className="grid items-start gap-4 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-7 no-print">
           {editingInvoiceId && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm">
-              <span className="font-medium text-sky-800">تعديل فاتورة محفوظة — احفظ لتطبيق التغييرات على المخزون والخزينة.</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-3 py-2 text-sm">
+              <span className="font-medium text-[rgb(var(--color-primary))]">تعديل فاتورة محفوظة — احفظ لتطبيق التغييرات على المخزون والخزينة.</span>
               <Button variant="outline" size="sm" onClick={resetDraft}>إلغاء التعديل</Button>
             </div>
           )}
@@ -950,7 +1026,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   </SelectContent>
                 </Select>
                 {paymentMethod === 'credit' ? (
-                  <p className="mt-1 text-xs text-amber-700">
+                  <p className="mt-1 text-xs text-[rgb(var(--color-warning))]">
                     تُرحَّل على ذمم العميل بدون دخول للخزينة. تأكد من تفعيل الآجل على الفرع.
                   </p>
                 ) : null}
@@ -1054,6 +1130,9 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 >
                   {saving ? 'جارٍ الحفظ...' : editingInvoiceId ? 'تحديث الفاتورة' : 'حفظ الفاتورة'}
                 </Button>
+                {hasDraft && !editingInvoiceId ? (
+                  <Button variant="ghost" onClick={resetDraft} disabled={saving}>مسح المسودة</Button>
+                ) : null}
                 {editingInvoiceId && (
                   <Button variant="outline" onClick={resetDraft} disabled={saving}>إلغاء التعديل</Button>
                 )}
@@ -1093,7 +1172,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                       <td className="px-4 py-2.5 text-center font-semibold tabular-nums">{fmt(line.lineTotal)}</td>
                       <td className="px-4 py-2.5 text-center">
                         <Button variant="ghost" size="icon" onClick={() => removeLine(line.key)} aria-label="حذف السطر">
-                          <Trash2 className="h-4 w-4 text-rose-600" />
+                          <Trash2 className="h-4 w-4 text-[rgb(var(--color-danger))]" />
                         </Button>
                       </td>
                     </tr>
@@ -1113,7 +1192,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 <span className="text-muted-foreground">عدد البنود: <strong className="text-foreground">{lines.length}</strong></span>
                 <div className="text-left tabular-nums">
                   <div>الإجمالي: {fmt(total)} ج.م</div>
-                  {discountAmount > 0 && <div className="text-rose-700">الخصم: -{fmt(discountAmount)} ج.م</div>}
+                  {discountAmount > 0 && <div className="text-[rgb(var(--color-danger))]">الخصم: -{fmt(discountAmount)} ج.م</div>}
                   <div className="text-lg font-bold">الصافي: {fmt(netTotal)} ج.م</div>
                 </div>
               </div>
@@ -1161,7 +1240,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
           </OpsDashPanel>
 
           {printableInvoice ? (
-            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-white shadow-sm">
+            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-[var(--color-card)] shadow-sm">
               <RepairSalesInvoicePrint
                 ref={printRef}
                 invoice={printableInvoice}
@@ -1274,7 +1353,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                       size="sm"
                       onClick={() => startEditInvoice(row)}
                     >
-                      <Pencil className="me-1 h-3.5 w-3.5 text-sky-600" />
+                      <Pencil className="me-1 h-3.5 w-3.5 text-[rgb(var(--color-primary))]" />
                       تعديل
                     </Button>
                   )}
@@ -1297,7 +1376,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                         setCancelReason('');
                       }}
                     >
-                      <XCircle className="me-1 h-3.5 w-3.5 text-rose-600" />
+                      <XCircle className="me-1 h-3.5 w-3.5 text-[rgb(var(--color-danger))]" />
                       إلغاء
                     </Button>
                   )}
@@ -1367,7 +1446,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                             aria-label="تعديل الفاتورة"
                             title="تعديل"
                           >
-                            <Pencil className="h-4 w-4 text-sky-600" />
+                            <Pencil className="h-4 w-4 text-[rgb(var(--color-primary))]" />
                           </Button>
                         )}
                         {row.status === 'pending_discount_approval' && can('repair.discounts.approve') && (
@@ -1391,7 +1470,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                             aria-label="إلغاء الفاتورة"
                             title="إلغاء (عكس المخزون والخزينة)"
                           >
-                            <XCircle className="h-4 w-4 text-rose-600" />
+                            <XCircle className="h-4 w-4 text-[rgb(var(--color-danger))]" />
                           </Button>
                         )}
                       </div>

@@ -570,7 +570,7 @@ export function SmartFilterBar({
                       <button
                         type="button"
                         onClick={() => handleDeleteFavorite(favorite.id)}
-                        className="rounded p-1 text-[var(--color-text-muted)] hover:bg-rose-50 hover:text-rose-600"
+                        className="rounded p-1 text-[var(--color-text-muted)] hover:bg-[rgb(var(--color-danger)/0.1)] hover:text-[rgb(var(--color-danger))]"
                         title={t('erpComponents.smartFilterBar.deleteFavorite')}
                       >
                         <Trash2 className="h-3.5 w-3.5" />

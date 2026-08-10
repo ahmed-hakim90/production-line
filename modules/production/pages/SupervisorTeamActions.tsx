@@ -105,7 +105,7 @@ type Toast = { type: 'success' | 'error'; message: string } | null;
 
 const LEGACY_PRODUCTION_APPROVAL_SOURCE = 'legacy_hr_approval';
 
-const INPUT_CLASS = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none';
+const INPUT_CLASS = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none';
 
 const ACTION_TABS: { key: ActionTab; label: string; icon: string }[] = [
   { key: 'leave', label: 'إجازة', icon: 'beach_access' },
@@ -114,17 +114,17 @@ const ACTION_TABS: { key: ActionTab; label: string; icon: string }[] = [
 ];
 
 const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; color: string; bg: string }> = {
-  overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-purple-500', bg: 'bg-purple-100' },
-  leave: { label: 'إجازة', icon: 'beach_access', color: 'text-blue-500', bg: 'bg-blue-100' },
-  loan: { label: 'سلفة', icon: 'payments', color: 'text-amber-500', bg: 'bg-amber-100' },
-  penalty: { label: 'جزاء', icon: 'gavel', color: 'text-rose-500', bg: 'bg-rose-100' },
+  overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-[rgb(var(--color-secondary))]', bg: 'bg-[rgb(var(--color-secondary)/0.1)]' },
+  leave: { label: 'إجازة', icon: 'beach_access', color: 'text-[rgb(var(--color-primary))]', bg: 'bg-[rgb(var(--color-primary)/0.1)]' },
+  loan: { label: 'سلفة', icon: 'payments', color: 'text-[rgb(var(--color-warning))]', bg: 'bg-[rgb(var(--color-warning)/0.1)]' },
+  penalty: { label: 'جزاء', icon: 'gavel', color: 'text-[rgb(var(--color-danger))]', bg: 'bg-[rgb(var(--color-danger)/0.1)]' },
 };
 
 const FALLBACK_TYPE_CONFIG = {
   label: 'طلب',
   icon: 'assignment',
-  color: 'text-slate-500',
-  bg: 'bg-slate-100',
+  color: 'text-[var(--color-text-muted)]',
+  bg: 'bg-[var(--color-surface-hover)]',
 };
 
 function formatApprovalEmployeeLabel(
@@ -1185,7 +1185,7 @@ export const SupervisorTeamActions: React.FC = () => {
   if (!canUsePage) {
     return (
       <OpsDashPanel accent="production">
-        <p className="text-sm font-bold text-rose-600 p-4">غير مصرح بعرض طلبات الإنتاج.</p>
+        <p className="text-sm font-bold text-[rgb(var(--color-danger))] p-4">غير مصرح بعرض طلبات الإنتاج.</p>
       </OpsDashPanel>
     );
   }
@@ -1208,8 +1208,8 @@ export const SupervisorTeamActions: React.FC = () => {
       {toast && (
         <div className={`rounded-[var(--border-radius-lg)] border px-4 py-3 text-sm font-bold ${
           toast.type === 'success'
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-            : 'border-rose-200 bg-rose-50 text-rose-700'
+            ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
+            : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
         }`}
         >
           {toast.message}
@@ -1276,7 +1276,7 @@ export const SupervisorTeamActions: React.FC = () => {
         </div>
       </OpsDashPanel>
 
-      <div className="flex flex-wrap gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
+      <div className="flex flex-wrap gap-2 bg-[var(--color-surface-hover)] p-1 rounded-[var(--border-radius-lg)] w-fit">
         {[
           ...(canCreateProductionRequests ? [{ key: 'create' as const, label: 'إنشاء طلب إنتاج', icon: 'edit_note' }] : []),
           { key: 'approvals' as const, label: `حالات الطلبات${filteredApprovalRequests.length ? ` (${filteredApprovalRequests.length})` : ''}`, icon: 'approval' },
@@ -1289,7 +1289,7 @@ export const SupervisorTeamActions: React.FC = () => {
             className={`px-5 py-2.5 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
               activePageTab === tab.key
                 ? 'bg-[var(--color-card)] text-primary shadow-sm'
-                : 'text-slate-500 hover:text-[var(--color-text)]'
+                : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
             }`}
           >
             <span className="material-icons-round text-sm ml-1.5 align-middle">{tab.icon}</span>
@@ -1343,7 +1343,7 @@ export const SupervisorTeamActions: React.FC = () => {
                 value={historyParticipantFilter}
                 onChange={setHistoryParticipantFilter}
                 placeholder="اختر منشئ الطلب أو أحد الموافقين..."
-                className="h-12 bg-[#f8f9fa]"
+                className="h-12 bg-[var(--color-bg)]"
               />
             </div>
             <Button
@@ -1363,7 +1363,7 @@ export const SupervisorTeamActions: React.FC = () => {
           ) : filteredHistoryRequests.length === 0 ? (
             <div className="text-center py-10">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">history</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد طلبات نهائية تطابق الفلاتر الحالية.</p>
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">لا توجد طلبات نهائية تطابق الفلاتر الحالية.</p>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 {hasActiveReportFilters
                   ? 'جرّب توسيع الفترة أو تغيير الفلاتر في قسم التقرير أعلاه.'
@@ -1408,13 +1408,13 @@ export const SupervisorTeamActions: React.FC = () => {
                           </p>
                         </div>
                       </div>
-                      <div className="min-w-0 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-3 text-xs font-bold text-[var(--color-text-muted)] lg:max-w-md">
+                      <div className="min-w-0 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-xs font-bold text-[var(--color-text-muted)] lg:max-w-md">
                         <p className="mb-2 text-[var(--color-text)]">سلسلة الاعتماد</p>
                         <div className="flex flex-wrap gap-2">
                           {approvalChain.length === 0 ? (
                             <span>اعتماد تلقائي</span>
                           ) : approvalChain.map((step, index) => (
-                            <span key={`${requestId}-${step.approverEmployeeId}-${index}`} className="rounded-full bg-white px-3 py-1 border border-[var(--color-border)]">
+                            <span key={`${requestId}-${step.approverEmployeeId}-${index}`} className="rounded-full bg-[var(--color-card)] px-3 py-1 border border-[var(--color-border)]">
                               {step.approverName || step.approverEmployeeId} — {step.status === 'approved' ? 'اعتمد' : step.status === 'rejected' ? 'رفض' : step.status === 'skipped' ? 'تم التخطي' : 'لم يكتمل'}
                             </span>
                           ))}
@@ -1454,7 +1454,7 @@ export const SupervisorTeamActions: React.FC = () => {
           ) : filteredApprovalRequests.length === 0 ? (
             <div className="text-center py-10">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">task_alt</span>
-              <p className="text-sm font-bold text-slate-500">
+              <p className="text-sm font-bold text-[var(--color-text-muted)]">
                 {hasActiveReportFilters ? 'لا توجد طلبات تطابق الفلاتر الحالية.' : 'لا توجد طلبات إنتاج ظاهرة حالياً.'}
               </p>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
@@ -1515,7 +1515,7 @@ export const SupervisorTeamActions: React.FC = () => {
                       </div>
 
                       {isExpanded && (
-                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4">
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4">
                           <div>
                             <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">العامل</p>
                             <p className="font-bold text-[var(--color-text)]">{formatApprovalEmployeeLabel(req, employeeCodeById)}</p>
@@ -1545,7 +1545,7 @@ export const SupervisorTeamActions: React.FC = () => {
                         <div className="mt-4 pt-4 border-t border-[var(--color-border)] flex flex-col lg:flex-row gap-3">
                           <input
                             type="text"
-                            className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-2.5 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                            className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-2.5 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                             placeholder="ملاحظات الاعتماد (اختياري)..."
                             value={approvalActionNotes[requestId] || ''}
                             onChange={(e) => setApprovalActionNotes((prev) => ({ ...prev, [requestId]: e.target.value }))}
@@ -1600,7 +1600,7 @@ export const SupervisorTeamActions: React.FC = () => {
             اختر العامل ونوع الطلب داخل نافذة واحدة، ثم أرسله لمسار اعتماد الإدارة الحالي.
           </p>
           {workerOptions.length === 0 && (
-            <div className="mt-4 text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
+            <div className="mt-4 text-sm font-bold text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4">
               لا يوجد عمال إنتاج متاحون لك حالياً. تأكد من ربط العاملين بخطوط الإنتاج المناسبة.
             </div>
           )}
@@ -1628,7 +1628,7 @@ export const SupervisorTeamActions: React.FC = () => {
             <div className="space-y-4 sm:space-y-5">
               <OpsDashPanel title="١. اختيار العامل" accent="production">
                 {workerOptions.length === 0 ? (
-                  <div className="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
+                  <div className="text-sm font-bold text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4">
                     لا يوجد عمال إنتاج متاحون لك حالياً. تأكد من ربط العاملين بخطوط الإنتاج المناسبة.
                   </div>
                 ) : (
@@ -1662,20 +1662,20 @@ export const SupervisorTeamActions: React.FC = () => {
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4 lg:min-w-[22rem]">
                         <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-card)] border border-[var(--color-border)] px-3 py-2">
-                          <p className="text-[11px] font-bold text-slate-500">سنوية</p>
-                          <p className="text-base font-black text-blue-600">{leaveBalance?.annualBalance ?? '—'}</p>
+                          <p className="text-[11px] font-bold text-[var(--color-text-muted)]">سنوية</p>
+                          <p className="text-base font-black text-[rgb(var(--color-primary))]">{leaveBalance?.annualBalance ?? '—'}</p>
                         </div>
                         <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-card)] border border-[var(--color-border)] px-3 py-2">
-                          <p className="text-[11px] font-bold text-slate-500">مرضية</p>
-                          <p className="text-base font-black text-rose-600">{leaveBalance?.sickBalance ?? '—'}</p>
+                          <p className="text-[11px] font-bold text-[var(--color-text-muted)]">مرضية</p>
+                          <p className="text-base font-black text-[rgb(var(--color-danger))]">{leaveBalance?.sickBalance ?? '—'}</p>
                         </div>
                         <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-card)] border border-[var(--color-border)] px-3 py-2">
-                          <p className="text-[11px] font-bold text-slate-500">طارئة</p>
-                          <p className="text-base font-black text-amber-600">{leaveBalance?.emergencyBalance ?? '—'}</p>
+                          <p className="text-[11px] font-bold text-[var(--color-text-muted)]">طارئة</p>
+                          <p className="text-base font-black text-[rgb(var(--color-warning))]">{leaveBalance?.emergencyBalance ?? '—'}</p>
                         </div>
                         <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-card)] border border-[var(--color-border)] px-3 py-2">
-                          <p className="text-[11px] font-bold text-slate-500">طلبات حديثة</p>
-                          <p className="text-base font-black text-slate-700">{recentLeaves.length + recentLoans.length}</p>
+                          <p className="text-[11px] font-bold text-[var(--color-text-muted)]">طلبات حديثة</p>
+                          <p className="text-base font-black text-[var(--color-text)]">{recentLeaves.length + recentLoans.length}</p>
                         </div>
                       </div>
                     </div>
@@ -1696,7 +1696,7 @@ export const SupervisorTeamActions: React.FC = () => {
                       >
                         <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                           <span className={`w-8 h-8 rounded-[var(--border-radius-base)] flex shrink-0 items-center justify-center sm:w-9 sm:h-9 ${
-                            activeTab === tab.key ? 'bg-primary/10 text-primary' : 'bg-[#f0f2f5] text-slate-500'
+                            activeTab === tab.key ? 'bg-primary/10 text-primary' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
                           }`}
                           >
                             <span className="material-icons-round text-lg sm:text-xl">{tab.icon}</span>
@@ -1726,9 +1726,9 @@ export const SupervisorTeamActions: React.FC = () => {
                           </select>
                         </div>
                         <div className="flex items-end">
-                          <div className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm bg-[#f8f9fa]">
+                          <div className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm bg-[var(--color-bg)]">
                             <span className="text-[var(--color-text-muted)] font-bold">الأثر على الراتب: </span>
-                            <span className={selectedLeaveType?.isPaid === false ? 'text-rose-500 font-bold' : 'text-emerald-600 font-bold'}>
+                            <span className={selectedLeaveType?.isPaid === false ? 'text-[rgb(var(--color-danger))] font-bold' : 'text-[rgb(var(--color-success))] font-bold'}>
                               {selectedLeaveType?.isPaid === false ? 'غير مدفوعة' : 'مدفوعة'}
                             </span>
                           </div>
@@ -1749,17 +1749,17 @@ export const SupervisorTeamActions: React.FC = () => {
                               value={leaveReasonCode}
                               onChange={setLeaveReasonCode}
                               placeholder="ابحث واختر سبب الإجازة..."
-                              className="h-12 bg-[#f8f9fa]"
+                              className="h-12 bg-[var(--color-bg)]"
                             />
                           ) : (
-                            <div className="border border-amber-200 bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold text-amber-700">
+                            <div className="border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold text-[rgb(var(--color-warning))]">
                               لا توجد أسباب إجازات معرفة. يرجى إضافتها من إعدادات الإجازات ثم العودة لإنشاء الطلب.
                             </div>
                           )}
                         </div>
                       </div>
                       {leaveDays > 0 && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-[var(--border-radius-lg)] p-4 text-sm font-bold text-blue-700">
+                        <div className="bg-[rgb(var(--color-primary)/0.1)] border border-[rgb(var(--color-primary)/0.25)] rounded-[var(--border-radius-lg)] p-4 text-sm font-bold text-[rgb(var(--color-primary))]">
                           مدة الإجازة: {leaveDays} يوم
                         </div>
                       )}
@@ -1791,7 +1791,7 @@ export const SupervisorTeamActions: React.FC = () => {
                       )}
                       <div>
                         <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{loanType === 'monthly_advance' ? 'شهر السلفة' : 'شهر بداية السداد'}</label>
-                        <div className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold bg-[#f8f9fa] text-[var(--color-text)]">
+                        <div className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold bg-[var(--color-bg)] text-[var(--color-text)]">
                           <span className="font-mono" dir="ltr">{automaticLoanStartMonth}</span>
                         </div>
                         <p className="text-xs font-bold text-[var(--color-text-muted)] mt-2">
@@ -1830,8 +1830,8 @@ export const SupervisorTeamActions: React.FC = () => {
                                 onClick={() => setPenaltyDurationDays(String(preset.days))}
                                 className={`rounded-[var(--border-radius-base)] border px-3 py-2 text-xs font-black transition-colors ${
                                   Number(penaltyDurationDays || 0) === preset.days
-                                    ? 'border-rose-300 bg-rose-50 text-rose-700'
-                                    : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:border-rose-200'
+                                    ? 'border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
+                                    : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:border-[rgb(var(--color-danger)/0.25)]'
                                 }`}
                               >
                                 {preset.label}
@@ -1848,7 +1848,7 @@ export const SupervisorTeamActions: React.FC = () => {
                               onChange={(e) => setPenaltyDurationDays(e.target.value)}
                               placeholder="مثال: 0.125 أو 0.25 أو 3"
                             />
-                            <div className="rounded-[var(--border-radius-lg)] border border-rose-100 bg-rose-50 px-4 py-3 text-sm font-black text-rose-700">
+                            <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] px-4 py-3 text-sm font-black text-[rgb(var(--color-danger))]">
                               {penaltyDurationLabel || 'حدد المدة'}
                             </div>
                           </div>
@@ -1861,10 +1861,10 @@ export const SupervisorTeamActions: React.FC = () => {
                         <div className="sm:col-span-2">
                           <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">سبب الجزاء *</label>
                           <textarea className={`${INPUT_CLASS} resize-none`} rows={3} value={penaltyReason} onChange={(e) => setPenaltyReason(e.target.value)} placeholder="اكتب سبب الجزاء..." />
-                          <p className="text-xs font-bold text-rose-500 mt-2">سبب الجزاء مطلوب لإرسال الطلب.</p>
+                          <p className="text-xs font-bold text-[rgb(var(--color-danger))] mt-2">سبب الجزاء مطلوب لإرسال الطلب.</p>
                         </div>
                       </div>
-                      <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 text-sm font-bold text-amber-700">
+                      <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4 text-sm font-bold text-[rgb(var(--color-warning))]">
                         {penaltyAmountPreview
                           ? `بعد الاعتماد سيُحتسب الخصم تقريباً ${formatCurrency(penaltyAmountPreview.amount)} ج.م على أساس ${formatCurrency(penaltyAmountPreview.dailyRate)} ج.م/يوم.`
                           : 'سيتم حفظ مدة الجزاء بعد الاعتماد. لا يوجد راتب أساسي كافٍ لحساب مبلغ الخصم تلقائياً.'}
@@ -1876,15 +1876,15 @@ export const SupervisorTeamActions: React.FC = () => {
                   <OpsDashPanel title="٤. مراجعة وإرسال" accent="production">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
-                      <div className="rounded-[var(--border-radius-lg)] bg-[#f8f9fa] border border-[var(--color-border)] p-3">
+                      <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] border border-[var(--color-border)] p-3">
                         <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">العامل</p>
                         <p className="break-words text-sm font-black text-[var(--color-text)]">{selectedWorker.employeeName}</p>
                       </div>
-                      <div className="rounded-[var(--border-radius-lg)] bg-[#f8f9fa] border border-[var(--color-border)] p-3">
+                      <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] border border-[var(--color-border)] p-3">
                         <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع الطلب</p>
                         <p className="text-sm font-black text-[var(--color-text)]">{activeActionTab.label}</p>
                       </div>
-                      <div className="rounded-[var(--border-radius-lg)] bg-[#f8f9fa] border border-[var(--color-border)] p-3">
+                      <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] border border-[var(--color-border)] p-3">
                         <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">ملخص سريع</p>
                         <p className="text-sm font-black text-[var(--color-text)]">
                           {activeTab === 'leave'
@@ -1905,24 +1905,24 @@ export const SupervisorTeamActions: React.FC = () => {
                         <div key={row.id} className="flex items-start justify-between gap-2 border-b border-[var(--color-border)] pb-2 last:border-b-0">
                           <div>
                             <p className="text-sm font-bold">إجازة {row.leaveTypeLabel || LEAVE_TYPE_LABELS[row.leaveType] || row.leaveType}</p>
-                            <p className="text-xs text-slate-500">{row.startDate} → {row.endDate}</p>
+                            <p className="text-xs text-[var(--color-text-muted)]">{row.startDate} → {row.endDate}</p>
                           </div>
                           <Badge variant={row.finalStatus === 'approved' ? 'success' : row.finalStatus === 'rejected' ? 'danger' : 'warning'}>{row.finalStatus}</Badge>
                         </div>
                       ))}
-                      {recentLeaves.length === 0 && <p className="text-sm text-slate-500">لا توجد إجازات حديثة.</p>}
+                      {recentLeaves.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">لا توجد إجازات حديثة.</p>}
                     </div>
                     <div className="space-y-3">
                       {recentLoans.slice(0, 3).map((row) => (
                         <div key={row.id} className="flex items-start justify-between gap-2 border-b border-[var(--color-border)] pb-2 last:border-b-0">
                           <div>
                             <p className="text-sm font-bold">{LOAN_TYPE_LABELS[row.loanType]}</p>
-                            <p className="text-xs text-slate-500">{formatCurrency(row.loanAmount)} ج.م</p>
+                            <p className="text-xs text-[var(--color-text-muted)]">{formatCurrency(row.loanAmount)} ج.م</p>
                           </div>
                           <Badge variant={row.finalStatus === 'approved' ? 'success' : row.finalStatus === 'rejected' ? 'danger' : 'warning'}>{row.finalStatus}</Badge>
                         </div>
                       ))}
-                      {recentLoans.length === 0 && <p className="text-sm text-slate-500">لا توجد سلف حديثة.</p>}
+                      {recentLoans.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">لا توجد سلف حديثة.</p>}
                     </div>
                   </div>
                 </OpsDashPanel>
@@ -1974,15 +1974,15 @@ export const SupervisorTeamActions: React.FC = () => {
             left: '-10000px',
             top: 0,
             width: '1120px',
-            background: '#ffffff',
-            color: '#0f172a',
+            background: 'var(--color-card)',
+            color: 'var(--color-text)',
             padding: '24px',
             pointerEvents: 'none',
           }}
         >
           <div style={{ fontFamily: 'Cairo, Tahoma, sans-serif' }}>
             <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 900 }}>{pdfExportTitle}</h2>
-            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: '13px', fontWeight: 700 }}>
+            <p style={{ margin: '0 0 18px', color: 'var(--color-text-muted)', fontSize: '13px', fontWeight: 700 }}>
               تقرير إنتاجي للطلبات الظاهرة وحالة اعتماد الإدارة
             </p>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
@@ -1992,8 +1992,8 @@ export const SupervisorTeamActions: React.FC = () => {
                     <th
                       key={header}
                       style={{
-                        border: '1px solid #e2e8f0',
-                        background: '#f8fafc',
+                        border: '1px solid var(--color-border)',
+                        background: 'var(--color-bg)',
                         padding: '8px',
                         textAlign: 'right',
                         fontWeight: 900,
@@ -2011,7 +2011,7 @@ export const SupervisorTeamActions: React.FC = () => {
                       <td
                         key={header}
                         style={{
-                          border: '1px solid #e2e8f0',
+                          border: '1px solid var(--color-border)',
                           padding: '7px',
                           verticalAlign: 'top',
                           fontWeight: 700,

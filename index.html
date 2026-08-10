@@ -4,7 +4,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#8f2424" />
+    <meta name="theme-color" content="#4F46E5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Factory ERP" />
@@ -30,7 +30,7 @@
         align-items: center;
         justify-content: center;
         gap: 20px;
-        background: linear-gradient(165deg, #8f2424 0%, #6d1b1b 100%);
+        background: linear-gradient(165deg, var(--splash-brand, #4F46E5) 0%, var(--splash-brand-dark, #3b34b0) 100%);
         color: #fff;
       }
       #html-splash img {
@@ -235,6 +235,53 @@
         if (warm) warm.removeAttribute('aria-hidden');
       })();
     </script>
+
+    <script>
+      /**
+       * Cold splash branding from cached tenant theme (tenant_theme_cache_v1).
+       * Keeps first paint aligned with applyAppTheme once React loads.
+       */
+      (function () {
+        var KEY = 'tenant_theme_cache_v1';
+        var DEFAULT = '#4F46E5';
+        function parseHex(hex) {
+          if (!hex || typeof hex !== 'string') return null;
+          var h = hex.trim();
+          if (h.charAt(0) === '#') h = h.slice(1);
+          if (!/^[0-9a-fA-F]{6}$/.test(h) && !/^[0-9a-fA-F]{3}$/.test(h)) return null;
+          if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+          return '#' + h.toLowerCase();
+        }
+        function darken(hex, amount) {
+          var h = hex.slice(1);
+          var r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+          function c(n){ n = Math.round(n*(1-amount)); return Math.max(0,Math.min(255,n)).toString(16).padStart(2,'0'); }
+          return '#' + c(r) + c(g) + c(b);
+        }
+        var primary = DEFAULT;
+        try {
+          var raw = localStorage.getItem(KEY);
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            var next = parseHex(parsed && parsed.primaryColor);
+            if (next) primary = next;
+          }
+        } catch (e) { /* ignore */ }
+        var dark = darken(primary, 0.22);
+        try {
+          document.documentElement.style.setProperty('--color-primary-hex', primary);
+          document.documentElement.style.setProperty('--splash-brand', primary);
+          document.documentElement.style.setProperty('--splash-brand-dark', dark);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', primary);
+          var el = document.getElementById('html-splash');
+          if (el && !el.classList.contains('html-splash--warm')) {
+            el.style.background = 'linear-gradient(165deg, ' + primary + ' 0%, ' + dark + ' 100%)';
+          }
+        } catch (e2) { /* ignore */ }
+      })();
+    </script>
+
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

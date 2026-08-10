@@ -32,7 +32,7 @@ export const CustomerPortalBottomBar: React.FC<CustomerPortalBottomBarProps> = (
   return (
     <nav
       className={cn(
-        'fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur',
+        'fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur',
         hasPrimary ? 'pt-5' : 'pt-1.5',
       )}
       aria-label="تنقل بوابة العميل"
@@ -60,7 +60,7 @@ export const CustomerPortalBottomBar: React.FC<CustomerPortalBottomBarProps> = (
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'group relative flex min-w-0 flex-col items-center justify-end gap-1 rounded-xl px-1 py-1.5 text-[10.5px] font-bold transition-colors',
-                active ? 'text-sky-700' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800',
+                active ? 'text-[rgb(var(--color-primary))]' : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]',
                 isPrimary && 'relative -mt-5',
               )}
             >
@@ -68,14 +68,14 @@ export const CustomerPortalBottomBar: React.FC<CustomerPortalBottomBarProps> = (
                 className={cn(
                   'relative flex items-center justify-center rounded-full transition-colors',
                   isPrimary
-                    ? 'h-11 w-11 border-4 border-white bg-sky-600 text-white shadow-lg shadow-sky-600/25'
+                    ? 'h-11 w-11 border-4 border-[var(--color-card)] bg-[rgb(var(--color-primary))] text-white shadow-lg shadow-sky-600/25'
                     : 'h-7 w-7',
-                  active && !isPrimary && 'bg-sky-50',
+                  active && !isPrimary && 'bg-[rgb(var(--color-primary)/0.1)]',
                 )}
               >
                 <Icon size={isPrimary ? 21 : 19} />
                 {badge != null && (
-                  <span className="absolute -end-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                  <span className="absolute -end-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[rgb(var(--color-danger)/0.1)]0 px-1 text-[9px] font-bold text-white">
                     {badge > 99 ? '99+' : badge}
                   </span>
                 )}

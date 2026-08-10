@@ -66,10 +66,10 @@ const TYPE_ICONS: Record<HRTransaction['type'], string> = {
 };
 
 const TYPE_COLORS: Record<HRTransaction['type'], string> = {
-  leave: 'text-blue-600 bg-blue-50',
-  loan: 'text-amber-600 bg-amber-50',
-  allowance: 'text-emerald-600 bg-emerald-50',
-  deduction: 'text-red-600 bg-red-50 dark:bg-red-900/30',
+  leave: 'text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]',
+  loan: 'text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)]',
+  allowance: 'text-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)]',
+  deduction: 'text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger))]/30',
 };
 
 const STATUS_MAP: Record<string, { label: string; color: HRTransaction['statusColor'] }> = {
@@ -470,7 +470,7 @@ export const HRTransactions: React.FC = () => {
           className={`rounded-[var(--border-radius-lg)] p-3 text-center transition-all border-2 ${filterType === 'all' ? 'border-primary bg-primary/5' : 'border-transparent bg-[var(--color-card)]'}`}
         >
           <div className="text-2xl font-bold text-[var(--color-text)]">{stats.total}</div>
-          <div className="text-xs text-slate-500">الكل</div>
+          <div className="text-xs text-[var(--color-text-muted)]">الكل</div>
         </button>
         {([['leave', 'إجازات', 'beach_access'], ['loan', 'سلف', 'payments'], ['allowance', 'بدلات', 'trending_up'], ['deduction', 'اقتطاعات', 'trending_down']] as const).map(([key, label, icon]) => (
           <button
@@ -482,7 +482,7 @@ export const HRTransactions: React.FC = () => {
               <span className={`material-icons-round text-base ${TYPE_COLORS[key].split(' ')[0]}`}>{icon}</span>
               <span className="text-2xl font-bold text-[var(--color-text)]">{stats.byType[key]}</span>
             </div>
-            <div className="text-xs text-slate-500">{label}</div>
+            <div className="text-xs text-[var(--color-text-muted)]">{label}</div>
           </button>
         ))}
       </div>
@@ -538,7 +538,7 @@ export const HRTransactions: React.FC = () => {
         />
 
         {filtered.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
+          <div className="text-center py-12 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-2">inbox</span>
             <p className="font-bold">لا توجد حركات</p>
           </div>
@@ -588,17 +588,17 @@ export const HRTransactions: React.FC = () => {
                   {canManage && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {txn.canEdit && (
-                        <button type="button" onClick={() => openEdit(txn)} className="p-1.5 rounded text-blue-500 hover:bg-blue-50" title="تعديل" disabled={actionLoading}>
+                        <button type="button" onClick={() => openEdit(txn)} className="p-1.5 rounded text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.1)]" title="تعديل" disabled={actionLoading}>
                           <span className="material-icons-round text-lg">edit</span>
                         </button>
                       )}
                       {txn.canCancel && (
-                        <button type="button" onClick={() => handleCancel(txn)} className="p-1.5 rounded text-amber-500 hover:bg-amber-50" title="إلغاء" disabled={actionLoading}>
+                        <button type="button" onClick={() => handleCancel(txn)} className="p-1.5 rounded text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.1)]" title="إلغاء" disabled={actionLoading}>
                           <span className="material-icons-round text-lg">block</span>
                         </button>
                       )}
                       {txn.canDelete && (
-                        <button type="button" onClick={() => setConfirmDelete(txn)} className="p-1.5 rounded text-red-500 hover:bg-red-50" title="حذف" disabled={actionLoading}>
+                        <button type="button" onClick={() => setConfirmDelete(txn)} className="p-1.5 rounded text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]" title="حذف" disabled={actionLoading}>
                           <span className="material-icons-round text-lg">delete</span>
                         </button>
                       )}
@@ -626,7 +626,7 @@ export const HRTransactions: React.FC = () => {
                 {filtered.map((txn) => (
                   <tr
                     key={`${txn.type}-${txn.id}`}
-                    className="border-b border-[var(--color-border)]/50 hover:bg-[#f8f9fa] transition-colors"
+                    className="border-b border-[var(--color-border)]/50 hover:bg-[var(--color-bg)] transition-colors"
                   >
                     <td className="py-3 px-2">
                       <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-[var(--border-radius-base)] text-xs font-bold ${TYPE_COLORS[txn.type]}`}>
@@ -674,7 +674,7 @@ export const HRTransactions: React.FC = () => {
                           {txn.canEdit && (
                             <button
                               onClick={() => openEdit(txn)}
-                              className="p-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 text-blue-500 transition-colors"
+                              className="p-1 rounded hover:bg-[rgb(var(--color-primary)/0.1)] dark:hover:bg-[rgb(var(--color-primary))]/30 text-[rgb(var(--color-primary))] transition-colors"
                               title="تعديل"
                               disabled={actionLoading}
                             >
@@ -684,7 +684,7 @@ export const HRTransactions: React.FC = () => {
                           {txn.canCancel && (
                             <button
                               onClick={() => handleCancel(txn)}
-                              className="p-1 rounded hover:bg-amber-50 dark:hover:bg-amber-900/30 text-amber-500 transition-colors"
+                              className="p-1 rounded hover:bg-[rgb(var(--color-warning)/0.1)] dark:hover:bg-[rgb(var(--color-warning))]/30 text-[rgb(var(--color-warning))] transition-colors"
                               title="إلغاء"
                               disabled={actionLoading}
                             >
@@ -694,7 +694,7 @@ export const HRTransactions: React.FC = () => {
                           {txn.canDelete && (
                             <button
                               onClick={() => setConfirmDelete(txn)}
-                              className="p-1 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500 transition-colors"
+                              className="p-1 rounded hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/30 text-[rgb(var(--color-danger))] transition-colors"
                               title="حذف"
                               disabled={actionLoading}
                             >
@@ -716,7 +716,7 @@ export const HRTransactions: React.FC = () => {
       {/* Edit Modal */}
       {editModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10050] p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-md shadow-2xl">
             <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
               <span className="material-icons-round text-primary">edit</span>
@@ -762,10 +762,10 @@ export const HRTransactions: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {confirmDelete && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10050] p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
-              <span className="material-icons-round text-5xl text-red-500 mb-2">warning</span>
+              <span className="material-icons-round text-5xl text-[rgb(var(--color-danger))] mb-2">warning</span>
               <h3 className="text-lg font-bold text-[var(--color-text)] mb-2">
                 تأكيد الحذف
               </h3>
@@ -784,7 +784,7 @@ export const HRTransactions: React.FC = () => {
                 size="sm"
                 onClick={() => handleDelete(confirmDelete)}
                 disabled={actionLoading}
-                className="!bg-red-600 hover:!bg-red-700"
+                className="!bg-[rgb(var(--color-danger))] hover:!bg-[rgb(var(--color-danger))]"
               >
                 {actionLoading ? 'جاري الحذف...' : 'حذف نهائي'}
               </Button>

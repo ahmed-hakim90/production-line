@@ -714,7 +714,7 @@ export const RepairPayments: React.FC = () => {
             {pendingApprovals.map((approval) => (
               <div
                 key={approval.id}
-                className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/50 p-3 md:flex-row md:items-center md:justify-between"
+                className="flex flex-col gap-2 rounded-md border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/50 p-3 md:flex-row md:items-center md:justify-between"
               >
                 <div>
                   <p className="font-semibold">
@@ -771,7 +771,7 @@ export const RepairPayments: React.FC = () => {
               return (
                 <div
                   key={`ar-${auth.id}`}
-                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200/80 bg-amber-50/50 p-3"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--color-warning)/0.25)]/80 bg-[rgb(var(--color-warning)/0.1)]/50 p-3"
                 >
                   <div className="min-w-0">
                     <p className="font-semibold">#{auth.receiptNo}</p>
@@ -828,7 +828,7 @@ export const RepairPayments: React.FC = () => {
                     </div>
                     <div>
                       <dt className="text-[10px] text-muted-foreground">الخصم</dt>
-                      <dd className="tabular-nums text-rose-600">{money(auth.discountAmount)}</dd>
+                      <dd className="tabular-nums text-[rgb(var(--color-danger))]">{money(auth.discountAmount)}</dd>
                     </div>
                     <div>
                       <dt className="text-[10px] text-muted-foreground">الصافي</dt>
@@ -836,11 +836,11 @@ export const RepairPayments: React.FC = () => {
                     </div>
                     <div>
                       <dt className="text-[10px] text-muted-foreground">المدفوع</dt>
-                      <dd className="tabular-nums text-emerald-600">{money(auth.paidAmount)}</dd>
+                      <dd className="tabular-nums text-[rgb(var(--color-success))]">{money(auth.paidAmount)}</dd>
                     </div>
                     <div className="col-span-2">
                       <dt className="text-[10px] text-muted-foreground">المتبقي</dt>
-                      <dd className="font-semibold tabular-nums text-amber-700">{money(auth.balanceDue)}</dd>
+                      <dd className="font-semibold tabular-nums text-[rgb(var(--color-warning))]">{money(auth.balanceDue)}</dd>
                     </div>
                   </dl>
                   <div className="mt-2">{renderAuthActions(auth, job)}</div>
@@ -880,16 +880,16 @@ export const RepairPayments: React.FC = () => {
                         </p>
                       </td>
                       <td className="p-2">{money(auth.grossAmount)}</td>
-                      <td className="p-2 text-rose-600">
+                      <td className="p-2 text-[rgb(var(--color-danger))]">
                         {money(auth.discountAmount)}
                       </td>
                       <td className="p-2 font-semibold">
                         {money(auth.netAmount)}
                       </td>
-                      <td className="p-2 text-emerald-600">
+                      <td className="p-2 text-[rgb(var(--color-success))]">
                         {money(auth.paidAmount)}
                       </td>
-                      <td className="p-2 text-amber-700">
+                      <td className="p-2 text-[rgb(var(--color-warning))]">
                         {money(auth.balanceDue)}
                       </td>
                       <td className="p-2">{renderAuthActions(auth, job)}</td>

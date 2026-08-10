@@ -64,7 +64,7 @@ interface CardProps {
 export const Card: React.FC<CardProps> = ({ children, className = '', title, onClick }) => (
   <UiCard
     onClick={onClick}
-    className={`bg-[var(--color-card)] rounded-[var(--border-radius-xl,12px)] border border-[var(--color-border)] overflow-hidden ring-1 ring-slate-900/[0.04] dark:ring-white/10 ${onClick ? 'cursor-pointer hover:border-primary/30 hover:shadow-md transition-shadow' : ''} ${className}`}
+    className={`bg-[var(--color-card)] rounded-[var(--border-radius-xl,12px)] border border-[var(--color-border)] overflow-hidden ring-1 ring-[var(--color-text)]/[0.04] dark:ring-white/10 ${onClick ? 'cursor-pointer hover:border-primary/30 hover:shadow-md transition-shadow' : ''} ${className}`}
     style={{ boxShadow: 'var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08))' }}
   >
     {title && (
@@ -88,7 +88,7 @@ interface KPIBoxProps {
 
 export const KPIBox: React.FC<KPIBoxProps> = ({ label, value, icon, trend, trendUp, colorClass = 'bg-primary/10 text-primary', unit }) => (
   <div
-    className="erp-kpi-card bg-[var(--color-card)] p-4 rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 flex items-center gap-3.5 min-h-[108px] h-full"
+    className="erp-kpi-card bg-[var(--color-card)] p-4 rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-[var(--color-text)]/[0.04] dark:ring-white/10 flex items-center gap-3.5 min-h-[108px] h-full"
     style={{ boxShadow: 'var(--shadow-desk-card, var(--shadow-card))' }}
   >
     <div className={`w-8 h-8 ${colorClass} rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0`}>
@@ -126,17 +126,17 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant, color, pulse })
       : 'neutral'
   );
   const styles: Record<NonNullable<BadgeProps['variant']>, string> = {
-    success: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-    warning: 'bg-amber-50 text-amber-700 border border-amber-200',
-    danger: 'bg-rose-50 text-rose-700 border border-rose-200',
-    info: 'bg-blue-50 text-blue-700 border border-blue-200',
+    success: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]',
+    warning: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]',
+    danger: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]',
+    info: 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary)/0.25)]',
     neutral: 'bg-[var(--color-bg)] text-[var(--color-text-muted)] border border-[var(--color-border)]',
   };
   const dotStyles: Record<NonNullable<BadgeProps['variant']>, string> = {
-    success: 'bg-emerald-500',
-    warning: 'bg-amber-500',
-    danger: 'bg-rose-500',
-    info: 'bg-blue-500',
+    success: 'bg-[rgb(var(--color-success)/0.1)]0',
+    warning: 'bg-[rgb(var(--color-warning)/0.1)]0',
+    danger: 'bg-[rgb(var(--color-danger)/0.1)]0',
+    info: 'bg-[rgb(var(--color-primary)/0.1)]0',
     neutral: 'bg-[var(--color-text-muted)]',
   };
   return (
@@ -191,10 +191,10 @@ export const Button: React.FC<LegacyButtonProps> = ({
   const legacyVariantClasses = {
     primary: '!bg-[rgb(var(--color-primary))] !text-white hover:!bg-[rgb(var(--color-primary)/0.9)]',
     default: '!bg-[rgb(var(--color-primary))] !text-white hover:!bg-[rgb(var(--color-primary)/0.9)]',
-    secondary: '!bg-emerald-600 !text-white hover:!bg-emerald-700',
+    secondary: '!bg-[rgb(var(--color-success))] !text-white hover:!bg-[rgb(var(--color-success))]',
     outline: '',
     ghost: '',
-    danger: '!bg-[#D85A30] !text-white hover:!bg-[#BF4D28]',
+    danger: '!bg-[rgb(var(--color-danger))] !text-white hover:!bg-[rgb(var(--color-danger)/0.9)]',
   };
 
   const look = bare || size === 'icon'
@@ -217,7 +217,7 @@ export const Button: React.FC<LegacyButtonProps> = ({
         size={size}
         bare
         className={cn(
-          'inline-flex items-center gap-1.5 text-[13px] font-semibold border shadow-none',
+          'inline-flex items-center gap-1.5 [font-size:var(--font-size-sm)] font-semibold border shadow-none',
           tableIconActionToneClass(look.tone, useSolid),
           className,
         )}
@@ -241,7 +241,7 @@ export const Button: React.FC<LegacyButtonProps> = ({
       iconName={iconName}
       tone={tone}
       solid={solid}
-      className={cn('text-[13px] font-semibold', legacyVariantClasses[variant], className)}
+      className={cn('[font-size:var(--font-size-sm)] font-semibold', legacyVariantClasses[variant], className)}
       {...props}
     >
       {children}
@@ -262,11 +262,11 @@ export interface SelectOption {
 }
 
 const SELECT_OPTION_HINT_STYLES: Record<SelectOptionHintType, string> = {
-  success: 'border-[#059669]/30 bg-[#059669]/10 text-[#059669]',
-  warning: 'border-[#D97706]/30 bg-[#D97706]/10 text-[#D97706]',
-  danger: 'border-[#DC2626]/30 bg-[#DC2626]/10 text-[#DC2626]',
-  info: 'border-[#2563EB]/30 bg-[#2563EB]/10 text-[#2563EB]',
-  muted: 'border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B]',
+  success: 'border-[rgb(var(--color-success)/0.3)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]',
+  warning: 'border-[rgb(var(--color-warning)/0.3)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]',
+  danger: 'border-[rgb(var(--color-danger)/0.3)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]',
+  info: 'border-[rgb(var(--color-primary)/0.3)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]',
+  muted: 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)]',
 };
 
 interface SearchableSelectProps {
@@ -319,7 +319,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            'w-full justify-between min-h-11 h-11 touch-manipulation text-[13px] font-medium border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
+            'w-full justify-between min-h-[var(--control-height-lg)] h-[var(--control-height-lg)] touch-manipulation [font-size:var(--font-size-sm)] font-medium border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
             disabled && 'opacity-70 cursor-not-allowed',
             className
           )}

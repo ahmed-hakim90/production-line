@@ -2,6 +2,8 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { Factory_REPAIR_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
@@ -12,6 +14,7 @@ import {
 } from '../lib/repairManufacturerWarranty';
 import { resolveRepairJobPrintProducts } from '../lib/repairJobPrint';
 import type { RepairBranch, RepairJob, RepairPayment, RepairPaymentAuthorization } from '../types';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 const methodLabel = (method?: string) =>
   method === 'card' ? 'بطاقة' : method === 'bank_transfer' ? 'تحويل بنكي' : 'نقدي';
@@ -32,7 +35,9 @@ export const RepairPaymentPrint = React.forwardRef<
   if (!authorization) return <div ref={ref} />;
 
   const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-  const accent = ps.primaryColor || undefined;
+  const doc = resolvePrintDocumentConfig(ps, 'repairPayment');
+  const accent = resolvePrintAccentHex(ps.primaryColor);
+  const font = resolvePrintFont(ps);
   const isReceipt = Boolean(payment);
   const isUnpriced =
     Number(authorization.grossAmount || 0) <= 0 && Number(authorization.warrantyGrossAmount || 0) <= 0;
@@ -57,42 +62,56 @@ export const RepairPaymentPrint = React.forwardRef<
   return (
     <FactoryPrintShell
       ref={ref}
-      companyName={ps.headerText || 'مركز الصيانة'}
+      companyName={doc.headerText || 'مركز الصيانة'}
       documentType={isReceipt ? 'إيصال تحصيل صيانة' : 'تفصيل حساب طلب صيانة'}
       printDate={printDate}
       logoUrl={ps.logoUrl}
       brandAccent={accent}
-      footerTagline={ps.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+      footerTagline={doc.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+      extraLines={doc.customLines}
       paperWidth="210mm"
       minHeight="297mm"
       padding="10mm 12mm"
-      metaCards={[
-        { label: 'رقم المستند', value: payment?.paymentNo || authorization.authorizationNo },
-        { label: 'رقم طلب الصيانة', value: authorization.receiptNo || '—' },
-        { label: 'الفرع', value: branch?.name || 'مركز الصيانة' },
-        { label: 'وضع الضمان', value: scopeLabel },
-      ]}
-      kpis={
-        isReceipt
+      fontFamily={font.fontFamily}
+      fontSize={font.fontSize}
+      metaCards={
+        doc.isFieldVisible('meta')
           ? [
-              { label: 'المبلغ المستلم', value: money(payment?.amount), tone: 'indigo' },
-              { label: 'وسيلة الدفع', value: methodLabel(payment?.method), tone: 'green' },
-              { label: 'صافي المطلوب', value: money(authorization.netAmount), tone: 'default' },
-              { label: 'المتبقي', value: money(authorization.balanceDue), tone: Number(authorization.balanceDue || 0) > 0 ? 'red' : 'green' },
+              { label: 'رقم المستند', value: payment?.paymentNo || authorization.authorizationNo },
+              { label: 'رقم طلب الصيانة', value: authorization.receiptNo || '—' },
+              { label: 'الفرع', value: branch?.name || 'مركز الصيانة' },
+              { label: 'وضع الضمان', value: scopeLabel },
             ]
-          : [
-              { label: 'صافي المطلوب', value: money(authorization.netAmount), tone: 'indigo' },
-              { label: 'المدفوع', value: money(authorization.paidAmount), tone: 'green' },
-              { label: 'المتبقي', value: money(authorization.balanceDue), tone: Number(authorization.balanceDue || 0) > 0 ? 'red' : 'default' },
-              { label: 'حالة الإذن', value: statusLabel, tone: isUnpriced ? 'red' : 'default' },
-            ]
+          : undefined
       }
-      signatures={[
-        { title: 'توقيع العميل' },
-        { title: 'موظف الاستقبال' },
-        { title: 'الختم والاعتماد' },
-      ]}
+      kpis={
+        doc.isFieldVisible('kpis')
+          ? isReceipt
+            ? [
+                { label: 'المبلغ المستلم', value: money(payment?.amount), tone: 'indigo' },
+                { label: 'وسيلة الدفع', value: methodLabel(payment?.method), tone: 'green' },
+                { label: 'صافي المطلوب', value: money(authorization.netAmount), tone: 'default' },
+                { label: 'المتبقي', value: money(authorization.balanceDue), tone: Number(authorization.balanceDue || 0) > 0 ? 'red' : 'green' },
+              ]
+            : [
+                { label: 'صافي المطلوب', value: money(authorization.netAmount), tone: 'indigo' },
+                { label: 'المدفوع', value: money(authorization.paidAmount), tone: 'green' },
+                { label: 'المتبقي', value: money(authorization.balanceDue), tone: Number(authorization.balanceDue || 0) > 0 ? 'red' : 'default' },
+                { label: 'حالة الإذن', value: statusLabel, tone: isUnpriced ? 'red' : 'default' },
+              ]
+          : undefined
+      }
+      signatures={
+        doc.isFieldVisible('signatures')
+          ? [
+              { title: 'توقيع العميل' },
+              { title: 'موظف الاستقبال' },
+              { title: 'الختم والاعتماد' },
+            ]
+          : undefined
+      }
     >
+      {doc.isFieldVisible('customerBlock') ? (
       <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
         {[
           ['العميل', job?.customerName || '—'],
@@ -113,8 +132,9 @@ export const RepairPaymentPrint = React.forwardRef<
           </div>
         ))}
       </div>
+      ) : null}
 
-      {productRows.length > 0 ? (
+      {doc.isFieldVisible('products') && productRows.length > 0 ? (
         <section className="mb-4">
           <FactoryPrintSectionTitle title="تفصيل المنتجات" accent={accent} />
           <table className="w-full border-collapse overflow-hidden rounded-lg text-right" style={{ tableLayout: 'fixed' }}>

@@ -208,8 +208,8 @@ const FormField: React.FC<{
   <div className="space-y-1.5">
     <label className="block text-sm font-bold text-[var(--color-text)]">{label}</label>
     {children}
-    {hint && !error && <p className="text-xs text-slate-400">{hint}</p>}
-    {error && <p className="text-xs text-rose-500 font-medium">{error}</p>}
+    {hint && !error && <p className="text-xs text-[var(--color-text-muted)]">{hint}</p>}
+    {error && <p className="text-xs text-[rgb(var(--color-danger))] font-medium">{error}</p>}
   </div>
 );
 
@@ -229,7 +229,7 @@ const NumberInput: React.FC<{
     max={max}
     step={step}
     disabled={disabled}
-    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
   />
 );
 
@@ -246,7 +246,7 @@ const Toggle: React.FC<{
       relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent
       transition-colors duration-200 ease-in-out focus:outline-none
       disabled:opacity-50 disabled:cursor-not-allowed
-      ${checked ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}
+      ${checked ? 'bg-primary' : 'bg-[var(--color-border)]'}
     `}
   >
     <span className={`
@@ -267,7 +267,7 @@ const SelectInput: React.FC<{
     value={value}
     onChange={(e) => onChange(e.target.value)}
     disabled={disabled}
-    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
   >
     {options.map((o) => (
       <option key={o.value} value={o.value}>{o.label}</option>
@@ -314,7 +314,7 @@ const DayPicker: React.FC<{
             disabled:opacity-50 disabled:cursor-not-allowed
             ${isSelected
               ? 'bg-primary text-white'
-              : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
+              : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
             }
           `}
         >
@@ -340,7 +340,7 @@ const ConfirmDialog: React.FC<{
   if (!open) return null;
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-bold mb-2">{title}</h3>
         <p className="text-sm text-[var(--color-text-muted)] mb-6">{message}</p>
@@ -351,7 +351,7 @@ const ConfirmDialog: React.FC<{
             onClick={onConfirm}
             className={`px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm text-white transition-all ${
               variant === 'danger'
-                ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'
+                ? 'bg-[rgb(var(--color-danger)/0.1)]0 hover:bg-[rgb(var(--color-danger)/0.9)] shadow-rose-500/20'
                 : 'bg-primary hover:bg-primary/90 shadow-primary/20'
             }`}
           >
@@ -406,7 +406,7 @@ const GeneralForm: React.FC<TabFormProps<'general'>> = ({ config, onChange, erro
     <FormField label="شهر بداية السنة المالية">
       <NumberInput value={config.fiscalYearStartMonth} onChange={(v) => onChange({ ...config, fiscalYearStartMonth: v })} min={1} max={12} disabled={readOnly} />
     </FormField>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">تفعيل الورديات المتعددة</span>
       <Toggle checked={config.useMultipleShifts} onChange={(v) => onChange({ ...config, useMultipleShifts: v })} disabled={readOnly} />
     </div>
@@ -425,11 +425,11 @@ const AttendanceForm: React.FC<TabFormProps<'attendance'>> = ({ config, onChange
       <NumberInput value={config.minimumWorkHoursForPresent} onChange={(v) => onChange({ ...config, minimumWorkHoursForPresent: v })} min={0} max={24} step={0.5} disabled={readOnly} />
     </FormField>
     <div />
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">السماح بالإدخال اليدوي</span>
       <Toggle checked={config.allowManualEntry} onChange={(v) => onChange({ ...config, allowManualEntry: v })} disabled={readOnly} />
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">إلزام تسجيل الخروج</span>
       <Toggle checked={config.requireCheckOut} onChange={(v) => onChange({ ...config, requireCheckOut: v })} disabled={readOnly} />
     </div>
@@ -453,7 +453,7 @@ const OvertimeForm: React.FC<TabFormProps<'overtime'>> = ({ config, onChange, er
     <FormField label="الحد الأقصى شهرياً (ساعات)" error={getError(errors, 'maxOvertimeHoursPerMonth')}>
       <NumberInput value={config.maxOvertimeHoursPerMonth} onChange={(v) => onChange({ ...config, maxOvertimeHoursPerMonth: v })} min={0} disabled={readOnly} />
     </FormField>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">طلب موافقة مسبقة</span>
       <Toggle checked={config.requireApproval} onChange={(v) => onChange({ ...config, requireApproval: v })} disabled={readOnly} />
     </div>
@@ -554,18 +554,18 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
         <FormField label="التقرير الطبي بعد (أيام)" error={getError(errors, 'sickDocumentThresholdDays')}>
           <NumberInput value={config.sickDocumentThresholdDays} onChange={(v) => onChange({ ...config, sickDocumentThresholdDays: v })} min={1} disabled={readOnly} />
         </FormField>
-        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
           <span className="text-sm font-bold text-[var(--color-text)]">السماح بالرصيد السالب</span>
           <Toggle checked={config.allowNegativeBalance} onChange={(v) => onChange({ ...config, allowNegativeBalance: v })} disabled={readOnly} />
         </div>
-        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
           <span className="text-sm font-bold text-[var(--color-text)]">التقرير الطبي إلزامي</span>
           <Toggle checked={config.requireDocumentForSick} onChange={(v) => onChange({ ...config, requireDocumentForSick: v })} disabled={readOnly} />
         </div>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-3">
-        <p className="text-xs text-amber-700 font-medium">
+      <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] px-4 py-3">
+        <p className="text-xs text-[rgb(var(--color-warning))] font-medium">
           تغيير تأثير الإجازة على الراتب سيؤثر على احتساب الرواتب القادمة فقط — لن يُعاد احتساب الأشهر المنتهية.
         </p>
       </div>
@@ -602,7 +602,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                     className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
                   />
                   {getError(errors, `leaveReasons.${idx}.code`) && (
-                    <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveReasons.${idx}.code`)}</p>
+                    <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveReasons.${idx}.code`)}</p>
                   )}
                 </div>
 
@@ -618,7 +618,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                     className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
                   />
                   {getError(errors, `leaveReasons.${idx}.labelAr`) && (
-                    <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveReasons.${idx}.labelAr`)}</p>
+                    <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveReasons.${idx}.labelAr`)}</p>
                   )}
                 </div>
 
@@ -675,7 +675,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
               />
               {getError(errors, `leaveTypes.${idx}.type`) && (
-                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.type`)}</p>
+                <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveTypes.${idx}.type`)}</p>
               )}
             </div>
 
@@ -691,7 +691,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
               />
               {getError(errors, `leaveTypes.${idx}.labelAr`) && (
-                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.labelAr`)}</p>
+                <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveTypes.${idx}.labelAr`)}</p>
               )}
             </div>
 
@@ -709,7 +709,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
               />
               {getError(errors, `leaveTypes.${idx}.defaultBalance`) && (
-                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.defaultBalance`)}</p>
+                <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveTypes.${idx}.defaultBalance`)}</p>
               )}
             </div>
 
@@ -744,7 +744,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary outline-none disabled:opacity-60"
                 />
                 {getError(errors, `leaveTypes.${idx}.deductPercent`) && (
-                  <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.deductPercent`)}</p>
+                  <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveTypes.${idx}.deductPercent`)}</p>
                 )}
               </div>
             )}
@@ -762,7 +762,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary outline-none disabled:opacity-60"
               />
               {getError(errors, `leaveTypes.${idx}.maxConsecutiveDays`) && (
-                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.maxConsecutiveDays`)}</p>
+                <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveTypes.${idx}.maxConsecutiveDays`)}</p>
               )}
             </div>
 
@@ -807,7 +807,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary outline-none disabled:opacity-60"
               />
               {getError(errors, `leaveTypes.${idx}.maxCarryOverDays`) && (
-                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.maxCarryOverDays`)}</p>
+                <p className="text-xs text-[rgb(var(--color-danger))] mt-1">{getError(errors, `leaveTypes.${idx}.maxCarryOverDays`)}</p>
               )}
             </div>
           </div>
@@ -816,7 +816,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
       })}
 
       {getError(errors, 'leaveTypes') && (
-        <p className="text-xs text-rose-500 font-medium">{getError(errors, 'leaveTypes')}</p>
+        <p className="text-xs text-[rgb(var(--color-danger))] font-medium">{getError(errors, 'leaveTypes')}</p>
       )}
     </div>
   );
@@ -836,7 +836,7 @@ const LoanForm: React.FC<TabFormProps<'loan'>> = ({ config, onChange, errors, re
     <FormField label="الحد الأدنى لمدة الخدمة (أشهر)" error={getError(errors, 'minimumServiceMonths')}>
       <NumberInput value={config.minimumServiceMonths} onChange={(v) => onChange({ ...config, minimumServiceMonths: v })} min={0} disabled={readOnly} />
     </FormField>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">السماح بالسلفة أثناء التجربة</span>
       <Toggle checked={config.allowLoanDuringProbation} onChange={(v) => onChange({ ...config, allowLoanDuringProbation: v })} disabled={readOnly} />
     </div>
@@ -862,19 +862,19 @@ const PayrollForm: React.FC<TabFormProps<'payroll'>> = ({ config, onChange, erro
       <NumberInput value={config.socialSecurityRate} onChange={(v) => onChange({ ...config, socialSecurityRate: v })} min={0} max={100} step={0.5} disabled={readOnly} />
     </FormField>
     <div />
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">السماح بالراتب السالب</span>
       <Toggle checked={config.allowNegativeSalary} onChange={(v) => onChange({ ...config, allowNegativeSalary: v })} disabled={readOnly} />
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">إغلاق الشهر تلقائياً</span>
       <Toggle checked={config.autoClosePayrollMonth} onChange={(v) => onChange({ ...config, autoClosePayrollMonth: v })} disabled={readOnly} />
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">تضمين النقل في الإجمالي</span>
       <Toggle checked={config.includeTransportInGross} onChange={(v) => onChange({ ...config, includeTransportInGross: v })} disabled={readOnly} />
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">تفعيل الضريبة</span>
       <Toggle checked={config.taxEnabled} onChange={(v) => onChange({ ...config, taxEnabled: v })} disabled={readOnly} />
     </div>
@@ -922,8 +922,8 @@ const PayrollPreviewPanel: React.FC = () => {
                 <tr key={row.name} className="border-b border-[var(--color-border)]">
                   <td className="py-3 px-3 font-bold">{row.name}</td>
                   <td className="py-3 px-3 font-mono text-xs">{formatAmount(row.base)}</td>
-                  <td className="py-3 px-3 font-mono text-xs text-emerald-600 font-bold">{formatAmount(row.gross)}</td>
-                  <td className="py-3 px-3 font-mono text-xs text-rose-500 font-bold">{formatAmount(row.deductions)}</td>
+                  <td className="py-3 px-3 font-mono text-xs text-[rgb(var(--color-success))] font-bold">{formatAmount(row.gross)}</td>
+                  <td className="py-3 px-3 font-mono text-xs text-[rgb(var(--color-danger))] font-bold">{formatAmount(row.deductions)}</td>
                   <td className="py-3 px-3 font-mono text-xs text-primary font-bold">{formatAmount(row.net)}</td>
                   <td className="py-3 px-3 text-center">
                     <Badge variant="success">{row.status}</Badge>
@@ -936,7 +936,7 @@ const PayrollPreviewPanel: React.FC = () => {
       </OpsDashPanel>
 
       <OpsDashPanel title="معاينة الكشف (كشف راتب تجريبي)" accent="hr">
-        <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/40 p-4 space-y-4">
+        <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[var(--color-bg)]/40 p-4 space-y-4">
           <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
             <div>
               <p className="text-base font-black text-[var(--color-text)]">أحمد محمد</p>
@@ -952,33 +952,33 @@ const PayrollPreviewPanel: React.FC = () => {
             </div>
             <div className="rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] p-3 text-center">
               <p className="text-xs text-[var(--color-text-muted)]">حضور</p>
-              <p className="text-lg font-black text-emerald-600">25</p>
+              <p className="text-lg font-black text-[rgb(var(--color-success))]">25</p>
             </div>
             <div className="rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] p-3 text-center">
               <p className="text-xs text-[var(--color-text-muted)]">غياب</p>
-              <p className="text-lg font-black text-rose-500">1</p>
+              <p className="text-lg font-black text-[rgb(var(--color-danger))]">1</p>
             </div>
             <div className="rounded-[var(--border-radius-base)] bg-[var(--color-card)] border border-[var(--color-border)] p-3 text-center">
               <p className="text-xs text-[var(--color-text-muted)]">تأخير</p>
-              <p className="text-lg font-black text-amber-500">2</p>
+              <p className="text-lg font-black text-[rgb(var(--color-warning))]">2</p>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-[var(--border-radius-base)] border border-emerald-200 bg-emerald-50/70 p-3">
-              <p className="text-sm font-bold text-emerald-700 mb-2">المستحقات</p>
+            <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/70 p-3">
+              <p className="text-sm font-bold text-[rgb(var(--color-success))] mb-2">المستحقات</p>
               <div className="space-y-1.5 text-sm">
                 <div className="flex items-center justify-between"><span>الراتب الأساسي</span><span className="font-mono font-bold">4,200.00</span></div>
                 <div className="flex items-center justify-between"><span>بدل إضافي</span><span className="font-mono font-bold">300.00</span></div>
                 <div className="flex items-center justify-between"><span>بدلات</span><span className="font-mono font-bold">120.00</span></div>
               </div>
             </div>
-            <div className="rounded-[var(--border-radius-base)] border border-rose-200 bg-rose-50/70 p-3">
-              <p className="text-sm font-bold text-rose-700 mb-2">الخصومات</p>
+            <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/70 p-3">
+              <p className="text-sm font-bold text-[rgb(var(--color-danger))] mb-2">الخصومات</p>
               <div className="space-y-1.5 text-sm">
-                <div className="flex items-center justify-between"><span>خصم غياب</span><span className="font-mono font-bold text-rose-600">120.00</span></div>
-                <div className="flex items-center justify-between"><span>خصم تأخير</span><span className="font-mono font-bold text-rose-600">40.00</span></div>
-                <div className="flex items-center justify-between"><span>قسط سلفة</span><span className="font-mono font-bold text-rose-600">20.00</span></div>
+                <div className="flex items-center justify-between"><span>خصم غياب</span><span className="font-mono font-bold text-[rgb(var(--color-danger))]">120.00</span></div>
+                <div className="flex items-center justify-between"><span>خصم تأخير</span><span className="font-mono font-bold text-[rgb(var(--color-danger))]">40.00</span></div>
+                <div className="flex items-center justify-between"><span>قسط سلفة</span><span className="font-mono font-bold text-[rgb(var(--color-danger))]">20.00</span></div>
               </div>
             </div>
           </div>
@@ -1005,19 +1005,19 @@ const ApprovalForm: React.FC<TabFormProps<'approval'>> = ({ config, onChange, er
       <NumberInput value={config.maxApprovalLevels} onChange={(v) => onChange({ ...config, maxApprovalLevels: v })} min={1} max={10} disabled={readOnly} />
     </FormField>
     <div />
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">إلزام موافقة المدير</span>
       <Toggle checked={config.requireManagerApproval} onChange={(v) => onChange({ ...config, requireManagerApproval: v })} disabled={readOnly} />
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">إشعار عند وجود طلبات معلقة</span>
       <Toggle checked={config.notifyOnPending} onChange={(v) => onChange({ ...config, notifyOnPending: v })} disabled={readOnly} />
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">HR المستوى الأخير دائماً</span>
       <Toggle checked={config.hrAlwaysFinalLevel ?? true} onChange={(v) => onChange({ ...config, hrAlwaysFinalLevel: v })} disabled={readOnly} />
     </div>
-    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+    <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
       <span className="text-sm font-bold text-[var(--color-text)]">السماح بالتفويض</span>
       <Toggle checked={config.allowDelegation ?? true} onChange={(v) => onChange({ ...config, allowDelegation: v })} disabled={readOnly} />
     </div>
@@ -1044,11 +1044,11 @@ const TransportForm: React.FC<TabFormProps<'transport'>> = ({ config, onChange, 
           <NumberInput value={config.defaultTransportAllowance} onChange={(v) => onChange({ ...config, defaultTransportAllowance: v })} min={0} disabled={readOnly} />
         </FormField>
         <div />
-        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
           <span className="text-sm font-bold text-[var(--color-text)]">خصم النقل عند الغياب</span>
           <Toggle checked={config.deductOnAbsence} onChange={(v) => onChange({ ...config, deductOnAbsence: v })} disabled={readOnly} />
         </div>
-        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+        <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
           <span className="text-sm font-bold text-[var(--color-text)]">النقل حسب المنطقة</span>
           <Toggle checked={config.zoneBasedTransport} onChange={(v) => onChange({ ...config, zoneBasedTransport: v })} disabled={readOnly} />
         </div>
@@ -1076,21 +1076,21 @@ const TransportForm: React.FC<TabFormProps<'transport'>> = ({ config, onChange, 
                   onChange={(e) => updateZone(i, 'name', e.target.value)}
                   placeholder="اسم المنطقة"
                   disabled={readOnly}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                 />
               </div>
               <div className="w-32">
                 <NumberInput value={zone.amount} onChange={(v) => updateZone(i, 'amount', v)} min={0} disabled={readOnly} />
               </div>
               {!readOnly && (
-                <button onClick={() => removeZone(i)} className="text-rose-400 hover:text-rose-600 transition-colors p-1">
+                <button onClick={() => removeZone(i)} className="text-[rgb(var(--color-danger))] hover:text-[rgb(var(--color-danger))] transition-colors p-1">
                   <span className="material-icons-round text-lg">delete</span>
                 </button>
               )}
             </div>
           ))}
           {getError(errors, 'zones') && (
-            <p className="text-xs text-rose-500 font-medium">{getError(errors, 'zones')}</p>
+            <p className="text-xs text-[rgb(var(--color-danger))] font-medium">{getError(errors, 'zones')}</p>
           )}
         </div>
       )}
@@ -1145,13 +1145,13 @@ const AuditLogPanel: React.FC<{ module: HRConfigModuleName }> = ({ module }) => 
   return (
     <div className="space-y-2 max-h-64 overflow-y-auto">
       {logs.map((log) => (
-        <div key={log.id} className="flex items-start gap-3 p-3 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50 text-sm">
+        <div key={log.id} className="flex items-start gap-3 p-3 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50 text-sm">
           <span className="material-icons-round text-[var(--color-text-muted)] text-lg mt-0.5">
             {log.action === 'reset' ? 'restart_alt' : 'edit'}
           </span>
           <div className="flex-1 min-w-0">
             <p className="font-medium text-[var(--color-text)]">{log.details}</p>
-            <div className="flex items-center gap-2 mt-1 text-xs text-slate-400">
+            <div className="flex items-center gap-2 mt-1 text-xs text-[var(--color-text-muted)]">
               <span>v{log.previousVersion} → v{log.newVersion}</span>
               <span>⬢</span>
               <span>{log.performedBy}</span>
@@ -1434,7 +1434,7 @@ export const HRSettings: React.FC = () => {
               <Badge variant="info">v{(currentConfig as any).configVersion || 0}</Badge>
               <button
                 onClick={() => setShowAuditLog(!showAuditLog)}
-                className="text-[var(--color-text-muted)] hover:text-slate-600 dark:hover:text-[var(--color-text-muted)] transition-colors"
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] dark:hover:text-[var(--color-text-muted)] transition-colors"
                 title="سجل التغييرات"
               >
                 <span className="material-icons-round text-xl">history</span>
@@ -1483,7 +1483,7 @@ export const HRSettings: React.FC = () => {
                     }
                     disabled={readOnly}
                     placeholder="D:\\ZKTeco\\Exports"
-                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </FormField>
 
@@ -1496,7 +1496,7 @@ export const HRSettings: React.FC = () => {
                     }
                     disabled={readOnly}
                     placeholder="*.xlsx,*.xls,*.csv"
-                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </FormField>
 
@@ -1508,7 +1508,7 @@ export const HRSettings: React.FC = () => {
                       setAttendanceIntegrationDraft((prev) => ({ ...prev, shiftStartTime: e.target.value }))
                     }
                     disabled={readOnly}
-                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm font-medium text-[var(--color-text)] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 </FormField>
 
@@ -1557,7 +1557,7 @@ export const HRSettings: React.FC = () => {
                 </FormField>
               </div>
 
-              <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[#f8f9fa]/50">
+              <div className="flex items-center justify-between p-4 rounded-[var(--border-radius-base)] bg-[var(--color-bg)]/50">
                 <span className="text-sm font-bold text-[var(--color-text)]">تفعيل مجلد المراقبة</span>
                 <Toggle
                   checked={attendanceIntegrationDraft.watchFolderEnabled}
@@ -1591,7 +1591,7 @@ export const HRSettings: React.FC = () => {
               <Button
                 variant="ghost"
                 onClick={handleReset}
-                className="text-sm font-medium text-rose-500 hover:text-rose-600 transition-colors flex items-center gap-1 h-auto p-0"
+                className="text-sm font-medium text-[rgb(var(--color-danger))] hover:text-[rgb(var(--color-danger))] transition-colors flex items-center gap-1 h-auto p-0"
               >
                 إعادة تعيين للقيم الافتراضية
               </Button>
@@ -1634,7 +1634,7 @@ export const HRSettings: React.FC = () => {
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-6 left-6 z-50 px-5 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold text-white flex items-center gap-2 animate-slide-up ${
-          toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
+          toast.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)]0' : 'bg-[rgb(var(--color-danger)/0.1)]0'
         }`}>
           <span className="material-icons-round text-lg">
             {toast.type === 'success' ? 'check_circle' : 'error'}

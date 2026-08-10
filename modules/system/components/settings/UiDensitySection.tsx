@@ -1,7 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { applyUiDensity, readUiDensity, writeUiDensity, type UiDensityMode } from '@/core/ui-engine/density/uiDensity';
+import {
+  applyUiDensity,
+  readUiDensity,
+  writeUiDensity,
+  type UiDensityMode,
+} from '@/core/ui-engine/density/uiDensity';
+import { applyThemeTypographyForDensity } from '@/core/ui-engine/density/applyThemeTypography';
 import { useAppStore } from '@/store/useAppStore';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+
 /**
  * تفضيل محلي (localStorage). عند وجود كثافة في «محرك المظهر» المحفوظة تُطبَّق على الجلسة عبر `applyAppTheme`
  * ويُفضّل مواءمة هذا القسم معها بعد التحميل أو تحديث الإعدادات.
@@ -14,11 +21,13 @@ export const UiDensitySection: React.FC = () => {
     setMode(savedDensity);
     writeUiDensity(savedDensity);
     applyUiDensity(savedDensity);
+    applyThemeTypographyForDensity(savedDensity);
   }, [savedDensity]);
   const onChange = useCallback((next: UiDensityMode) => {
     setMode(next);
     writeUiDensity(next);
     applyUiDensity(next);
+    applyThemeTypographyForDensity(next);
   }, []);
   return (
     <OpsDashPanel title="كثافة الواجهة (محلي)">

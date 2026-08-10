@@ -39,12 +39,20 @@ export function buildThemeSettingsCssVars(
   const t = { ...DEFAULT_THEME, ...settings };
   const densityFactor = t.density === 'compact' ? 0.92 : 1;
   const fs = Math.max(10, Math.round(t.baseFontSize * densityFactor));
-  const br = Number(t.borderRadius ?? 6);
+  const br = Math.max(0, Number(t.borderRadius ?? 6));
+  const radiusSm = br === 0 ? 0 : Math.max(2, Math.round(br * 0.6));
+  const radiusLg = br === 0 ? 0 : Math.round(br * 1.4);
+  const radiusXl = br === 0 ? 0 : Math.round(br * 2);
   const muted =
     t.mutedTextColor
     || (tenantPreset === 'dark' ? '#94a3b8' : '#64748b');
   const cw = (t.contentMaxWidth ?? DEFAULT_THEME.contentMaxWidth ?? '1536px').trim();
   const fontStack = `'${t.baseFontFamily}', 'Noto Sans Arabic', sans-serif`;
+  /** Scale toolbar/input/header-action heights with base font so settings affect buttons, not only body text. */
+  const controlScale = (fs / 14) * densityFactor;
+  const controlSm = Math.max(28, Math.round(34 * controlScale));
+  const controlMd = Math.max(32, Math.round(38 * controlScale));
+  const controlLg = Math.max(36, Math.round(42 * controlScale));
 
   const vars: Record<string, string> = {
     '--color-secondary': toRgbChannels(t.secondaryColor),
@@ -61,16 +69,23 @@ export function buildThemeSettingsCssVars(
     '--font-size-sm': `${Math.max(10, fs - 1)}px`,
     '--font-size-xs': `${Math.max(10, fs - 2)}px`,
     '--font-size-2xs': `${Math.max(9, fs - 3)}px`,
-    '--border-radius-sm': `${Math.max(2, Math.round(br * 0.6))}px`,
+    '--border-radius-sm': `${radiusSm}px`,
     '--border-radius-base': `${br}px`,
-    '--border-radius-lg': `${Math.round(br * 1.4)}px`,
-    '--border-radius-xl': `${Math.round(br * 2)}px`,
+    '--border-radius-lg': `${radiusLg}px`,
+    '--border-radius-xl': `${radiusXl}px`,
+    /** shadcn / legacy token — kept in sync with محرك المظهر */
+    '--radius': `${br}px`,
+    '--control-height-sm': `${controlSm}px`,
+    '--control-height': `${controlMd}px`,
+    '--control-height-lg': `${controlLg}px`,
     '--density-scale': t.density === 'compact' ? '0.92' : '1',
     '--content-max-width': cw,
   };
 
   if (t.cssVars) {
     Object.entries(t.cssVars).forEach(([key, value]) => {
+      // Never let a stale `--radius` in cssVars override ThemeSettings.borderRadius.
+      if (key === '--radius') return;
       vars[key] = value;
     });
   }

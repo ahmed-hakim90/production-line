@@ -1040,7 +1040,7 @@ export const DepartmentConsumables: React.FC = () => {
             </table>
           </div>
           {report?.truncated && (
-            <p className="text-xs text-amber-700">تم اقتطاع التقرير عند حد الحركات الأقصى.</p>
+            <p className="text-xs text-[rgb(var(--color-warning))]">تم اقتطاع التقرير عند حد الحركات الأقصى.</p>
           )}
         </OpsDashPanel>
       )}

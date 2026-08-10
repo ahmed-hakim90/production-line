@@ -110,7 +110,7 @@ export function WorkOrderFilters({
         }
       }}
       extra={(
-        <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
+        <div className="inline-flex h-[34px] items-center rounded-lg border border-[var(--color-border)] px-2.5 text-xs text-[var(--color-text-muted)]">
           نتائج الحالة: {selectedStatusCount}
         </div>
       )}

@@ -301,7 +301,7 @@ export const SupplyCyclesList: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      className="max-w-[1600px] mx-auto"
+      className="w-full min-w-0"
       eyebrow="دورات التوريد"
       rangeLabel="تتبع خام أو تام — فترة، أرقام، هالك تقارير ويدوي، وإقفال"
       onRefresh={() => void load()}
@@ -496,7 +496,7 @@ export const SupplyCyclesList: React.FC = () => {
                       return (
                         <tr
                           key={c.id}
-                          className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-muted/40"
+                          className="cursor-pointer transition-colors hover:bg-[var(--color-surface-hover)] dark:hover:bg-muted/40"
                           onClick={() => c.id && navigate(`/supply-cycles/${c.id}`)}
                         >
                           <td className="font-mono font-semibold text-primary">{c.batchCode}</td>
@@ -544,7 +544,7 @@ export const SupplyCyclesList: React.FC = () => {
         <DialogContent className="gap-0" dir="rtl">
           <DialogHeader className="space-y-0 text-right sm:text-right">
             <DialogTitle className="flex w-full min-w-0 flex-wrap items-center gap-2.5 pe-10 text-right text-base font-semibold sm:pe-11">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/15 text-sky-600 dark:text-sky-400">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[rgb(var(--color-primary)/0.1)]0/15 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]">
                 <Plus className="size-5" strokeWidth={2.25} />
               </span>
               دورة توريد جديدة

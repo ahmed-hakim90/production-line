@@ -82,14 +82,13 @@
     --border-radius-xl: 22px;
 
     /*
-     * Control contract (filters, inputs, selects, dense toolbar buttons)
-     * - sm: compact toolbar chips / period toggles
-     * - default: filter bar controls & form fields in dense ERP views
-     * - lg: shadcn default (h-10)
+     * Control contract (filters, inputs, selects, toolbar buttons)
+     * Overridden at runtime by ThemeSettings via buildThemeSettingsCssVars
+     * (scales with baseFontSize + density).
      */
-    --control-height-sm: 32px;
-    --control-height: 36px;
-    --control-height-lg: 40px;
+    --control-height-sm: 34px;
+    --control-height: 38px;
+    --control-height-lg: 42px;
     --control-pad-x: 10px;
     --filter-bar-gap: 8px;
     --filter-bar-pad-y: 8px;
@@ -150,8 +149,8 @@
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 239 84% 60%;
-    /* Align shadcn radius with Hakimo Flow cards (~12–16px controls) */
-    --radius: 0.75rem;
+    /* Align shadcn radius with محرك المظهر (`ThemeSettings.borderRadius`) */
+    --radius: var(--border-radius-base);
   }
 
   * {
@@ -262,6 +261,17 @@
     min-width: 0 !important;
     margin: 0 !important;
     margin-inline: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Nested wrappers inside print roots (receipt / card sheets) must also expand. */
+  .print-root > div,
+  .print-report > div,
+  .arabic-export-root > div {
+    width: 100% !important;
+    max-width: none !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
     box-sizing: border-box !important;
   }
 

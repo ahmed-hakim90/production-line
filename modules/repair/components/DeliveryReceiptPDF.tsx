@@ -2,6 +2,8 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { Factory_REPAIR_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
@@ -9,6 +11,7 @@ import {
 import { resolveRepairJobPrintProducts } from '../lib/repairJobPrint';
 import type { RepairBranch, RepairJob, RepairJobProduct } from '../types';
 import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 export type DeliveryReceiptPDFProps = {
   job: RepairJob | null;
@@ -47,9 +50,11 @@ export const DeliveryReceiptPDF = React.forwardRef<HTMLDivElement, DeliveryRecei
     if (!job || (!isDeliveredStatus(job.status) && !job.deliveredAt)) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'repairDeliveryReceipt');
     const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
-    const accent = ps.primaryColor || undefined;
+    const accent = resolvePrintAccentHex(ps.primaryColor);
+    const font = resolvePrintFont(ps);
     const rows = resolveRepairJobPrintProducts(job, products);
     const authorizationNo = job.deliveryAuthorizationNo || `DEL-${job.receiptNo}`;
     const deliveredAt = job.deliveryAuthorizationIssuedAt || job.deliveredAt;
@@ -72,42 +77,58 @@ export const DeliveryReceiptPDF = React.forwardRef<HTMLDivElement, DeliveryRecei
     return (
       <FactoryPrintShell
         ref={ref}
-        companyName={ps.headerText || 'مركز الصيانة'}
+        companyName={doc.headerText || 'مركز الصيانة'}
         documentType="إذن تسليم منتج"
         printDate={printDate}
         logoUrl={ps.logoUrl}
         brandAccent={accent}
-        footerTagline={ps.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        footerTagline={doc.footerText?.trim() || Factory_REPAIR_FOOTER_TAGLINE}
+        extraLines={doc.customLines}
         paperWidth={paper.width}
         minHeight={paper.minHeight}
         padding={isThermal ? '4mm 3mm' : '10mm 12mm'}
         dense={isThermal}
-        metaCards={[
-          { label: 'رقم إذن التسليم', value: authorizationNo },
-          { label: 'رقم طلب الصيانة', value: job.receiptNo || '—' },
-          { label: 'تاريخ التسليم', value: formatDate(deliveredAt) },
-          { label: 'الفرع', value: branch?.name || '—' },
-        ]}
-        kpis={[
-          { label: 'التكلفة النهائية', value: money(finalCost), tone: 'indigo' },
-          { label: 'المبلغ المحصل', value: money(paidAmount), tone: 'green' },
-          {
-            label: 'الرصيد المتبقي',
-            value: money(balanceDue),
-            tone: balanceDue > 0 ? 'red' : 'default',
-          },
-          {
-            label: 'حالة السداد',
-            value: PAYMENT_LABELS[paymentStatus] || paymentStatus,
-            tone: paymentStatus === 'paid' ? 'green' : paymentStatus === 'unpriced' ? 'red' : 'default',
-          },
-        ]}
-        signatures={[
-          { title: 'اسم وتوقيع المستلم' },
-          { title: 'موظف التسليم', detail: job.deliveryAuthorizationIssuedByName || 'الاسم / التوقيع' },
-          { title: 'اعتماد وختم الفرع', detail: branch?.name || 'الختم / التوقيع' },
-        ]}
+        fontFamily={font.fontFamily}
+        fontSize={isThermal ? font.denseFontSize : font.fontSize}
+        metaCards={
+          doc.isFieldVisible('meta')
+            ? [
+                { label: 'رقم إذن التسليم', value: authorizationNo },
+                { label: 'رقم طلب الصيانة', value: job.receiptNo || '—' },
+                { label: 'تاريخ التسليم', value: formatDate(deliveredAt) },
+                { label: 'الفرع', value: branch?.name || '—' },
+              ]
+            : undefined
+        }
+        kpis={
+          doc.isFieldVisible('kpis')
+            ? [
+                { label: 'التكلفة النهائية', value: money(finalCost), tone: 'indigo' },
+                { label: 'المبلغ المحصل', value: money(paidAmount), tone: 'green' },
+                {
+                  label: 'الرصيد المتبقي',
+                  value: money(balanceDue),
+                  tone: balanceDue > 0 ? 'red' : 'default',
+                },
+                {
+                  label: 'حالة السداد',
+                  value: PAYMENT_LABELS[paymentStatus] || paymentStatus,
+                  tone: paymentStatus === 'paid' ? 'green' : paymentStatus === 'unpriced' ? 'red' : 'default',
+                },
+              ]
+            : undefined
+        }
+        signatures={
+          doc.isFieldVisible('signatures')
+            ? [
+                { title: 'اسم وتوقيع المستلم' },
+                { title: 'موظف التسليم', detail: job.deliveryAuthorizationIssuedByName || 'الاسم / التوقيع' },
+                { title: 'اعتماد وختم الفرع', detail: branch?.name || 'الختم / التوقيع' },
+              ]
+            : undefined
+        }
       >
+        {doc.isFieldVisible('customerBlock') ? (
         <div className={`mb-4 grid overflow-hidden rounded-lg border border-slate-200 ${isThermal ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {[
             ['اسم العميل / المستلم', job.customerName || '—'],
@@ -128,7 +149,9 @@ export const DeliveryReceiptPDF = React.forwardRef<HTMLDivElement, DeliveryRecei
             </div>
           ))}
         </div>
+        ) : null}
 
+        {doc.isFieldVisible('products') ? (
         <section className="mb-4">
           <FactoryPrintSectionTitle title="المنتجات المسلّمة" accent={accent} />
           <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
@@ -168,6 +191,7 @@ export const DeliveryReceiptPDF = React.forwardRef<HTMLDivElement, DeliveryRecei
             </tbody>
           </table>
         </section>
+        ) : null}
 
         <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-bold leading-relaxed text-slate-700">
           أقرّ أنا المستلم بأنني عاينت المنتجات الموضحة أعلاه واستلمتها بحالة سليمة بعد انتهاء أعمال الصيانة،

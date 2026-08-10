@@ -521,9 +521,9 @@ export const QuickWarehouseTransfer: React.FC = () => {
   };
 
   const fieldClass =
-    'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f8f9fa] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-white focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
+    'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
   const fieldDisabledClass =
-    'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f0f2f5] text-[var(--color-text)] font-medium select-none cursor-default';
+    'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[var(--color-surface-hover)] text-[var(--color-text)] font-medium select-none cursor-default';
 
   const totalPieces =
     savedPrintData?.items?.reduce((sum, row) => sum + Number(row.quantityPieces || 0), 0) ?? 0;
@@ -584,7 +584,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
               >
                 <SelectTrigger
                   id="transfer-item-type"
-                  className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm"
+                  className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm"
                 >
                   <SelectValue placeholder="اختر نوع الصنف">
                     {itemType === 'finished_good' ? 'منتج نهائي' : 'مكونات المنتجات'}
@@ -641,7 +641,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                 style={{
                   gridTemplateColumns: '1fr 160px 140px 40px',
                   borderBottom: '1px solid var(--color-border)',
-                  background: '#f8f9fa',
+                  background: 'var(--color-bg)',
                 }}
               >
                 <span>الصنف</span>
@@ -682,7 +682,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                         />
                         {line.itemId && (
                           <p
-                            className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}
+                            className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}
                           >
                             متاح: {available} · متبقي: {remaining}
                           </p>
@@ -751,7 +751,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                               prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev,
                             )
                           }
-                          className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
+                          className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30 transition-all"
                           disabled={transferItems.length <= 1}
                           title="حذف الصف"
                         >
@@ -770,7 +770,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                               prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev,
                             )
                           }
-                          className="w-7 h-7 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
+                          className="w-7 h-7 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30 transition-all"
                           disabled={transferItems.length <= 1}
                           title="حذف الصف"
                         >
@@ -789,7 +789,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                       />
                       {line.itemId && (
                         <p
-                          className={`text-[11px] font-semibold ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}
+                          className={`text-[11px] font-semibold ${remaining < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}
                         >
                           متاح: {available} · متبقي: {remaining}
                         </p>
@@ -878,11 +878,11 @@ export const QuickWarehouseTransfer: React.FC = () => {
         </OpsDashPanel>
       ) : (
         <div className="space-y-4">
-          <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] px-5 py-4 flex items-center gap-3">
-            <span className="material-icons-round text-emerald-500 text-2xl">check_circle</span>
+          <div className="bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] px-5 py-4 flex items-center gap-3">
+            <span className="material-icons-round text-[rgb(var(--color-success))] text-2xl">check_circle</span>
             <div>
-              <p className="font-bold text-emerald-700">تم تسجيل طلب التحويل بنجاح!</p>
-              <p className="text-sm text-emerald-600 dark:text-emerald-500">
+              <p className="font-bold text-[rgb(var(--color-success))]">تم تسجيل طلب التحويل بنجاح!</p>
+              <p className="text-sm text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">
                 سيتم ترحيل المخزون بعد الاعتماد. يمكنك الطباعة أو التصدير أو المشاركة.
               </p>
             </div>
@@ -912,33 +912,33 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
           {savedPrintData && (
             <OpsDashPanel title="معاينة التحويلة" accent="inventory" bodyClassName="p-0 overflow-hidden">
-              <div className="px-5 py-3 bg-[#f8f9fa]/50 border-b border-[var(--color-border)] flex items-center gap-2">
-                <span className="material-icons-round text-sm text-slate-400">visibility</span>
-                <span className="text-xs font-bold text-slate-500">معاينة التحويلة</span>
+              <div className="px-5 py-3 bg-[var(--color-bg)]/50 border-b border-[var(--color-border)] flex items-center gap-2">
+                <span className="material-icons-round text-sm text-[var(--color-text-muted)]">visibility</span>
+                <span className="text-xs font-bold text-[var(--color-text-muted)]">معاينة التحويلة</span>
               </div>
               <div className="p-5 space-y-3">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-blue-100 dark:border-blue-900/20">
+                  <div className="bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">من مخزن</p>
-                    <p className="text-sm font-bold text-blue-600">{savedPrintData.fromWarehouseName}</p>
+                    <p className="text-sm font-bold text-[rgb(var(--color-primary))]">{savedPrintData.fromWarehouseName}</p>
                   </div>
-                  <div className="bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-violet-100 dark:border-violet-900/20">
+                  <div className="bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary)/0.15)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[rgb(var(--color-secondary)/0.25)] dark:border-[rgb(var(--color-secondary))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إلى مخزن</p>
-                    <p className="text-sm font-bold text-violet-600 dark:text-violet-400">{savedPrintData.toWarehouseName}</p>
+                    <p className="text-sm font-bold text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]">{savedPrintData.toWarehouseName}</p>
                   </div>
-                  <div className="bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-amber-100 dark:border-amber-900/20">
+                  <div className="bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[rgb(var(--color-warning)/0.25)] dark:border-[rgb(var(--color-warning))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">رقم المرجع</p>
-                    <p className="text-sm font-bold text-amber-700">{savedPrintData.transferNo}</p>
+                    <p className="text-sm font-bold text-[rgb(var(--color-warning))]">{savedPrintData.transferNo}</p>
                   </div>
-                  <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] p-3 text-center border border-emerald-100 dark:border-emerald-900/20">
+                  <div className="bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] rounded-[var(--border-radius-lg)] p-3 text-center border border-[rgb(var(--color-success)/0.25)] dark:border-[rgb(var(--color-success))]/20">
                     <p className="text-[10px] font-bold text-[var(--color-text-muted)] mb-1">إجمالي القطع</p>
-                    <p className="text-sm font-bold text-emerald-600">{totalPieces}</p>
+                    <p className="text-sm font-bold text-[rgb(var(--color-success))]">{totalPieces}</p>
                   </div>
                 </div>
 
                 {savedPrintData.items && savedPrintData.items.length > 0 && (
                   <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
-                    <div className="grid grid-cols-12 gap-0 bg-[#f8f9fa] px-3 py-2 text-[10px] font-bold text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
+                    <div className="grid grid-cols-12 gap-0 bg-[var(--color-bg)] px-3 py-2 text-[10px] font-bold text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
                       <span className="col-span-5">الصنف</span>
                       <span className="col-span-2 text-center">الوحدة</span>
                       <span className="col-span-2 text-center">الكمية</span>

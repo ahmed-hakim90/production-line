@@ -143,6 +143,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
   const productionLines = useAppStore((s) => s.productionLines);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const rawWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
+  const printTemplate = useAppStore((s) => s.systemSettings?.printTemplate);
   const workerSettings = useMemo(() => ({
     performance: {
       ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
@@ -573,21 +574,21 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           <Button onClick={() => void load({ force: true })}>تحديث</Button>
         </div>
         <div className="grid grid-cols-1 gap-3 border-b border-[var(--color-border)] p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl bg-slate-50 p-3 text-center">
+          <div className="rounded-xl bg-[var(--color-bg)] p-3 text-center">
             <div className="text-xs font-bold text-[var(--color-text-muted)]">الصفوف المعروضة</div>
             <div className="mt-1 text-xl font-black text-[var(--color-text)]">{formatNumber(filteredRows.length)}</div>
           </div>
-          <div className="rounded-xl bg-emerald-50 p-3 text-center">
-            <div className="text-xs font-bold text-emerald-700">أيام حضور</div>
-            <div className="mt-1 text-xl font-black text-emerald-700">{formatNumber(periodPresenceSummary.present)}</div>
+          <div className="rounded-xl bg-[rgb(var(--color-success)/0.1)] p-3 text-center">
+            <div className="text-xs font-bold text-[rgb(var(--color-success))]">أيام حضور</div>
+            <div className="mt-1 text-xl font-black text-[rgb(var(--color-success))]">{formatNumber(periodPresenceSummary.present)}</div>
           </div>
-          <div className="rounded-xl bg-rose-50 p-3 text-center">
-            <div className="text-xs font-bold text-rose-700">أيام غياب</div>
-            <div className="mt-1 text-xl font-black text-rose-700">{formatNumber(periodPresenceSummary.absent)}</div>
+          <div className="rounded-xl bg-[rgb(var(--color-danger)/0.1)] p-3 text-center">
+            <div className="text-xs font-bold text-[rgb(var(--color-danger))]">أيام غياب</div>
+            <div className="mt-1 text-xl font-black text-[rgb(var(--color-danger))]">{formatNumber(periodPresenceSummary.absent)}</div>
           </div>
-          <div className="rounded-xl bg-amber-50 p-3 text-center">
-            <div className="text-xs font-bold text-amber-700">أيام بدون هدف</div>
-            <div className="mt-1 text-xl font-black text-amber-700">{formatNumber(periodPresenceSummary.noTarget)}</div>
+          <div className="rounded-xl bg-[rgb(var(--color-warning)/0.1)] p-3 text-center">
+            <div className="text-xs font-bold text-[rgb(var(--color-warning))]">أيام بدون هدف</div>
+            <div className="mt-1 text-xl font-black text-[rgb(var(--color-warning))]">{formatNumber(periodPresenceSummary.noTarget)}</div>
           </div>
         </div>
         {loading ? <LoadingSkeleton rows={6} /> : (
@@ -626,6 +627,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           subtitle={printSubtitle}
           columns={printColumns}
           rows={filteredRows}
+          printSettings={printTemplate}
         />
       </div>
     );
@@ -662,6 +664,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
         subtitle={printSubtitle}
         columns={printColumns}
         rows={filteredRows}
+        printSettings={printTemplate}
       />
     </ModuleOpsPageShell>
   );

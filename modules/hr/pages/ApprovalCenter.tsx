@@ -43,10 +43,10 @@ type ApprovalCenterPageData = {
 };
 
 const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; color: string; bg: string }> = {
-  overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/30' },
-  leave: { label: 'إجازة', icon: 'beach_access', color: 'text-blue-500', bg: 'bg-blue-100' },
-  loan: { label: 'سلفة', icon: 'payments', color: 'text-amber-500', bg: 'bg-amber-100' },
-  penalty: { label: 'جزاء', icon: 'gavel', color: 'text-rose-500', bg: 'bg-rose-100' },
+  overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-[rgb(var(--color-secondary))]', bg: 'bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary))]/30' },
+  leave: { label: 'إجازة', icon: 'beach_access', color: 'text-[rgb(var(--color-primary))]', bg: 'bg-[rgb(var(--color-primary)/0.1)]' },
+  loan: { label: 'سلفة', icon: 'payments', color: 'text-[rgb(var(--color-warning))]', bg: 'bg-[rgb(var(--color-warning)/0.1)]' },
+  penalty: { label: 'جزاء', icon: 'gavel', color: 'text-[rgb(var(--color-danger))]', bg: 'bg-[rgb(var(--color-danger)/0.1)]' },
 };
 
 function formatRequestSummary(req: FirestoreApprovalRequest): string {
@@ -80,7 +80,7 @@ function formatRequestDetail(req: FirestoreApprovalRequest): string {
 }
 
 const StepIndicator: React.FC<{ chain: ApprovalChainSnapshot[]; currentStep: number }> = ({ chain, currentStep }) => {
-  if (chain.length === 0) return <span className="text-xs text-slate-400">بدون سلسلة موافقات</span>;
+  if (chain.length === 0) return <span className="text-xs text-[var(--color-text-muted)]">بدون سلسلة موافقات</span>;
 
   return (
     <div className="flex items-center gap-1">
@@ -88,19 +88,19 @@ const StepIndicator: React.FC<{ chain: ApprovalChainSnapshot[]; currentStep: num
         <React.Fragment key={i}>
           {i > 0 && (
             <div className={`w-4 h-0.5 ${
-              step.status === 'approved' ? 'bg-emerald-400' :
-              step.status === 'rejected' ? 'bg-rose-400' :
-              step.status === 'skipped' ? 'bg-amber-400' :
-              'bg-slate-200'
+              step.status === 'approved' ? 'bg-[rgb(var(--color-success))]' :
+              step.status === 'rejected' ? 'bg-[rgb(var(--color-danger))]' :
+              step.status === 'skipped' ? 'bg-[rgb(var(--color-warning))]' :
+              'bg-[var(--color-border)]'
             }`} />
           )}
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
-              step.status === 'approved' ? 'border-emerald-400 bg-emerald-50 text-emerald-700' :
-              step.status === 'rejected' ? 'border-rose-400 bg-rose-50 text-rose-700' :
-              step.status === 'skipped' ? 'border-amber-400 bg-amber-50 text-amber-700' :
+              step.status === 'approved' ? 'border-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' :
+              step.status === 'rejected' ? 'border-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' :
+              step.status === 'skipped' ? 'border-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' :
               i === currentStep ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/20' :
-              'border-[var(--color-border)] bg-[#f8f9fa] text-[var(--color-text-muted)]'
+              'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text-muted)]'
             }`}
             title={`${step.approverName} — ${step.approverJobTitle}${step.notes ? ` — ${step.notes}` : ''}${step.delegatedToName ? ` (مفوّض: ${step.delegatedToName})` : ''}`}
           >
@@ -367,9 +367,9 @@ export const ApprovalCenter: React.FC = () => {
       actions={(
         <div className="flex items-center gap-3">
           {actionableCount > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-2 flex items-center gap-2">
-              <span className="material-icons-round text-amber-500 text-lg">notifications_active</span>
-              <span className="text-sm font-bold text-amber-700">{actionableCount} طلب يتطلب إجراءك</span>
+            <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] px-4 py-2 flex items-center gap-2">
+              <span className="material-icons-round text-[rgb(var(--color-warning))] text-lg">notifications_active</span>
+              <span className="text-sm font-bold text-[rgb(var(--color-warning))]">{actionableCount} طلب يتطلب إجراءك</span>
             </div>
           )}
           {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
@@ -389,17 +389,17 @@ export const ApprovalCenter: React.FC = () => {
             key={f.key}
             onClick={() => setFilterStatus(f.key as any)}
             className={`px-4 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
-              filterStatus === f.key ? 'bg-primary text-white' : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-[#e8eaed]'
+              filterStatus === f.key ? 'bg-primary text-white' : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
             }`}
           >
             {f.label}
           </button>
         ))}
-        <div className="w-px bg-slate-200 mx-1" />
+        <div className="w-px bg-[var(--color-border)] mx-1" />
         <button
           onClick={() => setFilterType('')}
           className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
-            filterType === '' ? 'bg-primary/10 text-primary' : 'text-slate-400 hover:text-slate-600'
+            filterType === '' ? 'bg-primary/10 text-primary' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]'
           }`}
         >الكل</button>
         {(Object.entries(TYPE_CONFIG) as [ApprovalRequestType, typeof TYPE_CONFIG.leave][]).map(([key, cfg]) => (
@@ -407,7 +407,7 @@ export const ApprovalCenter: React.FC = () => {
             key={key}
             onClick={() => setFilterType(key)}
             className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all flex items-center gap-1 ${
-              filterType === key ? 'bg-primary/10 text-primary' : 'text-slate-400 hover:text-slate-600'
+              filterType === key ? 'bg-primary/10 text-primary' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]'
             }`}
           >
             <span className={`material-icons-round text-sm ${filterType === key ? 'text-primary' : cfg.color}`}>{cfg.icon}</span>
@@ -457,8 +457,8 @@ export const ApprovalCenter: React.FC = () => {
       <OpsDashPanel title="الطلبات" accent="hr" bodyClassName="p-0">
       {filtered.length === 0 ? (
         <div className="text-center py-12 px-4">
-          <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">task_alt</span>
-          <p className="text-sm font-bold text-slate-500">
+          <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)] mb-3 block">task_alt</span>
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">
             {filterStatus === 'actionable' ? 'لا توجد طلبات تتطلب إجراءك' : 'لا توجد طلبات'}
           </p>
         </div>
@@ -476,13 +476,13 @@ export const ApprovalCenter: React.FC = () => {
               <div
                 key={req.id}
                 className={`bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border overflow-hidden ${
-                  isOverdue ? 'border-rose-300 dark:border-rose-700 shadow-rose-500/5' :
+                  isOverdue ? 'border-[rgb(var(--color-danger)/0.35)] dark:border-[rgb(var(--color-danger)/0.25)] shadow-rose-500/5' :
                   canAct ? 'border-primary/30 shadow-primary/5' :
                   'border-[var(--color-border)]'
                 }`}
               >
                 {isOverdue && (
-                  <div className="bg-rose-50 px-5 py-2 flex items-center gap-2 text-xs font-bold text-rose-600 border-b border-rose-200">
+                  <div className="bg-[rgb(var(--color-danger)/0.1)] px-5 py-2 flex items-center gap-2 text-xs font-bold text-[rgb(var(--color-danger))] border-b border-[rgb(var(--color-danger)/0.25)]">
                     <span className="material-icons-round text-sm">warning</span>
                     هذا الطلب متأخر ويحتاج تدخل عاجل
                   </div>
@@ -528,7 +528,7 @@ export const ApprovalCenter: React.FC = () => {
                       <div className="flex flex-col sm:flex-row gap-3">
                         <input
                           type="text"
-                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-2.5 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-2.5 text-sm font-medium bg-[var(--color-bg)] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
                           placeholder="ملاحظات (اختياري)..."
                           value={actionNotes[req.id!] || ''}
                           onChange={(e) => setActionNotes((prev) => ({ ...prev, [req.id!]: e.target.value }))}

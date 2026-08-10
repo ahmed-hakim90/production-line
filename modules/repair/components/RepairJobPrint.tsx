@@ -3,6 +3,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
 import {
   formatRepairPrintProductLabel,
   repairCustomerReceiptAcknowledgment,
@@ -59,7 +62,9 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
 
     // Customer receipt is always A5 (same sheet as the internal card).
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings, paperSize: 'a5' as const };
+    const doc = resolvePrintDocumentConfig(ps, 'repairJobReceipt');
     const palette = getPrintThemePalette(ps);
+    const font = resolvePrintFont(ps);
     const paper = PAPER_DIMENSIONS.a5;
     const isThermal = false;
     const dense = true;
@@ -71,10 +76,11 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
     const statusChip = resolveRepairStatusChip(job.status, statusMap);
     const warrantyLabel = manufacturerWarrantyScopeLabel(job.warrantyScope, rows);
     const parts = Array.isArray(job.partsUsed) ? job.partsUsed : [];
-    const showQr = Boolean(trackUrl);
-    const showCosts = ps.showCosts !== false && shouldShowRepairPrintCosts(job, products);
+    const showQr = Boolean(trackUrl) && doc.isFieldVisible('qrCode');
+    const showCosts =
+      doc.isFieldVisible('costs') && shouldShowRepairPrintCosts(job, products);
     const decimalPlaces = Math.max(0, Math.min(3, Number(ps.decimalPlaces ?? 0)));
-    const brandName = String(ps.headerText || '').trim() || 'مركز الصيانة';
+    const brandName = String(doc.headerText || '').trim() || 'مركز الصيانة';
     const documentTitle = repairCustomerReceiptTitle(showCosts);
     const acknowledgment = repairCustomerReceiptAcknowledgment(showCosts);
     const branchContact = [branch?.address, branch?.phone].filter(Boolean).join(' — ');
@@ -84,6 +90,10 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
       problemText
       && !rows.some((row) => String(row.diagnosis || '').trim() === problemText),
     );
+    const configuredFooter = String(doc.footerText || '').trim();
+    const showProducts = doc.isFieldVisible('products');
+    const showParts = doc.isFieldVisible('parts');
+    const showSignatures = doc.isFieldVisible('signatures');
 
     const pad = dense ? '1.2mm 1.5mm' : '1.6mm 2mm';
     const gap = dense ? '2mm' : '2.5mm';
@@ -140,7 +150,6 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
     ];
     const infoColumns = isThermal ? 1 : 2;
 
-    const configuredFooter = String(ps.footerText || '').trim();
     const footerLine =
       configuredFooter && configuredFooter !== DEFAULT_PRINT_TEMPLATE.footerText
         ? configuredFooter
@@ -153,7 +162,9 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
         lang="ar"
         className="print-root print-report arabic-export-root"
         style={{
-          fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
+          fontFamily: font.fontFamily,
+          // Keep A5 width on screen so off-screen print parking cannot cover the job page.
+          // @media print (index.css + printManager) expands to full printable width.
           width: '100%',
           maxWidth: paper.width,
           minHeight: paper.minHeight,
@@ -161,7 +172,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           padding: isThermal ? '2.5mm 2mm' : dense ? '4mm 4.5mm' : '5mm 6mm',
           background: '#fff',
           color: palette.text,
-          fontSize: isThermal ? '7pt' : dense ? '8pt' : '8.5pt',
+          fontSize: isThermal ? font.denseFontSize : dense ? font.denseFontSize : font.fontSize,
           lineHeight: 1.3,
           boxSizing: 'border-box',
           letterSpacing: 'normal',
@@ -322,6 +333,8 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           </div>
         </header>
 
+        <PrintExtraLines lines={doc.customLines} dense />
+
         <section
           style={{
             display: 'grid',
@@ -355,6 +368,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           ))}
         </section>
 
+        {showProducts ? (
         <section style={{ marginBottom: gap }}>
           <p style={sectionTitle}>المنتجات المستلمة ({rows.length})</p>
           <table
@@ -418,6 +432,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
             </tbody>
           </table>
         </section>
+        ) : null}
 
         {showProblemBlock ? (
           <section
@@ -436,7 +451,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           </section>
         ) : null}
 
-        {parts.length > 0 && showCosts ? (
+        {parts.length > 0 && showCosts && showParts ? (
           <section style={{ marginBottom: gap }}>
             <p style={sectionTitle}>قطع الغيار المستخدمة</p>
             <table
@@ -487,6 +502,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           </p>
         </section>
 
+        {showSignatures ? (
         <section
           style={{
             display: 'grid',
@@ -548,6 +564,12 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
             </div>
           ) : null}
         </section>
+        ) : showQr && trackUrl ? (
+          <div style={{ textAlign: 'center', marginTop: dense ? '2mm' : '3mm' }}>
+            <p style={{ ...labelStyle, marginBottom: '0.8mm' }}>متابعة الطلب</p>
+            <QRCodeSVG value={trackUrl} size={dense ? 64 : 72} includeMargin={false} level="M" />
+          </div>
+        ) : null}
 
         <footer
           style={{

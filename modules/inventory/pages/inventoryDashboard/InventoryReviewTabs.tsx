@@ -96,7 +96,7 @@ function ChipRow<T extends string>({
           className={`rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
             value === opt.key
               ? 'bg-primary/10 text-primary border-primary/30'
-              : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              : 'bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]'
           }`}
         >
           {opt.label}
@@ -199,7 +199,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
               className={`rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${
                 reviewTab === tab.key
                   ? 'bg-primary text-white border-primary'
-                  : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  : 'bg-[var(--color-card)] text-[var(--color-text)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]'
               }`}
             >
               {tab.label}
@@ -304,19 +304,19 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                 {reviewTab === 'movements' &&
                   (movements.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-slate-400">
+                      <td colSpan={6} className="py-6 text-center text-[var(--color-text-muted)]">
                         لا توجد حركات في الفترة المحددة.
                       </td>
                     </tr>
                   ) : (
                     movements.map((tx) => (
-                      <tr key={tx.id} className="border-b border-slate-100">
+                      <tr key={tx.id} className="border-b border-[var(--color-border)]">
                         <td className="py-2.5 pr-2 font-medium">{tx.itemName}</td>
-                        <td className="py-2.5 text-slate-600">
+                        <td className="py-2.5 text-[var(--color-text-muted)]">
                           {tx.warehouseName || warehouseNameById.get(tx.warehouseId) || '—'}
                         </td>
                         <td className="py-2.5">{movementLabel[tx.movementType] || tx.movementType}</td>
-                        <td className="py-2.5 text-slate-600">{sourceModuleLabel(tx.sourceModule)}</td>
+                        <td className="py-2.5 text-[var(--color-text-muted)]">{sourceModuleLabel(tx.sourceModule)}</td>
                         <td className="py-2.5 tabular-nums">
                           <StatusBadge
                             label={
@@ -327,7 +327,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                             type={tx.quantity >= 0 ? 'success' : 'danger'}
                           />
                         </td>
-                        <td className="py-2.5 text-slate-500 whitespace-nowrap">
+                        <td className="py-2.5 text-[var(--color-text-muted)] whitespace-nowrap">
                           {tx.createdAt ? new Date(tx.createdAt).toLocaleString('ar-EG') : '—'}
                         </td>
                       </tr>
@@ -337,16 +337,16 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                 {reviewTab === 'issues' &&
                   (issues.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-6 text-center text-slate-400">
+                      <td colSpan={6} className="py-6 text-center text-[var(--color-text-muted)]">
                         لا توجد أوامر صرف مطابقة.
                       </td>
                     </tr>
                   ) : (
                     issues.map((row) => (
-                      <tr key={row.id || row.referenceNo} className="border-b border-slate-100">
+                      <tr key={row.id || row.referenceNo} className="border-b border-[var(--color-border)]">
                         <td className="py-2.5 pr-2 font-medium">{row.referenceNo}</td>
                         <td className="py-2.5">{row.productName}</td>
-                        <td className="py-2.5 text-slate-600">
+                        <td className="py-2.5 text-[var(--color-text-muted)]">
                           {row.sourceWarehouseName ||
                             warehouseNameById.get(row.sourceWarehouseId) ||
                             '—'}
@@ -364,7 +364,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                             }
                           />
                         </td>
-                        <td className="py-2.5 text-slate-500 whitespace-nowrap">
+                        <td className="py-2.5 text-[var(--color-text-muted)] whitespace-nowrap">
                           {new Date(row.issuedAt || row.createdAt).toLocaleString('ar-EG')}
                         </td>
                       </tr>
@@ -374,15 +374,15 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                 {reviewTab === 'receipts' &&
                   (receipts.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-6 text-center text-slate-400">
+                      <td colSpan={5} className="py-6 text-center text-[var(--color-text-muted)]">
                         لا توجد استلامات مطابقة.
                       </td>
                     </tr>
                   ) : (
                     receipts.map((row) => (
-                      <tr key={row.id || row.referenceNo} className="border-b border-slate-100">
+                      <tr key={row.id || row.referenceNo} className="border-b border-[var(--color-border)]">
                         <td className="py-2.5 pr-2 font-medium">{row.referenceNo}</td>
-                        <td className="py-2.5 text-slate-600">
+                        <td className="py-2.5 text-[var(--color-text-muted)]">
                           {row.warehouseName || warehouseNameById.get(row.warehouseId) || '—'}
                         </td>
                         <td className="py-2.5">{row.containerRef || '—'}</td>
@@ -398,7 +398,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                             }
                           />
                         </td>
-                        <td className="py-2.5 text-slate-500 whitespace-nowrap">
+                        <td className="py-2.5 text-[var(--color-text-muted)] whitespace-nowrap">
                           {new Date(row.executedAt || row.createdAt).toLocaleString('ar-EG')}
                         </td>
                       </tr>
@@ -408,15 +408,15 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                 {reviewTab === 'transfers' &&
                   (transfers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-6 text-center text-slate-400">
+                      <td colSpan={5} className="py-6 text-center text-[var(--color-text-muted)]">
                         لا توجد تحويلات مطابقة.
                       </td>
                     </tr>
                   ) : (
                     transfers.map((row) => (
-                      <tr key={row.id || row.referenceNo} className="border-b border-slate-100">
+                      <tr key={row.id || row.referenceNo} className="border-b border-[var(--color-border)]">
                         <td className="py-2.5 pr-2 font-medium">{row.referenceNo}</td>
-                        <td className="py-2.5 text-slate-600">
+                        <td className="py-2.5 text-[var(--color-text-muted)]">
                           {(row.fromWarehouseName ||
                             warehouseNameById.get(row.fromWarehouseId) ||
                             '—')}{' '}
@@ -438,7 +438,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                             }
                           />
                         </td>
-                        <td className="py-2.5 text-slate-500 whitespace-nowrap">
+                        <td className="py-2.5 text-[var(--color-text-muted)] whitespace-nowrap">
                           {new Date(row.createdAt).toLocaleString('ar-EG')}
                         </td>
                       </tr>

@@ -40,16 +40,16 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                 <div className="flex items-center gap-2">
                   <span className="material-icons-round text-primary">{kpi.icon}</span>
                   <p className="text-sm font-bold text-[var(--color-text)]">{kpi.label}</p>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[#f0f2f5] text-[var(--color-text-muted)] mr-auto">{kpi.unit}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] mr-auto">{kpi.unit}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <p className="text-[10px] font-bold text-emerald-600 mb-1">جيد</p>
+                    <p className="text-[10px] font-bold text-[rgb(var(--color-success))] mb-1">جيد</p>
                     <input
                       type="number"
                       min={0}
                       step={0.5}
-                      className="w-full border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                      className="w-full border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-[rgb(var(--color-success))]/20 transition-all"
                       value={threshold.good}
                       onChange={(e) =>
                         setLocalKPIs((prev) => ({
@@ -60,12 +60,12 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                     />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold text-amber-600 mb-1">تحذير</p>
+                    <p className="text-[10px] font-bold text-[rgb(var(--color-warning))] mb-1">تحذير</p>
                     <input
                       type="number"
                       min={0}
                       step={0.5}
-                      className="w-full border border-amber-200 bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
+                      className="w-full border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-[rgb(var(--color-warning))]/20 transition-all"
                       value={threshold.warning}
                       onChange={(e) =>
                         setLocalKPIs((prev) => ({
@@ -91,13 +91,13 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                 <th className="erp-th text-center">الوحدة</th>
                 <th className="erp-th text-center">المقياس</th>
                 <th className="erp-th text-center">
-                  <span className="text-emerald-600">جيد</span>
+                  <span className="text-[rgb(var(--color-success))]">جيد</span>
                 </th>
                 <th className="erp-th text-center">
-                  <span className="text-amber-600">تحذير</span>
+                  <span className="text-[rgb(var(--color-warning))]">تحذير</span>
                 </th>
                 <th className="erp-th text-center">
-                  <span className="text-rose-600">خطر</span>
+                  <span className="text-[rgb(var(--color-danger))]">خطر</span>
                 </th>
               </tr>
             </thead>
@@ -105,7 +105,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
               {KPI_DEFINITIONS.map((kpi) => {
                 const threshold = localKPIs[kpi.key] || DEFAULT_KPI_THRESHOLDS[kpi.key];
                 return (
-                  <tr key={kpi.key} className="hover:bg-[#f8f9fa] transition-colors">
+                  <tr key={kpi.key} className="hover:bg-[var(--color-bg)] transition-colors">
                     <td className="py-4 px-4">
                       <div className="flex items-center gap-3">
                         <span className="material-icons-round text-primary">{kpi.icon}</span>
@@ -116,8 +116,8 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                     <td className="py-4 px-4 text-center">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                         kpi.invertedScale
-                          ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-700'
-                          : 'bg-violet-100 dark:bg-violet-900/20 text-violet-700 dark:text-violet-400'
+                          ? 'bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)] text-[rgb(var(--color-primary))]'
+                          : 'bg-[rgb(var(--color-secondary)/0.1)] dark:bg-[rgb(var(--color-secondary)/0.15)] text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]'
                       }`}>
                         {kpi.invertedScale ? 'أقل = أفضل' : 'أعلى = أفضل'}
                       </span>
@@ -127,7 +127,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                         type="number"
                         min={0}
                         step={0.5}
-                        className="w-20 border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                        className="w-20 border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-[rgb(var(--color-success))]/20 transition-all"
                         value={threshold.good}
                         onChange={(e) =>
                           setLocalKPIs((prev) => ({
@@ -142,7 +142,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                         type="number"
                         min={0}
                         step={0.5}
-                        className="w-20 border border-amber-200 bg-amber-50 dark:bg-amber-900/10 rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-amber-500/20 transition-all"
+                        className="w-20 border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] rounded-[var(--border-radius-base)] text-sm font-bold text-center py-2 px-2 outline-none focus:ring-2 focus:ring-[rgb(var(--color-warning))]/20 transition-all"
                         value={threshold.warning}
                         onChange={(e) =>
                           setLocalKPIs((prev) => ({
@@ -153,7 +153,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
                       />
                     </td>
                     <td className="py-4 px-4 text-center">
-                      <span className="text-xs font-bold text-slate-400">
+                      <span className="text-xs font-bold text-[var(--color-text-muted)]">
                         {kpi.invertedScale
                           ? `> ${threshold.warning}${kpi.unit}`
                           : `< ${threshold.warning}${kpi.unit}`}
@@ -174,23 +174,23 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
               <div key={kpi.key} className="space-y-2">
                 <p className="text-xs font-bold text-[var(--color-text-muted)] text-center">{kpi.label}</p>
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-200">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    <span className="text-xs font-bold text-emerald-700">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-success)/0.1)] dark:bg-[rgb(var(--color-success)/0.15)] border border-[rgb(var(--color-success)/0.25)]">
+                    <span className="w-2 h-2 rounded-full bg-[rgb(var(--color-success)/0.1)]0"></span>
+                    <span className="text-xs font-bold text-[rgb(var(--color-success))]">
                       {kpi.invertedScale ? `≤ ${threshold.good}${kpi.unit}` : `≥ ${threshold.good}${kpi.unit}`}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-amber-50 dark:bg-amber-900/10 border border-amber-200">
-                    <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    <span className="text-xs font-bold text-amber-700">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.15)] border border-[rgb(var(--color-warning)/0.25)]">
+                    <span className="w-2 h-2 rounded-full bg-[rgb(var(--color-warning)/0.1)]0"></span>
+                    <span className="text-xs font-bold text-[rgb(var(--color-warning))]">
                       {kpi.invertedScale
                         ? `${threshold.good} — ${threshold.warning}${kpi.unit}`
                         : `${threshold.warning} — ${threshold.good}${kpi.unit}`}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-rose-50 dark:bg-rose-900/10 border border-rose-200">
-                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
-                    <span className="text-xs font-bold text-rose-700">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.15)] border border-[rgb(var(--color-danger)/0.25)]">
+                    <span className="w-2 h-2 rounded-full bg-[rgb(var(--color-danger)/0.1)]0"></span>
+                    <span className="text-xs font-bold text-[rgb(var(--color-danger))]">
                       {kpi.invertedScale ? `> ${threshold.warning}${kpi.unit}` : `< ${threshold.warning}${kpi.unit}`}
                     </span>
                   </div>

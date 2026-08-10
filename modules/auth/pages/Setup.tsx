@@ -105,13 +105,13 @@ export const Setup: React.FC = () => {
       <div className="erp-auth-page">
         <div className="erp-auth-card" style={{ maxWidth: 440, width: '100%' }}>
           <div className="erp-auth-card-body text-center">
-            <span className="material-icons-round text-rose-500 mb-3 block" style={{ fontSize: 48 }}>error</span>
+            <span className="material-icons-round text-[rgb(var(--color-danger))] mb-3 block" style={{ fontSize: 48 }}>error</span>
             <h2 className="text-[16px] font-bold text-[var(--color-text)] mb-2">Firebase غير مُعَد</h2>
             <p className="text-[12.5px] text-[var(--color-text-muted)]">
               أضف متغيرات{' '}
-              <code className="bg-[#f0f2f5] px-1.5 py-0.5 rounded text-[11px] font-mono">VITE_FIREBASE_*</code>{' '}
+              <code className="bg-[var(--color-surface-hover)] px-1.5 py-0.5 rounded text-[11px] font-mono">VITE_FIREBASE_*</code>{' '}
               في ملف{' '}
-              <code className="bg-[#f0f2f5] px-1.5 py-0.5 rounded text-[11px] font-mono">.env.local</code>
+              <code className="bg-[var(--color-surface-hover)] px-1.5 py-0.5 rounded text-[11px] font-mono">.env.local</code>
             </p>
           </div>
         </div>
@@ -140,7 +140,7 @@ export const Setup: React.FC = () => {
                 className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
                 style={{ background: '#e8f5e9' }}
               >
-                <span className="material-icons-round text-emerald-500" style={{ fontSize: 36 }}>check_circle</span>
+                <span className="material-icons-round text-[rgb(var(--color-success))]" style={{ fontSize: 36 }}>check_circle</span>
               </div>
               <h2 className="text-[16px] font-bold text-[var(--color-text)] mb-1">تم الإعداد بنجاح!</h2>
               <p className="text-[13px] text-[var(--color-text-muted)]">جاري التحويل لصفحة تسجيل الدخول...</p>
@@ -242,7 +242,7 @@ export const Setup: React.FC = () => {
                     <input
                       id="setup-confirm"
                       type="password"
-                      className={`erp-auth-input${confirmPassword && confirmPassword !== password ? ' border-rose-400!' : ''}`}
+                      className={`erp-auth-input${confirmPassword && confirmPassword !== password ? ' border-[rgb(var(--color-danger))]!' : ''}`}
                       placeholder="أعد كتابة كلمة المرور"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
@@ -252,7 +252,7 @@ export const Setup: React.FC = () => {
                     />
                   </div>
                   {confirmPassword && confirmPassword !== password && (
-                    <p className="text-[11.5px] text-rose-600 mt-1">كلمة المرور غير متطابقة</p>
+                    <p className="text-[11.5px] text-[rgb(var(--color-danger))] mt-1">كلمة المرور غير متطابقة</p>
                   )}
                 </div>
 

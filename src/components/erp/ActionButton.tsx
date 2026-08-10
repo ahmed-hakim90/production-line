@@ -21,7 +21,14 @@ interface ActionButtonProps extends ButtonProps {
 
 function renderIcon(icon?: ReactNode, iconName?: string) {
   if (iconName) {
-    return <span className="material-icons-round text-sm" aria-hidden>{iconName}</span>
+    return (
+      <span
+        className="material-icons-round [font-size:var(--font-size-base)]"
+        aria-hidden
+      >
+        {iconName}
+      </span>
+    )
   }
   if (icon) return <span>{icon}</span>
   return null
@@ -36,14 +43,16 @@ export function PrimaryButton({
   loading,
   className,
   disabled,
+  size = "default",
   ...props
 }: ActionButtonProps) {
   const { t } = useTranslation()
   return (
     <Button
       variant="default"
+      size={size}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium border shadow-none",
+        "inline-flex items-center gap-1.5 rounded-lg px-4 border shadow-none",
         tableIconActionToneClass(tone, solid),
         className,
       )}
@@ -51,7 +60,7 @@ export function PrimaryButton({
       {...props}
     >
       {loading
-        ? <span className="material-icons-round text-sm animate-spin" aria-hidden>refresh</span>
+        ? <span className="material-icons-round [font-size:var(--font-size-base)] animate-spin" aria-hidden>refresh</span>
         : renderIcon(icon, iconName)}
       {loading ? t("erpComponents.actionButton.loadingSave") : children}
     </Button>
@@ -65,13 +74,15 @@ export function GhostButton({
   tone = "neutral",
   solid = false,
   className,
+  size = "default",
   ...props
 }: ActionButtonProps) {
   return (
     <Button
       variant="ghost"
+      size={size}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold border shadow-none",
+        "inline-flex items-center gap-1.5 rounded-lg px-4 font-bold border shadow-none",
         tableIconActionToneClass(tone, solid),
         className,
       )}
@@ -90,13 +101,15 @@ export function DangerButton({
   tone = "delete",
   solid = false,
   className,
+  size = "default",
   ...props
 }: ActionButtonProps) {
   return (
     <Button
       variant="ghost"
+      size={size}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold border shadow-none",
+        "inline-flex items-center gap-1.5 rounded-lg px-4 font-bold border shadow-none",
         tableIconActionToneClass(tone, solid),
         className,
       )}

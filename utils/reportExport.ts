@@ -31,7 +31,7 @@ export type ShareToWhatsAppOptions = CaptureOptions & {
   caption?: string;
 };
 
-const applyRtlFontClone = (clonedDoc: Document) => {
+const applyRtlFontClone = (clonedDoc: Document, fontFamily?: string) => {
   clonedDoc.documentElement.setAttribute('dir', 'ltr');
   clonedDoc.documentElement.setAttribute('lang', 'ar');
   clonedDoc.documentElement.style.direction = 'ltr';
@@ -39,8 +39,10 @@ const applyRtlFontClone = (clonedDoc: Document) => {
   /**
    * Do not inject a Google Fonts <link> here — it loads asynchronously and html2canvas
    * rasterizes before the font applies, causing intermittent wrong Arabic/layout.
-   * Cairo is preloaded in the real document via ensureCairoLoaded() before capture.
+   * Print fonts are preloaded in the real document via ensurePrintFontLoaded() before capture.
    */
+  const resolvedFamily =
+    fontFamily?.trim() || "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif";
   const style = clonedDoc.createElement('style');
   /* letter-spacing (e.g. Tailwind tracking-*) breaks Arabic cursive joins in html2canvas */
   style.textContent = `
@@ -58,7 +60,7 @@ const applyRtlFontClone = (clonedDoc: Document) => {
       letter-spacing: normal !important;
       word-spacing: normal !important;
       font-variant-ligatures: normal !important;
-      font-family: 'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif !important;
+      font-family: ${resolvedFamily} !important;
     }
     /* html2canvas often ignores Tailwind grid at narrow viewport widths */
     .print-report .grid {
@@ -108,15 +110,22 @@ const applyRtlFontClone = (clonedDoc: Document) => {
   clonedDoc.head.appendChild(style);
 };
 
-const ensureCairoLoaded = async () => {
+const ensurePrintFontLoaded = async (fontFamilyHint?: string) => {
   if (typeof document === 'undefined' || !('fonts' in document)) return;
   const fonts = (document as Document & { fonts: FontFaceSet }).fonts;
+  const primary =
+    String(fontFamilyHint || '')
+      .split(',')[0]
+      ?.replace(/['"]/g, '')
+      .trim() || 'Cairo';
   try {
     await fonts.ready;
     await Promise.all([
-      fonts.load("400 13px Cairo"),
-      fonts.load("600 13px Cairo"),
-      fonts.load("700 18px Cairo"),
+      fonts.load(`400 13px ${primary}`),
+      fonts.load(`600 13px ${primary}`),
+      fonts.load(`700 18px ${primary}`),
+      fonts.load('400 13px Cairo'),
+      fonts.load('700 18px Cairo'),
     ]);
   } catch {
     /* ignore */
@@ -301,8 +310,12 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
 
   const captureRoot = resolveStandardReportRoot(el);
   const isStandardCard = isStandardReportCardRoot(captureRoot);
+  const fontHint =
+    captureRoot.getAttribute('data-print-font') ||
+    (typeof window !== 'undefined' ? window.getComputedStyle(captureRoot).fontFamily : '') ||
+    undefined;
 
-  await ensureCairoLoaded();
+  await ensurePrintFontLoaded(fontHint);
   await waitForImagesInElement(captureRoot);
   await waitForExportPaint();
 
@@ -329,7 +342,7 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
     ...(cloneRtlAndFonts
       ? {
           onclone: (clonedDoc: Document) => {
-            applyRtlFontClone(clonedDoc);
+            applyRtlFontClone(clonedDoc, fontHint);
           },
         }
       : {}),

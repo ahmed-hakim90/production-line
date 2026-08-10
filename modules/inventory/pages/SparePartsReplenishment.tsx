@@ -362,7 +362,7 @@ export const SparePartsReplenishment: React.FC = () => {
   if (!canView) {
     return (
       <ModuleOpsPageShell eyebrow="تموين قطع الغيار للمراكز">
-        <p className="text-sm text-slate-500">ليس لديك صلاحية عرض هذه الصفحة.</p>
+        <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية عرض هذه الصفحة.</p>
       </ModuleOpsPageShell>
     );
   }
@@ -697,17 +697,17 @@ export const SparePartsReplenishment: React.FC = () => {
                 ) : null}
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b bg-slate-50/60">
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">من مخزن</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 border-b bg-[var(--color-bg)]">
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">من مخزن</p>
                   <p className="mt-1 text-sm font-black">{selectedRequest.fromWarehouseName}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">إلى مخزن</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">إلى مخزن</p>
                   <p className="mt-1 text-sm font-black">{selectedRequest.toWarehouseName}</p>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">الحالة</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">الحالة</p>
                   <div className="mt-1">
                     <StatusBadge
                       label={SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[selectedRequest.status]}
@@ -715,8 +715,8 @@ export const SparePartsReplenishment: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">التكلفة المركزية</p>
+                <div className="rounded-lg border bg-[var(--color-card)] p-3">
+                  <p className="text-xs font-bold text-[var(--color-text-muted)]">التكلفة المركزية</p>
                   <p className="mt-1 text-sm font-black tabular-nums">
                     {selectedRequest.totalCostSnapshot != null
                       ? fmt(selectedRequest.totalCostSnapshot)
@@ -724,8 +724,8 @@ export const SparePartsReplenishment: React.FC = () => {
                   </p>
                 </div>
                 {selectedRequest.status === 'received' ? (
-                  <div className="rounded-lg border bg-white p-3 md:col-span-2">
-                    <p className="text-xs font-bold text-slate-500">مدة التنفيذ</p>
+                  <div className="rounded-lg border bg-[var(--color-card)] p-3 md:col-span-2">
+                    <p className="text-xs font-bold text-[var(--color-text-muted)]">مدة التنفيذ</p>
                     <p className="mt-1 text-sm font-black">
                       {formatDurationArabic(
                         replenishmentDurationMs(selectedRequest.createdAt, selectedRequest.receivedAt),
@@ -734,9 +734,9 @@ export const SparePartsReplenishment: React.FC = () => {
                   </div>
                 ) : null}
                 {(selectedRequest.lines || []).some((line) => isStockoutDemandLine(line)) ? (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 md:col-span-2">
-                    <p className="text-xs font-bold text-rose-700">تنبيه</p>
-                    <p className="mt-1 text-sm font-semibold text-rose-800">يحتوي قطعاً ناقصة عند الطلب</p>
+                  <div className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] p-3 md:col-span-2">
+                    <p className="text-xs font-bold text-[rgb(var(--color-danger))]">تنبيه</p>
+                    <p className="mt-1 text-sm font-semibold text-[rgb(var(--color-danger))]">يحتوي قطعاً ناقصة عند الطلب</p>
                   </div>
                 ) : null}
               </div>
@@ -744,7 +744,7 @@ export const SparePartsReplenishment: React.FC = () => {
               <div className="erp-table-wrap overflow-x-auto">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
-                    <tr className="bg-slate-50 border-b">
+                    <tr className="bg-[var(--color-bg)] border-b">
                       <th className="p-3 text-start">المكوّن</th>
                       <th className="p-3 text-center">مطلوب</th>
                       <th className="p-3 text-center">مجهّز</th>
@@ -756,7 +756,7 @@ export const SparePartsReplenishment: React.FC = () => {
                   <tbody>
                     {(selectedRequest.lines || []).length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-sm text-slate-400">
+                        <td colSpan={6} className="p-8 text-center text-sm text-[var(--color-text-muted)]">
                           لا توجد بنود في هذا الطلب.
                         </td>
                       </tr>
@@ -771,10 +771,10 @@ export const SparePartsReplenishment: React.FC = () => {
                             <td className="p-3">
                               <p className="font-medium">{line.itemName}</p>
                               {line.itemCode ? (
-                                <p className="mt-0.5 text-xs font-mono text-slate-500">{line.itemCode}</p>
+                                <p className="mt-0.5 text-xs font-mono text-[var(--color-text-muted)]">{line.itemCode}</p>
                               ) : null}
                               {line.unit ? (
-                                <p className="mt-0.5 text-[11px] text-slate-400">الوحدة: {line.unit}</p>
+                                <p className="mt-0.5 text-[11px] text-[var(--color-text-muted)]">الوحدة: {line.unit}</p>
                               ) : null}
                             </td>
                             <td className="p-3 text-center tabular-nums font-semibold">
@@ -793,29 +793,29 @@ export const SparePartsReplenishment: React.FC = () => {
                                     const rackShelf = [a.rack, a.shelf].filter(Boolean).join(' / ');
                                     return (
                                       <p key={`${a.locationId}-${a.quantity}`}>
-                                        <span className="font-semibold text-slate-700">{a.locationCode}</span>
+                                        <span className="font-semibold text-[var(--color-text)]">{a.locationCode}</span>
                                         {rackShelf ? (
-                                          <span className="text-slate-500"> ({rackShelf})</span>
+                                          <span className="text-[var(--color-text-muted)]"> ({rackShelf})</span>
                                         ) : null}
-                                        <span className="tabular-nums text-slate-600">
+                                        <span className="tabular-nums text-[var(--color-text-muted)]">
                                           {' '}· {fmt(a.quantity)}
                                         </span>
                                       </p>
                                     );
                                   })}
                                   {isSuggested ? (
-                                    <p className="text-[11px] text-amber-700">مقترح — يُثبَّت عند التجهيز</p>
+                                    <p className="text-[11px] text-[rgb(var(--color-warning))]">مقترح — يُثبَّت عند التجهيز</p>
                                   ) : null}
                                 </div>
                               ) : (
-                                <span className="text-slate-400">
+                                <span className="text-[var(--color-text-muted)]">
                                   {selectedRequest.status === 'submitted'
                                     ? 'يُحدد عند التجهيز'
                                     : 'بدون رفوف'}
                                 </span>
                               )}
                               {line.shortageQty && line.shortageQty > 0 ? (
-                                <p className="mt-1 font-semibold text-rose-600">
+                                <p className="mt-1 font-semibold text-[rgb(var(--color-danger))]">
                                   نقص: {fmt(line.shortageQty)}
                                 </p>
                               ) : null}
@@ -857,7 +857,7 @@ export const SparePartsReplenishment: React.FC = () => {
                 className={`min-h-9 flex-1 rounded-lg border px-2 py-1.5 text-xs font-bold sm:flex-none sm:px-3 ${
                   listTab === key
                     ? 'border-primary bg-primary text-white'
-                    : 'border-slate-200 bg-white text-slate-600'
+                    : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)]'
                 }`}
               >
                 {label}

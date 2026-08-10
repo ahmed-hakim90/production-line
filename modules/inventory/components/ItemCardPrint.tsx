@@ -2,6 +2,9 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { resolvePrintFont } from '@/utils/print/printFont';
 import { itemTypeLabel } from '../lib/stockLabels';
 import { movementFateLabel, movementPathLabel } from '../lib/itemMovementTrace';
 import type { InventoryItemType, StockItemBalance, StockTransaction } from '../types';
@@ -43,14 +46,22 @@ export const ItemCardPrint = React.forwardRef<HTMLDivElement, Props>(
     if (!card) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'itemCard');
+    const font = resolvePrintFont(ps);
     const palette = getPrintThemePalette(ps);
     const when = printedAt || new Date().toLocaleString('ar-EG');
     const totalQty = card.balances.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const showBalances = doc.isFieldVisible('balances');
+    const showBom = doc.isFieldVisible('bom');
+    const showMovements = doc.isFieldVisible('movements');
+    const showCategory = doc.isFieldVisible('category');
+    const showWarehouse = doc.isFieldVisible('warehouse');
 
     return (
       <div
         ref={ref}
         dir="rtl"
+        data-print-font={font.fontFamily}
         style={{
           width: '210mm',
           minHeight: '297mm',
@@ -58,7 +69,8 @@ export const ItemCardPrint = React.forwardRef<HTMLDivElement, Props>(
           padding: '10mm',
           background: '#fff',
           color: palette.text,
-          fontFamily: 'Tahoma, Arial, sans-serif',
+          fontFamily: font.fontFamily,
+          fontSize: font.fontSize,
           boxSizing: 'border-box',
         }}
       >
@@ -83,13 +95,20 @@ export const ItemCardPrint = React.forwardRef<HTMLDivElement, Props>(
             <div>
               <div style={{ fontSize: '16pt', fontWeight: 800 }}>كارت الصنف</div>
               <div style={{ fontSize: '10pt', opacity: 0.95, marginTop: '1mm' }}>
-                {card.itemName}
+                {doc.headerText || card.itemName}
               </div>
+              {doc.headerText ? (
+                <div style={{ fontSize: '9pt', opacity: 0.9, marginTop: '1mm' }}>{card.itemName}</div>
+              ) : null}
             </div>
             <div style={{ textAlign: 'left', fontSize: '9pt', opacity: 0.95 }}>
               <div>{when}</div>
-              {card.warehouseName ? <div>{card.warehouseName}</div> : null}
+              {showWarehouse && card.warehouseName ? <div>{card.warehouseName}</div> : null}
             </div>
+          </div>
+
+          <div style={{ padding: '3mm 4mm 0' }}>
+            <PrintExtraLines lines={doc.customLines} />
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
@@ -103,112 +122,141 @@ export const ItemCardPrint = React.forwardRef<HTMLDivElement, Props>(
               <tr>
                 <td style={labelCell}>الوحدة</td>
                 <td style={valueCell}>{card.unit || '—'}</td>
-                <td style={labelCell}>التصنيف</td>
-                <td style={valueCell}>{card.category || '—'}</td>
+                {showCategory ? (
+                  <>
+                    <td style={labelCell}>التصنيف</td>
+                    <td style={valueCell}>{card.category || '—'}</td>
+                  </>
+                ) : (
+                  <>
+                    <td style={labelCell}>إجمالي الرصيد</td>
+                    <td style={valueCell}>{fmt(totalQty)}</td>
+                  </>
+                )}
               </tr>
-              <tr>
-                <td style={labelCell}>إجمالي الرصيد</td>
-                <td style={valueCell} colSpan={3}>{fmt(totalQty)}</td>
-              </tr>
+              {showCategory ? (
+                <tr>
+                  <td style={labelCell}>إجمالي الرصيد</td>
+                  <td style={valueCell} colSpan={3}>{fmt(totalQty)}</td>
+                </tr>
+              ) : null}
             </tbody>
           </table>
 
-          <SectionTitle title="الأرصدة حسب المخزن" color={palette.primary} />
-          {card.balances.length === 0 ? (
-            <EmptyNote text="لا يوجد رصيد لهذا الصنف." />
-          ) : (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>المخزن</th>
-                  <th style={thStyle}>الرصيد</th>
-                  <th style={thStyle}>محجوز</th>
-                  <th style={thStyle}>متاح</th>
-                  <th style={thStyle}>الحد الأدنى</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.balances.map((row) => (
-                  <tr key={`${row.warehouseId}-${row.warehouseName}`}>
-                    <td style={tdStyle}>{row.warehouseName}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.quantity || 0))}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.reservedQty || 0))}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      {fmt(Number(row.availableQty ?? row.quantity ?? 0))}
-                    </td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.minStock || 0))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {showBalances ? (
+            <>
+              <SectionTitle title="الأرصدة حسب المخزن" color={palette.primary} />
+              {card.balances.length === 0 ? (
+                <EmptyNote text="لا يوجد رصيد لهذا الصنف." />
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>المخزن</th>
+                      <th style={thStyle}>الرصيد</th>
+                      <th style={thStyle}>محجوز</th>
+                      <th style={thStyle}>متاح</th>
+                      <th style={thStyle}>الحد الأدنى</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {card.balances.map((row) => (
+                      <tr key={`${row.warehouseId}-${row.warehouseName}`}>
+                        <td style={tdStyle}>{row.warehouseName}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.quantity || 0))}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.reservedQty || 0))}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          {fmt(Number(row.availableQty ?? row.quantity ?? 0))}
+                        </td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.minStock || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ) : null}
 
-          <SectionTitle title="المكونات (BOM)" color={palette.primary} />
-          {card.bomLines.length === 0 ? (
-            <EmptyNote text="لا توجد مكونات مرتبطة بهذا الصنف." />
-          ) : (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>كود المكون</th>
-                  <th style={thStyle}>اسم المكون</th>
-                  <th style={thStyle}>الكمية / وحدة</th>
-                  <th style={thStyle}>الوحدة</th>
-                  {card.bomLines.some((line) => line.stockQty != null) ? (
-                    <th style={thStyle}>رصيد المخزن</th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody>
-                {card.bomLines.map((line, index) => (
-                  <tr key={`${line.itemCode}-${index}`}>
-                    <td style={tdStyle}>{line.itemCode || '—'}</td>
-                    <td style={tdStyle}>{line.itemName || '—'}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(line.qtyPerUnit)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>{line.unit || '—'}</td>
-                    {card.bomLines.some((row) => row.stockQty != null) ? (
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>
-                        {line.stockQty == null ? '—' : fmt(line.stockQty)}
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {showBom ? (
+            <>
+              <SectionTitle title="المكونات (BOM)" color={palette.primary} />
+              {card.bomLines.length === 0 ? (
+                <EmptyNote text="لا توجد مكونات مرتبطة بهذا الصنف." />
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>كود المكون</th>
+                      <th style={thStyle}>اسم المكون</th>
+                      <th style={thStyle}>الكمية / وحدة</th>
+                      <th style={thStyle}>الوحدة</th>
+                      {card.bomLines.some((line) => line.stockQty != null) ? (
+                        <th style={thStyle}>رصيد المخزن</th>
+                      ) : null}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {card.bomLines.map((line, index) => (
+                      <tr key={`${line.itemCode}-${index}`}>
+                        <td style={tdStyle}>{line.itemCode || '—'}</td>
+                        <td style={tdStyle}>{line.itemName || '—'}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(line.qtyPerUnit)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>{line.unit || '—'}</td>
+                        {card.bomLines.some((row) => row.stockQty != null) ? (
+                          <td style={{ ...tdStyle, textAlign: 'center' }}>
+                            {line.stockQty == null ? '—' : fmt(line.stockQty)}
+                          </td>
+                        ) : null}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ) : null}
 
-          <SectionTitle title="آخر الحركات" color={palette.primary} />
-          {card.movements.length === 0 ? (
-            <EmptyNote text="لا توجد حركات لهذا الصنف." />
-          ) : (
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyle}>التاريخ</th>
-                  <th style={thStyle}>المرجع</th>
-                  <th style={thStyle}>المسار</th>
-                  <th style={thStyle}>الكمية</th>
-                  <th style={thStyle}>الحالة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {card.movements.slice(0, 40).map((tx) => (
-                  <tr key={tx.id || `${tx.createdAt}-${tx.referenceNo}`}>
-                    <td style={tdStyle}>
-                      {String(tx.createdAt || '').slice(0, 16).replace('T', ' ') || '—'}
-                    </td>
-                    <td style={tdStyle}>{tx.referenceNo || tx.sourceId || '—'}</td>
-                    <td style={tdStyle}>{movementPathLabel(tx)}</td>
-                    <td style={{ ...tdStyle, textAlign: 'center' }}>
-                      {tx.movementType === 'OUT' ? '−' : tx.movementType === 'IN' ? '+' : ''}
-                      {fmt(Math.abs(Number(tx.quantity || 0)))}
-                    </td>
-                    <td style={tdStyle}>{movementFateLabel(tx)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          {showMovements ? (
+            <>
+              <SectionTitle title="آخر الحركات" color={palette.primary} />
+              {card.movements.length === 0 ? (
+                <EmptyNote text="لا توجد حركات لهذا الصنف." />
+              ) : (
+                <table style={tableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>التاريخ</th>
+                      <th style={thStyle}>المرجع</th>
+                      <th style={thStyle}>المسار</th>
+                      <th style={thStyle}>الكمية</th>
+                      <th style={thStyle}>الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {card.movements.slice(0, 40).map((tx) => (
+                      <tr key={tx.id || `${tx.createdAt}-${tx.referenceNo}`}>
+                        <td style={tdStyle}>
+                          {String(tx.createdAt || '').slice(0, 16).replace('T', ' ') || '—'}
+                        </td>
+                        <td style={tdStyle}>{tx.referenceNo || tx.sourceId || '—'}</td>
+                        <td style={tdStyle}>{movementPathLabel(tx)}</td>
+                        <td style={{ ...tdStyle, textAlign: 'center' }}>
+                          {tx.movementType === 'OUT' ? '−' : tx.movementType === 'IN' ? '+' : ''}
+                          {fmt(Math.abs(Number(tx.quantity || 0)))}
+                        </td>
+                        <td style={tdStyle}>{movementFateLabel(tx)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ) : null}
+
+          {doc.footerText ? (
+            <div style={{ padding: '3mm 4mm', fontSize: '8pt', color: '#64748b', borderTop: '1px solid #e2e8f0' }}>
+              {doc.footerText}
+            </div>
+          ) : null}
         </div>
       </div>
     );

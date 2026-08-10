@@ -3,12 +3,13 @@ import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import {
   Factory_DEFAULT_FOOTER_TAGLINE,
-  Factory_IMAGE_PRIMARY,
-  Factory_IMAGE_PRIMARY_BADGE_BG,
-  Factory_IMAGE_PRIMARY_BADGE_TEXT,
-  Factory_IMAGE_PRIMARY_SOFT,
   Factory_TRANSFER_FOOTER_TAGLINE,
+  resolveImageExportPalette,
 } from '@/utils/imageExportTheme';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 export interface StockTransferPrintData {
   transferNo: string;
@@ -86,6 +87,13 @@ type PermitLayoutModel = {
   footerTagline: string;
   version?: string;
   showVersion?: boolean;
+  showItemCode?: boolean;
+  showQuantityPieces?: boolean;
+  showUnitsPerCarton?: boolean;
+  showSignatures?: boolean;
+  extraLines?: string[];
+  fontFamily?: string;
+  fontSize?: string;
   note?: string;
   fromWarehouseName: string;
   toWarehouseName: string;
@@ -101,6 +109,13 @@ function buildPermitModel(
     footerTagline: string;
     version?: string;
     showVersion?: boolean;
+    showItemCode?: boolean;
+    showQuantityPieces?: boolean;
+    showUnitsPerCarton?: boolean;
+    showSignatures?: boolean;
+    extraLines?: string[];
+    fontFamily?: string;
+    fontSize?: string;
   },
 ): PermitLayoutModel {
   const transferItems = resolveTransferItems(data);
@@ -118,6 +133,13 @@ function buildPermitModel(
     footerTagline: options.footerTagline,
     version: options.version,
     showVersion: options.showVersion,
+    showItemCode: options.showItemCode !== false,
+    showQuantityPieces: options.showQuantityPieces !== false,
+    showUnitsPerCarton: options.showUnitsPerCarton !== false,
+    showSignatures: options.showSignatures !== false,
+    extraLines: options.extraLines ?? [],
+    fontFamily: options.fontFamily,
+    fontSize: options.fontSize,
     note: data.note,
     fromWarehouseName: data.fromWarehouseName || '—',
     toWarehouseName: data.toWarehouseName || '—',
@@ -147,7 +169,10 @@ const StockTransferPermitDocument: React.FC<{
   padding = '28px 32px',
 }) => {
   const accent = model.accent;
+  const palette = resolveImageExportPalette(accent);
   const statusLabel = model.statusLabel;
+  const fontFamily = model.fontFamily || "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif";
+  const fontSize = model.fontSize || '10pt';
 
   return (
     <div
@@ -155,10 +180,11 @@ const StockTransferPermitDocument: React.FC<{
       ref={rootRef}
       dir="rtl"
       lang="ar"
+      data-print-font={fontFamily}
       className="print-root print-report arabic-export-root bg-white mx-auto"
       style={{
-        fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
-        fontSize: '13px',
+        fontFamily,
+        fontSize,
         letterSpacing: 'normal',
         wordSpacing: 'normal',
         width,
@@ -186,7 +212,7 @@ const StockTransferPermitDocument: React.FC<{
         <div className="shrink-0 text-left">
           <span
             className="inline-flex items-center justify-center rounded-md px-2.5 py-1 text-[13px] font-extrabold"
-            style={{ background: Factory_IMAGE_PRIMARY_BADGE_BG, color: Factory_IMAGE_PRIMARY_BADGE_TEXT }}
+            style={{ background: palette.badgeBg, color: palette.badgeText }}
           >
             إذن تحويل مخزون
           </span>
@@ -194,10 +220,12 @@ const StockTransferPermitDocument: React.FC<{
         </div>
       </header>
 
+      <PrintExtraLines lines={model.extraLines ?? []} />
+
       <section className="mb-4 grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
         <div
           className="rounded-lg border border-slate-200 px-3 py-2.5"
-          style={{ background: Factory_IMAGE_PRIMARY_SOFT }}
+          style={{ background: palette.primarySoft }}
         >
           <p className="text-[10px] font-bold text-slate-500">من المخزن</p>
           <p className="mt-1 text-[14px] font-extrabold leading-snug text-slate-900">
@@ -207,7 +235,7 @@ const StockTransferPermitDocument: React.FC<{
         <div className="flex items-center justify-center px-1">
           <span
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[15px] font-black"
-            style={{ background: Factory_IMAGE_PRIMARY_SOFT, color: accent }}
+            style={{ background: palette.primarySoft, color: accent }}
             aria-hidden
           >
             ←
@@ -282,10 +310,12 @@ const StockTransferPermitDocument: React.FC<{
             <thead>
               <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
                 <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '9%', letterSpacing: 'normal', textTransform: 'none' }}>#</th>
-                <th className="border border-slate-200 px-2 py-2" style={{ width: '41%', letterSpacing: 'normal', textTransform: 'none' }}>الصنف</th>
+                <th className="border border-slate-200 px-2 py-2" style={{ width: model.showQuantityPieces === false ? '59%' : '41%', letterSpacing: 'normal', textTransform: 'none' }}>الصنف</th>
                 <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '14%', letterSpacing: 'normal', textTransform: 'none' }}>الوحدة</th>
                 <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '18%', letterSpacing: 'normal', textTransform: 'none' }}>الكمية</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '18%', letterSpacing: 'normal', textTransform: 'none' }}>قطع</th>
+                {model.showQuantityPieces !== false ? (
+                  <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '18%', letterSpacing: 'normal', textTransform: 'none' }}>قطع</th>
+                ) : null}
               </tr>
             </thead>
             <tbody>
@@ -296,17 +326,23 @@ const StockTransferPermitDocument: React.FC<{
                   </td>
                   <td className="border border-slate-200 px-2 py-2">
                     <p className="text-[12px] font-extrabold leading-snug text-slate-900">{item.itemName}</p>
-                    <p className="mt-0.5 font-mono text-[11px] font-bold text-slate-600">{item.itemCode || '—'}</p>
+                    {model.showItemCode !== false ? (
+                      <p className="mt-0.5 font-mono text-[11px] font-bold text-slate-600">{item.itemCode || '—'}</p>
+                    ) : null}
                   </td>
                   <td className="border border-slate-200 px-2 py-2 text-center text-[11px] font-bold text-slate-700">
-                    {item.unitsPerCarton ? `${item.unitLabel} (${item.unitsPerCarton})` : item.unitLabel}
+                    {model.showUnitsPerCarton !== false && item.unitsPerCarton
+                      ? `${item.unitLabel} (${item.unitsPerCarton})`
+                      : item.unitLabel}
                   </td>
                   <td className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums" style={{ color: accent }}>
                     {formatQty(Number(item.quantity || 0))}
                   </td>
-                  <td className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums text-slate-900">
-                    {formatQty(Number(item.quantityPieces || 0))}
-                  </td>
+                  {model.showQuantityPieces !== false ? (
+                    <td className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums text-slate-900">
+                      {formatQty(Number(item.quantityPieces || 0))}
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -321,16 +357,18 @@ const StockTransferPermitDocument: React.FC<{
         </section>
       ) : null}
 
-      <section className="mb-4 mt-5 grid grid-cols-3 gap-4">
-        {['المنفذ', 'المستلم', 'المعتمد'].map((title) => (
-          <div key={title} className="flex flex-col items-center">
-            <p className="mb-8 text-[12px] font-extrabold text-slate-700">{title}</p>
-            <div className="w-full border-t border-slate-300 pt-1 text-center">
-              <p className="text-[10px] text-slate-400">الاسم / التوقيع</p>
+      {model.showSignatures !== false ? (
+        <section className="mb-4 mt-5 grid grid-cols-3 gap-4">
+          {['المنفذ', 'المستلم', 'المعتمد'].map((title) => (
+            <div key={title} className="flex flex-col items-center">
+              <p className="mb-8 text-[12px] font-extrabold text-slate-700">{title}</p>
+              <div className="w-full border-t border-slate-300 pt-1 text-center">
+                <p className="text-[10px] text-slate-400">الاسم / التوقيع</p>
+              </div>
             </div>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
+      ) : null}
 
       <footer className="mt-2 flex items-center justify-between border-t border-slate-200 pt-3">
         <p className="text-[10px] text-slate-400">
@@ -351,47 +389,55 @@ const StockTransferThermalPrint: React.FC<{
   data: StockTransferPrintData;
   printSettings: PrintTemplateSettings;
   rootRef?: React.Ref<HTMLDivElement>;
-}> = ({ data, printSettings, rootRef }) => {
-  const ps = printSettings;
+  doc: ReturnType<typeof resolvePrintDocumentConfig>;
+}> = ({ data, printSettings, rootRef, doc }) => {
   const printedAt = new Date().toLocaleString('ar-EG');
   const transferItems = resolveTransferItems(data);
   const totalPieces = transferItems.reduce((sum, item) => sum + Number(item.quantityPieces || 0), 0);
   const totalCartons = transferItems
     .filter((item) => item.unitLabel === 'كرتونة')
     .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const accent = ps.primaryColor || Factory_IMAGE_PRIMARY;
+  const palette = resolveImageExportPalette(resolvePrintAccentHex(printSettings.primaryColor));
+  const accent = palette.primary;
+  const font = resolvePrintFont(printSettings);
 
   return (
     <div
       ref={rootRef}
       dir="rtl"
       lang="ar"
+      data-print-font={font.fontFamily}
       className="arabic-export-root print-report"
       style={{
-        fontFamily: "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
+        fontFamily: font.fontFamily,
         width: '80mm',
         padding: '4mm 3mm',
         background: '#fff',
         color: '#0f172a',
-        fontSize: '8pt',
+        fontSize: font.denseFontSize,
         lineHeight: 1.45,
         boxSizing: 'border-box',
         letterSpacing: 'normal',
       }}
     >
-      <p style={{ margin: 0, fontWeight: 800, color: accent, fontSize: '10pt' }}>{ps.headerText}</p>
+      <p style={{ margin: 0, fontWeight: 800, color: accent, fontSize: '10pt' }}>{doc.headerText}</p>
       <p style={{ margin: '1mm 0 2mm', fontWeight: 800 }}>إذن تحويل مخزون</p>
+      <PrintExtraLines lines={doc.customLines} dense />
       <p style={{ margin: 0 }}>من: {data.fromWarehouseName}</p>
       <p style={{ margin: '1mm 0 0' }}>إلى: {data.toWarehouseName}</p>
       <p style={{ margin: '1mm 0 0' }}>رقم: {data.transferNo}</p>
       <p style={{ margin: '1mm 0 2mm' }}>كراتين: {formatQty(totalCartons)} — قطع: {formatQty(totalPieces)}</p>
       {transferItems.map((item, idx) => (
         <p key={`${item.itemCode}-${idx}`} style={{ margin: '1mm 0', borderTop: '1px dashed #cbd5e1', paddingTop: '1mm' }}>
-          {idx + 1}. {item.itemName} — {formatQty(item.quantity)} {item.unitLabel}
+          {idx + 1}. {item.itemName}
+          {doc.isFieldVisible('itemCode') ? ` (${item.itemCode || '—'})` : ''}
+          {' — '}
+          {formatQty(item.quantity)} {item.unitLabel}
+          {doc.isFieldVisible('quantityPieces') ? ` / ${formatQty(item.quantityPieces)} قطعة` : ''}
         </p>
       ))}
       <p style={{ margin: '3mm 0 0', fontSize: '6.5pt', color: '#64748b' }}>
-        {ps.footerText || Factory_TRANSFER_FOOTER_TAGLINE} — {printedAt}
+        {doc.footerText || Factory_TRANSFER_FOOTER_TAGLINE} — {printedAt}
       </p>
     </div>
   );
@@ -402,18 +448,27 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'stockTransfer');
+    const font = resolvePrintFont(ps);
     const isThermal = ps.paperSize === 'thermal';
     if (isThermal) {
-      return <StockTransferThermalPrint data={data} printSettings={ps} rootRef={ref} />;
+      return <StockTransferThermalPrint data={data} printSettings={ps} rootRef={ref} doc={doc} />;
     }
 
     const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const model = buildPermitModel(data, {
-      companyName: String(ps.headerText || 'Sokany-eg').trim() || 'Sokany-eg',
-      accent: ps.primaryColor || Factory_IMAGE_PRIMARY,
-      footerTagline: String(ps.footerText || '').trim() || Factory_TRANSFER_FOOTER_TAGLINE,
+      companyName: doc.headerText || 'Sokany-eg',
+      accent: resolvePrintAccentHex(ps.primaryColor),
+      footerTagline: doc.footerText || Factory_TRANSFER_FOOTER_TAGLINE,
       version: __APP_VERSION__,
-      showVersion: true,
+      showVersion: doc.isFieldVisible('version'),
+      showItemCode: doc.isFieldVisible('itemCode'),
+      showQuantityPieces: doc.isFieldVisible('quantityPieces'),
+      showUnitsPerCarton: doc.isFieldVisible('unitsPerCarton'),
+      showSignatures: doc.isFieldVisible('signatures'),
+      extraLines: doc.customLines,
+      fontFamily: font.fontFamily,
+      fontSize: font.fontSize,
     });
 
     return (
@@ -437,27 +492,38 @@ export interface StockTransferShareCardProps {
   companyName?: string;
   version?: string;
   exportRootId?: string;
+  printSettings?: PrintTemplateSettings;
 }
 
 export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTransferShareCardProps>(
   (
     {
       data,
-      companyName = 'مؤسسة المغربي للإستيراد',
+      companyName,
       version = __APP_VERSION__,
       exportRootId = 'stock-transfer-share-root',
+      printSettings,
     },
     ref,
   ) => {
     if (!data) return <div ref={ref} />;
 
+    const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'stockTransfer');
+    const font = resolvePrintFont(ps);
     const model = buildPermitModel(data, {
-      companyName,
-      accent: Factory_IMAGE_PRIMARY,
-      // Keep export footer aligned with production-report style when sharing.
-      footerTagline: Factory_DEFAULT_FOOTER_TAGLINE,
+      companyName: companyName || doc.headerText || 'مؤسسة المغربي للإستيراد',
+      accent: resolvePrintAccentHex(ps.primaryColor),
+      footerTagline: doc.footerText || Factory_DEFAULT_FOOTER_TAGLINE,
       version,
-      showVersion: true,
+      showVersion: doc.isFieldVisible('version'),
+      showItemCode: doc.isFieldVisible('itemCode'),
+      showQuantityPieces: doc.isFieldVisible('quantityPieces'),
+      showUnitsPerCarton: doc.isFieldVisible('unitsPerCarton'),
+      showSignatures: doc.isFieldVisible('signatures'),
+      extraLines: doc.customLines,
+      fontFamily: font.fontFamily,
+      fontSize: font.fontSize,
     });
 
     return (

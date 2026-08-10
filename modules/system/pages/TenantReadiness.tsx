@@ -58,13 +58,13 @@ export const TenantReadiness: React.FC = () => {
                 key={check.id}
                 className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ${
                   check.ok
-                    ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-900/10'
-                    : 'border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-900/10'
+                    ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/50 dark:border-[rgb(var(--color-success))]/40 dark:bg-[rgb(var(--color-success)/0.15)]'
+                    : 'border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/50 dark:border-[rgb(var(--color-warning))]/40 dark:bg-[rgb(var(--color-warning)/0.15)]'
                 }`}
               >
                 <div className="flex items-start gap-3">
                   <span
-                    className={`material-icons-round text-xl ${check.ok ? 'text-emerald-600' : 'text-amber-600'}`}
+                    className={`material-icons-round text-xl ${check.ok ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-warning))]'}`}
                   >
                     {check.ok ? 'check_circle' : 'error_outline'}
                   </span>

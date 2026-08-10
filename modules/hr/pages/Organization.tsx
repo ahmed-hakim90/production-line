@@ -380,11 +380,11 @@ export const Organization: React.FC = () => {
       ) : undefined}
     >
       <OpsDashPanel title="التبويبات" accent="hr">
-        <div className="flex gap-1 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 overflow-x-auto">
+        <div className="flex gap-1 bg-[var(--color-surface-hover)] rounded-[var(--border-radius-lg)] p-1 overflow-x-auto">
           {TABS.map((t) => (
             <button key={t.key} onClick={() => setTab(t.key)}
               className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--border-radius-base)] text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
-                tab === t.key ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
+                tab === t.key ? 'bg-primary text-white shadow-md' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
               }`}>
               <span className="material-icons-round text-lg">{t.icon}</span>
               {t.label}
@@ -396,15 +396,15 @@ export const Organization: React.FC = () => {
       {/* ── Departments Tab ── */}
       {tab === 'departments' && (
         <OpsDashPanel title="الأقسام" accent="hr">
-          <div className="mb-4 rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+          <div className="mb-4 rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] p-4 text-sm font-bold text-[rgb(var(--color-primary))]">
             يمكن اختيار نفس الموظف كمدير لأكثر من قسم. أي موظف يكون مديراً لقسم سيستطيع إنشاء طلبات إنتاج لموظفي هذا القسم من صفحة طلبات الإنتاج.
           </div>
           {departments.length === 0 ? <EmptyState icon="business" label="لا يوجد أقسام" sub='اضغط "إضافة قسم" للبدء' /> : (
             <DataTable headers={['القسم', 'الرمز', 'مدير القسم', { label: 'الموظفين', center: true }, { label: 'المناصب', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {departments.map((d) => (
-                <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{d.name}</td>
-                  <td className="py-3 px-4"><span className="bg-[#f0f2f5] text-[var(--color-text-muted)] px-2 py-0.5 rounded text-xs font-mono">{d.code}</span></td>
+                  <td className="py-3 px-4"><span className="bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] px-2 py-0.5 rounded text-xs font-mono">{d.code}</span></td>
                   <td className="py-3 px-4 text-[var(--color-text-muted)]">
                     <div className="space-y-1">
                       <p>{d.managerId ? getManagerName(d.managerId) : '—'}</p>
@@ -430,11 +430,11 @@ export const Organization: React.FC = () => {
           {positions.length === 0 ? <EmptyState icon="work" label="لا يوجد مناصب" sub='اضغط "إضافة منصب" للبدء' /> : (
             <DataTable headers={['المنصب', 'القسم', { label: 'المستوى', center: true }, { label: 'دخول النظام', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {positions.map((p) => (
-                <tr key={p.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                <tr key={p.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{p.title}</td>
                   <td className="py-3 px-4 text-[var(--color-text-muted)]">{getDeptName(p.departmentId)}</td>
                   <td className="py-3 px-4 text-center"><span className="bg-primary/10 text-primary px-2.5 py-0.5 rounded-full text-xs font-bold">{JOB_LEVEL_LABELS[p.level]}</span></td>
-                  <td className="py-3 px-4 text-center"><span className={`material-icons-round text-lg ${p.hasSystemAccessDefault ? 'text-emerald-500' : 'text-[var(--color-text-muted)]'}`}>{p.hasSystemAccessDefault ? 'check_circle' : 'cancel'}</span></td>
+                  <td className="py-3 px-4 text-center"><span className={`material-icons-round text-lg ${p.hasSystemAccessDefault ? 'text-[rgb(var(--color-success))]' : 'text-[var(--color-text-muted)]'}`}>{p.hasSystemAccessDefault ? 'check_circle' : 'cancel'}</span></td>
                   <td className="py-3 px-4 text-center"><Badge variant={p.isActive ? 'success' : 'neutral'}>{p.isActive ? 'نشط' : 'غير نشط'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditPos(p)} onDelete={() => setDeleteConfirmId(p.id!)} />}
                 </tr>
@@ -465,14 +465,14 @@ export const Organization: React.FC = () => {
                   value={employeeSearch}
                   onChange={(e) => setEmployeeSearch(e.target.value)}
                   placeholder="بحث بالقسم أو المنصب أو الموظف..."
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] text-sm outline-none focus:border-primary"
+                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] text-sm outline-none focus:border-primary"
                 />
                 <div className="max-h-[620px] overflow-y-auto space-y-3 pe-1">
                   {filteredDepartmentPositionHierarchy.length === 0 ? (
                     <EmptyState icon="account_tree" label="لا توجد نتائج" sub="غيّر كلمات البحث أو أضف أقسامًا ومناصب من الإعدادات" />
                   ) : filteredDepartmentPositionHierarchy.map((group) => (
                     <section key={group.department.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
-                      <div className="p-3 bg-[#f8f9fa] border-b border-[var(--color-border)]">
+                      <div className="p-3 bg-[var(--color-bg)] border-b border-[var(--color-border)]">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <h3 className="font-black text-sm text-[var(--color-text)] truncate">{group.department.name}</h3>
@@ -481,7 +481,7 @@ export const Organization: React.FC = () => {
                           <div className="flex items-center gap-2 shrink-0">
                             <Badge variant={group.managerId ? 'info' : 'warning'}>{group.employeeCount} موظف</Badge>
                             {canEdit && (
-                              <button type="button" onClick={() => openEditDept(group.department)} className="p-1.5 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:text-primary hover:bg-white">
+                              <button type="button" onClick={() => openEditDept(group.department)} className="p-1.5 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:text-primary hover:bg-[var(--color-card)]">
                                 <span className="material-icons-round text-lg">edit</span>
                               </button>
                             )}
@@ -504,7 +504,7 @@ export const Organization: React.FC = () => {
                               <div className="flex items-center gap-2 shrink-0">
                                 <Badge variant={position.level >= 3 ? 'info' : 'neutral'}>{employees.length} موظف</Badge>
                                 {canEdit && (
-                                  <button type="button" onClick={() => openEditPos(position)} className="p-1.5 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:text-primary hover:bg-[#f8f9fa]">
+                                  <button type="button" onClick={() => openEditPos(position)} className="p-1.5 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:text-primary hover:bg-[var(--color-bg)]">
                                     <span className="material-icons-round text-lg">edit</span>
                                   </button>
                                 )}
@@ -519,7 +519,7 @@ export const Organization: React.FC = () => {
                                   type="button"
                                   onClick={() => selectEmployee(employee)}
                                   className={`px-2.5 py-1.5 rounded-full border text-[11px] font-bold transition-colors ${
-                                    selectedEmployeeId === employee.id ? 'border-primary bg-primary/10 text-primary' : 'border-[var(--color-border)] text-[var(--color-text)] hover:bg-[#f8f9fa]'
+                                    selectedEmployeeId === employee.id ? 'border-primary bg-primary/10 text-primary' : 'border-[var(--color-border)] text-[var(--color-text)] hover:bg-[var(--color-bg)]'
                                   }`}
                                 >
                                   {employee.name}
@@ -530,8 +530,8 @@ export const Organization: React.FC = () => {
                         ))}
 
                         {group.employeesWithoutPosition.length > 0 && (
-                          <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50 p-3">
-                            <p className="font-bold text-sm text-amber-800">موظفون بلا منصب داخل القسم</p>
+                          <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] p-3">
+                            <p className="font-bold text-sm text-[rgb(var(--color-warning))]">موظفون بلا منصب داخل القسم</p>
                             <div className="mt-3 flex flex-wrap gap-2">
                               {group.employeesWithoutPosition.map((employee) => (
                                 <button
@@ -539,7 +539,7 @@ export const Organization: React.FC = () => {
                                   type="button"
                                   onClick={() => selectEmployee(employee)}
                                   className={`px-2.5 py-1.5 rounded-full border text-[11px] font-bold transition-colors ${
-                                    selectedEmployeeId === employee.id ? 'border-primary bg-primary/10 text-primary' : 'border-amber-200 bg-white text-amber-800 hover:bg-amber-100'
+                                    selectedEmployeeId === employee.id ? 'border-primary bg-primary/10 text-primary' : 'border-[rgb(var(--color-warning)/0.25)] bg-[var(--color-card)] text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.15)]'
                                   }`}
                                 >
                                   {employee.name}
@@ -568,7 +568,7 @@ export const Organization: React.FC = () => {
                     <Badge variant={selectedEmployee.isActive !== false ? 'success' : 'neutral'}>{selectedEmployee.isActive !== false ? 'نشط' : 'غير نشط'}</Badge>
                   </div>
 
-                  <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
+                  <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] p-4 text-sm text-[rgb(var(--color-primary))]">
                     يتم تحديد الوظيفة من القسم والمنصب والمستوى الوظيفي هنا. لإتاحة تسجيل طلبات إنتاج لأكثر من قسم، افتح كل قسم من تبويب الأقسام واختر نفس الموظف كمدير للقسم.
                   </div>
 
@@ -627,14 +627,14 @@ export const Organization: React.FC = () => {
                   </div>
 
                   {employeeValidationErrors.length > 0 && (
-                    <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-700 space-y-1">
+                    <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] p-3 text-sm font-bold text-[rgb(var(--color-danger))] space-y-1">
                       {employeeValidationErrors.map((error) => <p key={error}>{error}</p>)}
                     </div>
                   )}
 
                   {employeeSaveMsg && (
                     <div className={`rounded-[var(--border-radius-lg)] border p-3 text-sm font-bold ${
-                      employeeSaveMsg.type === 'success' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-rose-200 bg-rose-50 text-rose-700'
+                      employeeSaveMsg.type === 'success' ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'
                     }`}>
                       {employeeSaveMsg.text}
                     </div>
@@ -658,7 +658,7 @@ export const Organization: React.FC = () => {
           {shifts.length === 0 ? <EmptyState icon="schedule" label="لا يوجد ورديات" sub='اضغط "إضافة وردية" للبدء' /> : (
             <DataTable headers={['الوردية', { label: 'من', center: true }, { label: 'إلى', center: true }, { label: 'استراحة', center: true }, { label: 'سماح تأخير', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {shifts.map((s) => (
-                <tr key={s.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                <tr key={s.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{s.name}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.startTime}</td>
                   <td className="py-3 px-4 text-center font-mono">{s.endTime}</td>
@@ -679,7 +679,7 @@ export const Organization: React.FC = () => {
           {penalties.length === 0 ? <EmptyState icon="gavel" label="لا يوجد جزاءات" sub='اضغط "إضافة جزاء" لإنشاء قاعدة جزاء' /> : (
             <DataTable headers={['الجزاء', { label: 'النوع', center: true }, { label: 'طريقة الحساب', center: true }, { label: 'القيمة', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {penalties.map((p) => (
-                <tr key={p.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                <tr key={p.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{p.name}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={p.type === 'disciplinary' ? 'danger' : p.type === 'absence' ? 'warning' : 'info'}>{PENALTY_TYPE_LABELS[p.type]}</Badge></td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[p.valueType]}</td>
@@ -696,19 +696,19 @@ export const Organization: React.FC = () => {
       {/* ── Late Rules Tab ── */}
       {tab === 'lateRules' && (
         <OpsDashPanel title="قواعد التأخير" accent="hr">
-          <div className="mb-4 p-3 rounded-[var(--border-radius-base)] bg-amber-50 border border-amber-200">
-            <p className="text-xs font-bold text-amber-700">
+          <div className="mb-4 p-3 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)]">
+            <p className="text-xs font-bold text-[rgb(var(--color-warning))]">
               قواعد التأخير بتحدد الخصم حسب عدد دقائق التأخير. كل قاعدة تغطي نطاقاً معيناً من الدقائق.
             </p>
           </div>
           {lateRulesList.length === 0 ? <EmptyState icon="timer_off" label="لا يوجد قواعد تأخير" sub='اضغط "إضافة قاعدة" لإنشاء قاعدة تأخير' /> : (
             <DataTable headers={[{ label: 'من (دقيقة)', center: true }, { label: 'إلى (دقيقة)', center: true }, { label: 'طريقة الخصم', center: true }, { label: 'القيمة', center: true }]} canEdit={canEdit}>
               {lateRulesList.map((r) => (
-                <tr key={r.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                <tr key={r.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesFrom}</td>
                   <td className="py-3 px-4 text-center font-mono font-bold">{r.minutesTo}</td>
                   <td className="py-3 px-4 text-center text-sm">{VALUE_TYPE_LABELS[r.penaltyType]}</td>
-                  <td className="py-3 px-4 text-center font-bold text-rose-600">{r.penaltyValue}{r.penaltyType === 'percentage' ? '%' : ' ج.م'}</td>
+                  <td className="py-3 px-4 text-center font-bold text-[rgb(var(--color-danger))]">{r.penaltyValue}{r.penaltyType === 'percentage' ? '%' : ' ج.م'}</td>
                   {canEdit && <ActionCell onEdit={() => openEditLateRule(r)} onDelete={() => setDeleteConfirmId(r.id!)} />}
                 </tr>
               ))}
@@ -723,10 +723,10 @@ export const Organization: React.FC = () => {
           {allowances.length === 0 ? <EmptyState icon="card_giftcard" label="لا يوجد بدلات" sub='اضغط "إضافة بدل" لإنشاء نوع بدل' /> : (
             <DataTable headers={['البدل', { label: 'طريقة الحساب', center: true }, { label: 'القيمة', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {allowances.map((a) => (
-                <tr key={a.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
+                <tr key={a.id} className="border-b border-[var(--color-border)] hover:bg-[var(--color-bg)] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{a.name}</td>
                   <td className="py-3 px-4 text-center text-sm">{CALC_TYPE_LABELS[a.calculationType]}</td>
-                  <td className="py-3 px-4 text-center font-bold text-emerald-600">{a.value}{a.calculationType === 'percentage' ? '%' : ' ج.م'}</td>
+                  <td className="py-3 px-4 text-center font-bold text-[rgb(var(--color-success))]">{a.value}{a.calculationType === 'percentage' ? '%' : ' ج.م'}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={a.isActive ? 'success' : 'neutral'}>{a.isActive ? 'نشط' : 'غير نشط'}</Badge></td>
                   {canEdit && <ActionCell onEdit={() => openEditAllowance(a)} onDelete={() => setDeleteConfirmId(a.id!)} />}
                 </tr>
@@ -739,10 +739,10 @@ export const Organization: React.FC = () => {
       {/* ── Delete Confirmation Modal ── */}
       {deleteConfirmId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-3xl text-rose-500">delete_forever</span>
+            <div className="w-14 h-14 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="material-icons-round text-3xl text-[rgb(var(--color-danger))]">delete_forever</span>
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد الحذف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا العنصر؟ لا يمكن التراجع عن هذا الإجراء.</p>
@@ -762,7 +762,7 @@ export const Organization: React.FC = () => {
 
 const EmptyState: React.FC<{ icon: string; label: string; sub: string }> = ({ icon, label, sub }) => (
   <div className="text-center py-12">
-    <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600">{icon}</span>
+    <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)]">{icon}</span>
     <p className="text-[var(--color-text-muted)] font-bold mt-3">{label}</p>
     <p className="text-xs text-[var(--color-text-muted)] mt-1">{sub}</p>
   </div>
@@ -777,10 +777,10 @@ const FormField: React.FC<{ label: string; children: React.ReactNode }> = ({ lab
 
 const HealthCard: React.FC<{ label: string; count: number; icon: string; tone: 'amber' | 'rose' | 'orange' | 'blue' }> = ({ label, count, icon, tone }) => {
   const toneClass = {
-    amber: 'text-amber-600 bg-amber-500/10',
-    rose: 'text-rose-600 bg-rose-500/10',
-    orange: 'text-orange-600 bg-orange-500/10',
-    blue: 'text-blue-600 bg-blue-500/10',
+    amber: 'text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)]0/10',
+    rose: 'text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)]0/10',
+    orange: 'text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)]0/10',
+    blue: 'text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]0/10',
   }[tone];
 
   return (
@@ -799,10 +799,10 @@ const HealthCard: React.FC<{ label: string; count: number; icon: string; tone: '
 const ActionCell: React.FC<{ onEdit: () => void; onDelete: () => void }> = ({ onEdit, onDelete }) => (
   <td className="py-3 px-4 text-center">
     <div className="flex items-center justify-center gap-1">
-      <button onClick={onEdit} className="p-1.5 hover:bg-[#f0f2f5] rounded-[var(--border-radius-base)] transition-colors text-[var(--color-text-muted)] hover:text-primary">
+      <button onClick={onEdit} className="p-1.5 hover:bg-[var(--color-surface-hover)] rounded-[var(--border-radius-base)] transition-colors text-[var(--color-text-muted)] hover:text-primary">
         <span className="material-icons-round text-lg">edit</span>
       </button>
-      <button onClick={onDelete} className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-colors text-[var(--color-text-muted)] hover:text-rose-500">
+      <button onClick={onDelete} className="p-1.5 hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/20 rounded-[var(--border-radius-base)] transition-colors text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))]">
         <span className="material-icons-round text-lg">delete</span>
       </button>
     </div>

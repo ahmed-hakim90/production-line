@@ -98,15 +98,15 @@ export const GlobalEditWarehouseModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
       <div className="bg-[var(--color-card)] rounded-xl shadow-2xl w-full max-w-xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b flex items-center justify-between">
           <h3 className="text-lg font-bold">تعديل مخزن</h3>
-          <button type="button" onClick={handleClose} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+          <button type="button" onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]"><X size={20} /></button>
         </div>
         <div className="p-6 space-y-4">
           {message && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-bold ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+            <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-bold ${message.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
               {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               {message.text}
             </div>

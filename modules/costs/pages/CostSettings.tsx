@@ -147,9 +147,9 @@ export const CostSettings: React.FC = () => {
           </div>
 
           {cnyToEgpRate > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 space-y-3">
+            <div className="bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] p-4 space-y-3">
               <div className="flex items-center gap-2 mb-2">
-                <span className="material-icons-round text-amber-500 text-lg">currency_yuan</span>
+                <span className="material-icons-round text-[rgb(var(--color-warning))] text-lg">currency_yuan</span>
                 <span className="text-sm font-bold text-[var(--color-text)]">أمثلة تحويل</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

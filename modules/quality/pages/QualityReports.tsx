@@ -53,15 +53,15 @@ export const QualityReports: React.FC = () => {
   const qualityStatusMeta = (status?: string) => {
     const normalized = status ?? 'pending';
     if (normalized === 'approved') {
-      return { label: 'معتمد', className: 'bg-emerald-50 text-emerald-700' };
+      return { label: 'معتمد', className: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' };
     }
     if (normalized === 'rejected') {
-      return { label: 'مرفوض', className: 'bg-rose-50 text-rose-700' };
+      return { label: 'مرفوض', className: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' };
     }
     if (normalized === 'not_required') {
-      return { label: 'غير مطلوب', className: 'bg-[#f0f2f5] text-[var(--color-text)]' };
+      return { label: 'غير مطلوب', className: 'bg-[var(--color-surface-hover)] text-[var(--color-text)]' };
     }
-    return { label: 'قيد المراجعة', className: 'bg-amber-50 text-amber-700' };
+    return { label: 'قيد المراجعة', className: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' };
   };
   const qualityReportRows = useMemo(
     () =>
@@ -383,11 +383,11 @@ export const QualityReports: React.FC = () => {
                       <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full ${qm.className}`}>{qm.label}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                      <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
                         <p className="text-[var(--color-text-muted)] mb-0.5">Inspected</p>
                         <p className="font-bold">{wo.qualitySummary?.inspectedUnits ?? 0}</p>
                       </div>
-                      <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
+                      <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
                         <p className="text-[var(--color-text-muted)] mb-0.5">Failed</p>
                         <p className="font-bold">{wo.qualitySummary?.failedUnits ?? 0}</p>
                       </div>
@@ -406,7 +406,7 @@ export const QualityReports: React.FC = () => {
                       {canDeleteQualityReports && (
                         <Button
                           variant="outline"
-                          className="!px-2 !py-1 !border-rose-200 !text-rose-600 hover:!bg-rose-50"
+                          className="!px-2 !py-1 !border-[rgb(var(--color-danger)/0.25)] !text-[rgb(var(--color-danger))] hover:!bg-[rgb(var(--color-danger)/0.1)]"
                           onClick={() => void handleDeleteQualityReport(wo.id ?? '', wo.workOrderNumber)}
                           disabled={!wo.id || deletingWorkOrderId === wo.id}
                         >
@@ -453,7 +453,7 @@ export const QualityReports: React.FC = () => {
                         </td>
                         <td className="py-2 px-2">{wo.qualitySummary?.inspectedUnits ?? 0}</td>
                         <td className="py-2 px-2">{wo.qualitySummary?.failedUnits ?? 0}</td>
-                        <td className="py-2 px-2 text-xs text-slate-500">{lastInspectionDate}</td>
+                        <td className="py-2 px-2 text-xs text-[var(--color-text-muted)]">{lastInspectionDate}</td>
                         <td className="py-2 px-2">
                           <div className="flex items-center gap-2">
                             <Button
@@ -468,7 +468,7 @@ export const QualityReports: React.FC = () => {
                             {canDeleteQualityReports && (
                               <Button
                                 variant="outline"
-                                className="!px-2 !py-1 !border-rose-200 !text-rose-600 hover:!bg-rose-50"
+                                className="!px-2 !py-1 !border-[rgb(var(--color-danger)/0.25)] !text-[rgb(var(--color-danger))] hover:!bg-[rgb(var(--color-danger)/0.1)]"
                                 onClick={() => void handleDeleteQualityReport(wo.id ?? '', wo.workOrderNumber)}
                                 disabled={!wo.id || deletingWorkOrderId === wo.id}
                               >

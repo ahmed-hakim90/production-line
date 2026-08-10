@@ -38,6 +38,11 @@ import {
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
+import {
+  parseCatalogProductGap,
+  type CatalogProductGap,
+} from '../../catalog/lib/catalogDrilldown';
+import { loadProductIdsWithBomCoverage } from '../../catalog/services/catalogDashboardService';
 import { Button, Badge } from '../components/UI';
 import { type ProductBomCountCard } from '../components/ProductBomCountCardPrint';
 import { ProductBomCountCardPreviewModal } from '../components/ProductBomCountCardPreviewModal';
@@ -301,7 +306,7 @@ export const Products: React.FC = () => {
   const { can } = usePermission();
   const productPerms = useResourcePermission('products');
   const canViewCosts = can('costs.view');
-  const canViewSellingPrice = can('roles.manage');
+  const canViewSellingPrice = can('products.sellingPrice.view');
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'products'),
     [exportImportSettings]
@@ -429,6 +434,8 @@ export const Products: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState('');
   const [manufacturedFilter, setManufacturedFilter] = useState('');
+  const [gapFilter, setGapFilter] = useState<CatalogProductGap | ''>('');
+  const [productIdsWithBom, setProductIdsWithBom] = useState<Set<string> | null>(null);
   const [categoryFilterOptions, setCategoryFilterOptions] = useState<
     Array<{ value: string; label: string; leafName: string }>
   >([]);
@@ -590,6 +597,14 @@ export const Products: React.FC = () => {
     }));
   }, [products, lifetimeProducedByProductId, lifetimeProducedReady]);
 
+  const rawById = useMemo(() => {
+    const map = new Map<string, (typeof _rawProducts)[number]>();
+    for (const row of _rawProducts) {
+      if (row.id) map.set(String(row.id), row);
+    }
+    return map;
+  }, [_rawProducts]);
+
   const filtered = useMemo(() => {
     return productsForTable.filter((p) => {
       const matchSearch =
@@ -611,9 +626,41 @@ export const Products: React.FC = () => {
         !manufacturedFilter
         || (manufacturedFilter === 'yes' && p.isManufactured !== false)
         || (manufacturedFilter === 'no' && p.isManufactured === false);
-      return matchSearch && matchCategory && matchStock && matchManufactured;
+      const raw = rawById.get(String(p.id || ''));
+      const matchGap = (() => {
+        if (!gapFilter) return true;
+        if (gapFilter === 'no_category') {
+          return !(
+            String(p.categoryId || raw?.categoryId || '').trim() ||
+            String(p.category || raw?.categoryName || raw?.category || '').trim()
+          );
+        }
+        if (gapFilter === 'no_barcode') {
+          return !String(raw?.barcode || '').trim();
+        }
+        if (gapFilter === 'no_price') {
+          return !(Number(raw?.sellingPrice) > 0);
+        }
+        if (gapFilter === 'no_bom') {
+          if (p.isManufactured === false) return false;
+          if (!productIdsWithBom) return true;
+          return !productIdsWithBom.has(String(p.id || ''));
+        }
+        return true;
+      })();
+      return matchSearch && matchCategory && matchStock && matchManufactured && matchGap;
     });
-  }, [productsForTable, search, categoryFilter, stockFilter, manufacturedFilter, categoryFilterOptions]);
+  }, [
+    productsForTable,
+    search,
+    categoryFilter,
+    stockFilter,
+    manufacturedFilter,
+    gapFilter,
+    categoryFilterOptions,
+    rawById,
+    productIdsWithBom,
+  ]);
 
   const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
   const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
@@ -639,7 +686,40 @@ export const Products: React.FC = () => {
     return next;
   }, [exportMonthReports]);
 
-  useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [search, categoryFilter, stockFilter, manufacturedFilter]);
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds(new Set());
+  }, [search, categoryFilter, stockFilter, manufacturedFilter, gapFilter]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const manufactured = String(params.get('manufactured') || '').trim();
+    if (manufactured === 'yes' || manufactured === 'no') {
+      setManufacturedFilter(manufactured);
+    }
+    const gap = parseCatalogProductGap(params.get('gap'));
+    if (gap) setGapFilter(gap);
+    const category = String(params.get('category') || '').trim();
+    if (category) setCategoryFilter(category);
+  }, [location.search]);
+
+  useEffect(() => {
+    if (gapFilter !== 'no_bom') {
+      setProductIdsWithBom(null);
+      return;
+    }
+    let cancelled = false;
+    void loadProductIdsWithBomCoverage()
+      .then((ids) => {
+        if (!cancelled) setProductIdsWithBom(ids);
+      })
+      .catch(() => {
+        if (!cancelled) setProductIdsWithBom(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gapFilter]);
 
   useEffect(() => {
     if (!showWarehouseExportModal) return;
@@ -997,6 +1077,17 @@ export const Products: React.FC = () => {
   const openEdit = (id: string) => {
     if (!canUpdateProductModal) return;
     openModal(MODAL_KEYS.PRODUCTS_CREATE, { mode: 'edit', productId: id });
+  };
+
+  const canOpenProductBomModal = can('bom.view') || can('bom.manage') || can('products.edit');
+
+  const openProductBom = (product: { id: string; name?: string }) => {
+    if (!canOpenProductBomModal) return;
+    openModal(MODAL_KEYS.PRODUCTS_BOM_MANAGE, {
+      productId: product.id,
+      productName: product.name,
+      source: 'products.page',
+    });
   };
 
   const handleDelete = async (id: string) => {
@@ -2212,7 +2303,7 @@ export const Products: React.FC = () => {
         className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
           layoutMode === 'table'
             ? 'bg-primary text-white'
-            : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
+            : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]'
         }`}
         title="عرض جدول"
         aria-pressed={layoutMode === 'table'}
@@ -2226,7 +2317,7 @@ export const Products: React.FC = () => {
         className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
           layoutMode === 'grid'
             ? 'bg-primary text-white'
-            : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
+            : 'text-[var(--color-text-muted)] hover:bg-[var(--color-bg)] hover:text-[var(--color-text)]'
         }`}
         title="عرض بطاقات"
         aria-pressed={layoutMode === 'grid'}
@@ -2370,8 +2461,8 @@ export const Products: React.FC = () => {
         <div
           className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold border ${
             saveMsg.type === 'success'
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : 'bg-rose-50 text-rose-700 border-rose-200'
+              ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border-[rgb(var(--color-success)/0.25)]'
+              : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border-[rgb(var(--color-danger)/0.25)]'
           }`}
         >
           <ProductIcon name={saveMsg.type === 'success' ? 'check_circle' : 'error'} className="text-base shrink-0" />
@@ -2425,10 +2516,22 @@ export const Products: React.FC = () => {
               placeholder: 'كل الفئات',
               options: mergedCategoryFilterOptions.map((o) => ({ value: o.value, label: o.label })),
             },
+            {
+              key: 'gap',
+              label: 'فجوة الماستر',
+              placeholder: 'كل المنتجات',
+              options: [
+                { value: 'no_category', label: 'بلا فئة' },
+                { value: 'no_barcode', label: 'بلا باركود' },
+                { value: 'no_price', label: 'بلا سعر بيع' },
+                { value: 'no_bom', label: 'تصنيع بلا BOM' },
+              ],
+            },
           ]}
-          advancedFilterValues={{ category: categoryFilter || 'all' }}
+          advancedFilterValues={{ category: categoryFilter || 'all', gap: gapFilter || 'all' }}
           onAdvancedFilterChange={(key, value) => {
             if (key === 'category') setCategoryFilter(value === 'all' ? '' : value);
+            if (key === 'gap') setGapFilter(value === 'all' ? '' : (value as CatalogProductGap));
           }}
           className="mb-0 border-0 rounded-none"
         />
@@ -2567,7 +2670,7 @@ export const Products: React.FC = () => {
                 {Array.from({ length: 8 }).map((_, i) => (
                   <div
                     key={i}
-                    className="h-44 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] animate-pulse"
+                    className="h-44 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] animate-pulse"
                   />
                 ))}
               </div>
@@ -2575,7 +2678,7 @@ export const Products: React.FC = () => {
               Array.from({ length: 6 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-12 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] animate-pulse"
+                  className="h-12 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] animate-pulse"
                 />
               ))
             )}
@@ -2584,9 +2687,9 @@ export const Products: React.FC = () => {
         <>
         <div className="erp-mobile-card-list p-2">
           {sorted.length === 0 ? (
-            <div className="px-4 py-12 text-center text-slate-400">
+            <div className="px-4 py-12 text-center text-[var(--color-text-muted)]">
               <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30 mx-auto" />
-              <p className="font-bold">لا توجد منتجات{search || categoryFilter || stockFilter || manufacturedFilter ? ' مطابقة للبحث' : ' بعد'}</p>
+              <p className="font-bold">لا توجد منتجات{search || categoryFilter || stockFilter || manufacturedFilter || gapFilter ? ' مطابقة للبحث' : ' بعد'}</p>
             </div>
           ) : (
             paginated.map((product) => {
@@ -2615,10 +2718,10 @@ export const Products: React.FC = () => {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold">{shortProductName(product.name)}</p>
-                      <p className="font-mono text-[11px] text-slate-400">{product.code}</p>
+                      <p className="font-mono text-[11px] text-[var(--color-text-muted)]">{product.code}</p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                          product.isManufactured === false ? 'bg-amber-50 text-amber-700' : 'bg-sky-50 text-sky-700'
+                          product.isManufactured === false ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
                         }`}>
                           {product.isManufactured === false ? 'غير تصنيعي' : 'تصنيعي'}
                         </span>
@@ -2644,6 +2747,15 @@ export const Products: React.FC = () => {
                   </dl>
                   <div className="mt-2 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
                     <TableIconAction action="view" onClick={() => setDetailDrawerProductId(product.id)} />
+                    {canOpenProductBomModal && (
+                      <TableIconAction
+                        icon="account_tree"
+                        tone="execute"
+                        title="مكونات المنتج"
+                        aria-label="مكونات المنتج"
+                        onClick={() => openProductBom(product)}
+                      />
+                    )}
                     {canUpdateProductModal && (
                       <TableIconAction action="edit" onClick={() => openEdit(product.id)} />
                     )}
@@ -2713,9 +2825,9 @@ export const Products: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={99} className="px-6 py-16 text-center text-slate-400">
+                  <td colSpan={99} className="px-6 py-16 text-center text-[var(--color-text-muted)]">
                     <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30" />
-                    <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter || manufacturedFilter ? ' مطابقة للبحث' : ' بعد'}</p>
+                    <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter || manufacturedFilter || gapFilter ? ' مطابقة للبحث' : ' بعد'}</p>
                     <p className="text-sm mt-1">
                       {canCreateProductModal
                         ? 'اضغط "إضافة منتج جديد" لإضافة أول منتج'
@@ -2731,7 +2843,7 @@ export const Products: React.FC = () => {
                 return (
                 <tr
                   key={product.id}
-                  className={`cursor-pointer hover:bg-[#f8f9fa]/50 transition-colors group${selectedIds.has(product.id) ? ' bg-primary/5' : ''}`}
+                  className={`cursor-pointer hover:bg-[var(--color-bg)]/50 transition-colors group${selectedIds.has(product.id) ? ' bg-primary/5' : ''}`}
                   onClick={() => setDetailDrawerProductId(product.id)}
                   title="عرض ملخص المنتج"
                 >
@@ -2755,7 +2867,7 @@ export const Products: React.FC = () => {
                           {shortProductName(product.name)}
                         </span>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="font-mono text-[11px] text-slate-400">{product.code}</span>
+                          <span className="font-mono text-[11px] text-[var(--color-text-muted)]">{product.code}</span>
                           {product.category && (
                             <Badge variant="neutral">{product.category}</Badge>
                           )}
@@ -2767,8 +2879,8 @@ export const Products: React.FC = () => {
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${
                         product.isManufactured === false
-                          ? 'bg-amber-50 text-amber-700'
-                          : 'bg-sky-50 text-sky-700'
+                          ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+                          : 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
                       }`}
                     >
                       {product.isManufactured === false ? 'غير تصنيعي' : 'تصنيعي'}
@@ -2778,8 +2890,8 @@ export const Products: React.FC = () => {
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${
                         product.assemblyMode === 'team'
-                          ? 'bg-indigo-50 text-indigo-600'
-                          : 'bg-emerald-50 text-emerald-600'
+                          ? 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
+                          : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
                       }`}
                     >
                       {product.assemblyMode === 'team' ? 'جماعي' : 'فردي'}
@@ -2787,26 +2899,26 @@ export const Products: React.FC = () => {
                   </td>
                   {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-[var(--color-text)] tabular-nums">{formatNumber(decomposedBalance)}</td>}
                   {visibleColumns.totalProduction && <td className="px-4 py-4 text-center">
-                    <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-emerald-50 text-emerald-600 text-sm font-bold tabular-nums">
+                    <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] text-sm font-bold tabular-nums">
                       {formatNumber(product.totalProduction)}
                     </span>
                   </td>}
                   {visibleColumns.monthlyProductionQty && (
                     <td className="px-4 py-4 text-center">
-                      <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-sky-50 text-sky-700 text-sm font-bold tabular-nums">
+                      <span className="inline-block px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] text-sm font-bold tabular-nums">
                         {formatNumber(monthlyQtyByProductId[product.id] ?? 0)}
                       </span>
                     </td>
                   )}
                   {visibleColumns.wasteUnits && <td className="px-4 py-4 text-center">
                     {wasteBalance > 0 ? (
-                      <span className="text-sm font-bold text-rose-500 tabular-nums">{formatNumber(wasteBalance)}</span>
+                      <span className="text-sm font-bold text-[rgb(var(--color-danger))] tabular-nums">{formatNumber(wasteBalance)}</span>
                     ) : (
                       <span className="text-sm text-[var(--color-text-muted)]">0</span>
                     )}
                   </td>}
                   {visibleColumns.stockLevel && <td className="px-4 py-4 text-center">
-                    <span className={`text-sm font-bold tabular-nums ${finalBalance > 100 ? 'text-[var(--color-text)]' : finalBalance > 0 ? 'text-amber-600' : 'text-rose-500'}`}>
+                    <span className={`text-sm font-bold tabular-nums ${finalBalance > 100 ? 'text-[var(--color-text)]' : finalBalance > 0 ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-danger))]'}`}>
                       {formatNumber(finalBalance)}
                     </span>
                   </td>}
@@ -2826,7 +2938,7 @@ export const Products: React.FC = () => {
                       <>
                         {visibleColumns.totalCost && <td className="px-4 py-4 text-center">
                           {hasCost ? (
-                            <span className="text-sm font-bold text-amber-700 tabular-nums">{formatCost(c.totalCost)} <span className="text-[10px] font-medium opacity-70">ج.م</span></span>
+                            <span className="text-sm font-bold text-[rgb(var(--color-warning))] tabular-nums">{formatCost(c.totalCost)} <span className="text-[10px] font-medium opacity-70">ج.م</span></span>
                           ) : (
                             <span className="text-sm text-[var(--color-text-muted)]">—</span>
                           )}
@@ -2834,7 +2946,7 @@ export const Products: React.FC = () => {
                         {visibleColumns.directIndirect && <td className="px-4 py-4 text-center">
                           {hasCost ? (
                             <div className="flex flex-col items-center gap-0.5">
-                              <span className="text-xs tabular-nums text-blue-600 font-bold">{formatCost(c.laborCost)} <span className="text-[10px] font-normal opacity-70">مباشر</span></span>
+                              <span className="text-xs tabular-nums text-[rgb(var(--color-primary))] font-bold">{formatCost(c.laborCost)} <span className="text-[10px] font-normal opacity-70">مباشر</span></span>
                               <span className="text-xs tabular-nums text-[var(--color-text-muted)] font-bold">{formatCost(c.indirectCost)} <span className="text-[10px] font-normal opacity-70">غ.مباشر</span></span>
                             </div>
                           ) : (
@@ -2894,11 +3006,20 @@ export const Products: React.FC = () => {
                     );
                   })()}
                   <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-1 justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 justify-center">
                       <TableIconAction
                         action="view"
                         onClick={() => setDetailDrawerProductId(product.id)}
                       />
+                      {canOpenProductBomModal && (
+                        <TableIconAction
+                          icon="account_tree"
+                          tone="execute"
+                          title="مكونات المنتج"
+                          aria-label="مكونات المنتج"
+                          onClick={() => openProductBom(product)}
+                        />
+                      )}
                       {canUpdateProductModal && (
                         <TableIconAction
                           action="edit"
@@ -2922,9 +3043,9 @@ export const Products: React.FC = () => {
         ) : (
         <div className="p-4">
           {sorted.length === 0 ? (
-            <div className="px-6 py-16 text-center text-slate-400">
+            <div className="px-6 py-16 text-center text-[var(--color-text-muted)]">
               <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30 mx-auto" />
-              <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter ? ' مطابقة للبحث' : ' بعد'}</p>
+              <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter || manufacturedFilter || gapFilter ? ' مطابقة للبحث' : ' بعد'}</p>
               <p className="text-sm mt-1">
                 {canCreateProductModal
                   ? 'اضغط "إضافة منتج جديد" لإضافة أول منتج'
@@ -2981,14 +3102,14 @@ export const Products: React.FC = () => {
                           <p className="font-bold text-sm text-[var(--color-text)] truncate" title={product.name}>
                             {shortProductName(product.name)}
                           </p>
-                          <p className="font-mono text-[11px] text-slate-400 mt-0.5">{product.code}</p>
+                          <p className="font-mono text-[11px] text-[var(--color-text-muted)] mt-0.5">{product.code}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-2">
                             {product.category ? <Badge variant="neutral">{product.category}</Badge> : null}
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
                                 product.isManufactured === false
-                                  ? 'bg-amber-50 text-amber-700'
-                                  : 'bg-sky-50 text-sky-700'
+                                  ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'
+                                  : 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
                               }`}
                             >
                               {product.isManufactured === false ? 'غير تصنيعي' : 'تصنيعي'}
@@ -2996,8 +3117,8 @@ export const Products: React.FC = () => {
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
                                 product.assemblyMode === 'team'
-                                  ? 'bg-indigo-50 text-indigo-600'
-                                  : 'bg-emerald-50 text-emerald-600'
+                                  ? 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
+                                  : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
                               }`}
                             >
                               {product.assemblyMode === 'team' ? 'جماعي' : 'فردي'}
@@ -3007,28 +3128,28 @@ export const Products: React.FC = () => {
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                        <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2">
                           <span className="text-[10px] text-[var(--color-text-muted)] block mb-0.5">منتج تام</span>
                           <span
                             className={`font-black tabular-nums ${
                               finalBalance > 100
                                 ? 'text-[var(--color-text)]'
                                 : finalBalance > 0
-                                  ? 'text-amber-600'
-                                  : 'text-rose-500'
+                                  ? 'text-[rgb(var(--color-warning))]'
+                                  : 'text-[rgb(var(--color-danger))]'
                             }`}
                           >
                             {formatNumber(finalBalance)}
                           </span>
                         </div>
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                        <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2">
                           <span className="text-[10px] text-[var(--color-text-muted)] block mb-0.5">إنتاج الشهر</span>
-                          <span className="font-black tabular-nums text-sky-700">
+                          <span className="font-black tabular-nums text-[rgb(var(--color-primary))]">
                             {formatNumber(monthlyQtyByProductId[product.id] ?? 0)}
                           </span>
                         </div>
                         {canViewSellingPrice && (
-                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 col-span-2">
+                          <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] px-2.5 py-2 col-span-2">
                             <span className="text-[10px] text-[var(--color-text-muted)] block mb-0.5">سعر البيع</span>
                             <span className="font-black tabular-nums text-[var(--color-text)]">
                               {formatCost(selling)} ج.م
@@ -3047,6 +3168,16 @@ export const Products: React.FC = () => {
                         >
                           عرض
                         </ToneActionButton>
+                        {canOpenProductBomModal && (
+                          <ToneActionButton
+                            icon="account_tree"
+                            tone="execute"
+                            title="مكونات المنتج"
+                            onClick={() => openProductBom(product)}
+                          >
+                            مكونات
+                          </ToneActionButton>
+                        )}
                         {canUpdateProductModal && (
                           <ToneActionButton
                             action="edit"
@@ -3100,7 +3231,7 @@ export const Products: React.FC = () => {
           <ManagedModalPortal>
           <>
             <div
-              className="fixed inset-0 bg-black/35 z-[60] mt-0"
+              className="fixed inset-0 bg-black/35 z-[10050] mt-0"
               onClick={() => setDetailDrawerProductId(null)}
               aria-hidden
             />
@@ -3170,7 +3301,7 @@ export const Products: React.FC = () => {
                       </div>
                       <div>
                         <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">كمية الإنتاج (الشهر الحالي)</span>
-                        <span className="font-black tabular-nums text-emerald-600">{formatNumber(c?.quantityProduced ?? 0)}</span>
+                        <span className="font-black tabular-nums text-[rgb(var(--color-success))]">{formatNumber(c?.quantityProduced ?? 0)}</span>
                         <span className="text-[10px] text-[var(--color-text-muted)] block mt-0.5">من التقارير/التكلفة الشهرية، وليس رصيد المخزن</span>
                       </div>
                       {canViewCosts && (
@@ -3183,7 +3314,7 @@ export const Products: React.FC = () => {
                       )}
                       <div>
                         <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">نشط هذا الشهر</span>
-                        <span className={`font-black ${activeThisMonth ? 'text-emerald-600' : 'text-[var(--color-text-muted)]'}`}>
+                        <span className={`font-black ${activeThisMonth ? 'text-[rgb(var(--color-success))]' : 'text-[var(--color-text-muted)]'}`}>
                           {activeThisMonth ? 'نعم' : 'لا'}
                         </span>
                       </div>
@@ -3226,7 +3357,7 @@ export const Products: React.FC = () => {
                               <span className="font-bold tabular-nums">{formatCost(breakdown.productionOverheadShare)} ج.م</span>
                             </li>
                           </ul>
-                          <div className="flex justify-between gap-2 pt-2 border-t border-[var(--color-border)] font-black text-amber-800">
+                          <div className="flex justify-between gap-2 pt-2 border-t border-[var(--color-border)] font-black text-[rgb(var(--color-warning))]">
                             <span>إجمالي تفاصيل المنتج (للوحدة)</span>
                             <span className="tabular-nums">{formatCost(breakdown.totalCalculatedCost)} ج.م</span>
                           </div>
@@ -3243,7 +3374,7 @@ export const Products: React.FC = () => {
                       {hasMonthlyCost ? (
                         <ul className="space-y-1.5 text-xs">
                           <li className="flex justify-between gap-2">
-                            <span className="text-blue-600 font-medium">مباشر</span>
+                            <span className="text-[rgb(var(--color-primary))] font-medium">مباشر</span>
                             <span className="font-bold tabular-nums">{formatCost(c!.laborCost)} ج.م</span>
                           </li>
                           <li className="flex justify-between gap-2">
@@ -3252,7 +3383,7 @@ export const Products: React.FC = () => {
                           </li>
                           <li className="flex justify-between gap-2 pt-2 border-t border-[var(--color-border)] font-black">
                             <span>إجمالي تكاليف الإنتاج</span>
-                            <span className="tabular-nums text-amber-700">{formatCost(c!.totalCost)} ج.م</span>
+                            <span className="tabular-nums text-[rgb(var(--color-warning))]">{formatCost(c!.totalCost)} ج.م</span>
                           </li>
                         </ul>
                       ) : (
@@ -3307,10 +3438,10 @@ export const Products: React.FC = () => {
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && canDeleteProduct && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <ProductIcon name="delete_forever" className="text-rose-500 text-3xl" />
+            <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
+              <ProductIcon name="delete_forever" className="text-[rgb(var(--color-danger))] text-3xl" />
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد الحذف</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.</p>
@@ -3319,7 +3450,7 @@ export const Products: React.FC = () => {
               <Button
                 variant="danger"
                 onClick={() => handleDelete(deleteConfirmId)}
-                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
+                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-[rgb(var(--color-danger)/0.1)]0 text-white hover:bg-[rgb(var(--color-danger)/0.9)] shadow-rose-500/20 transition-all flex items-center gap-2"
               >
                 نعم، احذف
               </Button>
@@ -3332,7 +3463,7 @@ export const Products: React.FC = () => {
       {/* Import Excel Modal */}
       {showImportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
@@ -3344,7 +3475,7 @@ export const Products: React.FC = () => {
                   تحميل قالب بيانات المنتجات
                 </Button>
               </div>
-                <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+                <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
                 <ProductIcon name="close" />
               </button>
             </div>
@@ -3353,14 +3484,14 @@ export const Products: React.FC = () => {
               {importParsing && (
                 <div className="text-center py-12">
                   <ProductIcon name="refresh" className="animate-spin text-4xl text-primary mb-3 block" />
-                  <p className="font-bold text-slate-600">جاري تحليل الملف...</p>
+                  <p className="font-bold text-[var(--color-text-muted)]">جاري تحليل الملف...</p>
                 </div>
               )}
 
               {!importParsing && importResult && importResult.totalRows === 0 && (
                 <div className="text-center py-12">
                   <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
-                  <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
+                  <p className="font-bold text-[var(--color-text-muted)]">لم يتم العثور على بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">
                     هذا الملف لبيانات المنتج فقط (اسم، كود، باركود، منتج تصنيعي…). الربط بالمواد يكون من «رفع/تحديث مكونات المنتجات» بعد رفع المواد من شاشة المواد التصنيعية.
                   </p>
@@ -3373,30 +3504,30 @@ export const Products: React.FC = () => {
               {!importParsing && importResult && importResult.totalRows > 0 && (
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-3">
-                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold">
+                    <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold">
                       الإجمالي: <span className="text-primary">{importResult.totalRows}</span>
                     </div>
                     {importResult.newCount > 0 && (
-                      <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-emerald-600">
+                      <div className="bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-success))]">
                         <ProductIcon name="add_circle" className="text-xs align-middle ml-1 inline" />
                         جديد: {importResult.newCount}
                       </div>
                     )}
                     {importResult.updateCount > 0 && (
-                      <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-600">
+                      <div className="bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-warning))]">
                         <ProductIcon name="sync" className="text-xs align-middle ml-1 inline" />
                         تحديث: {importResult.updateCount}
                       </div>
                     )}
                     {importResult.errorCount > 0 && (
-                      <div className="bg-rose-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-rose-500">
+                      <div className="bg-[rgb(var(--color-danger)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-danger))]">
                         يحتوي أخطاء: {importResult.errorCount}
                       </div>
                     )}
                   </div>
 
                   {importResult.fileErrors && importResult.fileErrors.length > 0 && (
-                    <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+                    <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-4 py-3 text-xs font-bold text-[rgb(var(--color-warning))]">
                       <p className="mb-1">ملاحظات على الملف:</p>
                       <ul className="space-y-0.5">
                         {importResult.fileErrors.map((err, i) => <li key={i}>• {err}</li>)}
@@ -3404,7 +3535,7 @@ export const Products: React.FC = () => {
                     </div>
                   )}
 
-                  <div className="rounded-[var(--border-radius-lg)] border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-bold text-sky-900 space-y-1">
+                  <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-4 py-3 text-xs font-bold text-[rgb(var(--color-primary))] space-y-1">
                     <p>الترتيب الصحيح: مواد تصنيعية ← بيانات المنتجات ← مكونات.</p>
                     <p>بعد حفظ المنتجات ارفع المكونات من «رفع/تحديث مكونات المنتجات» (كود المنتج + كود المادة).</p>
                   </div>
@@ -3429,26 +3560,26 @@ export const Products: React.FC = () => {
                       </thead>
                       <tbody className="divide-y divide-[var(--color-border)]">
                         {importResult.rows.map((row) => (
-                          <tr key={row.rowIndex} className={row.errors.length > 0 ? 'bg-rose-50/50 dark:bg-rose-900/10' : ''}>
+                          <tr key={row.rowIndex} className={row.errors.length > 0 ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]' : ''}>
                             <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.rowIndex}</td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
-                                <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-danger))] text-xs font-bold">
                                   <ProductIcon name="error" className="text-sm" /> خطأ
                                 </span>
                               ) : row.action === 'update' ? (
-                                <span className="inline-flex items-center gap-1 text-amber-600 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-warning))] text-xs font-bold">
                                   <ProductIcon name="sync" className="text-sm" /> تحديث
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-success))] text-xs font-bold">
                                   <ProductIcon name="add_circle" className="text-sm" /> جديد
                                 </span>
                               )}
                             </td>
                             <td className="px-3 py-2.5 font-medium text-[var(--color-text)]">{row.name || '—'}</td>
-                            <td className="px-3 py-2.5 font-mono text-slate-500">{row.code || '—'}</td>
-                            <td className="px-3 py-2.5 text-slate-500">{row.model || '—'}</td>
+                            <td className="px-3 py-2.5 font-mono text-[var(--color-text-muted)]">{row.code || '—'}</td>
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)]">{row.model || '—'}</td>
                             <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.chineseUnitCost || '—'}</td>
                             <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.innerBoxCost || '—'}</td>
                             <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.outerCartonCost || '—'}</td>
@@ -3457,13 +3588,13 @@ export const Products: React.FC = () => {
                             <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.materials.length || '—'}</td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
-                                <ul className="text-xs text-rose-500 space-y-0.5">
+                                <ul className="text-xs text-[rgb(var(--color-danger))] space-y-0.5">
                                   {row.errors.map((err, i) => <li key={i}>• {err}</li>)}
                                 </ul>
                               ) : row.changes && row.changes.length > 0 ? (
-                                <p className="text-xs text-amber-600">تحديث: {row.changes.join('، ')}</p>
+                                <p className="text-xs text-[rgb(var(--color-warning))]">تحديث: {row.changes.join('، ')}</p>
                               ) : row.action === 'update' ? (
-                                <p className="text-xs text-slate-400">لا توجد تغييرات</p>
+                                <p className="text-xs text-[var(--color-text-muted)]">لا توجد تغييرات</p>
                               ) : null}
                             </td>
                           </tr>
@@ -3507,7 +3638,7 @@ export const Products: React.FC = () => {
       {showComponentsImportModal && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
           onClick={() => {
             setShowComponentsImportModal(false);
             setComponentsImportResult(null);
@@ -3535,7 +3666,7 @@ export const Products: React.FC = () => {
                   setComponentsImportResult(null);
                   setComponentsFallbackWarehouseId('');
                 }}
-                className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors"
               >
                 <ProductIcon name="close" />
               </button>
@@ -3545,14 +3676,14 @@ export const Products: React.FC = () => {
               {componentsImportParsing && (
                 <div className="text-center py-12">
                   <ProductIcon name="refresh" className="animate-spin text-4xl text-primary mb-3 block" />
-                  <p className="font-bold text-slate-600">جاري تحليل الملف...</p>
+                  <p className="font-bold text-[var(--color-text-muted)]">جاري تحليل الملف...</p>
                 </div>
               )}
 
               {!componentsImportParsing && componentsImportResult && componentsImportResult.totalRows === 0 && (
                 <div className="text-center py-12">
                   <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
-                  <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
+                  <p className="font-bold text-[var(--color-text-muted)]">لم يتم العثور على بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">
                     يُفضّل أن تكون المواد والمنتجات موجودة مسبقاً. كل صف = كود منتج + كود/اسم مادة.
                     الكمية المستخدمة اختيارية (فاضي/صفر = قطعة صيانة بدون استهلاك تصنيع). الرصيد واللوكيشن اختياريان للجرد.
@@ -3570,35 +3701,35 @@ export const Products: React.FC = () => {
               {!componentsImportParsing && componentsImportResult && componentsImportResult.totalRows > 0 && (
                 <div className="space-y-4">
                   <div className="flex flex-wrap gap-3">
-                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold">
+                    <div className="bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold">
                       الإجمالي: <span className="text-primary">{componentsImportResult.totalRows}</span>
                     </div>
-                    <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-emerald-600">
+                    <div className="bg-[rgb(var(--color-success)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-success))]">
                       صالح: {componentsImportResult.validCount}
                     </div>
-                    <div className="bg-blue-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-blue-600">
+                    <div className="bg-[rgb(var(--color-primary)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-primary))]">
                       منتجات BOM: {componentsImportResult.bomGroupCount}
                     </div>
                     {componentsImportResult.newMaterialCount > 0 && (
-                      <div className="bg-indigo-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-indigo-600">
+                      <div className="bg-[rgb(var(--color-primary)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-primary))]">
                         مواد جديدة: {componentsImportResult.newMaterialCount}
                       </div>
                     )}
-                    <div className="bg-violet-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-violet-600">
+                    <div className="bg-[rgb(var(--color-secondary)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-secondary))]">
                       تسويات رصيد: {componentsImportResult.stockMovementCount}
                     </div>
                     {componentsImportResult.skippedStockCount > 0 && (
-                      <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-700">
+                      <div className="bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-warning))]">
                         رصيد مطابق (بدون حركة): {componentsImportResult.skippedStockCount}
                       </div>
                     )}
                     {componentsImportResult.errorCount > 0 && (
-                      <div className="bg-rose-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-rose-500">
+                      <div className="bg-[rgb(var(--color-danger)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-danger))]">
                         أخطاء: {componentsImportResult.errorCount}
                       </div>
                     )}
                     {componentsImportResult.missingQuantityCount > 0 && (
-                      <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-700">
+                      <div className="bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-warning))]">
                         بدون كمية استخدام: {componentsImportResult.missingQuantityCount}
                       </div>
                     )}
@@ -3609,19 +3740,19 @@ export const Products: React.FC = () => {
                   componentsImportResult.rows.some(
                     (r) => r.previousLocationId && r.previousLocationId !== r.locationId,
                   ) ? (
-                    <div className="rounded-[var(--border-radius-lg)] border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-bold text-sky-900 space-y-1">
+                    <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-4 py-3 text-xs font-bold text-[rgb(var(--color-primary))] space-y-1">
                       <p>تحديث BOM للموجود + إضافة الجديد. الرصيد المكتوب = الكمية الفعلية (تسوية).</p>
                       <p>نقل لوكيشن: غيّر «كود اللوكيشن» واترك «كود اللوكيشن السابق» — يُصفَّر القديم ويُضبط الجديد.</p>
                       <p>رصيد فاضي = تحديث المكونات فقط بدون لمس المخزون (إلا تصفير السابق عند تغيير اللوكيشن).</p>
                     </div>
                   ) : (
-                    <div className="rounded-[var(--border-radius-lg)] border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-bold text-sky-900">
+                    <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-4 py-3 text-xs font-bold text-[rgb(var(--color-primary))]">
                       سيتم تحديث/إضافة مكونات BOM. اترك رصيد المكون فاضي إن لم ترد تعديل المخزون.
                     </div>
                   )}
 
                   {componentsImportResult.fileErrors.length > 0 && (
-                    <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+                    <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-4 py-3 text-xs font-bold text-[rgb(var(--color-warning))]">
                       <ul className="space-y-0.5">
                         {componentsImportResult.fileErrors.map((err, i) => (
                           <li key={i}>• {err}</li>
@@ -3672,45 +3803,45 @@ export const Products: React.FC = () => {
                             key={row.rowIndex}
                             className={
                               row.errors.length > 0
-                                ? 'bg-rose-50/50 dark:bg-rose-900/10'
+                                ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]'
                                 : row.skipStock
-                                  ? 'bg-amber-50/40 dark:bg-amber-900/10'
+                                  ? 'bg-[rgb(var(--color-warning)/0.1)]/40 dark:bg-[rgb(var(--color-warning)/0.15)]'
                                   : row.skipNotes && row.skipNotes.length > 0
-                                    ? 'bg-blue-50/30 dark:bg-blue-900/10'
+                                    ? 'bg-[rgb(var(--color-primary)/0.1)]/30 dark:bg-[rgb(var(--color-primary)/0.15)]'
                                     : ''
                             }
                           >
                             <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.rowIndex}</td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
-                                <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-danger))] text-xs font-bold">
                                   <ProductIcon name="error" className="text-sm" /> خطأ
                                 </span>
                               ) : row.skipStock ? (
-                                <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-warning))] text-xs font-bold">
                                   <ProductIcon name="remove_done" className="text-sm" /> رصيد مطابق
                                 </span>
                               ) : row.skipNotes && row.skipNotes.length > 0 ? (
-                                <span className="inline-flex items-center gap-1 text-blue-600 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-primary))] text-xs font-bold">
                                   <ProductIcon name="sync" className="text-sm" /> تحديث
                                 </span>
                               ) : row.willCreateMaterial ? (
-                                <span className="inline-flex items-center gap-1 text-indigo-600 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-primary))] text-xs font-bold">
                                   <ProductIcon name="add_circle" className="text-sm" /> مادة جديدة
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold">
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-success))] text-xs font-bold">
                                   <ProductIcon name="check_circle" className="text-sm" /> جاهز
                                 </span>
                               )}
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="font-medium">{row.productName || '—'}</div>
-                              <div className="font-mono text-xs text-slate-500">{row.productCode || '—'}</div>
+                              <div className="font-mono text-xs text-[var(--color-text-muted)]">{row.productCode || '—'}</div>
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="font-medium">{row.matchedMaterialName || row.materialName || '—'}</div>
-                              <div className="font-mono text-xs text-slate-500">
+                              <div className="font-mono text-xs text-[var(--color-text-muted)]">
                                 {row.matchedMaterialCode || row.materialCode || '—'}
                               </div>
                             </td>
@@ -3728,13 +3859,13 @@ export const Products: React.FC = () => {
                             </td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
-                                <ul className="text-xs text-rose-500 space-y-0.5">
+                                <ul className="text-xs text-[rgb(var(--color-danger))] space-y-0.5">
                                   {row.errors.map((err, i) => (
                                     <li key={i}>• {err}</li>
                                   ))}
                                 </ul>
                               ) : row.skipNotes && row.skipNotes.length > 0 ? (
-                                <ul className="text-xs text-amber-700 space-y-0.5">
+                                <ul className="text-xs text-[rgb(var(--color-warning))] space-y-0.5">
                                   {row.skipNotes.map((note, i) => (
                                     <li key={i}>• {note}</li>
                                   ))}
@@ -3795,7 +3926,7 @@ export const Products: React.FC = () => {
                 componentsImportResult.bomGroupCount === 0 &&
                 componentsImportResult.stockMovementCount === 0 &&
                 componentsImportResult.newMaterialCount === 0 && (
-                <p className="text-sm font-bold text-amber-700">
+                <p className="text-sm font-bold text-[rgb(var(--color-warning))]">
                   لا تحديثات BOM ولا تسويات رصيد للحفظ (رصيد فاضي أو مطابق).
                 </p>
               )}
@@ -3808,7 +3939,7 @@ export const Products: React.FC = () => {
       {showBulkCategoryModal && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
           onClick={() => !bulkToggleSaving && setShowBulkCategoryModal(false)}
         >
           <div
@@ -3826,7 +3957,7 @@ export const Products: React.FC = () => {
                 type="button"
                 disabled={bulkToggleSaving}
                 onClick={() => setShowBulkCategoryModal(false)}
-                className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors"
               >
                 <ProductIcon name="close" />
               </button>
@@ -3874,7 +4005,7 @@ export const Products: React.FC = () => {
       {showBomExportModal && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
           onClick={() => !exportingBom && setShowBomExportModal(false)}
         >
           <div
@@ -3890,7 +4021,7 @@ export const Products: React.FC = () => {
                 type="button"
                 disabled={exportingBom}
                 onClick={() => setShowBomExportModal(false)}
-                className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
+                className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors"
               >
                 <ProductIcon name="close" />
               </button>
@@ -3944,7 +4075,7 @@ export const Products: React.FC = () => {
       {/* Export Warehouse Selector Modal */}
       {showWarehouseExportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
@@ -3955,7 +4086,7 @@ export const Products: React.FC = () => {
                     : 'تصدير تقرير المنتجات (Excel)'}
                 </h3>
               </div>
-              <button type="button" onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+              <button type="button" onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
                 <ProductIcon name="close" />
               </button>
             </div>
@@ -3982,17 +4113,17 @@ export const Products: React.FC = () => {
                 && exportMonthReports.length === 0
                 && exportMonthSavedActiveProductIds.length === 0
                 && !exportMonthLoading && (
-                <p className="text-xs font-bold text-amber-700 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-[var(--border-radius-lg)] px-3 py-2">
+                <p className="text-xs font-bold text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.2)] border border-[rgb(var(--color-warning)/0.25)] dark:border-[rgb(var(--color-warning)/0.25)] rounded-[var(--border-radius-lg)] px-3 py-2">
                   لا توجد تقارير إنتاج في الشهر المحدد ولا سجلات تكلفة شهرية بكمية إنتاج — قد لا يظهر أي منتج في التصدير حتى يُحسب الشهر من صفحة التكلفة الشهرية.
                 </p>
               )}
               {exportScope === 'current_month' && monthExportProductCount === 0 && !exportMonthLoading && (
-                <p className="text-xs font-bold text-rose-700 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 rounded-[var(--border-radius-lg)] px-3 py-2">
+                <p className="text-xs font-bold text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] dark:bg-[rgb(var(--color-danger)/0.2)] border border-[rgb(var(--color-danger)/0.25)] dark:border-[rgb(var(--color-danger)/0.25)] rounded-[var(--border-radius-lg)] px-3 py-2">
                   لا يوجد منتج بكمية إنتاج مسجّلة في الشهر المحدد.
                 </p>
               )}
               {exportMonthLoading && (
-                <p className="text-xs font-bold text-sky-700 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-[var(--border-radius-lg)] px-3 py-2">
+                <p className="text-xs font-bold text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.2)] border border-[rgb(var(--color-primary)/0.25)] dark:border-[rgb(var(--color-primary)/0.25)] rounded-[var(--border-radius-lg)] px-3 py-2">
                   {exportScope === 'current_month'
                     ? 'جاري تحميل تقارير الشهر وسجلات التكلفة الشهرية...'
                     : 'جاري تحميل تقارير الشهر المختار...'}
@@ -4098,14 +4229,14 @@ export const Products: React.FC = () => {
       {/* â”€â”€ Column Control Modal â”€â”€ */}
       {showColumnsModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ProductIcon name="tune" className="text-primary" />
                 <h3 className="text-lg font-bold">إدارة الأعمدة الظاهرة</h3>
               </div>
-              <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+              <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]">
                 <ProductIcon name="close" />
               </button>
             </div>
@@ -4134,7 +4265,7 @@ export const Products: React.FC = () => {
                   className={`flex items-center gap-3 p-3 rounded-[var(--border-radius-lg)] border cursor-pointer transition-all ${
                     visibleColumns[opt.key]
                       ? 'border-primary/30 bg-primary/5'
-                      : 'border-[var(--color-border)] hover:bg-[#f8f9fa]'
+                      : 'border-[var(--color-border)] hover:bg-[var(--color-bg)]'
                   }`}
                 >
                   <input
@@ -4143,7 +4274,7 @@ export const Products: React.FC = () => {
                     onChange={(e) => toggleColumn(opt.key, e.target.checked)}
                     className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                   />
-                  <ProductIcon name={opt.icon} className={`text-lg ${visibleColumns[opt.key] ? 'text-primary' : 'text-slate-400'}`} />
+                  <ProductIcon name={opt.icon} className={`text-lg ${visibleColumns[opt.key] ? 'text-primary' : 'text-[var(--color-text-muted)]'}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[var(--color-text)]">{opt.label}</p>
                   </div>
@@ -4158,7 +4289,7 @@ export const Products: React.FC = () => {
                   setVisibleColumns(empty);
                   if (typeof window !== 'undefined') window.localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(empty));
                 }}
-                className="text-xs font-bold text-[var(--color-text-muted)] hover:text-slate-600 h-auto p-0"
+                className="text-xs font-bold text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] h-auto p-0"
               >
                 إلغاء تحديد الكل
               </Button>

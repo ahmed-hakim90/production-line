@@ -351,14 +351,14 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[300] flex items-center justify-center p-4" onClick={handleClose}>
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-lg border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h3 className="text-base sm:text-lg font-bold">{showEditChrome ? t('modalManager.createWorkOrder.editTitle') : t('modalManager.createWorkOrder.createTitle')}</h3>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
+          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -371,14 +371,14 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           )}
           {message && (
             <div className="erp-alert erp-alert-success">
-              <CheckCircle2 size={16} className="text-emerald-500" />
-              <p className="text-sm font-bold text-emerald-700 flex-1">{message}</p>
+              <CheckCircle2 size={16} className="text-[rgb(var(--color-success))]" />
+              <p className="text-sm font-bold text-[rgb(var(--color-success))] flex-1">{message}</p>
             </div>
           )}
           {error && (
             <div className="erp-alert erp-alert-error">
-              <AlertCircle size={16} className="text-rose-500" />
-              <p className="text-sm font-bold text-rose-700 flex-1">{error}</p>
+              <AlertCircle size={16} className="text-[rgb(var(--color-danger))]" />
+              <p className="text-sm font-bold text-[rgb(var(--color-danger))] flex-1">{error}</p>
             </div>
           )}
 
@@ -410,16 +410,16 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
               className="bg-[var(--color-card)]"
             />
             {selectedPlan && (
-              <div className="mt-2 rounded-[var(--border-radius-base)] border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 space-y-1">
+              <div className="mt-2 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-3 py-2 text-xs font-bold text-[rgb(var(--color-primary))] space-y-1">
                 <p>
                   {t('modalManager.createWorkOrder.remainingInPlan')}: {formatNumber(selectedPlanRemaining)} {t('modalManager.createWorkOrder.units')}
-                  <span className="text-blue-500"> ({t('modalManager.createWorkOrder.ofPlanned', { value: formatNumber(selectedPlan.plannedQuantity || 0) })})</span>
-                  <span className="mx-1 text-blue-400">—</span>
+                  <span className="text-[rgb(var(--color-primary))]"> ({t('modalManager.createWorkOrder.ofPlanned', { value: formatNumber(selectedPlan.plannedQuantity || 0) })})</span>
+                  <span className="mx-1 text-[rgb(var(--color-primary))]">—</span>
                   {productNameById.get(selectedPlan.productId) || t('modalManager.createWorkOrder.unknownProduct')}
-                  <span className="mx-1 text-blue-400">/</span>
+                  <span className="mx-1 text-[rgb(var(--color-primary))]">/</span>
                   {lines.find((l) => l.id === selectedPlan.lineId)?.name || t('modalManager.createWorkOrder.unknownLine')}
                 </p>
-                <p className={selectedPlan.acceptsProductionFromReports === false ? 'text-amber-700' : 'text-blue-600'}>
+                <p className={selectedPlan.acceptsProductionFromReports === false ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-primary))]'}>
                   {selectedPlan.acceptsProductionFromReports === false
                     ? 'هذه الخطة لا تستقبل إنتاج أوامر الشغل؛ سيتم تتبع كمية أمر الشغل منفصلة عن تقدم الخطة.'
                     : 'أمر الشغل مرتبط بالخطة، وتقاريره تُحسب على تقدم الخطة.'}
@@ -598,7 +598,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             {t('modalManager.createWorkOrder.dailyTimeHint')}
           </p>
           {missingRequiredFields.length > 0 && (
-            <div className="rounded-[var(--border-radius-base)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+            <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-3 py-2 text-xs font-bold text-[rgb(var(--color-warning))]">
               لاستكمال الإنشاء أدخل: {missingRequiredFields.join('، ')}
             </div>
           )}

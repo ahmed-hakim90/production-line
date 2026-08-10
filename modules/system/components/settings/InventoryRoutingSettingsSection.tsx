@@ -134,9 +134,9 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
       <button
         type="button"
         onClick={onToggle}
-        className={`relative w-12 h-7 rounded-full shrink-0 ${checked ? 'bg-primary' : 'bg-slate-300'}`}
+        className={`relative w-12 h-7 rounded-full shrink-0 ${checked ? 'bg-primary' : 'bg-[var(--color-border)]'}`}
       >
-        <span className={`absolute top-0.5 w-6 h-6 bg-white rounded-full transition-all ${checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
+        <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
       </button>
     </div>
   );
@@ -154,21 +154,21 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
           <button
             type="button"
             onClick={applyRecommendedPolicy}
-            className="px-4 py-2 rounded-lg border border-emerald-600 text-emerald-800 bg-emerald-50 text-sm font-bold"
+            className="px-4 py-2 rounded-lg border border-[rgb(var(--color-success))] text-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)] text-sm font-bold"
           >
             تطبيق توصية المصنع
           </button>
           <button
             type="button"
             onClick={() => linkByWarehouseRole(false)}
-            className="px-4 py-2 rounded-lg border border-sky-600 text-sky-900 bg-sky-50 text-sm font-bold"
+            className="px-4 py-2 rounded-lg border border-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] text-sm font-bold"
           >
             ربط الفراغات حسب الدور
           </button>
           <button
             type="button"
             onClick={() => linkByWarehouseRole(true)}
-            className="px-4 py-2 rounded-lg border border-amber-600 text-amber-950 bg-amber-50 text-sm font-bold"
+            className="px-4 py-2 rounded-lg border border-[rgb(var(--color-warning))] text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] text-sm font-bold"
           >
             إعادة ربط الكل حسب الدور
           </button>
@@ -182,9 +182,9 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
           </button>
         </div>
       </div>
-      {migrateMsg && <p className="text-sm font-medium text-slate-600">{migrateMsg}</p>}
+      {migrateMsg && <p className="text-sm font-medium text-[var(--color-text-muted)]">{migrateMsg}</p>}
 
-      <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+      <div className="rounded-lg border border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-primary))]">
         <p className="font-bold">اسم المخزن ≠ دور المخزن</p>
         <p className="mt-1 text-xs leading-relaxed">
           مثال: لو سمّيت المخزن «مخزن التجميع» أو «الجاهز»، سيّبه باسمه وعيّن له الدور المناسب من شاشة المخازن،
@@ -192,7 +192,7 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
         </p>
       </div>
 
-      <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+      <div className="rounded-lg border border-[rgb(var(--color-success)/0.35)] bg-[rgb(var(--color-success)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-success))]">
         <p className="font-bold">التوصية المعتمدة للمصنع (V2)</p>
         <ul className="mt-1 text-xs leading-relaxed list-disc pr-5 space-y-0.5">
           <li>صرف الإنتاج يحوّل المكونات من المفكك إلى صالة الإنتاج.</li>
@@ -200,7 +200,7 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
           <li>مشرف التغليف يؤكد الكمية الفعلية جزئياً قبل دخول «بانتظار التغليف».</li>
           <li>لا تحويل تلقائي لتجاوز استلام التغليف.</li>
         </ul>
-        <p className="mt-2 text-[11px] text-emerald-900/80">
+        <p className="mt-2 text-[11px] text-[rgb(var(--color-success))]/80">
           «تطبيق توصية المصنع» يضبط أعلام الاعتماد ويملأ الخانات الفارغة من أدوار مخازنك الحالية دون تغيير أسمائها. ثم احفظ من أعلى الصفحة.
         </p>
       </div>
@@ -220,14 +220,14 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
       {(routing.decomposedWarehouseId
         && routing.productionFloorWarehouseId
         && routing.decomposedWarehouseId === routing.productionFloorWarehouseId) && (
-        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+        <p className="text-xs font-bold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
           مخزن المفكك وصالة الإنتاج يجب أن يكونا مختلفين.
         </p>
       )}
       {(routing.productionWipWarehouseId
         && routing.finishedStagingWarehouseId
         && routing.productionWipWarehouseId === routing.finishedStagingWarehouseId) && (
-        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+        <p className="text-xs font-bold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
           مخزن «تحت التسليم» و«بانتظار التغليف» يجب أن يكونا مختلفين.
         </p>
       )}
@@ -246,13 +246,13 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
           || !routing.packagingTargetWarehouseId
           || routing.packagingSourceWarehouseId === routing.packagingTargetWarehouseId
         ) && (
-        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+        <p className="text-xs font-bold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">
           اختر مخزنين مختلفين للتغليف من/إلى لتفعيل تحويلات التغليف عند حفظ التقارير.
         </p>
       )}
 
       {routing.requireIssuedProductionIssueOnReport !== false && (
-        <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+        <div className="rounded-lg border border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-primary))]">
           <p className="font-bold">مسار V2: صرف → صالة → تقرير → استلام تغليف</p>
           <p className="mt-1 text-xs leading-relaxed">
             1) صرف إنتاج من المفكك إلى صالة الإنتاج واعتماده.
@@ -264,7 +264,7 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
       )}
 
       {Boolean(routing.autoConsumeBomOnProductionReport) && routing.requireIssuedProductionIssueOnReport === false && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <div className="rounded-lg border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] px-4 py-3 text-sm text-[rgb(var(--color-warning))]">
           <p className="font-bold">تنبيه: خصم مباشر من التقرير</p>
           <p className="mt-1 text-xs leading-relaxed">
             حفظ تقرير الإنتاج سيخصم مكونات الـ BOM مباشرة إذا لم يوجد أمر صرف صادر. مع V2 يُفضّل الخصم من صالة الإنتاج بعد الصرف.
@@ -273,7 +273,7 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
       )}
 
       {localPlanSettings.inventoryRoutingMigratedAt && (
-        <p className="text-xs text-emerald-700 font-medium">
+        <p className="text-xs text-[rgb(var(--color-success))] font-medium">
           آخر مزامنة: {new Date(localPlanSettings.inventoryRoutingMigratedAt).toLocaleString('ar-EG')}
         </p>
       )}

@@ -62,7 +62,7 @@ export const CustomDashboardWidgetItem: React.FC<{
               {widget.unit ? <span className="text-sm font-bold text-[var(--color-text-muted)] mr-1">{widget.unit}</span> : null}
             </p>
             {widget.description && (
-              <p className="text-xs text-slate-400">{widget.description}</p>
+              <p className="text-xs text-[var(--color-text-muted)]">{widget.description}</p>
             )}
           </div>
           <span className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 text-primary flex items-center justify-center">

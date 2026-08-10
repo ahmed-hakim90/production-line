@@ -883,7 +883,7 @@ export const StockTransactions: React.FC = () => {
                 onValueChange={(value) => setBulkAction(value === 'none' ? '' : (value as 'export' | 'delete'))}
                 disabled={selectedRows.length === 0}
               >
-                <SelectTrigger className="h-[34px] min-w-[150px] rounded-lg border-slate-200 bg-white">
+                <SelectTrigger className="h-[34px] min-w-[150px] rounded-lg border-[var(--color-border)] bg-[var(--color-card)]">
                   <SelectValue placeholder="إجراء على المحدد" />
                 </SelectTrigger>
                 <SelectContent>

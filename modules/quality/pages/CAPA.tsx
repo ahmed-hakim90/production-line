@@ -216,7 +216,7 @@ export const CAPA: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
-              <tr className="border-b border-[var(--color-border)] text-slate-500">
+              <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)]">
                 <th className="erp-th">Title</th>
                 <th className="erp-th">Reason</th>
                 <th className="erp-th">Work Order</th>

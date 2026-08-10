@@ -155,7 +155,7 @@ export const ProductionFloorStock: React.FC = () => {
   );
 
   if (!can('inventory.view')) {
-    return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+    return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
   }
 
   if (scoped && !canAccessFloor) {
@@ -184,7 +184,7 @@ export const ProductionFloorStock: React.FC = () => {
       )}
     >
       {!floorId && (
-        <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-4 py-3">
           عيّن «مخزن صالة الإنتاج» من إعدادات توجيه المخزون.
           <Link className="font-bold underline ms-2" to={withTenantPath(tenantSlug, '/settings/production')}>
             فتح الإعدادات
@@ -193,7 +193,7 @@ export const ProductionFloorStock: React.FC = () => {
       )}
 
       {data?.truncated && (
-        <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-4 py-3">
           تحذير: تقرير الفترة مقطوع بسبب حجم الحركات الكبير. قلّص الفترة أو نفّذ backfill يومي.
         </p>
       )}
@@ -204,7 +204,7 @@ export const ProductionFloorStock: React.FC = () => {
             key={key}
             type="button"
             className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
-              period === key ? 'bg-primary text-white border-primary' : 'bg-white border-slate-200 text-slate-600'
+              period === key ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'
             }`}
             onClick={() => {
               setPeriod(key);
@@ -255,7 +255,7 @@ export const ProductionFloorStock: React.FC = () => {
               <tbody>
                 {pagedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={8} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       لا توجد حركات في الفترة المحددة.
                     </td>
                   </tr>
@@ -264,7 +264,7 @@ export const ProductionFloorStock: React.FC = () => {
                     <tr key={`${row.itemType}-${row.itemId}`} className="border-b">
                       <td className="px-4 py-3">
                         <p className="text-sm font-medium">{row.itemName}</p>
-                        <p className="text-xs font-mono text-slate-400">{row.itemCode}</p>
+                        <p className="text-xs font-mono text-[var(--color-text-muted)]">{row.itemCode}</p>
                       </td>
                       <td className="px-4 py-3 text-center tabular-nums">{formatNumber(row.openingQty)}</td>
                       <td className="px-4 py-3 text-center tabular-nums">{formatNumber(row.inQty)}</td>
@@ -290,13 +290,13 @@ export const ProductionFloorStock: React.FC = () => {
 
       <OpsDashPanel title="آخر الحركات" accent="inventory">
           {(data?.recentTx || []).length === 0 ? (
-            <p className="text-sm text-slate-400">لا توجد حركات.</p>
+            <p className="text-sm text-[var(--color-text-muted)]">لا توجد حركات.</p>
           ) : (
             (data?.recentTx || []).map((tx) => (
               <div key={tx.id} className="flex justify-between gap-3 rounded-lg border px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{tx.itemName}</p>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-[var(--color-text-muted)]">
                     {sourceModuleLabel(tx.sourceModule)} · {tx.movementType}
                     {tx.transferDirection ? `/${tx.transferDirection}` : ''}
                   </p>

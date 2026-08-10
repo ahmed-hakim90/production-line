@@ -496,7 +496,7 @@ export const WarehouseWorkspace: React.FC = () => {
       <ModuleOpsPageShell eyebrow="المخزون" rangeLabel="مساحة المخزن">
         <OpsDashPanel accent="inventory">
           <div className="space-y-3">
-            <p className="text-sm text-rose-700">{error || 'المخزن غير موجود.'}</p>
+            <p className="text-sm text-[rgb(var(--color-danger))]">{error || 'المخزن غير موجود.'}</p>
             <Link className="text-sm font-bold text-primary underline" to={withTenantPath(tenantSlug, backPath)}>
               {accessDenied ? 'العودة' : backLabel}
             </Link>
@@ -543,7 +543,7 @@ export const WarehouseWorkspace: React.FC = () => {
         {isCentralSparePartsWarehouse ? (
           <>
             <OpsDashPanel title="بانتظارك (تموين)" accent="inventory">
-              <div className="text-2xl font-black text-amber-700">{centralWorkQueue}</div>
+              <div className="text-2xl font-black text-[rgb(var(--color-warning))]">{centralWorkQueue}</div>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 اعتماد {awaitingApprove} · تجهيز {awaitingPrepare} · موافقة {awaitingResponsible}
               </p>
@@ -646,7 +646,7 @@ export const WarehouseWorkspace: React.FC = () => {
             ) : null}
           </div>
           {isCenterWarehouse && canManageParts && !linkedBranch?.id ? (
-            <p className="mt-2 text-xs text-amber-800">
+            <p className="mt-2 text-xs text-[rgb(var(--color-warning))]">
               لا يوجد فرع صيانة مربوط بهذا المخزن — لا يمكن إضافة صنف من هنا.
             </p>
           ) : null}
@@ -691,7 +691,7 @@ export const WarehouseWorkspace: React.FC = () => {
                       {row.fromWarehouseName} → {row.toWarehouseName}
                     </div>
                   </div>
-                  <div className="text-xs font-bold text-amber-800">
+                  <div className="text-xs font-bold text-[rgb(var(--color-warning))]">
                     {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[row.status]}
                   </div>
                 </Link>

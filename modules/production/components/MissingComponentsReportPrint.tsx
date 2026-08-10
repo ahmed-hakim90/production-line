@@ -2,6 +2,9 @@ import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
+import { resolvePrintFont } from '@/utils/print/printFont';
+import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
 
 export type MissingComponentsReportLine = {
   materialName: string;
@@ -52,7 +55,9 @@ export const MissingComponentsReportPrint = React.forwardRef<
   MissingComponentsReportPrintProps
 >(({ title, subtitle, generatedAt, warehouseName, sections, printSettings }, ref) => {
   const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+  const doc = resolvePrintDocumentConfig(ps, 'missingComponentsReport');
   const palette = getPrintThemePalette(ps);
+  const font = resolvePrintFont(ps);
   const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
   const isThermal = ps.paperSize === 'thermal';
   const now = generatedAt ?? new Date().toLocaleString('ar-EG');
@@ -62,6 +67,8 @@ export const MissingComponentsReportPrint = React.forwardRef<
     (sum, row) => sum + row.lines.reduce((s, line) => s + Number(line.shortageQty || 0), 0),
     0,
   );
+  const brandName = String(doc.headerText || '').trim() || ps.headerText;
+  const footerText = String(doc.footerText || '').trim() || ps.footerText;
 
   const thStyle: React.CSSProperties = {
     border: `1px solid ${palette.border}`,
@@ -88,13 +95,14 @@ export const MissingComponentsReportPrint = React.forwardRef<
     <div
       ref={ref}
       dir="rtl"
+      className="print-root print-report arabic-export-root"
       style={{
-        fontFamily: 'Calibri, Segoe UI, Tahoma, sans-serif',
+        fontFamily: font.fontFamily,
         width: paper.width,
         padding: isThermal ? '4mm 3mm' : '10mm 12mm',
         background: '#fff',
         color: palette.text,
-        fontSize: isThermal ? '8pt' : '11pt',
+        fontSize: isThermal ? font.denseFontSize : font.fontSize,
         lineHeight: 1.45,
         boxSizing: 'border-box',
       }}
@@ -126,7 +134,7 @@ export const MissingComponentsReportPrint = React.forwardRef<
             color: palette.primary,
           }}
         >
-          {ps.headerText}
+          {brandName}
         </h1>
         <p
           style={{
@@ -158,9 +166,11 @@ export const MissingComponentsReportPrint = React.forwardRef<
         )}
         <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '6pt' : '9pt', color: palette.mutedText }}>
           تاريخ الطباعة: {now}
-          {warehouseName ? ` · المخزن: ${warehouseName}` : ''}
+          {doc.isFieldVisible('warehouse') && warehouseName ? ` · المخزن: ${warehouseName}` : ''}
         </p>
       </div>
+
+      <PrintExtraLines lines={doc.customLines} dense={isThermal} />
 
       <table
         style={{
@@ -273,7 +283,7 @@ export const MissingComponentsReportPrint = React.forwardRef<
         </table>
       )}
 
-      {ps.footerText && (
+      {footerText ? (
         <p
           style={{
             marginTop: isThermal ? '4mm' : '8mm',
@@ -284,9 +294,9 @@ export const MissingComponentsReportPrint = React.forwardRef<
             textAlign: 'center',
           }}
         >
-          {ps.footerText}
+          {footerText}
         </p>
-      )}
+      ) : null}
     </div>
   );
 });

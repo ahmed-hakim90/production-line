@@ -361,7 +361,7 @@ export const Categories: React.FC = () => {
               onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
             />
             <select
-              className="sm:col-span-2 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm bg-white"
+              className="sm:col-span-2 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm bg-[var(--color-card)]"
               value={form.parentId ?? ''}
               onChange={(e) =>
                 setForm((prev) => ({
@@ -393,7 +393,7 @@ export const Categories: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  className="shrink-0 p-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+                  className="shrink-0 p-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]"
                   onClick={toggleCategoryCodeLock}
                   title={categoryCodeLocked ? t('entityCode.unlockTitle') : t('entityCode.lockTitle')}
                 >
@@ -462,7 +462,7 @@ export const Categories: React.FC = () => {
                 const hasKids = productCategories.some((c) => c.parentId === id);
                 const usage = usageById[id];
                 return (
-                  <tr key={id} className="hover:bg-[#f8f9fa]/50 transition-colors">
+                  <tr key={id} className="hover:bg-[var(--color-bg)]/50 transition-colors">
                     <td className="px-5 py-4 font-bold">
                       <div
                         className="flex items-center gap-1"
@@ -493,8 +493,8 @@ export const Categories: React.FC = () => {
                       <span
                         className={`text-xs font-bold px-2 py-1 rounded ${
                           category.isActive !== false
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-slate-100 text-slate-600'
+                            ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
+                            : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]'
                         }`}
                       >
                         {category.isActive !== false ? 'نشطة' : 'موقفة'}
@@ -528,7 +528,7 @@ export const Categories: React.FC = () => {
                         {canEdit && category.isActive !== false && (
                           <button
                             onClick={() => void handleDeactivate(id)}
-                            className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-600"
+                            className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-warning))]"
                             title="إيقاف"
                           >
                             <span className="material-icons-round text-[18px]">pause_circle</span>
@@ -537,7 +537,7 @@ export const Categories: React.FC = () => {
                         {canDelete && (
                           <button
                             onClick={() => void handleDelete(id)}
-                            className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500"
+                            className="p-1.5 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))]"
                             title="حذف"
                           >
                             <span className="material-icons-round text-[18px]">delete</span>

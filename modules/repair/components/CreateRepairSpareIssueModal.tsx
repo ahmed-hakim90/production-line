@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SearchableSelect } from '../../../components/UI';
 import { toast } from '../../../components/Toast';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
+import { useAppStore } from '../../../store/useAppStore';
 import { customerService } from '../../customers/services/customerService';
 import type { CustomerType } from '../../customers/types';
 import { stockService } from '../../inventory/services/stockService';
@@ -26,6 +29,14 @@ type DraftLine = {
   locationId: string;
 };
 
+type SpareIssueFormDraft = {
+  branchId: string;
+  note: string;
+  jobId: string;
+  jobCode: string;
+  lines: DraftLine[];
+};
+
 const emptyDraftLine = (): DraftLine => ({
   key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   partId: '',
@@ -33,6 +44,12 @@ const emptyDraftLine = (): DraftLine => ({
   quantity: 0,
   locationId: '',
 });
+
+const isSpareIssueFormDraftEmpty = (draft: SpareIssueFormDraft): boolean => {
+  const hasHeader = Boolean(draft.note.trim() || draft.jobId.trim() || draft.jobCode.trim());
+  const hasLines = draft.lines.some((line) => Boolean(line.itemId) || Number(line.quantity) > 0 || Boolean(line.locationId));
+  return !hasHeader && !hasLines;
+};
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
@@ -60,6 +77,7 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
   onCreated,
   branches,
 }) => {
+  const user = useAppStore((s) => s.userProfile);
   const usableBranches = useMemo(
     () => branches.filter((b) => String(b.warehouseId || '').trim() && String(b.id || '').trim()),
     [branches],
@@ -81,14 +99,44 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
   const selectedBranch = usableBranches.find((b) => b.id === branchId);
   const warehouseId = String(selectedBranch?.warehouseId || '').trim();
 
+  const spareIssueDraftValue = useMemo<SpareIssueFormDraft>(() => ({
+    branchId,
+    note,
+    jobId,
+    jobCode,
+    lines,
+  }), [branchId, note, jobId, jobCode, lines]);
+
+  const { hasDraft, clearDraft } = useLocalFormDraft<SpareIssueFormDraft>({
+    formKey: 'repair:spareIssueCreate',
+    tenantId: getCurrentTenantIdOrNull() || user?.tenantId,
+    userId: user?.id,
+    value: spareIssueDraftValue,
+    enabled: open,
+    isEmpty: isSpareIssueFormDraftEmpty,
+    onRestore: (draft) => {
+      setBranchId(String(draft.branchId || usableBranches[0]?.id || ''));
+      setNote(String(draft.note || ''));
+      setJobId(String(draft.jobId || ''));
+      setJobCode(String(draft.jobCode || ''));
+      setLines(
+        Array.isArray(draft.lines) && draft.lines.length > 0
+          ? draft.lines.map((line) => ({
+              key: String(line.key || emptyDraftLine().key),
+              partId: String(line.partId || ''),
+              itemId: String(line.itemId || ''),
+              quantity: Number(line.quantity || 0),
+              locationId: String(line.locationId || ''),
+            }))
+          : [emptyDraftLine()],
+      );
+    },
+  });
+
   useEffect(() => {
     if (!open) return;
-    setBranchId(usableBranches[0]?.id || '');
-    setNote('');
-    setJobId('');
-    setJobCode('');
-    setJobCustomerType(null);
-    setLines([emptyDraftLine()]);
+    // Seed default branch only when empty — do not wipe a restored draft.
+    setBranchId((prev) => prev || usableBranches[0]?.id || '');
   }, [open, usableBranches]);
 
   useEffect(() => {
@@ -288,6 +336,12 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
           : {}),
       });
       toast.success(`تم إنشاء السند ${created.referenceNo}`);
+      clearDraft();
+      setNote('');
+      setJobId('');
+      setJobCode('');
+      setJobCustomerType(null);
+      setLines([emptyDraftLine()]);
       onCreated();
       onClose();
     } catch (error) {
@@ -304,6 +358,24 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       maxWidthClassName="max-w-3xl"
       footer={(
         <>
+          {hasDraft ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full sm:w-auto"
+              onClick={() => {
+                clearDraft();
+                setNote('');
+                setJobId('');
+                setJobCode('');
+                setJobCustomerType(null);
+                setLines([emptyDraftLine()]);
+                setBranchId(usableBranches[0]?.id || '');
+              }}
+            >
+              مسح المسودة
+            </Button>
+          ) : null}
           <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={onClose}>إلغاء</Button>
           <Button type="button" className="w-full sm:w-auto" onClick={() => void handleCreate()} disabled={saving || loadingMeta}>
             {saving ? 'جاري الحفظ...' : 'حفظ السند'}

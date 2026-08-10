@@ -298,7 +298,7 @@ export const RoutingAnalyticsPage: React.FC = () => {
                 ? (execution.timeEfficiency * 100).toFixed(1)
                 : '—'
             }
-            colorClass="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
+            colorClass="bg-[rgb(var(--color-success)/0.1)]0/15 text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]"
           />
           {execution.timeEfficiency != null &&
             execution.laborEfficiency != null &&
@@ -307,20 +307,20 @@ export const RoutingAnalyticsPage: React.FC = () => {
                 icon="groups"
                 label="كفاءة العمالة % (إصدار قديم)"
                 value={(execution.laborEfficiency * 100).toFixed(1)}
-                colorClass="bg-sky-500/15 text-sky-700 dark:text-sky-400"
+                colorClass="bg-[rgb(var(--color-primary)/0.1)]0/15 text-[rgb(var(--color-primary))] dark:text-[rgb(var(--color-primary))]"
               />
             )}
           <KPIBox
             icon="payments"
             label="تكلفة الوحدة"
             value={execution.costPerUnit != null ? execution.costPerUnit.toFixed(2) : '—'}
-            colorClass="bg-amber-500/15 text-amber-800 dark:text-amber-300"
+            colorClass="bg-[rgb(var(--color-warning)/0.1)]0/15 text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]"
           />
           <KPIBox
             icon="schedule"
             label="إجمالي الزمن الفعلي"
             value={formatDurationSeconds(execution.actualTotalTimeSeconds ?? 0)}
-            colorClass="bg-violet-500/15 text-violet-700 dark:text-violet-300"
+            colorClass="bg-[rgb(var(--color-secondary)/0.1)]0/15 text-[rgb(var(--color-secondary))] dark:text-[rgb(var(--color-secondary))]"
           />
         </div>
       )}
@@ -347,8 +347,8 @@ export const RoutingAnalyticsPage: React.FC = () => {
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip />
                     <Legend />
-                    <Bar dataKey="standard" name="قياسي" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="actual" name="فعلي" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="standard" name="قياسي" fill="var(--color-text-muted)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="actual" name="فعلي" fill="var(--chart-1)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -361,7 +361,7 @@ export const RoutingAnalyticsPage: React.FC = () => {
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
                     <Tooltip />
-                    <Bar dataKey="cost" name="تكلفة" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="cost" name="تكلفة" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -376,8 +376,8 @@ export const RoutingAnalyticsPage: React.FC = () => {
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="timeVar" name="انحراف زمن %" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="workerVar" name="انحراف عمال %" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="timeVar" name="انحراف زمن %" fill="var(--chart-4)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="workerVar" name="انحراف عمال %" fill="var(--chart-5)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

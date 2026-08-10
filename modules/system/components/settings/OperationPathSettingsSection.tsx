@@ -25,11 +25,11 @@ const ToggleButton: React.FC<{
     disabled={disabled}
     onClick={onToggle}
     className={`relative h-7 w-12 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-      checked ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'
+      checked ? 'bg-primary' : 'bg-[var(--color-border)]'
     }`}
   >
     <span
-      className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${
+      className={`absolute top-0.5 h-6 w-6 rounded-full bg-[var(--color-card)] transition-all ${
         checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'
       }`}
     />
@@ -82,7 +82,7 @@ export const OperationPathSettingsSection: React.FC<Props> = ({
                         className={`flex items-start gap-3 rounded-[var(--border-radius-base)] border p-3 ${
                           operationEnabled
                             ? 'border-[var(--color-border)] bg-[var(--color-surface)]'
-                            : 'border-slate-200 bg-slate-100/60 opacity-60 dark:border-slate-700 dark:bg-slate-900/40'
+                            : 'border-[var(--color-border)] bg-[var(--color-surface-hover)] opacity-60 dark:border-[var(--color-border)] dark:bg-[var(--color-surface-hover)]'
                         }`}
                       >
                         <div className="min-w-0 flex-1">

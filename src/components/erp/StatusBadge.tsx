@@ -61,7 +61,7 @@ export function StatusBadge({ label, type, dot, className }: StatusBadgeProps) {
   const resolvedType = type ?? labelVariantMap[label] ?? "muted"
 
   return (
-    <Badge className={cn("rounded-lg border px-2.5 py-1 text-xs font-medium", styles[resolvedType], className)}>
+    <Badge className={cn("rounded-md border px-2.5 py-1 text-xs font-medium", styles[resolvedType], className)}>
       {dot && <span className={cn("me-1 inline-block h-1.5 w-1.5 rounded-full", dotColors[resolvedType])} />}
       {label}
     </Badge>

@@ -355,7 +355,7 @@ export const SparePartsRecall: React.FC = () => {
               className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${
                 listTab === key
                   ? 'border-primary bg-primary text-white'
-                  : 'border-slate-200 bg-white text-slate-600'
+                  : 'border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)]'
               }`}
             >
               {label}
@@ -409,7 +409,7 @@ export const SparePartsRecall: React.FC = () => {
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={`sk-${i}`}>
                     <td className="py-3 px-2" colSpan={5}>
-                      <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                      <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface-hover)]" />
                     </td>
                   </tr>
                 ))
@@ -477,7 +477,7 @@ export const SparePartsRecall: React.FC = () => {
                         </td>
                       </tr>
                       {expanded ? (
-                        <tr className="border-b border-[var(--color-border)]/40 bg-slate-50/70">
+                        <tr className="border-b border-[var(--color-border)]/40 bg-[var(--color-bg)]">
                           <td colSpan={5} className="px-3 py-2">
                             <ul className="space-y-1 text-xs">
                               {(row.lines || []).map((line) => (

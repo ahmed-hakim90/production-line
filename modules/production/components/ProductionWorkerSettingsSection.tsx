@@ -29,7 +29,7 @@ const ToggleRow: React.FC<{
       type="button"
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${checked ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
+      className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${checked ? 'bg-primary' : 'bg-[var(--color-border)]'}`}
     >
       <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${checked ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
     </button>
@@ -248,7 +248,7 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
               />
             </label>
             {bonus.method === 'target_plus_extra' && (
-              <div className="sm:col-span-2 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+              <div className="sm:col-span-2 rounded-lg border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] p-3 text-xs leading-relaxed text-[rgb(var(--color-primary))]">
                 الحساب شهري: لو «مكافأة تحقيق 100% من هدف الشهر» = 200، و«قيمة كل قطعة زيادة فوق هدف الشهر» = 0.10،
                 والعامل حقق هدف الشهر يأخذ 200. لو زاد 500 قطعة عن هدف الشهر يأخذ 200 + 50 = 250.
               </div>
@@ -325,7 +325,7 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
           </div>
 
           <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
-            <div className="grid grid-cols-3 gap-2 bg-[#f8f9fa] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)]">
+            <div className="grid grid-cols-3 gap-2 bg-[var(--color-bg)] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)]">
               <span>من %</span>
               <span>إلى %</span>
               <span>معامل الشريحة</span>
@@ -364,7 +364,7 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
             ))}
           </div>
 
-          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+          <div className="rounded-lg border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] p-3 text-xs leading-relaxed text-[rgb(var(--color-primary))]">
             الحساب: إجمالي المحقق للعمال ÷ إجمالي أهدافهم × 100، ثم المكافأة الأساسية × النسبة × معامل المشرف × معامل الشريحة.
             سقف مساهمة العامل يمنع عامل واحد من رفع نتيجة الفريق بالكامل.
           </div>

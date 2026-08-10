@@ -130,7 +130,7 @@ export const WarehouseManagerHome: React.FC = () => {
       dir="rtl"
     >
       {loadError ? (
-        <p className="text-sm text-rose-700">{loadError}</p>
+        <p className="text-sm text-[rgb(var(--color-danger))]">{loadError}</p>
       ) : null}
       {warehouses.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">

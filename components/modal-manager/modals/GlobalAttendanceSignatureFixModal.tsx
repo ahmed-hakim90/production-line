@@ -127,7 +127,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
 
         <div className="erp-modal-body space-y-4">
           {message && (
-            <div className={`rounded-[var(--border-radius-base)] px-3 py-2 text-sm font-bold ${message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
+            <div className={`rounded-[var(--border-radius-base)] px-3 py-2 text-sm font-bold ${message.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
               {message.text}
             </div>
           )}
