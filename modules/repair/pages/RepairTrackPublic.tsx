@@ -17,6 +17,7 @@ import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 const PUBLIC_TRACK_PROGRESS_STEPS: RepairJobStatus[] = [
   'received',
   'diagnosing',
+  'diagnosed',
   'waiting_approval',
   'waiting_parts',
   'repairing',
@@ -124,7 +125,7 @@ export const RepairTrackPublic: React.FC = () => {
   const isTerminalBad = result?.status === 'cancelled' || result?.status === 'unrepairable';
 
   return (
-    <div className="min-h-screen bg-slate-50" dir={dir}>
+    <div className="min-h-screen bg-[var(--color-bg)]" dir={dir}>
       <RepairOpsPageShell
         className="max-w-2xl mx-auto"
         eyebrow="الصيانة"
@@ -157,7 +158,7 @@ export const RepairTrackPublic: React.FC = () => {
 
         {error ? (
           <OpsDashPanel accent="repair">
-            <p className="text-rose-600 text-sm">{error}</p>
+            <p className="text-[rgb(var(--color-danger))] text-sm">{error}</p>
           </OpsDashPanel>
         ) : null}
 
@@ -189,7 +190,7 @@ export const RepairTrackPublic: React.FC = () => {
                         <div
                           key={step}
                           className={`flex items-center gap-1 rounded-full px-2 py-1 text-xs border ${
-                            active ? 'border-primary bg-primary/10 text-primary font-medium' : done ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-muted bg-muted/30 text-muted-foreground'
+                            active ? 'border-primary bg-primary/10 text-primary font-medium' : done ? 'border-[rgb(var(--color-success)/0.35)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'border-muted bg-muted/30 text-muted-foreground'
                           }`}
                         >
                           {done ? <Check className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
@@ -202,7 +203,7 @@ export const RepairTrackPublic: React.FC = () => {
               ) : null}
 
               {isTerminalBad ? (
-                <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-rose-900">
+                <div className="rounded-md border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] p-3 text-[rgb(var(--color-danger))]">
                   {REPAIR_JOB_STATUS_LABELS[result.status] || result.statusLabel || result.status}
                 </div>
               ) : null}

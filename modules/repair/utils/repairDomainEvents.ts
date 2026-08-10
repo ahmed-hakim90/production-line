@@ -25,8 +25,8 @@ export function resolveDomainEventForStatusChange(before: string, after: string)
   if (a === 'testing' && b !== 'testing') return 'testing.started';
   if (a === 'repairing' && b !== 'repairing') return 'repair.started';
 
-  if (b === 'diagnosing' && a !== 'diagnosing') return 'diagnosis.completed';
   if (a === 'diagnosing' && b !== 'diagnosing') return 'diagnosis.started';
+  if (a === 'diagnosed' && b !== 'diagnosed') return 'diagnosis.completed';
 
   if (a === 'waiting_parts' && b !== 'waiting_parts') return 'job.waiting_parts';
   if (a === 'waiting_approval' && b !== 'waiting_approval') return 'job.waiting_approval';

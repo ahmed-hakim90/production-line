@@ -1360,6 +1360,7 @@ export async function mutateRepairCustomerOpsHandler(request) {
                 'received',
                 'assigned',
                 'diagnosing',
+                'diagnosed',
                 'inspection',
                 'estimate_ready',
                 'waiting_customer_approval',

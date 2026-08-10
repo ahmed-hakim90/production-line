@@ -347,7 +347,7 @@ const saveTechnical = async (actor: Actor, data: Record<string, unknown>) => {
       actorUid: actor.uid,
       actorName: actor.displayName,
       action: 'status_change',
-      domainEvent: nextStatus === 'diagnosing' || resolveStatusRole(nextStatus, statuses) === 'diagnosis'
+      domainEvent: nextStatus === 'diagnosed' || resolveStatusRole(nextStatus, statuses) === 'diagnosis'
         ? 'diagnosis.completed'
         : 'job.status_changed',
       eventSchemaVersion: 1,

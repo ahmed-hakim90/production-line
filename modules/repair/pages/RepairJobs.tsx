@@ -32,7 +32,7 @@ import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 
-type JobsFocusFilter = 'all' | 'open' | 'ready' | 'delivered' | 'overdue' | 'today';
+type JobsFocusFilter = 'all' | 'open' | 'diagnosing' | 'diagnosed' | 'ready' | 'delivered' | 'overdue' | 'today';
 
 function RepairJobKanbanCardBody({
   job,
@@ -151,6 +151,8 @@ export const RepairJobs: React.FC = () => {
   const focusFromQuery = String(searchParams.get('focus') || '').trim();
   const initialFocus: JobsFocusFilter =
     focusFromQuery === 'open'
+    || focusFromQuery === 'diagnosing'
+    || focusFromQuery === 'diagnosed'
     || focusFromQuery === 'ready'
     || focusFromQuery === 'delivered'
     || focusFromQuery === 'overdue'
@@ -201,6 +203,8 @@ export const RepairJobs: React.FC = () => {
   useEffect(() => {
     if (
       focusFromQuery === 'open'
+      || focusFromQuery === 'diagnosing'
+      || focusFromQuery === 'diagnosed'
       || focusFromQuery === 'ready'
       || focusFromQuery === 'delivered'
       || focusFromQuery === 'overdue'
@@ -247,6 +251,8 @@ export const RepairJobs: React.FC = () => {
       if (Number.isFinite(created) && (created < from || created > to)) return false;
 
       if (focusFilter === 'open' && !openStatusSet.has(jobStatus)) return false;
+      if (focusFilter === 'diagnosing' && jobStatus !== 'diagnosing') return false;
+      if (focusFilter === 'diagnosed' && jobStatus !== 'diagnosed') return false;
       if (focusFilter === 'ready' && jobStatus !== 'ready') return false;
       if (focusFilter === 'delivered' && !isDeliveredStatus(jobStatus)) return false;
       if (focusFilter === 'today' && job.createdAt?.slice(0, 10) !== today) return false;
@@ -347,6 +353,8 @@ export const RepairJobs: React.FC = () => {
   const focusHero = [
     { key: 'all', label: 'إجمالي', value: summaryAll.total, onClick: () => setFocusFilter('all'), active: focusFilter === 'all' },
     { key: 'open', label: 'مفتوح', value: summaryAll.open, onClick: () => applyFocus('open'), active: focusFilter === 'open', toneClassName: 'ops-dash-kpi-card--tone-sky' },
+    { key: 'diagnosing', label: 'جاري الفحص', value: summaryAll.diagnosing, onClick: () => applyFocus('diagnosing'), active: focusFilter === 'diagnosing', toneClassName: 'ops-dash-kpi-card--tone-amber' },
+    { key: 'diagnosed', label: 'تم الفحص', value: summaryAll.diagnosed, onClick: () => applyFocus('diagnosed'), active: focusFilter === 'diagnosed', toneClassName: 'ops-dash-kpi-card--tone-amber' },
     { key: 'ready', label: 'جاهز', value: summaryAll.ready, onClick: () => applyFocus('ready'), active: focusFilter === 'ready', toneClassName: 'ops-dash-kpi-card--tone-emerald' },
     { key: 'delivered', label: 'تم التسليم', value: summaryAll.delivered, onClick: () => applyFocus('delivered'), active: focusFilter === 'delivered' },
     { key: 'overdue', label: 'متأخر', value: summaryAll.overdue, onClick: () => applyFocus('overdue'), active: focusFilter === 'overdue', toneClassName: summaryAll.overdue > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined },

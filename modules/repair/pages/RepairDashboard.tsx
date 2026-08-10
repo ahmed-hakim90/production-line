@@ -249,7 +249,7 @@ const RepairOperationalDashboard: React.FC = () => {
   const waitingPartsCount = jobs.filter((job) => mapLegacyRepairStatus(job.status) === 'waiting_parts').length;
   const inWorkshopCount = jobs.filter((job) => {
     const status = mapLegacyRepairStatus(job.status);
-    return status === 'diagnosing' || status === 'repairing' || status === 'testing';
+    return status === 'diagnosing' || status === 'diagnosed' || status === 'repairing' || status === 'testing';
   }).length;
 
   const handleRefresh = () => {

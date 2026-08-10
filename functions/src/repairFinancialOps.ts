@@ -198,12 +198,13 @@ export const deliverRepairJobAndCollectHandler = async (request: CallableRequest
     : [
         { id: 'received', order: 1, isTerminal: false, isEnabled: true },
         { id: 'diagnosing', order: 2, isTerminal: false, isEnabled: true },
-        { id: 'waiting_approval', order: 3, isTerminal: false, isEnabled: true },
-        { id: 'waiting_parts', order: 4, isTerminal: false, isEnabled: true },
-        { id: 'repairing', order: 5, isTerminal: false, isEnabled: true },
-        { id: 'testing', order: 6, isTerminal: false, isEnabled: true },
-        { id: 'ready', order: 7, isTerminal: false, isEnabled: true },
-        { id: 'delivered', order: 8, isTerminal: true, isEnabled: true },
+        { id: 'diagnosed', order: 3, isTerminal: false, isEnabled: true },
+        { id: 'waiting_approval', order: 4, isTerminal: false, isEnabled: true },
+        { id: 'waiting_parts', order: 5, isTerminal: false, isEnabled: true },
+        { id: 'repairing', order: 6, isTerminal: false, isEnabled: true },
+        { id: 'testing', order: 7, isTerminal: false, isEnabled: true },
+        { id: 'ready', order: 8, isTerminal: false, isEnabled: true },
+        { id: 'delivered', order: 9, isTerminal: true, isEnabled: true },
       ])
     .filter((row) => row.isEnabled !== false)
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));

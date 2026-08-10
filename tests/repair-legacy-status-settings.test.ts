@@ -30,12 +30,17 @@ const legacySettings = {
   const resolved = resolveRepairSettings(legacySettings);
   const ids = resolved.workflow.statuses.map((s) => s.id);
   assert.ok(ids.includes('diagnosing'));
+  assert.ok(ids.includes('diagnosed'));
   assert.ok(ids.includes('repairing'));
   assert.equal(ids.includes('inspection'), false);
   assert.equal(ids.includes('repair'), false);
-  assert.equal(resolved.statusMap.diagnosing?.label, 'فحص');
+  assert.equal(resolved.statusMap.diagnosing?.label, 'جاري الفحص');
+  assert.equal(resolved.statusMap.diagnosing?.role, 'in_diagnosis');
+  assert.equal(resolved.statusMap.diagnosed?.label, 'تم الفحص');
+  assert.equal(resolved.statusMap.diagnosed?.role, 'diagnosis');
   assert.equal(resolved.statusMap.repairing?.label, 'إصلاح');
   assert.ok(resolved.workflow.openStatusIds.includes('diagnosing'));
+  assert.ok(resolved.workflow.openStatusIds.includes('diagnosed'));
   assert.ok(resolved.workflow.openStatusIds.includes('repairing'));
   assert.ok(resolved.workflow.assignmentTriggerStatusIds.includes('diagnosing'));
   assert.ok(resolved.workflow.assignmentTriggerStatusIds.includes('repairing'));
@@ -45,12 +50,19 @@ const legacySettings = {
     statuses: resolved.workflow.statuses,
   });
   assert.ok(workshop.includes('diagnosing'));
-  assert.ok(workshop.includes('estimate_ready'));
+  assert.ok(workshop.includes('diagnosed'));
+  const workshopFromDiagnosing = listAllowedWorkshopStatusTargets({
+    fromStatus: 'diagnosing',
+    statuses: resolved.workflow.statuses,
+  });
+  assert.ok(workshopFromDiagnosing.includes('diagnosed'));
+  assert.ok(workshopFromDiagnosing.includes('estimate_ready'));
 
   const chip = resolveRepairStatusChip('inspection', resolved.statusMap);
-  assert.equal(chip.label, 'فحص');
+  assert.equal(chip.label, 'جاري الفحص');
 
   assert.equal(isOpenRepairJob({ status: 'diagnosing' }, resolved.workflow.openStatusIds), true);
+  assert.equal(isOpenRepairJob({ status: 'diagnosed' }, resolved.workflow.openStatusIds), true);
   assert.equal(isRepairJobOpenStatus('inspection', ['inspection', 'repair']), true);
   assert.equal(isRepairJobOpenStatus('diagnosing', ['inspection', 'repair']), true);
 

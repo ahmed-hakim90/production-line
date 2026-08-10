@@ -135,6 +135,8 @@ export function summarizeRepairJobs(jobs: RepairJob[], openStatusIds: string[]) 
       const status = mapLegacyRepairStatus(job.status);
       acc.total += 1;
       if (openSet.has(status)) acc.open += 1;
+      if (status === 'diagnosing') acc.diagnosing += 1;
+      if (status === 'diagnosed') acc.diagnosed += 1;
       if (status === 'ready') acc.ready += 1;
       if (isDeliveredStatus(status)) acc.delivered += 1;
       if (job.createdAt?.slice(0, 10) === today) acc.createdToday += 1;
@@ -142,6 +144,6 @@ export function summarizeRepairJobs(jobs: RepairJob[], openStatusIds: string[]) 
       acc.revenue += computeRepairJobCost(job).finalCost;
       return acc;
     },
-    { total: 0, open: 0, ready: 0, delivered: 0, createdToday: 0, overdue: 0, revenue: 0 },
+    { total: 0, open: 0, diagnosing: 0, diagnosed: 0, ready: 0, delivered: 0, createdToday: 0, overdue: 0, revenue: 0 },
   );
 }

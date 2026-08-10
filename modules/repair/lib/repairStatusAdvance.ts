@@ -7,6 +7,7 @@ import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 export const REPAIR_STATUS_ROLES = [
   'intake',
+  'in_diagnosis',
   'diagnosis',
   'estimate_review',
   'awaiting_customer',
@@ -23,7 +24,8 @@ export type RepairStatusRole = (typeof REPAIR_STATUS_ROLES)[number];
 
 export const REPAIR_STATUS_ROLE_LABELS: Record<RepairStatusRole, string> = {
   intake: 'وارد / استلام',
-  diagnosis: 'فحص بعد التشخيص',
+  in_diagnosis: 'جاري الفحص',
+  diagnosis: 'تم الفحص',
   estimate_review: 'تقدير لمراجعة الاستقبال',
   awaiting_customer: 'بانتظار موافقة العميل',
   awaiting_parts: 'بانتظار قطع الغيار',
@@ -38,6 +40,7 @@ export const REPAIR_STATUS_ROLE_LABELS: Record<RepairStatusRole, string> = {
 /** Roles that must exist on an enabled status for a valid workflow. */
 export const MANDATORY_REPAIR_STATUS_ROLES: RepairStatusRole[] = [
   'intake',
+  'in_diagnosis',
   'diagnosis',
   'estimate_review',
   'awaiting_customer',
@@ -64,8 +67,9 @@ export type RepairStatusRoleRow = {
 
 const DEFAULT_ROLE_BY_STATUS_ID: Record<string, RepairStatusRole> = {
   received: 'intake',
-  diagnosing: 'diagnosis',
-  inspection: 'diagnosis',
+  diagnosing: 'in_diagnosis',
+  inspection: 'in_diagnosis',
+  diagnosed: 'diagnosis',
   estimate_ready: 'estimate_review',
   waiting_approval: 'awaiting_customer',
   waiting_parts: 'awaiting_parts',
@@ -80,6 +84,7 @@ const DEFAULT_ROLE_BY_STATUS_ID: Record<string, RepairStatusRole> = {
 
 const ROLE_FLOW_ORDER: RepairStatusRole[] = [
   'intake',
+  'in_diagnosis',
   'diagnosis',
   'estimate_review',
   'awaiting_customer',
@@ -223,6 +228,8 @@ export function resolveNextStatusForAction(input: {
   switch (input.action) {
     case 'diagnosis_saved': {
       if (!input.hasDiagnosis) return null;
+      // Diagnosis text saved → تم الفحص. With part/service already on the job,
+      // advance straight to estimate review (still may pass through diagnosed if estimate role missing).
       if (input.hasServiceOrPartSignal) {
         return pick('estimate_review') || pick('diagnosis');
       }

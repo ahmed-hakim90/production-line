@@ -13,6 +13,7 @@ export { isSameRepairStatus } from './repairStatusIds';
  */
 export const DEFAULT_STATUSES_THAT_SET_ASSIGNED_AT = new Set([
   'diagnosing',
+  'diagnosed',
   'waiting_parts',
   'repairing',
   'testing',

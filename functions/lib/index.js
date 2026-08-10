@@ -1480,7 +1480,9 @@ const trackPhonesMatchLast10 = (storedPhone, queryPhone) => {
 };
 const REPAIR_TRACK_STATUS_LABELS = {
     received: 'وارد',
-    diagnosing: 'تشخيص',
+    diagnosing: 'جاري الفحص',
+    diagnosed: 'تم الفحص',
+    estimate_ready: 'التقدير جاهز',
     waiting_approval: 'بانتظار موافقة العميل',
     waiting_parts: 'بانتظار قطع الغيار',
     repairing: 'إصلاح',

@@ -3,6 +3,7 @@ import { mapLegacyRepairStatus } from './repairStatusIds.js';
 
 export const REPAIR_STATUS_ROLES = [
   'intake',
+  'in_diagnosis',
   'diagnosis',
   'estimate_review',
   'awaiting_customer',
@@ -35,8 +36,9 @@ export type RepairStatusRoleRow = {
 
 const DEFAULT_ROLE_BY_STATUS_ID: Record<string, RepairStatusRole> = {
   received: 'intake',
-  diagnosing: 'diagnosis',
-  inspection: 'diagnosis',
+  diagnosing: 'in_diagnosis',
+  inspection: 'in_diagnosis',
+  diagnosed: 'diagnosis',
   estimate_ready: 'estimate_review',
   waiting_approval: 'awaiting_customer',
   waiting_parts: 'awaiting_parts',
@@ -51,6 +53,7 @@ const DEFAULT_ROLE_BY_STATUS_ID: Record<string, RepairStatusRole> = {
 
 const ROLE_FLOW_ORDER: RepairStatusRole[] = [
   'intake',
+  'in_diagnosis',
   'diagnosis',
   'estimate_review',
   'awaiting_customer',
@@ -109,6 +112,29 @@ export function partsAwaitingFulfillment(partsUsed: Array<Record<string, unknown
   );
 }
 
+function healDiagnosisRoleSplit(rows: RepairStatusRoleRow[]): RepairStatusRoleRow[] {
+  const next = rows.map((row) => ({ ...row }));
+  const diagnosing = next.find((row) => row.id === 'diagnosing');
+  const diagnosed = next.find((row) => row.id === 'diagnosed');
+  if (diagnosing && diagnosing.role === 'diagnosis') {
+    diagnosing.role = 'in_diagnosis';
+  }
+  if (diagnosed && (diagnosed.role === 'none' || !diagnosed.role)) {
+    diagnosed.role = 'diagnosis';
+  }
+  if (!diagnosed) {
+    next.push({
+      id: 'diagnosed',
+      order: (diagnosing?.order || 2) + 0.5,
+      isEnabled: true,
+      isTerminal: false,
+      role: 'diagnosis',
+    });
+    next.sort((a, b) => a.order - b.order);
+  }
+  return next;
+}
+
 export function loadWorkflowStatusRows(rawStatuses: unknown): RepairStatusRoleRow[] {
   if (!Array.isArray(rawStatuses) || rawStatuses.length === 0) {
     return Object.entries(DEFAULT_ROLE_BY_STATUS_ID)
@@ -121,7 +147,7 @@ export function loadWorkflowStatusRows(rawStatuses: unknown): RepairStatusRoleRo
         role,
       }));
   }
-  return rawStatuses.map((raw, index) => {
+  const mapped = rawStatuses.map((raw, index) => {
     const row = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
     const id = mapLegacyRepairStatus(String(row.id || '').trim());
     const roleRaw = row.role;
@@ -134,6 +160,7 @@ export function loadWorkflowStatusRows(rawStatuses: unknown): RepairStatusRoleRo
       role,
     };
   }).filter((row) => row.id);
+  return healDiagnosisRoleSplit(mapped);
 }
 
 type SettingsDb = {
@@ -187,6 +214,8 @@ export function resolveNextStatusForAction(input: {
   switch (input.action) {
     case 'diagnosis_saved': {
       if (!input.hasDiagnosis) return null;
+      // Diagnosis text saved → تم الفحص. With part/service already on the job,
+      // advance straight to estimate review (still may pass through diagnosed if estimate role missing).
       if (input.hasServiceOrPartSignal) {
         return pick('estimate_review') || pick('diagnosis');
       }

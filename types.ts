@@ -1611,6 +1611,7 @@ export interface RepairAccessSettings {
 /** Semantic role binding a status id to an action-driven workflow step. */
 export type RepairStatusRole =
   | 'intake'
+  | 'in_diagnosis'
   | 'diagnosis'
   | 'estimate_review'
   | 'awaiting_customer'

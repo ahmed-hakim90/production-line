@@ -27,16 +27,17 @@ export type ResolvedRepairStatus = {
 
 const DEFAULT_STATUSES: ResolvedRepairStatus[] = [
   { id: 'received', label: 'وارد', color: '#64748b', order: 1, isTerminal: false, isEnabled: true, role: 'intake' },
-  { id: 'diagnosing', label: 'جاري الفحص', color: '#f59e0b', order: 2, isTerminal: false, isEnabled: true, role: 'diagnosis' },
-  { id: 'estimate_ready', label: 'التقدير جاهز لمراجعة الاستقبال', color: '#0284c7', order: 3, isTerminal: false, isEnabled: true, role: 'estimate_review' },
-  { id: 'waiting_approval', label: 'بانتظار موافقة العميل', color: '#a855f7', order: 4, isTerminal: false, isEnabled: true, role: 'awaiting_customer' },
-  { id: 'waiting_parts', label: 'بانتظار قطع الغيار', color: '#ea580c', order: 5, isTerminal: false, isEnabled: true, role: 'awaiting_parts' },
-  { id: 'repairing', label: 'إصلاح', color: '#0ea5e9', order: 6, isTerminal: false, isEnabled: true, role: 'in_repair' },
-  { id: 'testing', label: 'اختبار', color: '#6366f1', order: 7, isTerminal: false, isEnabled: true, role: 'none' },
-  { id: 'ready', label: 'جاهز للتسليم', color: '#22c55e', order: 8, isTerminal: false, isEnabled: true, role: 'ready_delivery' },
-  { id: 'delivered', label: 'تم التسليم', color: '#16a34a', order: 9, isTerminal: true, isEnabled: true, role: 'delivered' },
-  { id: 'cancelled', label: 'ملغى', color: '#78716c', order: 10, isTerminal: true, isEnabled: true, role: 'cancelled' },
-  { id: 'unrepairable', label: 'غير قابل للإصلاح', color: '#ef4444', order: 11, isTerminal: true, isEnabled: true, role: 'unrepairable' },
+  { id: 'diagnosing', label: 'جاري الفحص', color: '#f59e0b', order: 2, isTerminal: false, isEnabled: true, role: 'in_diagnosis' },
+  { id: 'diagnosed', label: 'تم الفحص', color: '#ca8a04', order: 3, isTerminal: false, isEnabled: true, role: 'diagnosis' },
+  { id: 'estimate_ready', label: 'التقدير جاهز لمراجعة الاستقبال', color: '#0284c7', order: 4, isTerminal: false, isEnabled: true, role: 'estimate_review' },
+  { id: 'waiting_approval', label: 'بانتظار موافقة العميل', color: '#a855f7', order: 5, isTerminal: false, isEnabled: true, role: 'awaiting_customer' },
+  { id: 'waiting_parts', label: 'بانتظار قطع الغيار', color: '#ea580c', order: 6, isTerminal: false, isEnabled: true, role: 'awaiting_parts' },
+  { id: 'repairing', label: 'إصلاح', color: '#0ea5e9', order: 7, isTerminal: false, isEnabled: true, role: 'in_repair' },
+  { id: 'testing', label: 'اختبار', color: '#6366f1', order: 8, isTerminal: false, isEnabled: true, role: 'none' },
+  { id: 'ready', label: 'جاهز للتسليم', color: '#22c55e', order: 9, isTerminal: false, isEnabled: true, role: 'ready_delivery' },
+  { id: 'delivered', label: 'تم التسليم', color: '#16a34a', order: 10, isTerminal: true, isEnabled: true, role: 'delivered' },
+  { id: 'cancelled', label: 'ملغى', color: '#78716c', order: 11, isTerminal: true, isEnabled: true, role: 'cancelled' },
+  { id: 'unrepairable', label: 'غير قابل للإصلاح', color: '#ef4444', order: 12, isTerminal: true, isEnabled: true, role: 'unrepairable' },
 ];
 
 const DEFAULT_ACCESSORIES: RepairAccessoryCatalogItem[] = [
@@ -73,6 +74,7 @@ const DEFAULT_REPAIR_SETTINGS = {
     openStatusIds: [
       'received',
       'diagnosing',
+      'diagnosed',
       'estimate_ready',
       'waiting_approval',
       'waiting_parts',
@@ -80,7 +82,7 @@ const DEFAULT_REPAIR_SETTINGS = {
       'testing',
       'ready',
     ],
-    assignmentTriggerStatusIds: ['diagnosing', 'estimate_ready', 'waiting_parts', 'repairing', 'testing'],
+    assignmentTriggerStatusIds: ['diagnosing', 'diagnosed', 'estimate_ready', 'waiting_parts', 'repairing', 'testing'],
   },
   defaults: {
     defaultWarranty: 'none' as const,
@@ -156,6 +158,58 @@ function normalizeServiceCatalog(raw: unknown): RepairServiceCatalogItem[] {
     .filter(Boolean) as RepairServiceCatalogItem[];
 }
 
+/** Legacy saved labels for diagnosing → canonical Arabic used on the jobs kanban. */
+const LEGACY_DIAGNOSING_LABELS = new Set(['فحص', 'فحص (قديم)', 'inspection', 'diagnosing']);
+
+function normalizeStatusLabel(id: string, rawLabel: string): string {
+  const label = String(rawLabel || '').trim();
+  if (id === 'diagnosing' && (!label || LEGACY_DIAGNOSING_LABELS.has(label))) {
+    return 'جاري الفحص';
+  }
+  const fallback = DEFAULT_STATUSES.find((row) => row.id === id)?.label;
+  return label || fallback || id;
+}
+
+/** Keep mandatory workflow roles visible (kanban / filters) even if a tenant disabled them. */
+function ensureMandatoryRolesEnabled(rows: ResolvedRepairStatus[]): ResolvedRepairStatus[] {
+  let next = rows.map((row) => ({ ...row }));
+  for (const role of MANDATORY_REPAIR_STATUS_ROLES) {
+    if (next.some((row) => row.isEnabled && row.role === role)) continue;
+    const disabledIdx = next.findIndex((row) => row.role === role);
+    if (disabledIdx >= 0) {
+      next[disabledIdx] = { ...next[disabledIdx], isEnabled: true };
+      continue;
+    }
+    const def = DEFAULT_STATUSES.find((row) => row.role === role);
+    if (def) next = [...next, { ...def }].sort((a, b) => a.order - b.order);
+  }
+  return next;
+}
+
+/**
+ * Older tenants bound role `diagnosis` on `diagnosing` (جاري الفحص).
+ * Split so diagnosing = in_diagnosis and diagnosed (تم الفحص) owns diagnosis.
+ */
+function healDiagnosisRoleSplit(rows: ResolvedRepairStatus[]): ResolvedRepairStatus[] {
+  const next = rows.map((row) => ({ ...row }));
+  const diagnosing = next.find((row) => row.id === 'diagnosing');
+  const diagnosed = next.find((row) => row.id === 'diagnosed');
+  if (diagnosing && diagnosing.role === 'diagnosis') {
+    diagnosing.role = 'in_diagnosis';
+  }
+  if (diagnosed && (diagnosed.role === 'none' || !diagnosed.role)) {
+    diagnosed.role = 'diagnosis';
+  }
+  return next;
+}
+
+function ensureOpenStatusId(ids: string[], statusId: string, afterId?: string): void {
+  if (ids.includes(statusId)) return;
+  const afterIdx = afterId ? ids.indexOf(afterId) : -1;
+  if (afterIdx >= 0) ids.splice(afterIdx + 1, 0, statusId);
+  else ids.unshift(statusId);
+}
+
 export const resolveRepairSettings = (
   systemSettings: SystemSettings | null | undefined,
 ): Required<RepairSettings> & {
@@ -189,7 +243,13 @@ export const resolveRepairSettings = (
       return role === required.role && status?.isEnabled !== false;
     });
     if (hasRole) continue;
-    configuredStatuses.push({ ...required });
+    const diagnosingOrder = configuredStatuses.find(
+      (status) => mapLegacyRepairStatus(String(status?.id || '')) === 'diagnosing',
+    );
+    const nextOrder = required.id === 'diagnosed' && diagnosingOrder
+      ? Number(diagnosingOrder.order || 2) + 0.5
+      : required.order;
+    configuredStatuses.push({ ...required, order: nextOrder });
   }
   const mappedStatuses = configuredStatuses
     .map((status, index) => {
@@ -200,7 +260,7 @@ export const resolveRepairSettings = (
         : defaultRoleForStatusId(id);
       return {
         id,
-        label: String(status?.label || '').trim() || String(status?.id || '').trim(),
+        label: normalizeStatusLabel(id, String(status?.label || '')),
         color: String(status?.color || '').trim() || '#64748b',
         order: Number.isFinite(Number(status?.order)) ? Number(status?.order) : index + 1,
         isTerminal: Boolean(status?.isTerminal),
@@ -222,7 +282,9 @@ export const resolveRepairSettings = (
     seenIds.add(status.id);
     deduped.push(status);
   }
-  const statuses: ResolvedRepairStatus[] = assignDefaultRolesToStatuses(deduped);
+  const statuses: ResolvedRepairStatus[] = ensureMandatoryRolesEnabled(
+    healDiagnosisRoleSplit(assignDefaultRolesToStatuses(deduped)),
+  );
   const enabledStatuses = statuses.filter((status) => status.isEnabled);
   const initialStatusId = mapLegacyRepairStatus(
     String(fromRoot?.workflow?.initialStatusId || '').trim()
@@ -234,6 +296,13 @@ export const resolveRepairSettings = (
   const normalizedOpenStatusIds = Array.from(new Set(
     openStatusIds.length > 0 ? openStatusIds : DEFAULT_REPAIR_SETTINGS.workflow.openStatusIds,
   ));
+  // Keep inspection queue statuses in the open set for older tenant configs.
+  if (enabledStatuses.some((row) => row.id === 'diagnosing')) {
+    ensureOpenStatusId(normalizedOpenStatusIds, 'diagnosing', 'received');
+  }
+  if (enabledStatuses.some((row) => row.id === 'diagnosed')) {
+    ensureOpenStatusId(normalizedOpenStatusIds, 'diagnosed', 'diagnosing');
+  }
   const rawAssignment = Array.isArray(fromRoot?.workflow?.assignmentTriggerStatusIds)
     ? fromRoot.workflow.assignmentTriggerStatusIds.map((id) => mapLegacyRepairStatus(String(id || '').trim())).filter(Boolean)
     : [];

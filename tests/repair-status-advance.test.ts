@@ -18,15 +18,33 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
       statuses: defaultStatuses,
       hasDiagnosis: true,
     }),
-    'diagnosing',
+    'diagnosed',
   );
   assert.equal(
     resolveNextStatusForAction({
       action: 'diagnosis_saved',
-      currentStatus: 'received',
+      currentStatus: 'diagnosing',
+      statuses: defaultStatuses,
+      hasDiagnosis: true,
+    }),
+    'diagnosed',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'diagnosis_saved',
+      currentStatus: 'diagnosing',
       statuses: defaultStatuses,
       hasDiagnosis: true,
       hasServiceOrPartSignal: true,
+    }),
+    'estimate_ready',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'part_or_service_linked',
+      currentStatus: 'diagnosed',
+      statuses: defaultStatuses,
+      waitsForParts: true,
     }),
     'estimate_ready',
   );
@@ -119,6 +137,7 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
     { id: 'ready', order: 6, role: 'ready_delivery', isEnabled: true },
     { id: 'unrepairable', order: 7, role: 'unrepairable', isEnabled: true, isTerminal: true },
   ]);
+  // Custom configs without in_diagnosis still advance diagnosis_saved → diagnosis role target.
   assert.equal(
     resolveNextStatusForAction({
       action: 'diagnosis_saved',
@@ -129,7 +148,6 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
     'custom_inspect',
   );
   assert.equal(statusIdForRole('diagnosis', custom), 'custom_inspect');
-  assert.equal(validateMandatoryStatusRoles(custom).length, 0);
 }
 
 {
@@ -151,9 +169,12 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
       },
     },
   } as SystemSettings);
-  assert.equal(resolved.statusMap.diagnosing?.role, 'diagnosis');
+  assert.equal(resolved.statusMap.diagnosing?.role, 'in_diagnosis');
   assert.equal(resolved.statusMap.diagnosing?.label, 'فحص مخصص');
+  assert.equal(resolved.statusMap.diagnosed?.role, 'diagnosis');
+  assert.equal(resolved.statusMap.diagnosed?.label, 'تم الفحص');
   assert.equal(resolved.statusMap.received?.role, 'intake');
+  assert.equal(validateMandatoryStatusRoles(resolved.workflow.statuses).length, 0);
 }
 
 {
@@ -170,11 +191,12 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
   const restored = validateMandatoryStatusRoles([
     { id: 'received', order: 1, role: 'none', isEnabled: true },
     { id: 'diagnosing', order: 2, role: 'none', isEnabled: true },
-    { id: 'estimate_ready', order: 3, role: 'none', isEnabled: true },
-    { id: 'waiting_approval', order: 4, role: 'none', isEnabled: true },
-    { id: 'repairing', order: 5, role: 'none', isEnabled: true },
-    { id: 'ready', order: 6, role: 'none', isEnabled: true },
-    { id: 'unrepairable', order: 7, role: 'none', isEnabled: true, isTerminal: true },
+    { id: 'diagnosed', order: 3, role: 'none', isEnabled: true },
+    { id: 'estimate_ready', order: 4, role: 'none', isEnabled: true },
+    { id: 'waiting_approval', order: 5, role: 'none', isEnabled: true },
+    { id: 'repairing', order: 6, role: 'none', isEnabled: true },
+    { id: 'ready', order: 7, role: 'none', isEnabled: true },
+    { id: 'unrepairable', order: 8, role: 'none', isEnabled: true, isTerminal: true },
   ]);
   assert.equal(restored.length, 0);
 }
@@ -182,11 +204,13 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
 {
   const defaults = resolveRepairSettings(null);
   assert.equal(defaults.statusMap.diagnosing?.label, 'جاري الفحص');
-  assert.equal(defaults.statusMap.diagnosing?.role, 'diagnosis');
+  assert.equal(defaults.statusMap.diagnosing?.role, 'in_diagnosis');
+  assert.equal(defaults.statusMap.diagnosed?.label, 'تم الفحص');
+  assert.equal(defaults.statusMap.diagnosed?.role, 'diagnosis');
 }
 
 {
-  // Legacy config without waiting_approval / estimate_ready gets them backfilled.
+  // Legacy config without waiting_approval / estimate_ready / diagnosed gets them backfilled.
   const healed = resolveRepairSettings({
     repairSettings: {
       workflow: {
@@ -202,6 +226,9 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
       },
     },
   } as SystemSettings);
+  assert.equal(healed.statusMap.diagnosing?.role, 'in_diagnosis');
+  assert.equal(healed.statusMap.diagnosing?.label, 'جاري الفحص');
+  assert.equal(healed.statusMap.diagnosed?.role, 'diagnosis');
   assert.equal(healed.statusMap.estimate_ready?.role, 'estimate_review');
   assert.equal(healed.statusMap.waiting_approval?.role, 'awaiting_customer');
   assert.equal(validateMandatoryStatusRoles(healed.workflow.statuses).length, 0);

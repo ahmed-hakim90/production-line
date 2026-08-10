@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-10 (accounting + costs nav merge)
+**Last updated:** 2026-08-10 (repair diagnosed / تم الفحص status)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -31,7 +31,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 - Tenant-scoped routes under `/t/:tenantSlug/...`
 - Shared permissions (`utils/permissions.ts`), menu (`config/menu.config.ts`), inventory warehouse scope
 - Visual language: **Hakimo Flow** — tokens in `src/index.css` / `DEFAULT_THEME`; runtime apply via `applyAppTheme` (`core/ui-engine/theme/tenantTheme.ts`); shells `DomainHomeShell` + `ModuleOpsPageShell`; doc `docs/HAKIMO_FLOW.md`
-- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars; `systemSettings.printTemplate` drives paper / WhatsApp PNG (`ProductionReportShareCard`, print layouts). Preview: `/settings/reports` + `/dev/image-export`.
+- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars (`applyAppTheme`); product UI is guarded by `npm run arch:check:theme-tokens` (blocks hex + slate/gray + semantic Tailwind palettes mapped to success/warning/danger/primary/secondary; sidebar colorful + charts use `--chart-*` via `core/ui-engine/theme/chartColors.ts`). `systemSettings.printTemplate` drives paper / WhatsApp PNG plus per-document field visibility / custom lines / print font (full registry: production/worker/missing/supervisor/BOM, repair invoice/payment/spare/treasury/receipt/card/delivery, stock/item/supplies, accounting, quality, payslip, routing, catalog product detail). Preview: `/settings/reports` + `/dev/image-export`. Auth/splash follow `applyAppTheme` / cached tenant primary (`--splash-brand`); print/WhatsApp soft accents derive from `printTemplate.primaryColor` with UI theme fallback via `resolvePrintAccentHex`. Theme-preset color pickers still use literal hex by design.
 
 ## Modules (MOD)
 
@@ -53,7 +53,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 1. **Catalog** — manufactured products (`isManufactured`) + materials/BOM  
 2. **Production plan / report** → **production issue** (prepare by location → approve → issue → print)  
 3. Stock moves supplies → floor → WIP → finished  
-4. **Repair** (parallel): receive (per-product `inWarranty`) → diagnose (auto status) → part/service → estimate → customer approval → repair/parts → ready → deliver; status roles configured in repair settings. Manufacturer warranty: all lines → full `WAR-…` close without collect; mixed → bill non-warranty only + `warrantyAllowances` on deliver  
+4. **Repair** (parallel): receive (per-product `inWarranty`) → **desk assign or QR claim** (`/repair/jobs/:jobId/claim` → workspace; unassigned `received` advances to `diagnosing` / جاري الفحص) → technician saves diagnosis → `diagnosed` / تم الفحص → part/service → `estimate_ready` → customer approval → repair/parts → ready → deliver. Desk (reception/edit) may **reassign / فك الإسناد** when the tech is unavailable; unassign on diagnosing without diagnosis rolls back to `received`. Status roles configured in repair settings. Manufacturer warranty: all lines → full `WAR-…` close without collect; mixed → bill non-warranty only + `warrantyAllowances` on deliver  
 
 5. **Center replenishment** (parallel): center request → central approve/prepare/responsible → center receive (stock in on receive only)
 
@@ -98,7 +98,11 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Warehouses hub (filters, no sidebar spam) | `/inventory/warehouses` |
 | Shelf locations | `/inventory/locations` |
 | Production issue | `/inventory/production-issues` |
+| Catalog home board (KPIs + readiness) | `/catalog` |
 | Products (factory tag filter) | `/products` |
+| Repair job detail / assign | `/repair/jobs/:jobId` |
+| Technician QR claim → workspace | `/repair/jobs/:jobId/claim` |
+| Technician workspace | `/repair/jobs/:jobId/workspace` |
 | Custody + unrepairable (tabs) | `/repair/custody-stock` (`?stockType=unrepairable`) |
 | Legacy unrepairable | `/repair/unrepairable-stock` → redirect |
 | Spare parts center | `/repair/parts` |

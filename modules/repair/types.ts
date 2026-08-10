@@ -4,6 +4,7 @@ import type { FirestoreUser } from '../../types';
 export const REPAIR_JOB_STATUSES = [
   'received',
   'diagnosing',
+  'diagnosed',
   'estimate_ready',
   'waiting_approval',
   'waiting_parts',
@@ -21,6 +22,7 @@ export type RepairJobStatus = string;
 export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
   received: 'وارد',
   diagnosing: 'جاري الفحص',
+  diagnosed: 'تم الفحص',
   estimate_ready: 'التقدير جاهز لمراجعة الاستقبال',
   waiting_approval: 'بانتظار موافقة العميل',
   waiting_parts: 'بانتظار قطع الغيار',
@@ -36,6 +38,7 @@ export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
 export const REPAIR_JOB_STATUS_COLORS: Record<string, string> = {
   received: '#64748b',
   diagnosing: '#f59e0b',
+  diagnosed: '#ca8a04',
   estimate_ready: '#0284c7',
   waiting_approval: '#a855f7',
   waiting_parts: '#ea580c',
