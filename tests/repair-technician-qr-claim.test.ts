@@ -11,5 +11,18 @@ assert.equal(decideTechnicianQrClaim({ ...base, currentTechnicianId: 'other-tech
 assert.equal(decideTechnicianQrClaim({ ...base, status: 'ready' }), 'terminal');
 assert.equal(decideTechnicianQrClaim({ ...base, status: 'delivered' }), 'terminal');
 assert.equal(decideTechnicianQrClaim({ ...base, isClosed: true }), 'terminal');
+// Closed/terminal + assigned to this tech → reopen for view (no new claim).
+assert.equal(
+  decideTechnicianQrClaim({ ...base, isClosed: true, currentTechnicianId: 'user-tech' }),
+  'already_self',
+);
+assert.equal(
+  decideTechnicianQrClaim({ ...base, status: 'delivered', currentTechnicianId: 'employee-tech' }),
+  'already_self',
+);
+assert.equal(
+  decideTechnicianQrClaim({ ...base, isClosed: true, currentTechnicianId: 'other-tech' }),
+  'terminal',
+);
 
 console.log('repair-technician-qr-claim.test.ts: ok');

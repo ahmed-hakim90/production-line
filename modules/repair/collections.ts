@@ -7,6 +7,7 @@ export const REPAIR_TREASURY_SESSIONS_COLLECTION = 'repair_treasury_sessions';
 export const REPAIR_TREASURY_ENTRIES_COLLECTION = 'repair_treasury_entries';
 export const REPAIR_TREASURY_MONTH_CLOSES_COLLECTION = 'repair_treasury_month_closes';
 export const REPAIR_TREASURY_SETTLEMENTS_COLLECTION = 'repair_treasury_settlements';
+export const REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION = 'repair_treasury_expense_requests';
 export const REPAIR_SALES_INVOICES_COLLECTION = 'repair_sales_invoices';
 export const REPAIR_SERVICE_EVENTS_SUBCOLLECTION = 'service_events';
 export const REPAIR_PART_RESERVATIONS_COLLECTION = 'repair_part_reservations';

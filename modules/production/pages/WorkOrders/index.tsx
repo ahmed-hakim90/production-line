@@ -43,6 +43,7 @@ import {
   type InjectionComponentOption,
 } from '../../utils/injectionComponentOptions';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
   PRODUCTION_REPORT_OPERATION_KEYS,
   PRODUCTION_REPORT_RECONCILE_PATHS,
@@ -102,6 +103,13 @@ export const WorkOrders: React.FC = () => {
   const deleteWorkOrder = useAppStore((s) => s.deleteWorkOrder);
   const updateWorkOrder = useAppStore((s) => s.updateWorkOrder);
   const reconcileWorkOrderFromReports = useAppStore((s) => s.reconcileWorkOrderFromReports);
+  const fetchProducts = useAppStore((s) => s.fetchProducts);
+  const fetchLines = useAppStore((s) => s.fetchLines);
+  const fetchEmployees = useAppStore((s) => s.fetchEmployees);
+
+  useEffect(() => {
+    void Promise.all([fetchProducts(), fetchLines(), fetchEmployees()]).catch(() => undefined);
+  }, [fetchEmployees, fetchLines, fetchProducts]);
   const workOrderReconcileEnabled = isOperationPathEnabled(
     systemSettings,
     PRODUCTION_REPORT_OPERATION_KEYS.reconcile,
@@ -122,14 +130,16 @@ export const WorkOrders: React.FC = () => {
   }, [userRoleName, loggedInSupervisor]);
 
   const { filters, setFilter, clearFilters } = useWorkOrderFilters();
+  const debouncedWorkOrderSearch = useDebouncedValue(filters.search, 350);
   const realtimeStatus = filters.status === 'completed' || filters.status === 'cancelled'
     ? filters.status
     : 'all';
-  const { orders: liveOrders, loading, loadingMore, hasMore, error, loadMore } = useWorkOrdersRealtime({
+  const { orders: liveOrders, loading, loadingMore, hasMore, hasPrevious, page, error, loadMore, loadPrevious } = useWorkOrdersRealtime({
     status: realtimeStatus,
     lineId: filters.lineId,
     supervisorId: scopedSupervisorId,
     dateRange: normalizeDateRange(filters.dateRange),
+    search: debouncedWorkOrderSearch,
   });
 
   const setOrders = useWorkOrderStore((s) => s.setOrders);
@@ -796,6 +806,8 @@ export const WorkOrders: React.FC = () => {
           loading={loading}
           loadingMore={loadingMore}
           hasMore={hasMore}
+          hasPrevious={hasPrevious}
+          page={page}
           onRowClick={(order) => setSelectedOrder(order.id || null)}
           onStatusChange={canUpdateWorkOrderStatus ? handleStatusChange : undefined}
           onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
@@ -804,6 +816,7 @@ export const WorkOrders: React.FC = () => {
           onReopenCompleted={can('workOrders.edit') ? handleReopenCompletedOrder : undefined}
           onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
           onLoadMore={() => void loadMore()}
+          onPrevious={loadPrevious}
         />
       </OpsDashPanel>
 

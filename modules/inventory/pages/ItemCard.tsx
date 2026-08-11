@@ -28,6 +28,7 @@ import {
 import { ProductBomCountCardPreviewModal } from '../../production/components/ProductBomCountCardPreviewModal';
 import { buildProductBomCountCards } from '../../production/lib/buildProductBomCountCards';
 import type { ProductBomCountCard } from '../../production/components/ProductBomCountCardPrint';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
@@ -46,6 +47,11 @@ type CatalogOption = {
 type MovementCursorState = {
   byType: Partial<Record<InventoryItemType, unknown>>;
   hasMoreByType: Partial<Record<InventoryItemType, boolean>>;
+};
+type MovementCachedPage = {
+  rows: StockTransaction[];
+  cursorState: MovementCursorState;
+  hasNext: boolean;
 };
 
 function itemMovementTypes(itemType: InventoryItemType): InventoryItemType[] {
@@ -97,6 +103,8 @@ export const ItemCard: React.FC = () => {
   const [bomLines, setBomLines] = useState<ItemCardBomLine[]>([]);
   const [movements, setMovements] = useState<StockTransaction[]>([]);
   const [hasMoreMovements, setHasMoreMovements] = useState(false);
+  const [movementPages, setMovementPages] = useState<MovementCachedPage[]>([]);
+  const [movementPageIndex, setMovementPageIndex] = useState(0);
   const movementCursorStateRef = useRef<MovementCursorState>({
     byType: {},
     hasMoreByType: {},
@@ -297,8 +305,12 @@ export const ItemCard: React.FC = () => {
           nextState.hasMoreByType[type] = Boolean(page?.hasMore);
         });
         movementCursorStateRef.current = nextState;
-        setMovements(mergeUniqueMovements(movementPages.flatMap((page) => page.items)));
-        setHasMoreMovements(movementTypes.some((type) => nextState.hasMoreByType[type]));
+        const firstRows = mergeUniqueMovements(movementPages.flatMap((page) => page.items));
+        const firstHasNext = movementTypes.some((type) => nextState.hasMoreByType[type]);
+        setMovements(firstRows);
+        setHasMoreMovements(firstHasNext);
+        setMovementPages([{ rows: firstRows, cursorState: nextState, hasNext: firstHasNext }]);
+        setMovementPageIndex(0);
       }
 
       if (!selectedOption) {
@@ -309,6 +321,8 @@ export const ItemCard: React.FC = () => {
       setBalances([]);
       setBomLines([]);
       setMovements([]);
+      setMovementPages([]);
+      setMovementPageIndex(0);
     } finally {
       setLoading(false);
     }
@@ -328,13 +342,23 @@ export const ItemCard: React.FC = () => {
       setBalances([]);
       setBomLines([]);
       setMovements([]);
+      setMovementPages([]);
+      setMovementPageIndex(0);
       return;
     }
     void loadCard(true);
   }, [itemId, itemType, warehouseId, loadCard]);
 
-  const loadMoreMovements = async () => {
+  const loadNextMovementsPage = async () => {
     if (!itemId || !hasMoreMovements) return;
+    const cached = movementPages[movementPageIndex + 1];
+    if (cached) {
+      movementCursorStateRef.current = cached.cursorState;
+      setMovementPageIndex((value) => value + 1);
+      setMovements(cached.rows);
+      setHasMoreMovements(cached.hasNext);
+      return;
+    }
     setLoading(true);
     try {
       const movementTypes = itemMovementTypes(itemType);
@@ -369,15 +393,28 @@ export const ItemCard: React.FC = () => {
       });
       movementCursorStateRef.current = nextState;
 
-      setMovements((prev) =>
-        mergeUniqueMovements([...prev, ...pages.flatMap((page) => page.items)]),
-      );
-      setHasMoreMovements(movementTypes.some((type) => nextState.hasMoreByType[type]));
+      const nextRows = mergeUniqueMovements(pages.flatMap((page) => page.items));
+      const nextHasMore = movementTypes.some((type) => nextState.hasMoreByType[type]);
+      const nextPage: MovementCachedPage = { rows: nextRows, cursorState: nextState, hasNext: nextHasMore };
+      setMovementPages((prev) => [...prev.slice(0, movementPageIndex + 1), nextPage]);
+      setMovementPageIndex((value) => value + 1);
+      setMovements(nextRows);
+      setHasMoreMovements(nextHasMore);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'تعذر تحميل المزيد من الحركات.');
+      toast.error(error instanceof Error ? error.message : 'تعذر تحميل صفحة الحركات التالية.');
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadPreviousMovementsPage = () => {
+    if (movementPageIndex === 0 || loading) return;
+    const previous = movementPages[movementPageIndex - 1];
+    if (!previous) return;
+    movementCursorStateRef.current = previous.cursorState;
+    setMovementPageIndex((value) => value - 1);
+    setMovements(previous.rows);
+    setHasMoreMovements(previous.hasNext);
   };
 
   const openCountCard = async () => {
@@ -650,13 +687,16 @@ export const ItemCard: React.FC = () => {
                 </tbody>
               </table>
             </div>
-            {hasMoreMovements ? (
-              <div className="mt-3">
-                <Button type="button" variant="secondary" disabled={loading} onClick={() => void loadMoreMovements()}>
-                  تحميل المزيد
-                </Button>
-              </div>
-            ) : null}
+            <DataPaginationFooter
+              page={movementPageIndex + 1}
+              itemCount={movements.length}
+              itemLabel="حركة"
+              hasPrevious={movementPageIndex > 0}
+              hasNext={hasMoreMovements}
+              onPrevious={loadPreviousMovementsPage}
+              onNext={() => void loadNextMovementsPage()}
+              loading={loading}
+            />
           </OpsDashPanel>
         </>
       ) : null}

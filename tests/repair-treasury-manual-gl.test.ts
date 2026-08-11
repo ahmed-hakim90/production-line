@@ -18,6 +18,11 @@ assert.match(treasuryOps, /repair\.treasury\.manage/);
 assert.match(treasuryOps, /expenseType/);
 assert.match(treasuryOps, /repair_treasury_manual/);
 assert.match(treasuryOps, /getRepairTreasuryExpenseType/);
+assert.match(treasuryOps, /repair_treasury_expense_requests/);
+assert.match(treasuryOps, /approve_expense/);
+assert.match(treasuryOps, /reject_expense/);
+assert.match(treasuryOps, /اعتماد المصروفات متاح لأدمن الصيانة فقط/);
+assert.match(treasuryOps, /لا يمكن لمقدم طلب المصروف اعتماد طلبه/);
 
 const indexSource = readFileSync(join(root, 'functions/src/index.ts'), 'utf8');
 assert.match(indexSource, /mutateRepairTreasury/);
@@ -32,10 +37,22 @@ for (const key of ['salaries', 'packaging', 'electricity', 'internet', 'water', 
 const service = readFileSync(join(root, 'modules/repair/services/repairTreasuryService.ts'), 'utf8');
 assert.match(service, /mutateRepairTreasuryCallable/);
 assert.doesNotMatch(service, /source:\s*'manual_treasury'/);
+assert.match(service, /countPendingExpenseApprovals/);
 
 const ui = readFileSync(join(root, 'modules/repair/pages/RepairTreasury.tsx'), 'utf8');
 assert.match(ui, /REPAIR_TREASURY_EXPENSE_TYPES/);
 assert.match(ui, /entryExpenseType/);
+assert.match(ui, /إرسال المصروف لاعتماد الإدارة/);
+assert.match(ui, /مصروفات بانتظار اعتماد الأدمن/);
+
+const paymentOps = readFileSync(join(root, 'functions/src/repairPaymentOps.ts'), 'utf8');
+assert.match(paymentOps, /repair\.discounts\.approve/);
+assert.match(paymentOps, /لا يمكن لمقدم الطلب اعتماد طلبه/);
+
+const salesInvoiceOps = readFileSync(join(root, 'functions/src/repairFinancialOps.ts'), 'utf8');
+assert.match(salesInvoiceOps, /pending_discount_approval/);
+assert.match(salesInvoiceOps, /repair\.discounts\.approve/);
+assert.match(salesInvoiceOps, /لا يمكن لمقدم الخصم اعتماد طلبه/);
 
 const menu = readFileSync(join(root, 'config/menu.config.ts'), 'utf8');
 assert.match(menu, /accounting-repair-pnl/);

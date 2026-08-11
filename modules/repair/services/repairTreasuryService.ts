@@ -16,6 +16,7 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import {
   REPAIR_TREASURY_ENTRIES_COLLECTION,
+  REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION,
   REPAIR_TREASURY_MONTH_CLOSES_COLLECTION,
   REPAIR_TREASURY_SESSIONS_COLLECTION,
   REPAIR_TREASURY_SETTLEMENTS_COLLECTION,
@@ -25,6 +26,7 @@ import type {
   RepairTreasuryBranchMonthlySummary,
   RepairTreasuryEntry,
   RepairTreasuryEntryType,
+  RepairTreasuryExpenseRequest,
   RepairTreasuryMonthClose,
   RepairTreasuryMonthCloseSnapshot,
   RepairTreasuryMonthlyReportData,
@@ -713,9 +715,75 @@ export const repairTreasuryService = {
         paymentMethod: input.paymentMethod as 'cash' | 'card' | 'bank_transfer',
         expenseType: input.expenseType,
       });
-      return String(result.entryId || requestId);
+      return String(result.entryId || result.expenseRequestId || requestId);
     } catch (error: any) {
       throw normalizeTreasuryError(error, 'تعذر تسجيل حركة الخزينة.');
+    }
+  },
+
+  async listExpenseRequests(branchIds?: string[]): Promise<RepairTreasuryExpenseRequest[]> {
+    if (!isConfigured) return [];
+    const normalizedBranchIds = Array.from(new Set(
+      (branchIds || []).map((id) => String(id || '').trim()).filter(Boolean),
+    ));
+    if (branchIds && normalizedBranchIds.length === 0) return [];
+    try {
+      const snapshots = normalizedBranchIds.length > 0
+        ? await Promise.all(
+          normalizedBranchIds.map((branchId) => getDocs(tenantQuery(
+            db,
+            REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION,
+            where('branchId', '==', branchId),
+            limit(120),
+          ))),
+        )
+        : [await getDocs(tenantQuery(
+          db,
+          REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION,
+          limit(240),
+        ))];
+      const byId = new Map<string, RepairTreasuryExpenseRequest>();
+      snapshots.flatMap((snap) => snap.docs).forEach((row) => {
+        byId.set(row.id, { id: row.id, ...row.data() } as RepairTreasuryExpenseRequest);
+      });
+      return Array.from(byId.values())
+        .sort((a, b) => String(b.requestedAt || '').localeCompare(String(a.requestedAt || '')));
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر تحميل طلبات المصروفات.');
+    }
+  },
+
+  async countPendingExpenseApprovals(): Promise<number> {
+    if (!isConfigured) return 0;
+    try {
+      const rows = await this.listExpenseRequests();
+      return rows.filter((row) => row.status === 'pending').length;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      if (code.includes('permission-denied') || message.includes('permission')) return 0;
+      console.error('repairTreasury.countPendingExpenseApprovals failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return 0;
+    }
+  },
+
+  async approveExpense(expenseRequestId: string): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await mutateRepairTreasuryCallable({ operation: 'approve_expense', expenseRequestId });
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر اعتماد المصروف.');
+    }
+  },
+
+  async rejectExpense(expenseRequestId: string, reason: string): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await mutateRepairTreasuryCallable({ operation: 'reject_expense', expenseRequestId, reason });
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر رفض المصروف.');
     }
   },
 

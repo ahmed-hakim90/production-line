@@ -2207,240 +2207,66 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: Load all app data (after auth) ────────────────────────────
 
   _loadAppData: async () => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const tenantId = get().userProfile?.tenantId;
-    const bootstrapAccess = resolveBootstrapDataAccess((permission) =>
-      hasPermission(get().userPermissions, permission),
-    );
-    const [
-      rawProducts,
-      allCategories,
-      rawLines,
-      rawEmployees,
-      configs,
-      productionPlans,
-      productionPlanFollowUps,
-      workOrders,
-      costCenters,
-      costCenterValues,
-      costAllocations,
-      laborSettings,
-      assets,
-      assetDepreciations,
-      systemSettingsRaw,
-      tenantDoc,
-    ] = await Promise.all([
-      productService.getAll(),
-      categoryService.getAll(),
-      lineService.getAll(),
-      employeeService.getAll(),
-      lineProductConfigService.getAll(),
-      productionPlanService.getAll(),
-      productionPlanFollowUpService.getAll(),
-      workOrderService.getAll(),
-      bootstrapAccess.costCenters ? costCenterService.getAll() : Promise.resolve([]),
-      bootstrapAccess.costDetails ? costCenterValueService.getAll() : Promise.resolve([]),
-      bootstrapAccess.costDetails ? costAllocationService.getAll() : Promise.resolve([]),
-      laborSettingsService.get(),
-      assetService.getAll(),
-      assetDepreciationService.getByPeriod(currentMonth),
+    const uid = get().uid;
+    // Login bootstrap is intentionally point-read only. Catalogs, operations,
+    // finance and reports are loaded by their owning routes/actions.
+    const [systemSettingsRaw, tenantDoc, currentEmployee, laborSettings] = await Promise.all([
       systemSettingsService.get(),
       tenantId ? tenantService.getById(tenantId) : Promise.resolve(null),
+      uid ? employeeService.getByUserId(uid) : Promise.resolve(null),
+      laborSettingsService.get(),
     ]);
-
-    const today = getReportOperationalDateString(get().systemSettings);
-    const [todayReports, lineStatuses] = await Promise.all([
-      reportService.getByDateRange(today, today),
-      lineStatusService.getAll(),
-    ]);
-    const rangeCacheNow = Date.now();
-    const rkToday = getProductionReportsRangeCacheKey(today, today);
-
-    /** Filled after idle — keeps first paint after login lighter. */
-    const planReports: Record<string, ProductionReport[]> = {};
-
     const mergedSettings = resolveSystemSettings(systemSettingsRaw);
-    const filteredRawProducts = await filterProductsByRawMaterialWarehouse(
-      rawProducts,
-      mergedSettings.planSettings?.rawMaterialWarehouseId,
-    );
-
-    let routingTotalTimeSecondsByProduct: Record<string, number> = {};
-    let routingVarianceBasisSecondsByProduct: Record<string, number> = {};
-    let routingTargetUnitSecondsByProduct: Record<string, number> = {};
-    let routingProductTargetUnitSecondsByProduct: Record<string, number> =
-      buildProductRoutingTargetSecondsByProductId(filteredRawProducts);
-    try {
-      const activeRoutingPlans = await routingPlanService.getActivePlans();
-      routingTotalTimeSecondsByProduct = buildRoutingTotalSecondsByProductId(activeRoutingPlans);
-      const varianceFromPlans = buildRoutingVarianceBasisSecondsByProductId(activeRoutingPlans);
-      routingTargetUnitSecondsByProduct =
-        buildRoutingTargetSecondsOnlyByProductId(activeRoutingPlans);
-      routingProductTargetUnitSecondsByProduct =
-        buildProductRoutingTargetSecondsByProductId(filteredRawProducts);
-      routingVarianceBasisSecondsByProduct = mergeProductTargetsIntoRoutingVarianceBasis(
-        varianceFromPlans,
-        routingProductTargetUnitSecondsByProduct,
-      );
-    } catch (routingErr) {
-      console.warn('routingPlanService.getActivePlans failed', routingErr);
-      routingVarianceBasisSecondsByProduct = mergeProductTargetsIntoRoutingVarianceBasis(
-        {},
-        routingProductTargetUnitSecondsByProduct,
-      );
-    }
-
-    // Resolve current employee record for the logged-in user
-    const uid = get().uid;
-    const currentEmployee = uid
-      ? rawEmployees.find((e) => e.userId === uid) ?? null
-      : null;
-
     set({
-      _rawProducts: filteredRawProducts,
-      _productCategories: allCategories.filter(isProductCategoryRow),
-      _rawLines: rawLines,
-      _rawEmployees: rawEmployees,
+      _rawProducts: [],
+      _productCategories: [],
+      _rawLines: [],
+      _rawEmployees: currentEmployee ? [currentEmployee] : [],
       currentEmployee,
-      lineProductConfigs: configs,
-      routingTotalTimeSecondsByProduct,
-      routingVarianceBasisSecondsByProduct,
-      routingTargetUnitSecondsByProduct,
-      routingProductTargetUnitSecondsByProduct,
-      todayReports,
+      lineProductConfigs: [],
+      routingTotalTimeSecondsByProduct: {},
+      routingVarianceBasisSecondsByProduct: {},
+      routingTargetUnitSecondsByProduct: {},
+      routingProductTargetUnitSecondsByProduct: {},
+      todayReports: [],
       monthlyReports: [],
       productionReports: [],
-      productionReportsRangeCache: {
-        ...get().productionReportsRangeCache,
-        [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-      },
-      lineStatuses,
-      productionPlans,
-      productionPlanFollowUps,
-      planReports,
-      workOrders,
-      costCenters,
-      costCenterValues,
-      costAllocations,
+      productionReportsRangeCache: {},
+      lineStatuses: [],
+      productionPlans: [],
+      productionPlanFollowUps: [],
+      planReports: {},
+      workOrders: [],
+      costCenters: [],
+      costCenterValues: [],
+      costAllocations: [],
       laborSettings,
-      assets,
-      assetDepreciations,
+      assets: [],
+      assetDepreciations: [],
       systemSettings: mergedSettings,
       tenantCompanyName: tenantDoc?.name?.trim() ?? '',
       tenantActivityPacks: resolveActivityPacks(tenantDoc?.activityPacks),
+      products: [],
+      productionLines: [],
+      employees: currentEmployee ? [{
+        id: currentEmployee.id!,
+        name: currentEmployee.name,
+        departmentId: currentEmployee.departmentId ?? '',
+        jobPositionId: currentEmployee.jobPositionId ?? '',
+        level: currentEmployee.level ?? 1,
+        managerId: currentEmployee.managerId,
+        employmentType: currentEmployee.employmentType ?? 'full_time',
+        baseSalary: currentEmployee.baseSalary ?? 0,
+        hourlyRate: currentEmployee.hourlyRate ?? 0,
+        shiftId: currentEmployee.shiftId,
+        vehicleId: currentEmployee.vehicleId,
+        hasSystemAccess: currentEmployee.hasSystemAccess ?? false,
+        isActive: currentEmployee.isActive !== false,
+        code: currentEmployee.code,
+      }] : [],
     });
-
     reapplyThemeFromAppStore(get);
-
-    const allReports = todayReports;
-    const productCategories = allCategories.filter(isProductCategoryRow);
-    const products = buildProducts(
-      filteredRawProducts,
-      allReports,
-      configs,
-      routingTotalTimeSecondsByProduct,
-      productCategories,
-    );
-    const productionLines = buildProductionLines(
-      rawLines, rawProducts, rawEmployees, todayReports, lineStatuses, configs,
-      productionPlans, planReports, workOrders
-    );
-    const employees: Employee[] = rawEmployees.map((e) => ({
-      id: e.id!,
-      name: e.name,
-      departmentId: e.departmentId ?? '',
-      jobPositionId: e.jobPositionId ?? '',
-      level: e.level ?? 1,
-      managerId: e.managerId,
-      employmentType: e.employmentType ?? 'full_time',
-      baseSalary: e.baseSalary ?? 0,
-      hourlyRate: e.hourlyRate ?? 0,
-      shiftId: e.shiftId,
-      vehicleId: e.vehicleId,
-      hasSystemAccess: e.hasSystemAccess ?? false,
-      isActive: e.isActive !== false,
-      code: e.code,
-    }));
-
-    set({ products, productionLines, employees });
-    {
-      const bootTs = Date.now();
-      _productsFetchedAt = bootTs;
-      _linesFetchedAt = bootTs;
-      _employeesFetchedAt = bootTs;
-      _plansFetchedAt = bootTs;
-      _workOrdersFetchedAt = bootTs;
-    }
-
-    const scheduleDeferredBootstrap = () => {
-      const idle =
-        typeof requestIdleCallback !== 'undefined'
-          ? (cb: IdleRequestCallback) => requestIdleCallback(cb, { timeout: 4500 })
-          : (cb: IdleRequestCallback) =>
-              window.setTimeout(
-                () => cb({ didTimeout: true, timeRemaining: () => 0 } as IdleDeadline),
-                50,
-              );
-
-      idle(() => {
-        void (async () => {
-          try {
-            const { start: ms, end: me } = getMonthDateRange();
-            const monthly = await reportService.getByDateRange(ms, me);
-            const rkMonth = getProductionReportsRangeCacheKey(ms, me);
-            set((st) => ({
-              monthlyReports: monthly,
-              productionReportsRangeCache: {
-                ...st.productionReportsRangeCache,
-                [rkMonth]: { rows: monthly, fetchedAt: Date.now() },
-              },
-            }));
-            get()._rebuildProducts();
-            get()._rebuildLines();
-          } catch (err) {
-            console.warn('_loadAppData: deferred monthly reports failed', err);
-          }
-
-          try {
-            const plans = get().productionPlans;
-            const activePlans = plans.filter(
-              (p) => p.status === 'in_progress' || p.status === 'planned' || p.status === 'paused',
-            );
-            const nextPlanReports: Record<string, ProductionReport[]> = {};
-            const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
-            const planReportResults = await Promise.allSettled(
-              activePlans.map(async (plan) => {
-                const key = plan.id || `product_${plan.productId}`;
-                const reports = await reportService.getByProduct(plan.productId);
-                return { plan, key, reports };
-              }),
-            );
-            planReportResults.forEach((result) => {
-              if (result.status !== 'fulfilled') return;
-              const { plan, key, reports } = result.value;
-              const planReports = filterReportsForProductionPlan(plan, reports);
-              nextPlanReports[key] = planReports;
-              if (!plan.id) return;
-              const patch = deriveProductionPlanAutoPatch(plan, reports);
-              if (!patch) return;
-              planAutoPatches.push({ id: plan.id, patch });
-              Object.assign(plan, patch);
-            });
-            if (planAutoPatches.length > 0) {
-              await Promise.allSettled(
-                planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
-              );
-            }
-            set({ planReports: nextPlanReports, productionPlans: [...plans] });
-            get()._rebuildLines();
-          } catch (err) {
-            console.warn('_loadAppData: deferred plan reports failed', err);
-          }
-        })();
-      });
-    };
-    scheduleDeferredBootstrap();
   },
 
   // ── Role Switching ─────────────────────────────────────────────────────────
@@ -3757,7 +3583,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const normalized = await normalizeProductCategoryOnSave(data);
       const id = await productService.create(normalized as Omit<FirestoreProduct, 'id'>);
       if (!id) throw new Error('تعذر حفظ المنتج. حاول مرة أخرى.');
-      await get().fetchProducts({ force: true });
+      const fresh = await productService.getById(id);
+      if (fresh) {
+        set((state) => ({ _rawProducts: [fresh, ...state._rawProducts.filter((row) => row.id !== id)] }));
+        get()._rebuildProducts();
+      }
       return id;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر حفظ المنتج. حاول مرة أخرى.';
@@ -3778,7 +3608,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const normalized = await normalizeProductCategoryOnSave(data);
       await productService.update(id, normalized);
-      await get().fetchProducts({ force: true });
+      const fresh = await productService.getById(id);
+      if (fresh) {
+        set((state) => ({ _rawProducts: state._rawProducts.map((row) => row.id === id ? fresh : row) }));
+        get()._rebuildProducts();
+      }
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
@@ -3788,7 +3622,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteProduct: async (id) => {
     try {
       await productService.delete(id);
-      await get().fetchProducts({ force: true });
+      set((state) => ({ _rawProducts: state._rawProducts.filter((row) => row.id !== id) }));
+      get()._rebuildProducts();
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : '';
       const message = rawMessage.includes('مرتبط بتقارير إنتاج')

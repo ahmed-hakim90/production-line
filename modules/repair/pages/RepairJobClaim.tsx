@@ -57,7 +57,8 @@ export const RepairJobClaim: React.FC = () => {
         {state === 'error' ? (
           <div className="mt-4 space-y-3">
             <p className="text-xs text-muted-foreground">
-              لو الطلب مسند لفني تاني أو مش موجود: من تفاصيل الطلب (استقبال / مسؤول المركز) غيّر الفني أو فك الإسناد، ثم أعد المسح.
+              لو الطلب مسند لفني تاني: من تفاصيل الطلب (استقبال / مسؤول المركز) غيّر الفني أو فك الإسناد، ثم أعد المسح.
+              الطلب المغلق يفتح للعرض فقط لو كان مسند لك قبل كده.
             </p>
             <div className="flex justify-center gap-2">
               <Button type="button" onClick={() => void claim()}>إعادة المحاولة</Button>

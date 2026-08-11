@@ -108,6 +108,22 @@ function buildTokenDocId(token: string): string {
   return token.slice(-24).replace(/[^A-Za-z0-9_-]/g, '');
 }
 
+async function backfillEmployeeIdOnUserDevices(userId: string, employeeId: string): Promise<void> {
+  if (!userId || !employeeId) return;
+  const snap = await getDocs(query(collection(db, DEVICE_COLLECTION), where('userId', '==', userId)));
+  await Promise.all(
+    snap.docs.map(async (deviceDoc) => {
+      const current = String((deviceDoc.data() as { employeeId?: string }).employeeId || '').trim();
+      if (current) return;
+      await setDoc(
+        deviceDoc.ref,
+        { employeeId, updatedAt: serverTimestamp() },
+        { merge: true },
+      );
+    }),
+  );
+}
+
 async function persistTokenOnUser(userId: string, token: string): Promise<void> {
   const tokenDocId = buildTokenDocId(token) || token.slice(-10);
   await setDoc(
@@ -156,17 +172,21 @@ export const pushService = {
         const token = await getToken(messaging, buildGetTokenOptions(registration));
         if (!token) return null;
 
+        const linkedEmployeeId = String(employeeId || '').trim();
         const ref = doc(db, DEVICE_COLLECTION, token);
         await setDoc(ref, {
           token,
           userId,
-          employeeId: employeeId || '',
+          ...(linkedEmployeeId ? { employeeId: linkedEmployeeId } : {}),
           platform: 'web',
           userAgent: navigator.userAgent || '',
           enabled: true,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         }, { merge: true });
+        if (linkedEmployeeId) {
+          await backfillEmployeeIdOnUserDevices(userId, linkedEmployeeId);
+        }
         await persistTokenOnUser(userId, token);
         return token;
       } catch (error) {

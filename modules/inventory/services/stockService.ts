@@ -12,6 +12,7 @@ import {
   updateDoc,
   writeBatch,
   startAfter,
+  documentId,
   QueryDocumentSnapshot,
   type QueryConstraint,
 } from 'firebase/firestore';
@@ -145,6 +146,22 @@ const locationBalanceWrite = (fields: {
   });
 
 export const stockService = {
+  async getBalancesForItems(itemIds: string[], warehouseId?: string): Promise<StockItemBalance[]> {
+    if (!isConfigured) return [];
+    const ids = Array.from(new Set(itemIds.map((id) => String(id || '').trim()).filter(Boolean)));
+    if (ids.length === 0) return [];
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
+    const rows: StockItemBalance[] = [];
+    for (let offset = 0; offset < ids.length; offset += 30) {
+      const constraints: QueryConstraint[] = [where('itemId', 'in', ids.slice(offset, offset + 30))];
+      if (scope.warehouseId) constraints.push(where('warehouseId', '==', scope.warehouseId));
+      const snap = await getDocs(tenantQuery(db, BALANCES_COLLECTION, ...constraints));
+      rows.push(...snap.docs.map((row) => ({ id: row.id, ...row.data() } as StockItemBalance)));
+    }
+    return rows;
+  },
+
   async getBalancesPaged(params?: {
     warehouseId?: string;
     limit?: number;
@@ -154,14 +171,16 @@ export const stockService = {
     const scope = await resolveInventoryWarehouseReadScope(params?.warehouseId);
     if (scope.denied) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), MAX_PAGE_SIZE));
-    const constraints: any[] = [orderBy('updatedAt', 'desc'), limit(pageSize)];
+    const constraints: any[] = [orderBy('updatedAt', 'desc'), orderBy(documentId()), limit(pageSize + 1)];
     if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
     const q = tenantQuery(db, BALANCES_COLLECTION, ...constraints);
     const snap = await getDocs(q);
-    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockItemBalance));
-    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
-    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+    const hasMore = snap.docs.length > pageSize;
+    const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const items = docs.map((d) => ({ id: d.id, ...d.data() } as StockItemBalance));
+    const nextCursor = docs.length > 0 ? docs[docs.length - 1] : null;
+    return { items, nextCursor, hasMore };
   },
 
   async getTransactionsPaged(params?: {
@@ -179,7 +198,7 @@ export const stockService = {
     const scope = await resolveInventoryWarehouseReadScope(params?.warehouseId);
     if (scope.denied) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), MAX_PAGE_SIZE));
-    const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
+    const constraints: any[] = [orderBy('createdAt', 'desc'), orderBy(documentId()), limit(pageSize + 1)];
     if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     if (params?.itemId) constraints.unshift(where('itemId', '==', params.itemId));
     if (params?.itemType) constraints.unshift(where('itemType', '==', params.itemType));
@@ -190,9 +209,11 @@ export const stockService = {
     if (params?.cursor) constraints.push(startAfter(params.cursor));
     const q = tenantQuery(db, TRANSACTIONS_COLLECTION, ...constraints);
     const snap = await getDocs(q);
-    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
-    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
-    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+    const hasMore = snap.docs.length > pageSize;
+    const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const items = docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
+    const nextCursor = docs.length > 0 ? docs[docs.length - 1] : null;
+    return { items, nextCursor, hasMore };
   },
 
   /**

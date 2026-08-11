@@ -5,6 +5,10 @@ import {
   getDoc,
   getDocs,
   limit,
+  orderBy,
+  startAfter,
+  documentId,
+  type QueryDocumentSnapshot,
   query,
   runTransaction,
   updateDoc,
@@ -41,6 +45,8 @@ import {
   type MaterialCreatePath,
   type MaterialUpdatePath,
 } from '../../system/lib/operationPathSettings';
+import { buildSearchPrefixes } from '@/lib/firestoreSearch';
+import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 
 const MATERIAL_ENTITY_TYPE = 'material';
 
@@ -97,6 +103,37 @@ export function toBaseQty(
 export { isDuplicateEntityCodeError, DUPLICATE_ENTITY_CODE };
 
 export const materialService = {
+  async listPaged(params: {
+    pageSize?: 20 | 50;
+    cursor?: QueryDocumentSnapshot | null;
+    search?: string;
+    type?: Material['type'];
+    isActive?: boolean;
+    isManufacturedInternally?: boolean;
+  } = {}): Promise<{ items: Material[]; nextCursor: QueryDocumentSnapshot | null; hasNext: boolean }> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasNext: false };
+    const pageSize = params.pageSize === 50 ? 50 : 20;
+    const constraints: any[] = [];
+    const search = normalizeFirestoreSearch(params.search);
+    if (search.length >= 2) constraints.push(where('searchPrefixes', 'array-contains', search));
+    if (params.type) constraints.push(where('type', '==', params.type));
+    if (params.isActive !== undefined) constraints.push(where('isActive', '==', params.isActive));
+    if (params.isManufacturedInternally !== undefined) {
+      constraints.push(where('isManufacturedInternally', '==', params.isManufacturedInternally));
+    }
+    constraints.push(orderBy('code'), orderBy(documentId()));
+    if (params.cursor) constraints.push(startAfter(params.cursor));
+    constraints.push(limit(pageSize + 1));
+    const snap = await getDocs(tenantQuery(db, MATERIALS_COLLECTION, ...constraints));
+    const hasNext = snap.docs.length > pageSize;
+    const docs = hasNext ? snap.docs.slice(0, pageSize) : snap.docs;
+    return {
+      items: docs.map((row) => ({ id: row.id, ...row.data() } as Material)),
+      nextCursor: docs.length > 0 ? docs[docs.length - 1]! : null,
+      hasNext,
+    };
+  },
+
   async getAll(): Promise<Material[]> {
     if (!isConfigured) return [];
     const snap = await getDocs(tenantQuery(db, MATERIALS_COLLECTION));
@@ -117,8 +154,10 @@ export const materialService = {
     if (!isConfigured) return null;
     const want = normalizeMaterialCode(code);
     if (!want) return null;
-    const rows = await materialService.getAll();
-    return rows.find((r) => normalizeMaterialCode(r.code) === want) || null;
+    const snap = await getDocs(tenantQuery(db, MATERIALS_COLLECTION, where('code', '==', want), limit(1)));
+    if (snap.empty) return null;
+    const row = snap.docs[0]!;
+    return { id: row.id, ...row.data() } as Material;
   },
 
   async getByLegacyRawMaterialId(legacyId: string): Promise<Material | null> {
@@ -144,11 +183,8 @@ export const materialService = {
       const ownerId = String(claimSnap.data()?.ownerId || '');
       if (!excludeId || ownerId !== excludeId) return true;
     }
-    const rows = await materialService.getAll();
-    return rows.some((r) => {
-      if (excludeId && r.id === excludeId) return false;
-      return normalizeMaterialCode(r.code) === want;
-    });
+    const snap = await getDocs(tenantQuery(db, MATERIALS_COLLECTION, where('code', '==', want), limit(2)));
+    return snap.docs.some((row) => !excludeId || row.id !== excludeId);
   },
 
   /**
@@ -267,6 +303,7 @@ export const materialService = {
             ...payload,
             ...categoryFields,
             code: allocatedCode,
+            searchPrefixes: buildSearchPrefixes([payload.name, allocatedCode, (payload as unknown as { barcode?: unknown }).barcode]),
             baseUnit: payload.baseUnit || normalizeLegacyUnit(payload.baseUnit as string),
             conversionRate: Number(payload.conversionRate ?? 1) || 1,
             purchaseCost: Number(payload.purchaseCost ?? 0),
@@ -307,6 +344,7 @@ export const materialService = {
             ...payload,
             ...categoryFields,
             code,
+            searchPrefixes: buildSearchPrefixes([payload.name, code, (payload as unknown as { barcode?: unknown }).barcode]),
             baseUnit: payload.baseUnit || normalizeLegacyUnit(payload.baseUnit as string),
             conversionRate: Number(payload.conversionRate ?? 1) || 1,
             purchaseCost: Number(payload.purchaseCost ?? 0),
@@ -369,6 +407,10 @@ export const materialService = {
     const { id: _id, tenantId: _t, createdAt: _c, ...rest } = { ...payload, ...extra };
     const materialRef = doc(db, MATERIALS_COLLECTION, id);
     const sanitizedRest = stripClientSalePriceFields(rest as Record<string, unknown>);
+    if (payload.name !== undefined || payload.code !== undefined || 'barcode' in payload) {
+      const merged = { ...current, ...payload, ...extra } as Material & { barcode?: string };
+      sanitizedRest.searchPrefixes = buildSearchPrefixes([merged.name, nextCode, merged.barcode]);
+    }
 
     if (payload.code === undefined || nextCode === prevCode) {
       await updateDoc(materialRef, stripUndefined(sanitizedRest));

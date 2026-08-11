@@ -774,11 +774,14 @@ export const mutateRepairPaymentCallable = async (
 export type MutateRepairTreasuryInput = {
   operation:
     | "post_manual_entry"
+    | "approve_expense"
+    | "reject_expense"
     | "submit_settlement"
     | "approve_settlement"
     | "reject_settlement";
   requestId?: string;
   settlementId?: string;
+  expenseRequestId?: string;
   branchId?: string;
   fromBranchId?: string;
   entryType?: "INCOME" | "EXPENSE" | "TRANSFER_OUT" | "TRANSFER_IN";

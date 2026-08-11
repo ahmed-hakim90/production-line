@@ -23,7 +23,10 @@ import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { usePermission } from '@/utils/permissions';
 import { useResourcePermission } from '@/utils/useResourcePermission';
-import { useMaterials, useMaterialMutations } from '../hooks/useMaterials';
+import { useMaterialMutations } from '../hooks/useMaterials';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 import {
   MATERIAL_TYPE_LABELS,
   MATERIAL_UNIT_LABELS,
@@ -183,7 +186,6 @@ export const Materials: React.FC = () => {
     MANUFACTURING_OPERATION_KEYS.bomUpsert,
     BOM_UPSERT_PATHS.migration,
   );
-  const { data: rows = [], isLoading, refetch } = useMaterials();
   const { create, update, remove } = useMaterialMutations();
   const importInputRef = useRef<HTMLInputElement>(null);
   const categoryCodeRequestRef = useRef(0);
@@ -203,7 +205,6 @@ export const Materials: React.FC = () => {
   const [weightPerPiece, setWeightPerPiece] = useState(0);
   const [migrating, setMigrating] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>('code');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -213,6 +214,28 @@ export const Materials: React.FC = () => {
   const [importFileName, setImportFileName] = useState('');
   /** When true, existing codes are left as-is; only missing materials are created. */
   const [importSkipUpdates, setImportSkipUpdates] = useState(true);
+  const [importExistingMaterials, setImportExistingMaterials] = useState<Material[]>([]);
+  const debouncedSearch = useDebouncedValue(search, 350);
+  const materialPager = useCursorPagination<Material, NonNullable<Awaited<ReturnType<typeof materialService.listPaged>>['nextCursor']>>({
+    queryKey: JSON.stringify({
+      search: normalizeFirestoreSearch(debouncedSearch),
+      typeFilter,
+      statusFilter,
+      manufacturedFilter,
+      gapFilter,
+    }),
+    loadPage: (cursor) => materialService.listPaged({
+      pageSize: PAGE_SIZE,
+      cursor,
+      search: debouncedSearch,
+      type: typeFilter === 'all' ? undefined : typeFilter,
+      isActive: statusFilter === 'all' ? undefined : statusFilter === 'active',
+      isManufacturedInternally: manufacturedFilter === 'all' ? undefined : manufacturedFilter === 'internal',
+    }),
+  });
+  const rows = materialPager.items;
+  const isLoading = materialPager.loading;
+  const refetch = materialPager.refresh;
   const effectivePurchaseUnit = form.purchaseUnit || form.baseUnit;
   const usesWeightPerPiece =
     form.baseUnit === 'piece' && isWeightMaterialUnit(effectivePurchaseUnit);
@@ -263,16 +286,7 @@ export const Materials: React.FC = () => {
     return list;
   }, [filtered, sortKey, sortDir]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const page = Math.min(currentPage, totalPages);
-  const paged = useMemo(
-    () => sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [sorted, page],
-  );
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [search, typeFilter, statusFilter, manufacturedFilter, gapFilter, sortKey, sortDir]);
+  const paged = sorted;
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -508,6 +522,7 @@ export const Materials: React.FC = () => {
         }
       }
 
+      await refetch();
       setShowForm(false);
       toast.success(editing ? 'تم تحديث المادة.' : 'تمت إضافة المادة.');
     } catch (e) {
@@ -532,6 +547,7 @@ export const Materials: React.FC = () => {
     if (!window.confirm(`حذف المادة "${row.name}"؟`)) return;
     try {
       await remove.mutateAsync(row.id);
+      await refetch();
       toast.success('تم حذف المادة.');
     } catch {
       toast.error('تعذر حذف المادة.');
@@ -572,10 +588,12 @@ export const Materials: React.FC = () => {
     return map;
   }, [rawProducts]);
 
-  const handleExportExcel = () => {
-    if (!canExportFromPage || sorted.length === 0) return;
+  const handleExportExcel = async () => {
+    if (!canExportFromPage) return;
+    const exportRows = await materialService.getAll();
+    if (exportRows.length === 0) return;
     exportManufacturingMaterials(
-      sorted.map((r) => ({
+      exportRows.map((r) => ({
         code: r.code,
         name: r.name,
         categoryName: r.categoryName || '',
@@ -607,7 +625,11 @@ export const Materials: React.FC = () => {
     setImportFileName(file.name);
     setShowImportModal(true);
     try {
-      const categories = await materialCategoryService.getAll();
+      const [categories, existingMaterials] = await Promise.all([
+        materialCategoryService.getAll(),
+        materialService.getAll(),
+      ]);
+      setImportExistingMaterials(existingMaterials);
       const categoryOpts = categories
         .filter((c) => c.id)
         .map((c) => ({
@@ -615,7 +637,7 @@ export const Materials: React.FC = () => {
           name: c.name,
           breadcrumb: formatCategoryBreadcrumb(categories, c.id) || c.name,
         }));
-      const result = await parseMaterialsExcel(file, rows, {
+      const result = await parseMaterialsExcel(file, existingMaterials, {
         categories: categoryOpts,
         products: rawProducts
           .filter((p) => p.id && p.code)
@@ -656,13 +678,13 @@ export const Materials: React.FC = () => {
 
     let orderedRows;
     try {
-      orderedRows = orderMaterialImportRowsForSave(validRows, rows);
+      orderedRows = orderMaterialImportRowsForSave(validRows, importExistingMaterials);
     } catch {
       toast.error('تعذر ترتيب تحديثات الأكواد. راجع أخطاء الملف وأعد المحاولة.');
       return;
     }
 
-    const materialsSnapshot = [...rows];
+    const materialsSnapshot = [...importExistingMaterials];
     const skipUpdates = importSkipUpdates;
     // Skip rows are counted up front — job progress only tracks writes (create/update).
     const writeRows = orderedRows.filter(
@@ -788,7 +810,7 @@ export const Materials: React.FC = () => {
             </Button>
           ) : null}
           {canExportFromPage && sorted.length > 0 ? (
-            <Button type="button" size="sm" variant="outline" onClick={handleExportExcel}>
+            <Button type="button" size="sm" variant="outline" onClick={() => { void handleExportExcel(); }}>
               <span className="material-icons-round text-sm">download</span>
               تصدير بيانات المواد (للاستيراد)
             </Button>
@@ -1130,10 +1152,13 @@ export const Materials: React.FC = () => {
 
         {!isLoading && (
           <DataPaginationFooter
-            page={page}
-            totalPages={totalPages}
-            totalItems={sorted.length}
-            onPageChange={setCurrentPage}
+            page={materialPager.page}
+            itemCount={sorted.length}
+            hasPrevious={materialPager.hasPrevious}
+            hasNext={materialPager.hasNext}
+            onPrevious={materialPager.previous}
+            onNext={() => { void materialPager.next(); }}
+            loading={materialPager.loading}
             itemLabel="مادة"
           />
         )}

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Button } from '../../components/UI';
 import { toast } from '../../../../components/Toast';
 import { stockService } from '../../services/stockService';
@@ -9,6 +9,8 @@ import {
   type ConsumableOption,
 } from '../../lib/itemMovementTrace';
 import { ModalShell } from './ModalShell';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 const PAGE_SIZE = 30;
@@ -21,57 +23,44 @@ type Props = {
 };
 
 export const ItemMovementTraceModal: React.FC<Props> = ({ open, onClose, item, warehouses }) => {
-  const [rows, setRows] = useState<StockTransaction[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
   const [balances, setBalances] = useState<Array<{ warehouseName: string; qty: number }>>([]);
-  const cursorRef = useRef<unknown>(null);
 
   const warehouseName = useCallback((id: string) => {
     return warehouses.find((w) => w.id === id)?.name || id;
   }, [warehouses]);
 
-  const loadPage = useCallback(async (reset: boolean) => {
-    if (!item?.id) return;
-    setLoading(true);
-    try {
-      const page = await stockService.getTransactionsPaged({
+  const loadMovementPage = useCallback(async (cursor: Parameters<typeof stockService.getTransactionsPaged>[0] extends infer P
+    ? P extends { cursor?: infer C } ? C : never : never) => {
+      if (!item?.id) return { items: [], nextCursor: null, hasNext: false };
+      const result = await stockService.getTransactionsPaged({
         itemId: item.id,
         itemType: 'material',
         limit: PAGE_SIZE,
-        cursor: reset ? null : (cursorRef.current as never),
+        cursor,
       });
-      setRows((prev) => (reset ? page.items : [...prev, ...page.items]));
-      cursorRef.current = page.nextCursor;
-      setHasMore(page.hasMore);
-      if (reset) {
-        const bals = await stockService.getBalances();
-        setBalances(
-          bals
-            .filter((b) => b.itemType === 'material' && b.itemId === item.id)
-            .map((b) => ({
-              warehouseName: warehouseName(b.warehouseId),
-              qty: Number(b.quantity || 0),
-            })),
-        );
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'تعذر تحميل سجل الحركات.');
-    } finally {
-      setLoading(false);
-    }
-  }, [item?.id, warehouseName]);
+      return { items: result.items, nextCursor: result.nextCursor, hasNext: result.hasMore };
+  }, [item?.id]);
+  const movementPager = useCursorPagination<StockTransaction, NonNullable<Awaited<ReturnType<typeof stockService.getTransactionsPaged>>['nextCursor']>>({
+    queryKey: `inventory:item-trace:${open ? item?.id || '' : ''}`,
+    loadPage: loadMovementPage,
+    enabled: open && Boolean(item?.id),
+  });
+  const rows = movementPager.items;
+  const loading = movementPager.loading;
 
   useEffect(() => {
     if (!open || !item?.id) {
-      setRows([]);
-      cursorRef.current = null;
-      setHasMore(false);
       setBalances([]);
       return;
     }
-    void loadPage(true);
-  }, [open, item?.id, loadPage]);
+    void stockService.getBalances().then((bals) => {
+      setBalances(
+        bals
+          .filter((b) => b.itemType === 'material' && b.itemId === item.id)
+          .map((b) => ({ warehouseName: warehouseName(b.warehouseId), qty: Number(b.quantity || 0) })),
+      );
+    }).catch((error) => toast.error(error instanceof Error ? error.message : 'تعذر تحميل الأرصدة.'));
+  }, [open, item?.id, warehouseName]);
 
   if (!open || !item) return null;
 
@@ -143,16 +132,16 @@ export const ItemMovementTraceModal: React.FC<Props> = ({ open, onClose, item, w
         </table>
       </div>
 
-      {hasMore && (
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={loading}
-          onClick={() => void loadPage(false)}
-        >
-          {loading ? 'جاري التحميل...' : 'تحميل المزيد'}
-        </Button>
-      )}
+      <DataPaginationFooter
+        page={movementPager.page}
+        itemCount={rows.length}
+        itemLabel="حركة"
+        hasPrevious={movementPager.hasPrevious}
+        hasNext={movementPager.hasNext}
+        onPrevious={movementPager.previous}
+        onNext={() => void movementPager.next()}
+        loading={loading}
+      />
     </ModalShell>
   );
 };

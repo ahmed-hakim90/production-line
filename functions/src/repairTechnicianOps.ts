@@ -166,26 +166,14 @@ const claimJobFromInternalQr = async (actor: Actor, data: Record<string, unknown
     actorIds,
   });
   rejectClaimDecision(preDecision);
-  // Already owned by this technician — open workspace without a no-op transaction.
+  // Already owned by this technician — open workspace without a no-op transaction
+  // (including closed/terminal jobs for read-only reopen via QR).
   if (preDecision === 'already_self') {
     return { ok: true as const, jobId, claimed: false };
   }
-  // Desk assign rejects non-branch techs; QR claim must match (no cross-branch claim).
+  // Technicians move across branches; QR claim is company-scoped (tenant + technician role),
+  // not limited to repair_branches.technicianIds. Desk assign may still use the branch list.
   if (!branchId) throw new HttpsError('failed-precondition', 'الطلب غير مرتبط بفرع.');
-  const branchSnap = await db.collection('repair_branches').doc(branchId).get();
-  if (!branchSnap.exists) throw new HttpsError('not-found', 'فرع الطلب غير موجود.');
-  const branchData = branchSnap.data() as { tenantId?: string; technicianIds?: unknown };
-  if (String(branchData.tenantId || '') !== actor.tenantId) {
-    throw new HttpsError('permission-denied', 'فرع الطلب خارج شركتك.');
-  }
-  const branchTechnicianIds = new Set(
-    (Array.isArray(branchData.technicianIds) ? branchData.technicianIds : [])
-      .map((id) => String(id || '').trim())
-      .filter(Boolean),
-  );
-  if (!actorIds.some((id) => branchTechnicianIds.has(id))) {
-    throw new HttpsError('permission-denied', 'لست فنيًا مربوطًا بفرع هذا الطلب.');
-  }
   const at = new Date().toISOString();
   let claimed = false;
   let advancedStatus: string | null = null;

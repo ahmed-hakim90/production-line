@@ -4,9 +4,11 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { createHash } from 'node:crypto';
 import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
+import { collectPushTokenTargets } from './pushTokenLookup.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
 import {
@@ -107,6 +109,7 @@ const REPAIR_PARTS_TRANSACTIONS_COLLECTION = 'repair_parts_transactions';
 const REPAIR_SALES_INVOICES_COLLECTION = 'repair_sales_invoices';
 const REPAIR_TREASURY_SESSIONS_COLLECTION = 'repair_treasury_sessions';
 const REPAIR_TREASURY_ENTRIES_COLLECTION = 'repair_treasury_entries';
+const REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION = 'repair_treasury_expense_requests';
 const REPAIR_PM_PLANS_COLLECTION = 'repair_pm_plans';
 const CUSTOMER_SERVICE_REQUESTS_COLLECTION = 'customer_service_requests';
 const CUSTOMER_SERVICE_EVENTS_COLLECTION = 'customer_service_events';
@@ -178,9 +181,13 @@ const writeAuditDelta = async (params: {
 type ReportLike = {
   date?: string;
   tenantId?: string;
+  productId?: string;
   quantityProduced?: number;
+  reportType?: string;
   componentScrapItems?: Array<{ quantity?: number }>;
   totalCost?: number;
+  legacyConversionCostSnapshot?: number;
+  fullManufacturingCostSnapshot?: number;
 };
 
 const toNumber = (value: unknown): number => {
@@ -195,12 +202,22 @@ const deriveComponentWaste = (items: ReportLike['componentScrapItems']): number 
 
 const normalizeReport = (value: ReportLike | undefined): Required<ReportLike> | null => {
   if (!value || !value.date || !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return null;
+  const reportType = String(value.reportType || 'finished_product');
+  const countsTowardVolume = reportType !== 'packaging' && reportType !== 'component_waste';
   return {
     date: value.date,
     tenantId: String(value.tenantId || 'global').trim() || 'global',
-    quantityProduced: toNumber(value.quantityProduced),
+    productId: String(value.productId || '').trim(),
+    quantityProduced: countsTowardVolume ? toNumber(value.quantityProduced) : 0,
+    reportType,
     componentScrapItems: Array.isArray(value.componentScrapItems) ? value.componentScrapItems : [],
-    totalCost: toNumber(value.totalCost),
+    totalCost: toNumber(
+      value.fullManufacturingCostSnapshot
+      ?? value.legacyConversionCostSnapshot
+      ?? value.totalCost,
+    ),
+    legacyConversionCostSnapshot: toNumber(value.legacyConversionCostSnapshot),
+    fullManufacturingCostSnapshot: toNumber(value.fullManufacturingCostSnapshot),
   };
 };
 
@@ -484,6 +501,11 @@ const applyDelta = async (report: Required<ReportLike>, factor: 1 | -1) => {
   const root = statsRootForTenant(tid);
   const dailyRef = db.doc(`${root}/daily/${report.date}`);
   const monthlyRef = db.doc(`${root}/monthly/${monthKey(report.date)}`);
+  const productRef = report.productId ? db.doc(`${root}/products/${report.productId}`) : null;
+  const productCatalogRef = report.productId ? db.doc(`products/${report.productId}`) : null;
+  const productMonthRef = report.productId
+    ? db.doc(`${root}/productMonths/${monthKey(report.date)}__${report.productId}`)
+    : null;
   const wasteQuantity = deriveComponentWaste(report.componentScrapItems);
   const payload = {
     totalProduction: FieldValue.increment(report.quantityProduced * factor),
@@ -496,7 +518,39 @@ const applyDelta = async (report: Required<ReportLike>, factor: 1 | -1) => {
   const batch = db.batch();
   batch.set(dailyRef, { date: report.date, month: monthKey(report.date), ...payload }, { merge: true });
   batch.set(monthlyRef, { month: monthKey(report.date), ...payload }, { merge: true });
+  if (productRef && productMonthRef) {
+    batch.set(productRef, { productId: report.productId, ...payload }, { merge: true });
+    batch.set(productMonthRef, {
+      productId: report.productId,
+      month: monthKey(report.date),
+      ...payload,
+    }, { merge: true });
+  }
   await batch.commit();
+  if (productCatalogRef) {
+    const reportMonth = monthKey(report.date);
+    await db.runTransaction(async (transaction) => {
+      const current = await transaction.get(productCatalogRef);
+      if (!current.exists) return;
+      const currentMonth = String(current.data()?.productionStatsMonth || '');
+      const update: Record<string, unknown> = {
+        totalProduction: FieldValue.increment(report.quantityProduced * factor),
+        totalWaste: FieldValue.increment(wasteQuantity * factor),
+        productionStatsUpdatedAt: FieldValue.serverTimestamp(),
+      };
+      if (currentMonth === reportMonth) {
+        update.monthlyProduction = FieldValue.increment(report.quantityProduced * factor);
+        update.monthlyWaste = FieldValue.increment(wasteQuantity * factor);
+        update.monthlyProductionCost = FieldValue.increment(report.totalCost * factor);
+      } else if (factor === 1 && (!currentMonth || reportMonth > currentMonth)) {
+        update.productionStatsMonth = reportMonth;
+        update.monthlyProduction = report.quantityProduced;
+        update.monthlyWaste = wasteQuantity;
+        update.monthlyProductionCost = report.totalCost;
+      }
+      transaction.update(productCatalogRef, update);
+    });
+  }
 };
 
 export const aggregateProductionReports = onDocumentWritten(
@@ -600,17 +654,16 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
     const recipientId = String(payload.recipientId || '').trim();
     if (!recipientId) return;
 
-    const devicesSnap = await db
-      .collection(USER_DEVICES_COLLECTION)
-      .where('employeeId', '==', recipientId)
-      .where('enabled', '==', true)
-      .get();
-
-    if (devicesSnap.empty) return;
-    const tokens = devicesSnap.docs
-      .map((d) => String((d.data() as { token?: string }).token || '').trim())
-      .filter(Boolean);
-    if (tokens.length === 0) return;
+    const tokenTargets = await collectPushTokenTargets(db, recipientId);
+    const tokens = tokenTargets.map((target) => target.token);
+    if (tokens.length === 0) {
+      logger.info('push skipped: no device tokens', {
+        notificationId: String(after.id),
+        recipientId,
+        type: String(payload.type || ''),
+      });
+      return;
+    }
 
     const notificationId = String(after.id);
     const type = String(payload.type || '').trim();
@@ -681,14 +734,20 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
     if (invalidTokenIndexes.length === 0) return;
 
     const cleanupBatch = db.batch();
+    const seenCleanupPaths = new Set<string>();
     invalidTokenIndexes.forEach((idx) => {
-      const token = tokens[idx];
-      if (!token) return;
-      cleanupBatch.set(db.collection(USER_DEVICES_COLLECTION).doc(token), {
-        enabled: false,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+      const target = tokenTargets[idx];
+      if (!target) return;
+      target.refs.forEach((ref) => {
+        if (seenCleanupPaths.has(ref.path)) return;
+        seenCleanupPaths.add(ref.path);
+        cleanupBatch.set(ref, {
+          enabled: false,
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
     });
+    if (seenCleanupPaths.size === 0) return;
     await cleanupBatch.commit();
   },
 );
@@ -1360,6 +1419,7 @@ export const deleteRepairBranchCascade = onCall(
     unlinkedCounts.managers = managerEmployeeId ? 1 : 0;
 
     deletedCounts[REPAIR_TREASURY_ENTRIES_COLLECTION] = await deleteByBranchId(REPAIR_TREASURY_ENTRIES_COLLECTION, branchId);
+    deletedCounts[REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION] = await deleteByBranchId(REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION, branchId);
     deletedCounts[REPAIR_TREASURY_SESSIONS_COLLECTION] = await deleteByBranchId(REPAIR_TREASURY_SESSIONS_COLLECTION, branchId);
     deletedCounts[REPAIR_PARTS_TRANSACTIONS_COLLECTION] = await deleteByBranchId(REPAIR_PARTS_TRANSACTIONS_COLLECTION, branchId);
     deletedCounts[REPAIR_SPARE_PARTS_STOCK_COLLECTION] = await deleteByBranchId(REPAIR_SPARE_PARTS_STOCK_COLLECTION, branchId);

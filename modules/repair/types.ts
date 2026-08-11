@@ -70,6 +70,37 @@ export type RepairTreasuryEntryType =
 
 export type RepairTreasurySettlementStatus = 'submitted' | 'approved' | 'rejected';
 
+export type RepairTreasuryExpenseRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface RepairTreasuryExpenseRequest {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  sessionId: string;
+  requestId: string;
+  status: RepairTreasuryExpenseRequestStatus;
+  amount: number;
+  note: string;
+  paymentMethod: RepairPaymentMethod;
+  costCenterId: string;
+  expenseType: string;
+  expenseAccountId?: string | null;
+  requestedBy: string;
+  requestedByName: string;
+  requestedAt: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedByName?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  treasuryEntryId?: string;
+  journalEntryId?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface RepairTreasurySettlement {
   id?: string;
   tenantId: string;

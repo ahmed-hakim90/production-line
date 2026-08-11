@@ -16,6 +16,7 @@ import {
   QueryDocumentSnapshot,
   runTransaction,
   deleteField,
+  documentId,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { ProductionReport } from '../../../types';
@@ -191,17 +192,20 @@ export const reportService = {
       where('date', '>=', params.startDate),
       where('date', '<=', params.endDate),
       orderBy('date', 'desc'),
+      orderBy(documentId()),
     ];
     if (params.lineId) constraints.unshift(where('lineId', '==', params.lineId));
     if (params.productId) constraints.unshift(where('productId', '==', params.productId));
     if (params.employeeId) constraints.unshift(where('employeeId', '==', params.employeeId));
     if (params.cursor) constraints.push(startAfter(params.cursor));
-    constraints.push(limit(pageSize));
+    constraints.push(limit(pageSize + 1));
     const q = tenantQuery(db, COLLECTION, ...constraints);
     const snap = await getDocs(q);
-    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
-    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+    const hasMore = snap.docs.length > pageSize;
+    const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const items = docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+    const nextCursor = docs.length > 0 ? docs[docs.length - 1] : null;
+    return { items, nextCursor, hasMore };
   },
 
   async listBySupplyCycleIdPaged(
@@ -214,14 +218,17 @@ export const reportService = {
     const constraints: any[] = [
       where('supplyCycleId', '==', params.supplyCycleId.trim()),
       orderBy('date', 'desc'),
+      orderBy(documentId()),
     ];
     if (params.cursor) constraints.push(startAfter(params.cursor));
-    constraints.push(limit(pageSize));
+    constraints.push(limit(pageSize + 1));
     const q = tenantQuery(db, COLLECTION, ...constraints);
     const snap = await getDocs(q);
-    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
-    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+    const hasMore = snap.docs.length > pageSize;
+    const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const items = docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
+    const nextCursor = docs.length > 0 ? docs[docs.length - 1] : null;
+    return { items, nextCursor, hasMore };
   },
 
   async listAllBySupplyCycleId(supplyCycleId: string): Promise<ProductionReport[]> {

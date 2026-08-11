@@ -37,7 +37,7 @@ import {
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
+import { useAppStore } from '../../../store/useAppStore';
 import {
   parseCatalogProductGap,
   type CatalogProductGap,
@@ -47,9 +47,14 @@ import { Button, Badge } from '../components/UI';
 import { type ProductBomCountCard } from '../components/ProductBomCountCardPrint';
 import { ProductBomCountCardPreviewModal } from '../components/ProductBomCountCardPreviewModal';
 import { buildProductBomCountCards } from '../lib/buildProductBomCountCards';
+import { productService } from '../services/productService';
 import { formatNumber } from '../../../utils/calculations';
 import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
 import type { Product, ProductionReport } from '../../../types';
+import type { FirestoreProduct } from '../../../types';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 import { usePermission } from '../../../utils/permissions';
 import { useResourcePermission } from '@/utils/useResourcePermission';
 import {
@@ -120,7 +125,6 @@ import { CategoryTreeSelect } from '../../catalog/components/CategoryTreeSelect'
 import { categoryService, isProductCategoryRow } from '../../catalog/services/categoryService';
 import { flattenCategoryTree, formatCategoryBreadcrumb } from '../../catalog/lib/categoryTree';
 import { monthlyProductionCostService } from '../../costs/services/monthlyProductionCostService';
-import { reportService } from '../services/reportService';
 import {
   Select,
   SelectContent,
@@ -289,8 +293,6 @@ export const Products: React.FC = () => {
   const completeJob = useJobsStore((s) => s.completeJob);
   const failJob = useJobsStore((s) => s.failJob);
 
-  const storeTodayReports = useAppStore((s) => s.todayReports);
-  const storeMonthlyReports = useAppStore((s) => s.monthlyReports);
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
@@ -302,6 +304,7 @@ export const Products: React.FC = () => {
     ? 'material'
     : 'raw_material';
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+
 
   const { can } = usePermission();
   const productPerms = useResourcePermission('products');
@@ -435,14 +438,37 @@ export const Products: React.FC = () => {
   const [stockFilter, setStockFilter] = useState('');
   const [manufacturedFilter, setManufacturedFilter] = useState('');
   const [gapFilter, setGapFilter] = useState<CatalogProductGap | ''>('');
+  const debouncedProductSearch = useDebouncedValue(search, 350);
+  const loadProductPage = useCallback((cursor: Parameters<typeof productService.listPaged>[0]['cursor']) =>
+    productService.listPaged({
+      pageSize: 20,
+      cursor,
+      search: debouncedProductSearch,
+      categoryId: categoryFilter && !categoryFilter.startsWith('name:') ? categoryFilter : undefined,
+      // Legacy products omit this field and semantically mean manufactured=true.
+      isManufactured: manufacturedFilter === 'no' ? false : undefined,
+    }), [categoryFilter, debouncedProductSearch, manufacturedFilter]);
+  const productPager = useCursorPagination<FirestoreProduct, NonNullable<Awaited<ReturnType<typeof productService.listPaged>>['nextCursor']>>({
+    queryKey: JSON.stringify({
+      search: normalizeFirestoreSearch(debouncedProductSearch),
+      categoryFilter,
+      manufacturedFilter,
+      stockFilter,
+      gapFilter,
+    }),
+    loadPage: loadProductPage,
+  });
+  const productsPageLoading = productsLoading || productPager.loading;
+
+  useEffect(() => {
+    useAppStore.setState({ _rawProducts: productPager.items });
+    useAppStore.getState()._rebuildProducts();
+  }, [productPager.items]);
   const [productIdsWithBom, setProductIdsWithBom] = useState<Set<string> | null>(null);
   const [categoryFilterOptions, setCategoryFilterOptions] = useState<
     Array<{ value: string; label: string; leafName: string }>
   >([]);
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
-  const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
-  const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
-  const [savedMonthlyCostsMap, setSavedMonthlyCostsMap] = useState<Record<string, ProductCostData>>({});
   const [warehouses, setWarehouses] = useState<InventoryWarehouse[]>([]);
   const [showWarehouseExportModal, setShowWarehouseExportModal] = useState(false);
   const [exportWarehouseId, setExportWarehouseId] = useState('');
@@ -547,8 +573,6 @@ export const Products: React.FC = () => {
   }, [detailDrawerProductId]);
 
   // Sort & Pagination & Selection
-  const PAGE_SIZE = 20;
-  const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -556,46 +580,11 @@ export const Products: React.FC = () => {
   const handleSort = (key: string) => {
     if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     else { setSortKey(key); setSortDir('asc'); }
-    setCurrentPage(1);
   };
 
-  /** إجمالي ما تم إنتاجه من التقارير (مثل صفحة تفاصيل المنتج)، وليس رصيد مخزن التام */
-  const [lifetimeProducedByProductId, setLifetimeProducedByProductId] = useState<Record<string, number>>({});
-  const [lifetimeProducedReady, setLifetimeProducedReady] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void reportService
-      .getAll()
-      .then((reports) => {
-        if (cancelled) return;
-        const next: Record<string, number> = {};
-        for (const r of reports) {
-          if (!countsTowardProductManufacturingVolume(r)) continue;
-          const pid = String(r.productId || '').trim();
-          if (!pid) continue;
-          next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
-        }
-        setLifetimeProducedByProductId(next);
-        setLifetimeProducedReady(true);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setLifetimeProducedByProductId({});
-          setLifetimeProducedReady(true);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const productsForTable = useMemo((): Product[] => {
-    return products.map((p) => ({
-      ...p,
-      totalProduction: lifetimeProducedReady ? (lifetimeProducedByProductId[p.id] ?? 0) : p.totalProduction,
-    }));
-  }, [products, lifetimeProducedByProductId, lifetimeProducedReady]);
+  // totalProduction is a write-time aggregate on the product document. Do not
+  // scan the entire production_reports collection to render this column.
+  const productsForTable = products;
 
   const rawById = useMemo(() => {
     const map = new Map<string, (typeof _rawProducts)[number]>();
@@ -662,18 +651,13 @@ export const Products: React.FC = () => {
     productIdsWithBom,
   ]);
 
-  const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
-  const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
   const monthlyQtyByProductId = useMemo(() => {
-    const next: Record<string, number> = {};
-    for (const r of monthlyReports) {
-      if (!countsTowardProductManufacturingVolume(r)) continue;
-      const pid = String(r.productId || '').trim();
-      if (!pid) continue;
-      next[pid] = (next[pid] || 0) + Number(r.quantityProduced || 0);
-    }
-    return next;
-  }, [monthlyReports]);
+    const month = getCurrentMonth();
+    return Object.fromEntries(_rawProducts.map((product) => [
+      String(product.id || ''),
+      product.productionStatsMonth === month ? Number(product.monthlyProduction || 0) : 0,
+    ]));
+  }, [_rawProducts]);
 
   const exportMonthQtyByProductId = useMemo(() => {
     const next: Record<string, number> = {};
@@ -687,7 +671,6 @@ export const Products: React.FC = () => {
   }, [exportMonthReports]);
 
   useEffect(() => {
-    setCurrentPage(1);
     setSelectedIds(new Set());
   }, [search, categoryFilter, stockFilter, manufacturedFilter, gapFilter]);
 
@@ -787,15 +770,23 @@ export const Products: React.FC = () => {
 
   const productCosts = useMemo(() => {
     if (!canViewCosts) return {} as Record<string, ProductCostData>;
-    const hourlyRate = laborSettings?.hourlyRate ?? 0;
-    const allReports = monthlyReports.length > 0 ? monthlyReports : todayReports;
     const result: Record<string, ProductCostData> = {};
+    const month = getCurrentMonth();
     for (const p of products) {
-      result[p.id] = savedMonthlyCostsMap[p.id]
-        ?? buildProductAvgCost(p.id, allReports, hourlyRate, costCenters, costCenterValues, costAllocations);
+      const raw = rawById.get(p.id);
+      const matchesMonth = raw?.productionStatsMonth === month;
+      const quantityProduced = matchesMonth ? Number(raw?.monthlyProduction || 0) : 0;
+      const totalCost = matchesMonth ? Number(raw?.monthlyProductionCost || 0) : 0;
+      result[p.id] = {
+        laborCost: 0,
+        indirectCost: totalCost,
+        totalCost,
+        quantityProduced,
+        costPerUnit: quantityProduced > 0 ? totalCost / quantityProduced : 0,
+      };
     }
     return result;
-  }, [canViewCosts, products, monthlyReports, todayReports, laborSettings, costCenters, costCenterValues, costAllocations, savedMonthlyCostsMap]);
+  }, [canViewCosts, products, rawById]);
 
   const [materialsByProductId, setMaterialsByProductId] = useState<Record<string, ProductMaterial[]>>({});
 
@@ -872,12 +863,8 @@ export const Products: React.FC = () => {
     });
   }, [filtered, sortKey, sortDir, monthlyQtyByProductId, costBreakdownByProductId]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const page = Math.min(currentPage, totalPages);
-  const paginated = useMemo(
-    () => sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [sorted, page],
-  );
+  const page = productPager.page;
+  const paginated = sorted;
 
   const allPageSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
   const somePageSelected = !allPageSelected && paginated.some((p) => selectedIds.has(p.id));
@@ -945,22 +932,16 @@ export const Products: React.FC = () => {
   };
 
   useEffect(() => {
+    const itemIds = productPager.items.map((product) => String(product.id || '')).filter(Boolean);
     void (async () => {
       try {
-        const rows: StockItemBalance[] = [];
-        let cursor: any = null;
-        for (let page = 0; page < 5; page += 1) {
-          const res = await stockService.getBalancesPaged({cursor });
-          rows.push(...res.items);
-          if (!res.hasMore || !res.nextCursor) break;
-          cursor = res.nextCursor;
-        }
+        const rows = await stockService.getBalancesForItems(itemIds);
         setInventoryBalances(rows);
       } catch {
         setInventoryBalances([]);
       }
     })();
-  }, []);
+  }, [productPager.items]);
 
   useEffect(() => {
     let cancelled = false;
@@ -977,69 +958,6 @@ export const Products: React.FC = () => {
     void loadWarehouses();
     return () => { cancelled = true; };
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const now = new Date();
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const monthStart = `${month}-01`;
-    const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
-    const today = new Date().toISOString().slice(0, 10);
-    const maxAgeMs = 5 * 60 * 1000;
-    const kToday = getProductionReportsRangeCacheKey(today, today);
-    const kMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-    const cache = useAppStore.getState().productionReportsRangeCache;
-    if (cache[kToday]) setTodayReportsScoped(cache[kToday].rows);
-    if (cache[kMonth]) setMonthlyReportsScoped(cache[kMonth].rows);
-    void Promise.all([
-      ensureProductionReportsForRange(today, today, { maxAgeMs }),
-      ensureProductionReportsForRange(monthStart, monthEnd, { maxAgeMs }),
-    ])
-      .then(([todayRows, monthRows]) => {
-        if (cancelled) return;
-        setTodayReportsScoped(todayRows);
-        setMonthlyReportsScoped(monthRows);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setTodayReportsScoped([]);
-        setMonthlyReportsScoped([]);
-      });
-    return () => { cancelled = true; };
-  }, [ensureProductionReportsForRange]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadSavedMonthlyCosts = async () => {
-      if (!canViewCosts) {
-        if (!cancelled) setSavedMonthlyCostsMap({});
-        return;
-      }
-      try {
-        const rows = await monthlyProductionCostService.getByMonth(getCurrentMonth());
-        if (cancelled) return;
-        const next = rows.reduce<Record<string, ProductCostData>>((acc, row) => {
-          const qty = Number(row.totalProducedQty || 0);
-          const labor = Number(row.directCost || 0);
-          const indirect = Number(row.indirectCost || 0);
-          const total = Number(row.totalProductionCost || (labor + indirect));
-          acc[row.productId] = {
-            laborCost: labor,
-            indirectCost: indirect,
-            totalCost: total,
-            quantityProduced: qty,
-            costPerUnit: qty > 0 ? (total / qty) : Number(row.averageUnitCost || 0),
-          };
-          return acc;
-        }, {});
-        setSavedMonthlyCostsMap(next);
-      } catch {
-        if (!cancelled) setSavedMonthlyCostsMap({});
-      }
-    };
-    void loadSavedMonthlyCosts();
-    return () => { cancelled = true; };
-  }, [canViewCosts]);
 
   const monthExportProductCount = useMemo(() => {
     const idSet = new Set<string>();
@@ -1155,6 +1073,8 @@ export const Products: React.FC = () => {
         const flat = await categoryService.getAll();
         const productCats = flat.filter(isProductCategoryRow);
         if (cancelled) return;
+        useAppStore.setState({ _productCategories: productCats });
+        useAppStore.getState()._rebuildProducts();
         const opts = flattenCategoryTree(tree)
           .filter(({ category }) => category.id)
           .map(({ category }) => ({
@@ -2346,9 +2266,10 @@ export const Products: React.FC = () => {
                 label: 'تصدير بيانات المنتجات (للاستيراد)',
                 icon: 'table_chart',
                 group: 'بيانات أساسية',
-                hidden: !canExportFromPage || _rawProducts.length === 0,
-                onClick: () => {
-                  const rows = _rawProducts
+                hidden: !canExportFromPage,
+                onClick: () => { void (async () => {
+                  const exportRows = await productService.getAll();
+                  const rows = exportRows
                     .filter((p) => p.id && p.code)
                     .map((p) => ({
                       code: p.code,
@@ -2375,7 +2296,7 @@ export const Products: React.FC = () => {
                     includeSellingPrice: canViewSellingPrice,
                   });
                   toast.success(`تم تصدير ${rows.length} منتج (بيانات أساسية للاستيراد).`);
-                },
+                })().catch(() => toast.error('تعذر قراءة بيانات المنتجات للتصدير.')); },
               },
               {
                 label: 'تحميل قالب بيانات المنتجات',
@@ -2663,7 +2584,7 @@ export const Products: React.FC = () => {
           </div>
         )}
 
-        {productsLoading ? (
+        {productsPageLoading ? (
           <div className="p-4 space-y-3" aria-busy="true" aria-label="جاري تحميل المنتجات">
             {layoutMode === 'grid' ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
@@ -3201,12 +3122,15 @@ export const Products: React.FC = () => {
           )}
         </div>
         )}
-        {!productsLoading && (
+        {!productsPageLoading && (
           <DataPaginationFooter
             page={page}
-            totalPages={totalPages}
-            totalItems={sorted.length}
-            onPageChange={setCurrentPage}
+            itemCount={paginated.length}
+            hasPrevious={productPager.hasPrevious}
+            hasNext={productPager.hasNext}
+            onPrevious={productPager.previous}
+            onNext={() => void productPager.next()}
+            loading={productsPageLoading}
             itemLabel="منتج"
           />
         )}
@@ -4317,6 +4241,3 @@ export const Products: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
-
-

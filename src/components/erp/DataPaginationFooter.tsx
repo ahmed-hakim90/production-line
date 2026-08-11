@@ -4,9 +4,15 @@ import { cn } from '@/lib/utils';
 
 export type DataPaginationFooterProps = {
   page: number;
-  totalPages: number;
-  totalItems: number;
-  onPageChange: (page: number) => void;
+  totalPages?: number;
+  totalItems?: number;
+  onPageChange?: (page: number) => void;
+  itemCount?: number;
+  hasPrevious?: boolean;
+  hasNext?: boolean;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  loading?: boolean;
   /** Noun for total count, e.g. شحنة / سجل */
   itemLabel?: string;
   className?: string;
@@ -15,13 +21,21 @@ export type DataPaginationFooterProps = {
 /** RTL-friendly footer: page info + prev/numbered/next (labeled controls only). */
 export const DataPaginationFooter: React.FC<DataPaginationFooterProps> = ({
   page,
-  totalPages,
-  totalItems,
+  totalPages = 1,
+  totalItems = 0,
   onPageChange,
+  itemCount,
+  hasPrevious,
+  hasNext,
+  onPrevious,
+  onNext,
+  loading = false,
   itemLabel = 'سجل',
   className,
 }) => {
-  if (totalItems === 0) return null;
+  const cursorMode = onPrevious != null || onNext != null;
+  const visibleCount = itemCount ?? totalItems;
+  if (visibleCount === 0 && !loading) return null;
 
   return (
     <div
@@ -31,9 +45,22 @@ export const DataPaginationFooter: React.FC<DataPaginationFooterProps> = ({
       )}
     >
       <div className="text-sm text-muted-foreground tabular-nums">
-        صفحة {page} من {totalPages} — إجمالي {totalItems} {itemLabel}
+        {cursorMode
+          ? `صفحة ${page} — ${visibleCount} ${itemLabel}`
+          : `صفحة ${page} من ${totalPages} — إجمالي ${totalItems} ${itemLabel}`}
       </div>
-      {totalPages > 1 && (
+      {cursorMode ? (
+        <div className="flex items-center gap-1">
+          <Button type="button" variant="outline" size="sm" className="h-8 px-2.5"
+            disabled={!hasPrevious || loading} onClick={onPrevious}>
+            السابق
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="h-8 px-2.5"
+            disabled={!hasNext || loading} onClick={onNext}>
+            التالي
+          </Button>
+        </div>
+      ) : totalPages > 1 && onPageChange ? (
         <div className="flex items-center gap-1">
           <Button
             type="button"
@@ -72,7 +99,7 @@ export const DataPaginationFooter: React.FC<DataPaginationFooterProps> = ({
             التالي
           </Button>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

@@ -18,6 +18,7 @@ import {
 import { db, isConfigured } from './firebase';
 import type { FirestoreUser } from '../types';
 import { getCurrentTenantId } from '../lib/currentTenant';
+import { buildSearchPrefixes } from '../lib/firestoreSearch';
 
 const COLLECTION = 'users';
 
@@ -69,6 +70,7 @@ export const userService = {
       await setDoc(doc(db, COLLECTION, uid), {
         ...data,
         tenantId: data.tenantId || getCurrentTenantId(),
+        searchPrefixes: buildSearchPrefixes([data.displayName, data.email]),
         createdAt: serverTimestamp(),
       });
     } catch (error) {
@@ -130,7 +132,20 @@ export const userService = {
   async update(uid: string, data: Partial<Omit<FirestoreUser, 'id'>>): Promise<void> {
     if (!isConfigured) return;
     try {
-      await updateDoc(doc(db, COLLECTION, uid), data as Record<string, any>);
+      const ref = doc(db, COLLECTION, uid);
+      let payload: Record<string, any> = data as Record<string, any>;
+      if ('displayName' in data || 'email' in data) {
+        const current = await getDoc(ref);
+        const previous = current.data() as Partial<FirestoreUser> | undefined;
+        payload = {
+          ...payload,
+          searchPrefixes: buildSearchPrefixes([
+            data.displayName ?? previous?.displayName,
+            data.email ?? previous?.email,
+          ]),
+        };
+      }
+      await updateDoc(ref, payload);
     } catch (error) {
       console.error('userService.update error:', error);
       throw error;

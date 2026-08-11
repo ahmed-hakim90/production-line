@@ -123,6 +123,7 @@ import {
 } from '../components/ProductionReportPrint';
 import { ProductionReportShareCardTarget } from '../components/ProductionReportShareCardTarget';
 import { SelectableTable } from '../components/SelectableTable';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import type { TableColumn, TableBulkAction } from '../components/SelectableTable';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
@@ -966,6 +967,8 @@ export const Reports: React.FC = () => {
   const [viewMode, setViewMode] = useState<'today' | 'range' | 'general'>('today');
   const [rangeCursor, setRangeCursor] = useState<FirestoreCursor>(null);
   const [rangeHasMore, setRangeHasMore] = useState(false);
+  const [rangePage, setRangePage] = useState(1);
+  const rangePageCacheRef = useRef<Array<{ items: ProductionReport[]; nextCursor: FirestoreCursor; hasMore: boolean }>>([]);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
   const [generalMonthlyDialogOpen, setGeneralMonthlyDialogOpen] = useState(false);
@@ -978,6 +981,13 @@ export const Reports: React.FC = () => {
   const [factorySortDirection, setFactorySortDirection] = useState<'asc' | 'desc'>('desc');
   const reportsUiReferenceCache = useAppStore((s) => s.reportsUiReferenceCache);
   const ensureReportsUiReferenceData = useAppStore((s) => s.ensureReportsUiReferenceData);
+  const fetchProducts = useAppStore((s) => s.fetchProducts);
+  const fetchLines = useAppStore((s) => s.fetchLines);
+  const fetchEmployees = useAppStore((s) => s.fetchEmployees);
+
+  useEffect(() => {
+    void Promise.all([fetchProducts(), fetchLines(), fetchEmployees()]).catch(() => undefined);
+  }, [fetchEmployees, fetchLines, fetchProducts]);
   const stockBalances: StockItemBalance[] = reportsUiReferenceCache?.stockBalances ?? [];
   const warehouses: Warehouse[] = reportsUiReferenceCache?.warehouses ?? [];
   const categoryOptions: string[] = reportsUiReferenceCache?.categoryOptions ?? [];
@@ -1207,12 +1217,20 @@ export const Reports: React.FC = () => {
           lineId: filterLineId.trim() || undefined,
           employeeId: employeeIdForQuery,
         });
-        const current = append ? useAppStore.getState().productionReports : [];
-        useAppStore.setState({
-          productionReports: append ? [...current, ...page.items] : page.items,
-        });
+        useAppStore.setState({ productionReports: page.items });
         setRangeCursor(page.nextCursor);
         setRangeHasMore(page.hasMore);
+        if (append) {
+          const nextPageNumber = rangePage + 1;
+          rangePageCacheRef.current = [
+            ...rangePageCacheRef.current.slice(0, nextPageNumber - 1),
+            { items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore },
+          ];
+          setRangePage(nextPageNumber);
+        } else {
+          rangePageCacheRef.current = [{ items: page.items, nextCursor: page.nextCursor, hasMore: page.hasMore }];
+          setRangePage(1);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
         setRangeError(message);
@@ -1220,7 +1238,7 @@ export const Reports: React.FC = () => {
         setRangeLoading(false);
       }
     },
-    [rangeCursor, filterLineId, filterEmployeeId, myEmployeeId],
+    [rangeCursor, rangePage, filterLineId, filterEmployeeId, myEmployeeId],
   );
 
   /** Load every page for a date range so general/monthly summaries are complete. */
@@ -1263,9 +1281,9 @@ export const Reports: React.FC = () => {
         useAppStore.setState({ productionReports: all });
         setRangeCursor(hasMore ? cursor : null);
         setRangeHasMore(hasMore);
-        if (hasMore) {
-          setRangeError('تم تحميل جزء من التقارير فقط. استخدم «تحميل المزيد» لإكمال الباقي.');
-        }
+        setRangePage(1);
+        rangePageCacheRef.current = [];
+        if (hasMore) setRangeError('الفترة كبيرة جدًا للمعاينة. قلّل نطاق التاريخ أو استخدم التصدير.');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
         setRangeError(message);
@@ -2095,6 +2113,8 @@ export const Reports: React.FC = () => {
     setRangeError(null);
     setRangeHasMore(false);
     setRangeCursor(null);
+    setRangePage(1);
+    rangePageCacheRef.current = [];
   }, []);
 
   const handleShowToday = () => {
@@ -2212,8 +2232,26 @@ export const Reports: React.FC = () => {
     return 'all';
   }, [viewMode, startDate, endDate, reportBehavior.operationalDayStartHour]);
   const handleLoadMoreRange = async () => {
-    if ((viewMode !== 'range' && viewMode !== 'general') || rangeLoading || !rangeHasMore) return;
+    if (viewMode !== 'range' || rangeLoading || !rangeHasMore) return;
+    const cached = rangePageCacheRef.current[rangePage];
+    if (cached) {
+      useAppStore.setState({ productionReports: cached.items });
+      setRangePage((value) => value + 1);
+      setRangeCursor(cached.nextCursor);
+      setRangeHasMore(cached.hasMore);
+      return;
+    }
     await loadRangeReports(startDate, endDate, true);
+  };
+
+  const handlePreviousRange = () => {
+    if (viewMode !== 'range' || rangeLoading || rangePage <= 1) return;
+    const previous = rangePageCacheRef.current[rangePage - 2];
+    if (!previous) return;
+    useAppStore.setState({ productionReports: previous.items });
+    setRangePage((value) => value - 1);
+    setRangeCursor(previous.nextCursor);
+    setRangeHasMore(previous.hasMore);
   };
 
   const reportsFilterBar = (
@@ -4268,7 +4306,7 @@ export const Reports: React.FC = () => {
               />
               <div className="text-xs md:mr-auto font-bold text-[var(--color-text-muted)]">
                 {reportKindFilterLabel(filterReportKind)} | إجمالي {factoryGeneralRows.length} صف | إنتاج {formatNumber(factoryGeneralSummary.produced)} | تقارير {formatNumber(factoryGeneralSummary.reports)}
-                {rangeHasMore ? ' | (غير مكتمل — حمّل المزيد)' : ''}
+                {rangeHasMore ? ' | توجد صفحة تالية' : ''}
               </div>
             </div>
           </div>
@@ -4405,16 +4443,17 @@ export const Reports: React.FC = () => {
           )}
         </div>
       )}
-      {(viewMode === 'range' || viewMode === 'general') && (
-        <div className="flex items-center justify-center">
-          <Button
-            variant="secondary"
-            onClick={() => void handleLoadMoreRange()}
-            disabled={!rangeHasMore || rangeLoading}
-          >
-            {rangeLoading ? 'جاري التحميل...' : (rangeHasMore ? 'تحميل المزيد' : 'تم تحميل كل النتائج')}
-          </Button>
-        </div>
+      {viewMode === 'range' && (
+        <DataPaginationFooter
+          page={rangePage}
+          itemCount={productionReports.length}
+          itemLabel="تقرير"
+          hasPrevious={rangePage > 1}
+          hasNext={rangeHasMore}
+          onPrevious={handlePreviousRange}
+          onNext={() => void handleLoadMoreRange()}
+          loading={rangeLoading}
+        />
       )}
 
       {/* Fixed-size WhatsApp share image render target */}

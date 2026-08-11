@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -40,6 +40,9 @@ import {
   type Customer,
   type CustomerType,
 } from '../types';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 
 const PAGE_SIZE = 20;
 
@@ -63,51 +66,44 @@ export const Customers: React.FC = () => {
   const canImport = customerPerms.canAction('import');
   const user = useAppStore((s) => s.userProfile);
 
-  const [rows, setRows] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
-  const load = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const tenantId = await waitForTenantId();
-      if (!tenantId) {
-        const message = toCustomerListLoadErrorMessage(
-          new Error('Tenant context not initialised'),
-        );
-        setLoadError(message);
-        setRows([]);
-        toast.error(message);
-        return;
-      }
-      const list = await customerService.listAll({ includeInactive: true });
-      setRows(list);
+  const debouncedSearch = useDebouncedValue(search, 350);
+  const loadCustomerPage = useCallback(async (cursor: Parameters<typeof customerService.listPaged>[0]['cursor']) => {
+    const tenantId = await waitForTenantId();
+    if (!tenantId) throw new Error('Tenant context not initialised');
+    return customerService.listPaged({
+      pageSize: PAGE_SIZE,
+      cursor,
+      search: debouncedSearch,
+      type: typeFilter as CustomerType | 'all',
+      status: statusFilter as 'active' | 'inactive' | 'all',
+    });
+  }, [debouncedSearch, statusFilter, typeFilter]);
+  const customerPager = useCursorPagination<Customer, NonNullable<Awaited<ReturnType<typeof customerService.listPaged>>['nextCursor']>>({
+    queryKey: JSON.stringify({ search: normalizeFirestoreSearch(debouncedSearch), typeFilter, statusFilter }),
+    loadPage: loadCustomerPage,
+    enabled: canView,
+  });
+  const rows = customerPager.items;
+  const loading = customerPager.loading;
+  const load = customerPager.refresh;
+
+  useEffect(() => {
+    if (!customerPager.error) {
       setLoadError(null);
-    } catch (error: unknown) {
-      const message = toCustomerListLoadErrorMessage(error, CUSTOMER_LIST_LOAD_FALLBACK);
-      setLoadError(message);
-      setRows([]);
-      toast.error(message);
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
-
-  useEffect(() => {
-    void load();
-  }, []);
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, typeFilter, statusFilter]);
+    const message = toCustomerListLoadErrorMessage(customerPager.error, CUSTOMER_LIST_LOAD_FALLBACK);
+    setLoadError(message);
+    toast.error(message);
+  }, [customerPager.error]);
 
   const filtered = useMemo(() => {
     let list = [...rows];
@@ -125,9 +121,7 @@ export const Customers: React.FC = () => {
     return list;
   }, [rows, search, typeFilter, statusFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const paged = filtered;
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -167,7 +161,7 @@ export const Customers: React.FC = () => {
           updatedBy: actor.userId,
           updatedByName: actor.userName,
         });
-        setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
+        await customerPager.refresh();
         toast.success('تم تحديث العميل.');
       } else {
         const created = await customerService.create({
@@ -181,7 +175,7 @@ export const Customers: React.FC = () => {
           createdBy: actor.userId,
           createdByName: actor.userName,
         });
-        setRows((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+        await customerPager.refresh();
         toast.success('تم إنشاء العميل.');
       }
       setModalOpen(false);
@@ -414,11 +408,14 @@ export const Customers: React.FC = () => {
         </div>
 
         <DataPaginationFooter
-          page={safePage}
-          totalPages={totalPages}
-          totalItems={filtered.length}
+          page={customerPager.page}
+          itemCount={paged.length}
           itemLabel="عميل"
-          onPageChange={setPage}
+          hasPrevious={customerPager.hasPrevious}
+          hasNext={customerPager.hasNext}
+          onPrevious={customerPager.previous}
+          onNext={() => void customerPager.next()}
+          loading={loading}
         />
       </OpsDashPanel>
 

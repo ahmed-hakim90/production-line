@@ -59,6 +59,14 @@ const seed = async () => {
       'repair.parts.view': true,
     },
   });
+  await set('roles', 'tenantA-repair-treasury-admin-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'repair.treasury.view': true,
+      'repair.treasury.manage': true,
+      'repair.branches.manage': true,
+    },
+  });
   await set('roles', 'tenantA-repair-reception-role', {
     tenantId: 'tenantA',
     permissions: {
@@ -217,6 +225,12 @@ const seed = async () => {
     roleId: 'tenantA-operator-role',
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
+  });
+  await set('users', 'userARepairTreasuryAdmin', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-repair-treasury-admin-role',
   });
   await set('users', 'userAReception', {
     tenantId: 'tenantA',
@@ -460,6 +474,27 @@ await seed();
 
   await assertSucceeds(userAAdminDb.collection('products').doc('tenantA_product').get());
   await assertFails(userAAdminDb.collection('products').doc('tenantB_product').get());
+  await assertSucceeds(userAAdminDb.collection('products').doc('tenantA_product').update({
+    searchPrefixes: Array.from({ length: 80 }, (_, index) => `p${index}`),
+  }));
+  await assertFails(userAAdminDb.collection('products').doc('tenantA_product').update({
+    searchPrefixes: Array.from({ length: 81 }, (_, index) => `p${index}`),
+  }));
+  await assertSucceeds(userAAdminDb.collection('users').doc('userAAdmin').update({
+    searchPrefixes: Array.from({ length: 80 }, (_, index) => `u${index}`),
+  }));
+  await assertFails(userAAdminDb.collection('users').doc('userAAdmin').update({
+    searchPrefixes: Array.from({ length: 81 }, (_, index) => `u${index}`),
+  }));
+  await assertSucceeds(userAAdminDb.collection('materials').doc('tenantA_material').set({
+    tenantId: 'tenantA',
+    name: 'مادة اختبار',
+    code: 'MAT-1',
+    searchPrefixes: Array.from({ length: 80 }, (_, index) => `m${index}`),
+  }));
+  await assertFails(userAAdminDb.collection('materials').doc('tenantA_material').update({
+    searchPrefixes: Array.from({ length: 81 }, (_, index) => `m${index}`),
+  }));
 }
 
 // 1b) System settings writes are limited to settings admins.
@@ -1449,6 +1484,45 @@ await seed();
       .where('status', 'in', ['draft', 'submitted', 'approved'])
       .where('warehouseId', '==', 'whA')
       .get(),
+  );
+}
+
+// 13) Repair expenses are server-owned approval requests; clients can only read their scope.
+{
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await context.firestore().collection('repair_treasury_expense_requests').doc('expense-request-a').set({
+      tenantId: 'tenantA',
+      branchId: 'branchA',
+      sessionId: 'sessionA',
+      requestId: 'manual_approval_test',
+      status: 'pending',
+      amount: 125,
+      note: 'مصروف اختبار',
+      requestedBy: 'userAOperator',
+      requestedAt: new Date(),
+    });
+  });
+
+  const treasuryAdminDb = testEnv.authenticatedContext('userARepairTreasuryAdmin').firestore();
+  const operatorDb = testEnv.authenticatedContext('userAOperator').firestore();
+  await assertSucceeds(
+    treasuryAdminDb.collection('repair_treasury_expense_requests').doc('expense-request-a').get(),
+  );
+  await assertFails(
+    operatorDb.collection('repair_treasury_expense_requests').doc('expense-request-a').get(),
+  );
+  await assertFails(
+    treasuryAdminDb.collection('repair_treasury_expense_requests').doc('expense-client-create').set({
+      tenantId: 'tenantA',
+      branchId: 'branchA',
+      status: 'approved',
+      amount: 125,
+    }),
+  );
+  await assertFails(
+    treasuryAdminDb.collection('repair_treasury_expense_requests').doc('expense-request-a').update({
+      status: 'approved',
+    }),
   );
 }
 

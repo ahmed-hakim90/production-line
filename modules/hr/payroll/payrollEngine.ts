@@ -27,6 +27,8 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
+import { buildSearchPrefixes } from '@/lib/firestoreSearch';
 import {
   payrollMonthsRef,
   payrollRecordsRef,
@@ -588,9 +590,11 @@ export async function generatePayroll(
     for (const { employee, result } of calculations) {
       const ref = doc(payrollRecordsRef());
       firestoreBatch.set(ref, {
+        tenantId: getCurrentTenantId(),
         payrollMonthId,
         employeeId: employee.employeeId,
         employeeName: employee.employeeName,
+        searchPrefixes: buildSearchPrefixes([employee.employeeName, employee.employeeId, employee.departmentId]),
         departmentId: employee.departmentId,
         costCenterId: employee.costCenterId,
         productionLineId: employee.productionLineId,

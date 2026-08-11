@@ -17,11 +17,13 @@ import {
   Unsubscribe,
   startAfter,
   QueryDocumentSnapshot,
+  documentId,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { WorkOrder } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
+import { buildSearchPrefixes } from '@/lib/firestoreSearch';
 
 const COLLECTION = 'work_orders';
 const MAX_PAGE_SIZE = 100;
@@ -45,7 +47,7 @@ export const workOrderService = {
   async listPaged(params: WorkOrderPagedParams = {}): Promise<WorkOrderPageResult> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));
-    const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
+    const constraints: any[] = [orderBy('createdAt', 'desc'), orderBy(documentId()), limit(pageSize + 1)];
     if (params.status) constraints.unshift(where('status', '==', params.status));
     if (params.lineId) constraints.unshift(where('lineId', '==', params.lineId));
     if (params.productId) constraints.unshift(where('productId', '==', params.productId));
@@ -53,9 +55,11 @@ export const workOrderService = {
     if (params.cursor) constraints.push(startAfter(params.cursor));
     const q = tenantQuery(db, COLLECTION, ...constraints);
     const snap = await getDocs(q);
-    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
-    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
-    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+    const hasMore = snap.docs.length > pageSize;
+    const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+    const items = docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
+    const nextCursor = docs.length > 0 ? docs[docs.length - 1] : null;
+    return { items, nextCursor, hasMore };
   },
 
   async getAll(): Promise<WorkOrder[]> {
@@ -183,6 +187,13 @@ export const workOrderService = {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
         tenantId: getCurrentTenantId(),
+        searchPrefixes: buildSearchPrefixes([
+          data.workOrderNumber,
+          (data as WorkOrder & { productCode?: string }).productCode,
+          (data as WorkOrder & { productName?: string }).productName,
+          (data as WorkOrder & { lineName?: string }).lineName,
+          (data as WorkOrder & { supervisorName?: string }).supervisorName,
+        ]),
         createdAt: serverTimestamp(),
       });
       return ref.id;
@@ -196,6 +207,19 @@ export const workOrderService = {
     if (!isConfigured) return;
     try {
       const { id: _id, createdAt: _ts, ...fields } = data as any;
+      const searchableChanged = ['workOrderNumber', 'productCode', 'productName', 'lineName', 'supervisorName']
+        .some((field) => field in fields);
+      if (searchableChanged) {
+        const current = await getDoc(doc(db, COLLECTION, id));
+        const merged = { ...(current.data() || {}), ...fields };
+        fields.searchPrefixes = buildSearchPrefixes([
+          merged.workOrderNumber,
+          merged.productCode,
+          merged.productName,
+          merged.lineName,
+          merged.supervisorName,
+        ]);
+      }
       await updateDoc(doc(db, COLLECTION, id), fields);
     } catch (error) {
       console.error('workOrderService.update error:', error);

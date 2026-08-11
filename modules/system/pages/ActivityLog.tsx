@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { activityLogService } from '../services/activityLogService';
 import { Badge, Button, LoadingSkeleton, SearchableSelect } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
@@ -18,13 +17,10 @@ import type {
   FirestoreUser,
   UserPresence,
 } from '../../../types';
-import {
-  fetchCachedPageData,
-  invalidatePageDataCache,
-  peekPageDataCache,
-} from '../../shared/lib/pageDataCache';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
-const PAGE_SIZE = 15;
+const PAGE_SIZE = 20;
 const HIDDEN_ACTIVITY_ACTIONS = new Set<ActivityAction>([
   'CREATE_REPORT',
   'UPDATE_REPORT',
@@ -82,22 +78,19 @@ interface ActivityLogDayGroup {
   users: ActivityLogUserGroup[];
 }
 
-const ACTIVITY_LOG_CACHE_KEY = 'system:activityLog:page1';
-
-type ActivityLogPage1Data = {
-  logs: ActivityLogType[];
-  hasMore: boolean;
-};
-
 export const ActivityLogPage: React.FC = () => {
   const { can } = usePermission();
   const canBroadcast = can('roles.manage');
-  const initialLogsCache = peekPageDataCache<ActivityLogPage1Data>(ACTIVITY_LOG_CACHE_KEY);
-  const [logs, setLogs] = useState<ActivityLogType[]>(() => initialLogsCache?.logs ?? []);
-  const [loading, setLoading] = useState(() => initialLogsCache == null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [cursor, setCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [hasMore, setHasMore] = useState(() => initialLogsCache?.hasMore ?? false);
+  const loadLogPage = useCallback(async (cursor: Parameters<typeof activityLogService.getPaginated>[1] = null) => {
+    const result = await activityLogService.getPaginated(PAGE_SIZE, cursor);
+    return { items: result.logs, nextCursor: result.lastDoc, hasNext: result.hasMore };
+  }, []);
+  const logPager = useCursorPagination<ActivityLogType, NonNullable<Awaited<ReturnType<typeof activityLogService.getPaginated>>['lastDoc']>>({
+    queryKey: 'system:activity-log',
+    loadPage: loadLogPage,
+  });
+  const logs = logPager.items;
+  const loading = logPager.loading;
   const [presences, setPresences] = useState<UserPresence[]>([]);
   const [employeesById, setEmployeesById] = useState<Record<string, FirestoreEmployee>>({});
   const [accountUsersById, setAccountUsersById] = useState<Record<string, FirestoreUser>>({});
@@ -111,73 +104,12 @@ export const ActivityLogPage: React.FC = () => {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
 
-  const fetchLogs = useCallback(async (opts?: { force?: boolean }) => {
-    const cached = peekPageDataCache<ActivityLogPage1Data>(ACTIVITY_LOG_CACHE_KEY);
-    if (cached) {
-      setLogs(cached.logs);
-      setHasMore(cached.hasMore);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-    try {
-      const { data, fromCache } = await fetchCachedPageData(
-        ACTIVITY_LOG_CACHE_KEY,
-        async () => {
-          const result = await activityLogService.getPaginated(PAGE_SIZE);
-          setCursor(result.lastDoc);
-          return { logs: result.logs, hasMore: result.hasMore };
-        },
-        { force: opts?.force === true, maxAgeMs: 45_000 },
-      );
-      setLogs(data.logs);
-      setHasMore(data.hasMore);
-      // Firestore cursors are not cached; refresh cursor in background when serving stale page-1.
-      if (fromCache) {
-        void activityLogService.getPaginated(PAGE_SIZE).then((result) => {
-          setCursor(result.lastDoc);
-          setLogs(result.logs);
-          setHasMore(result.hasMore);
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   const reloadLogs = useCallback(async () => {
-    invalidatePageDataCache(ACTIVITY_LOG_CACHE_KEY);
-    setCursor(null);
-    await fetchLogs({ force: true });
-  }, [fetchLogs]);
-
-  const loadMore = async () => {
-    if (!hasMore) return;
-    setLoadingMore(true);
-    try {
-      let activeCursor = cursor;
-      if (!activeCursor) {
-        const first = await activityLogService.getPaginated(PAGE_SIZE);
-        setLogs(first.logs);
-        setCursor(first.lastDoc);
-        setHasMore(first.hasMore);
-        activeCursor = first.lastDoc;
-        if (!first.hasMore || !activeCursor) return;
-      }
-      const result = await activityLogService.getPaginated(PAGE_SIZE, activeCursor);
-      setLogs((prev) => [...prev, ...result.logs]);
-      setCursor(result.lastDoc);
-      setHasMore(result.hasMore);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
+    await logPager.refresh();
+  }, [logPager.refresh]);
 
   useEffect(() => {
-    void fetchLogs();
-  }, [fetchLogs]);
-
-  useEffect(() => {
+    if (!canBroadcast) return;
     let mounted = true;
     void Promise.all([employeeService.getAll(), roleService.getAll(), userService.getAll()]).then(
       ([employees, rolesRows, users]) => {
@@ -198,7 +130,7 @@ export const ActivityLogPage: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [canBroadcast]);
 
   useEffect(() => {
     const unsub = presenceService.subscribeAll((rows) => setPresences(rows));
@@ -444,7 +376,7 @@ export const ActivityLogPage: React.FC = () => {
   return (
     <ModuleOpsPageShell
       eyebrow="سجل النشاط"
-      rangeLabel={`تتبع الأحداث والعمليات؛ يُعرض ${PAGE_SIZE} سجلًا في كل دفعة (تحميل المزيد). أحداث تقارير الإنتاج (إنشاء/تعديل/حذف) غير معروضة هنا.`}
+      rangeLabel={`تتبع الأحداث والعمليات؛ يُعرض ${PAGE_SIZE} سجلًا في كل صفحة. أحداث تقارير الإنتاج (إنشاء/تعديل/حذف) غير معروضة هنا.`}
       actions={(
         <Button
           variant="secondary"
@@ -739,33 +671,22 @@ export const ActivityLogPage: React.FC = () => {
             )}
           </div>
 
-          {hasMore && (
-            <div className="pt-4 mt-4 border-t border-[var(--color-border)] text-center">
-              <Button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="px-6 py-2.5 bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] rounded-[var(--border-radius-lg)] text-sm font-bold hover:bg-[var(--color-surface-hover)] transition-all disabled:opacity-50"
-              >
-                {loadingMore ? (
-                  <span className="flex items-center gap-2 justify-center">
-                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    جاري التحميل...
-                  </span>
-                ) : (
-                  'تحميل المزيد'
-                )}
-              </Button>
-            </div>
-          )}
+          <DataPaginationFooter
+            page={logPager.page}
+            itemCount={visibleLogs.length}
+            itemLabel="نشاط"
+            hasPrevious={logPager.hasPrevious}
+            hasNext={logPager.hasNext}
+            onPrevious={logPager.previous}
+            onNext={() => void logPager.next()}
+            loading={loading}
+          />
         </OpsDashPanel>
       )}
 
       {/* Summary */}
       <div className="text-xs text-[var(--color-text-muted)] font-medium text-center">
-        عرض {visibleLogs.length} نشاط {hasMore ? '(يوجد المزيد)' : '(نهاية السجل)'}
+        عرض {visibleLogs.length} نشاط في الصفحة الحالية
       </div>
     </ModuleOpsPageShell>
   );

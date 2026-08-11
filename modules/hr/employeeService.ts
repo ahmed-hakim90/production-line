@@ -12,6 +12,7 @@ import {
   query,
   where,
   orderBy,
+  documentId,
   limit,
   startAfter,
   getCountFromServer,
@@ -22,6 +23,7 @@ import { db, isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
 import { employeesRef, HR_COLLECTIONS } from './collections';
 import type { FirestoreEmployee } from '@/types';
+import { buildSearchPrefixes, normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 
 const eqTenant = () => where('tenantId', '==', getCurrentTenantId());
 
@@ -55,13 +57,29 @@ export const employeeService = {
    * employees: tenantId ==, name ASC
    */
   async listPaged(options: {
-    pageSize?: number;
+    pageSize?: 20 | 50;
     cursor?: EmployeePageCursor;
+    search?: string;
+    filters?: {
+      departmentId?: string;
+      jobPositionId?: string;
+      employmentType?: string;
+      isActive?: boolean;
+      hasSystemAccess?: boolean;
+    };
   }): Promise<{ items: FirestoreEmployee[]; nextCursor: EmployeePageCursor; hasMore: boolean }> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
-    const pageSize = Math.min(Math.max(options.pageSize ?? 50, 1), 100);
+    const pageSize = options.pageSize === 50 ? 50 : 20;
     const take = pageSize + 1;
-    const constraints: any[] = [eqTenant(), orderBy('name')];
+    const constraints: any[] = [eqTenant()];
+    const search = normalizeFirestoreSearch(options.search);
+    if (search.length >= 2) constraints.push(where('searchPrefixes', 'array-contains', search));
+    if (options.filters?.departmentId) constraints.push(where('departmentId', '==', options.filters.departmentId));
+    if (options.filters?.jobPositionId) constraints.push(where('jobPositionId', '==', options.filters.jobPositionId));
+    if (options.filters?.employmentType) constraints.push(where('employmentType', '==', options.filters.employmentType));
+    if (options.filters?.isActive !== undefined) constraints.push(where('isActive', '==', options.filters.isActive));
+    if (options.filters?.hasSystemAccess !== undefined) constraints.push(where('hasSystemAccess', '==', options.filters.hasSystemAccess));
+    constraints.push(orderBy('name'), orderBy(documentId()));
     if (options.cursor) constraints.push(startAfter(options.cursor));
     constraints.push(limit(take));
     const snap = await getDocs(query(employeesRef(), ...constraints));
@@ -84,6 +102,7 @@ export const employeeService = {
     const ref = await addDoc(employeesRef(), {
       ...clean(data),
       tenantId: getCurrentTenantId(),
+      searchPrefixes: buildSearchPrefixes([data.name, data.code, data.phone, data.email]),
       createdAt: serverTimestamp(),
     });
     return ref.id;
@@ -92,6 +111,12 @@ export const employeeService = {
   async update(id: string, data: Partial<FirestoreEmployee>): Promise<void> {
     if (!isConfigured) return;
     const { id: _id, ...fields } = data as any;
+    const searchableChanged = ['name', 'code', 'phone', 'email'].some((key) => key in fields);
+    if (searchableChanged) {
+      const current = await getDoc(doc(db, HR_COLLECTIONS.EMPLOYEES, id));
+      const merged = { ...(current.data() || {}), ...fields } as FirestoreEmployee;
+      fields.searchPrefixes = buildSearchPrefixes([merged.name, merged.code, merged.phone, merged.email]);
+    }
     await updateDoc(doc(db, HR_COLLECTIONS.EMPLOYEES, id), clean(fields));
   },
 

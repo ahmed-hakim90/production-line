@@ -5,6 +5,7 @@ import {
   orderBy,
   limit as firestoreLimit,
   startAfter,
+  documentId,
   serverTimestamp,
   QueryDocumentSnapshot,
   DocumentData,
@@ -14,6 +15,7 @@ import { auth, db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { ActivityLog, ActivityAction } from '../../../types';
+import { buildSearchPrefixes } from '@/lib/firestoreSearch';
 
 const COLLECTION = 'activity_logs';
 
@@ -34,6 +36,7 @@ export const activityLogService = {
         db,
         COLLECTION,
         orderBy('timestamp', 'desc'),
+        orderBy(documentId()),
         firestoreLimit(pageSize + 1),
       );
 
@@ -42,6 +45,7 @@ export const activityLogService = {
           db,
           COLLECTION,
           orderBy('timestamp', 'desc'),
+          orderBy(documentId()),
           startAfter(cursor),
           firestoreLimit(pageSize + 1),
         );
@@ -94,6 +98,7 @@ export const activityLogService = {
       action,
       description,
       metadata: metadata ?? {},
+      searchPrefixes: buildSearchPrefixes([userEmail, action, description]),
       timestamp: serverTimestamp(),
     };
     try {

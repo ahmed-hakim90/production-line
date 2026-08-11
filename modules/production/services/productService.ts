@@ -9,6 +9,10 @@ import {
   runTransaction,
   where,
   limit,
+  orderBy,
+  startAfter,
+  documentId,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { FirestoreProduct } from '../../../types';
@@ -24,6 +28,8 @@ import {
   seedMaxProductCodes,
   clampPadding,
 } from '../../shared/services/entityCodeSequenceService';
+import { buildSearchPrefixes } from '@/lib/firestoreSearch';
+import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 
 const COLLECTION = 'products';
 const BARCODE_CLAIMS_COLLECTION = 'product_barcode_claims';
@@ -45,6 +51,33 @@ const normalizeBarcode = (value: unknown): string => String(value || '').trim().
 const barcodeClaimId = (tenantId: string, barcode: string) => `${tenantId}__${encodeURIComponent(barcode)}`;
 
 export const productService = {
+  async listPaged(params: {
+    pageSize?: 20 | 50;
+    cursor?: QueryDocumentSnapshot | null;
+    search?: string;
+    categoryId?: string;
+    isManufactured?: boolean;
+  } = {}): Promise<{ items: FirestoreProduct[]; nextCursor: QueryDocumentSnapshot | null; hasNext: boolean }> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasNext: false };
+    const pageSize = params.pageSize === 50 ? 50 : 20;
+    const constraints: any[] = [];
+    const search = normalizeFirestoreSearch(params.search);
+    if (search.length >= 2) constraints.push(where('searchPrefixes', 'array-contains', search));
+    if (params.categoryId) constraints.push(where('categoryId', '==', params.categoryId));
+    if (params.isManufactured !== undefined) constraints.push(where('isManufactured', '==', params.isManufactured));
+    constraints.push(orderBy('name'), orderBy(documentId()));
+    if (params.cursor) constraints.push(startAfter(params.cursor));
+    constraints.push(limit(pageSize + 1));
+    const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints));
+    const hasNext = snap.docs.length > pageSize;
+    const docs = hasNext ? snap.docs.slice(0, pageSize) : snap.docs;
+    return {
+      items: docs.map((row) => ({ id: row.id, ...row.data() } as FirestoreProduct)),
+      nextCursor: docs.length > 0 ? docs[docs.length - 1]! : null,
+      hasNext,
+    };
+  },
+
   async getAll(): Promise<FirestoreProduct[]> {
     if (!isConfigured) return [];
     try {
@@ -92,15 +125,8 @@ export const productService = {
     if (!isConfigured) return false;
     const want = String(code || '').trim().toUpperCase();
     if (!want) return false;
-    const snap = await getDocs(tenantQuery(db, COLLECTION));
-    return snap.docs.some((d) => {
-      if (excludeId && d.id === excludeId) return false;
-      return (
-        String(d.data()?.code ?? '')
-          .trim()
-          .toUpperCase() === want
-      );
-    });
+    const snap = await getDocs(tenantQuery(db, COLLECTION, where('code', '==', want), limit(2)));
+    return snap.docs.some((d) => !excludeId || d.id !== excludeId);
   },
 
   async isBarcodeTaken(barcode: string, excludeId?: string): Promise<boolean> {
@@ -153,7 +179,11 @@ export const productService = {
             if (claim.exists()) throw new Error('باركود المنتج مستخدم مسبقًا.');
             transaction.set(claimRef, { tenantId, barcode: barcodeNormalized, productId: ref.id, createdAt: new Date().toISOString() });
           }
-          transaction.set(ref, { ...basePayload, code: upper });
+          transaction.set(ref, {
+            ...basePayload,
+            code: upper,
+            searchPrefixes: buildSearchPrefixes([data.name, upper, data.barcode]),
+          });
         });
         return ref.id;
       }
@@ -179,6 +209,7 @@ export const productService = {
         transaction.set(newRef, {
           ...basePayload,
           code,
+          searchPrefixes: buildSearchPrefixes([data.name, code, data.barcode]),
         });
         return newRef.id;
       });
@@ -222,9 +253,21 @@ export const productService = {
           if (oldNormalized && oldNormalized !== normalized) {
             transaction.delete(doc(db, BARCODE_CLAIMS_COLLECTION, barcodeClaimId(tenantId, oldNormalized)));
           }
-          transaction.update(productRef, stripUndefined({ ...fields, barcode: String(data.barcode || '').trim(), barcodeNormalized: normalized }));
+          const merged = { ...productSnap.data(), ...fields, barcode: String(data.barcode || '').trim() };
+          transaction.update(productRef, stripUndefined({
+            ...fields,
+            barcode: String(data.barcode || '').trim(),
+            barcodeNormalized: normalized,
+            searchPrefixes: buildSearchPrefixes([merged.name, merged.code, merged.barcode]),
+          }));
         });
       } else {
+        const searchableChanged = data.name !== undefined || data.code !== undefined;
+        if (searchableChanged) {
+          const current = await getDoc(doc(db, COLLECTION, id));
+          const merged = { ...(current.data() || {}), ...fields };
+          (fields as Record<string, unknown>).searchPrefixes = buildSearchPrefixes([merged.name, merged.code, merged.barcode]);
+        }
         await updateDoc(doc(db, COLLECTION, id), stripUndefined(fields as Record<string, unknown>));
       }
     } catch (error) {

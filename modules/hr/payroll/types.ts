@@ -56,6 +56,8 @@ export interface FirestorePayrollMonth {
 
 export interface FirestorePayrollRecord {
   id?: string;
+  tenantId?: string;
+  searchPrefixes?: string[];
   payrollMonthId: string;
   employeeId: string;
   employeeName: string;

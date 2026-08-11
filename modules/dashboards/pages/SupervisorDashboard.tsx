@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import { GhostButton, PrimaryButton } from '@/src/components/erp/ActionButton';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
@@ -210,6 +211,20 @@ export const SupervisorDashboard: React.FC = () => {
 
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
   const retryQueuedReportCreate = useAppStore((s) => s.retryQueuedReportCreate);
+  const fetchProducts = useAppStore((s) => s.fetchProducts);
+  const fetchLines = useAppStore((s) => s.fetchLines);
+  const fetchEmployees = useAppStore((s) => s.fetchEmployees);
+  const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
+  const fetchWorkOrders = useAppStore((s) => s.fetchWorkOrders);
+  useEffect(() => {
+    void Promise.all([
+      fetchProducts(),
+      fetchLines(),
+      fetchEmployees(),
+      fetchProductionPlans(),
+      fetchWorkOrders({ silent: true }),
+    ]).catch(() => undefined);
+  }, [fetchEmployees, fetchLines, fetchProductionPlans, fetchProducts, fetchWorkOrders]);
   const { snapshot: decisionSnapshot, loading: decisionLoading, refresh: refreshDecision } =
     useOperationalDecisionSnapshot();
 
@@ -225,7 +240,7 @@ export const SupervisorDashboard: React.FC = () => {
   const [workOrderStatusFilter, setWorkOrderStatusFilter] = useState('all');
   const [workOrderCategoryFilter, setWorkOrderCategoryFilter] = useState('all');
   const [woFiltersHydrated, setWoFiltersHydrated] = useState(false);
-  const [visibleWorkOrdersCount, setVisibleWorkOrdersCount] = useState(10);
+  const [workOrdersPage, setWorkOrdersPage] = useState(1);
   const [componentLabelOptions, setComponentLabelOptions] = useState<InjectionComponentOption[]>([]);
   const today = getTodayDateString();
   const woFiltersStorageKey = activeWoFiltersStorageKey(tenantSlug, uid);
@@ -427,7 +442,7 @@ export const SupervisorDashboard: React.FC = () => {
   ]);
 
   useEffect(() => {
-    setVisibleWorkOrdersCount(10);
+    setWorkOrdersPage(1);
   }, [
     workOrderSearch,
     workOrderSupervisorFilter,
@@ -654,7 +669,13 @@ export const SupervisorDashboard: React.FC = () => {
     },
   ];
 
-  const workOrdersPreview = filteredWorkOrders.slice(0, visibleWorkOrdersCount);
+  const workOrdersPageSize = 10;
+  const workOrdersTotalPages = Math.max(1, Math.ceil(filteredWorkOrders.length / workOrdersPageSize));
+  const safeWorkOrdersPage = Math.min(workOrdersPage, workOrdersTotalPages);
+  const workOrdersPreview = filteredWorkOrders.slice(
+    (safeWorkOrdersPage - 1) * workOrdersPageSize,
+    safeWorkOrdersPage * workOrdersPageSize,
+  );
   const todaysEnteredReports = todayReports.filter(isMyReport);
 
   return (
@@ -922,12 +943,16 @@ export const SupervisorDashboard: React.FC = () => {
                 );
               })}
             </ul>
-            {canCreateForAnySupervisor && visibleWorkOrdersCount < filteredWorkOrders.length ? (
-              <div className="pt-3 text-center">
-                <GhostButton type="button" size="sm" onClick={() => setVisibleWorkOrdersCount((value) => value + 10)}>
-                  تحميل المزيد
-                </GhostButton>
-              </div>
+            {canCreateForAnySupervisor ? (
+              <DataPaginationFooter
+                page={safeWorkOrdersPage}
+                itemCount={workOrdersPreview.length}
+                itemLabel="أمر"
+                hasPrevious={safeWorkOrdersPage > 1}
+                hasNext={safeWorkOrdersPage < workOrdersTotalPages}
+                onPrevious={() => setWorkOrdersPage((value) => Math.max(1, value - 1))}
+                onNext={() => setWorkOrdersPage((value) => Math.min(workOrdersTotalPages, value + 1))}
+              />
             ) : null}
           </>
         )}

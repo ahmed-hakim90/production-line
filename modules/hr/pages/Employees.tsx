@@ -34,7 +34,7 @@ import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { userService } from '../../../services/userService';
 import { activityLogService } from '../../system/services/activityLogService';
-import { employeeService, type EmployeePageCursor } from '../employeeService';
+import { employeeService } from '../employeeService';
 import { JOB_LEVEL_LABELS } from '../types';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, FirestoreVehicle } from '../types';
 import { getDocs } from 'firebase/firestore';
@@ -63,6 +63,10 @@ import {
   buildProductionEmployeeContext,
   type ProductionEmployeeContext,
 } from '@/modules/production/utils/productionEmployeeContext';
+import { useCursorPagination } from '@/hooks/useCursorPagination';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -144,10 +148,6 @@ export const Employees: React.FC = () => {
   const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
   const [allUsers, setAllUsers] = useState<FirestoreUser[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [listEmployees, setListEmployees] = useState<FirestoreEmployee[]>([]);
-  const [listCursor, setListCursor] = useState<EmployeePageCursor>(null);
-  const [listHasMore, setListHasMore] = useState(false);
-  const [listLoading, setListLoading] = useState(false);
   const [tenantEmployeeCount, setTenantEmployeeCount] = useState<number | null>(null);
   const [productionEmployeeContext, setProductionEmployeeContext] = useState<Map<string, ProductionEmployeeContext>>(new Map());
 
@@ -159,6 +159,27 @@ export const Employees: React.FC = () => {
     employmentType: '',
     systemAccess: 'all',
   });
+  const debouncedSearch = useDebouncedValue(search, 350);
+  const employeeQueryKey = useMemo(() => JSON.stringify({
+    search: normalizeFirestoreSearch(debouncedSearch),
+    filters: filterValues,
+  }), [debouncedSearch, filterValues]);
+  const loadEmployeePage = useCallback((cursor: Parameters<typeof employeeService.listPaged>[0]['cursor']) =>
+    employeeService.listPaged({
+      pageSize: 20,
+      cursor,
+      search: debouncedSearch,
+    }).then((result) => ({
+      items: result.items,
+      nextCursor: result.nextCursor,
+      hasNext: result.hasMore,
+    })), [debouncedSearch, filterValues]);
+  const employeePager = useCursorPagination<FirestoreEmployee, NonNullable<Awaited<ReturnType<typeof employeeService.listPaged>>['nextCursor']>>({
+    queryKey: employeeQueryKey,
+    loadPage: loadEmployeePage,
+  });
+  const listEmployees = employeePager.items;
+  const listLoading = employeePager.loading;
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -261,42 +282,16 @@ export const Employees: React.FC = () => {
     void loadProductionEmployeeContext();
   }, [loadProductionEmployeeContext]);
 
-  const reloadEmployeeList = useCallback(async () => {
-    setListLoading(true);
-    try {
-      const [count, page] = await Promise.all([
-        employeeService.countTenantEmployees(),
-        employeeService.listPaged({ pageSize: 50, cursor: null }),
-      ]);
-      setTenantEmployeeCount(count);
-      setListEmployees(page.items);
-      setListCursor(page.nextCursor);
-      setListHasMore(page.hasMore);
-    } catch (e) {
-      console.error('reloadEmployeeList error:', e);
-    } finally {
-      setListLoading(false);
-    }
+  useEffect(() => {
+    void employeeService.countTenantEmployees().then(setTenantEmployeeCount).catch((e) => {
+      console.error('countTenantEmployees error:', e);
+    });
   }, []);
 
-  useEffect(() => {
-    void reloadEmployeeList();
-  }, [reloadEmployeeList]);
-
-  const loadMoreEmployees = useCallback(async () => {
-    if (!listHasMore || listLoading || !listCursor) return;
-    setListLoading(true);
-    try {
-      const page = await employeeService.listPaged({ pageSize: 50, cursor: listCursor });
-      setListEmployees((prev) => [...prev, ...page.items]);
-      setListCursor(page.nextCursor);
-      setListHasMore(page.hasMore);
-    } catch (e) {
-      console.error('loadMoreEmployees error:', e);
-    } finally {
-      setListLoading(false);
-    }
-  }, [listHasMore, listLoading, listCursor]);
+  const reloadEmployeeList = useCallback(async () => {
+    await employeePager.refresh();
+    void employeeService.countTenantEmployees().then(setTenantEmployeeCount);
+  }, [employeePager.refresh]);
 
   const getDepartmentName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const getJobPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '—';
@@ -993,7 +988,7 @@ export const Employees: React.FC = () => {
       )}
     >
       <p className="text-xs text-[var(--color-text-muted)] px-1">
-        الإجمالي من الخادم. مؤشرات نشط / غير نشط / دخول النظام تُحسب من الموظفين المحمّلين في الجدول — استخدم «تحميل المزيد» لإظهار دفعات إضافية (٥٠ لكل دفعة).
+        الإجمالي من الخادم. البحث والفلاتر والتنقّل تُنفّذ على Firestore بصفحة واحدة في كل مرة.
       </p>
 
       {pendingUsers.length > 0 && canManageUsers && (
@@ -1012,7 +1007,7 @@ export const Employees: React.FC = () => {
       <OpsDashPanel title="قائمة الموظفين" accent="hr" bodyClassName="p-0 overflow-hidden">
         <SmartFilterBar
       pageId="hr-employees"
-          searchPlaceholder="بحث باسم / رمز / خط إنتاج / مدير"
+          searchPlaceholder="بحث باسم أو رمز الموظف"
           searchValue={search}
           onSearchChange={setSearch}
           quickFilters={[
@@ -1066,17 +1061,16 @@ export const Employees: React.FC = () => {
       />
       </OpsDashPanel>
 
-      {(listHasMore || listLoading) && (
-        <div className="flex justify-center">
-          <Button
-            variant="secondary"
-            disabled={!listHasMore || listLoading}
-            onClick={() => void loadMoreEmployees()}
-          >
-            {listLoading ? 'جاري التحميل...' : (listHasMore ? 'تحميل المزيد (٥٠)' : 'تم تحميل القائمة')}
-          </Button>
-        </div>
-      )}
+      <DataPaginationFooter
+        page={employeePager.page}
+        itemCount={listEmployees.length}
+        itemLabel="موظف"
+        hasPrevious={employeePager.hasPrevious}
+        hasNext={employeePager.hasNext}
+        onPrevious={employeePager.previous}
+        onNext={() => void employeePager.next()}
+        loading={listLoading}
+      />
 
       <OpsDashPanel accent="hr">
         <div className="flex items-center justify-between gap-3">
@@ -1613,7 +1607,5 @@ export const Employees: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
-
 
 

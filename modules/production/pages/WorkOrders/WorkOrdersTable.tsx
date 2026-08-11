@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React from 'react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { WORK_ORDER_STATUS_LABELS } from '../../utils/workOrderReportLinking';
@@ -6,7 +6,7 @@ import type { WorkOrderGroupBy } from './hooks/useWorkOrderFilters';
 import { WorkOrderRow, type WorkOrderRowView } from './WorkOrderRow';
 import { WorkOrderMobileCard } from './WorkOrderMobileCard';
 import { TableSkeleton } from '@/src/shared/ui/skeletons';
-import { Button } from '@/components/UI';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 interface WorkOrdersTableProps {
   rows: WorkOrderRowView[];
@@ -14,6 +14,8 @@ interface WorkOrdersTableProps {
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
+  hasPrevious: boolean;
+  page: number;
   onRowClick: (order: WorkOrder) => void;
   onStatusChange?: (id: string, status: WorkOrderStatus) => void;
   onEdit?: (order: WorkOrder) => void;
@@ -22,6 +24,7 @@ interface WorkOrdersTableProps {
   onReopenCompleted?: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;
   onLoadMore: () => void;
+  onPrevious: () => void;
 }
 
 interface GroupBucket {
@@ -67,6 +70,8 @@ export function WorkOrdersTable({
   loading,
   loadingMore,
   hasMore,
+  hasPrevious,
+  page,
   onRowClick,
   onStatusChange,
   onEdit,
@@ -75,22 +80,9 @@ export function WorkOrdersTable({
   onReopenCompleted,
   onOpenScanner,
   onLoadMore,
+  onPrevious,
 }: WorkOrdersTableProps) {
   const grouped = groupRows(rows, groupBy);
-  const loaderRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!hasMore || loadingMore || !loaderRef.current) return;
-    const node = loaderRef.current;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) onLoadMore();
-      },
-      { threshold: 0.1 },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasMore, loadingMore, onLoadMore]);
 
   if (loading) {
     return (
@@ -180,16 +172,16 @@ export function WorkOrdersTable({
         </table>
       </div>
 
-      <div className="flex flex-col items-center gap-2 py-3">
-        {hasMore && <div ref={loaderRef} className="h-1 w-full" aria-hidden="true" />}
-        {hasMore ? (
-          <Button type="button" variant="outline" onClick={onLoadMore} disabled={loadingMore}>
-            {loadingMore ? 'جاري التحميل...' : 'تحميل المزيد'}
-          </Button>
-        ) : (
-          <span className="text-xs font-bold text-[var(--color-text-muted)]">تم تحميل كل النتائج</span>
-        )}
-      </div>
+      <DataPaginationFooter
+        page={page}
+        itemCount={rows.length}
+        itemLabel="أمر"
+        hasPrevious={hasPrevious}
+        hasNext={hasMore}
+        onPrevious={onPrevious}
+        onNext={onLoadMore}
+        loading={loadingMore}
+      />
     </div>
   );
 }

@@ -71,13 +71,18 @@ const run = async () => {
 
   const dailyAgg = new Map<string, Aggregate>();
   const monthlyAgg = new Map<string, Aggregate>();
+  const productAgg = new Map<string, Aggregate>();
+  const productMonthlyAgg = new Map<string, Aggregate>();
 
   let readCount = 0;
   let pageCount = 0;
   let lastDoc: QueryDocumentSnapshot<DocumentData> | null = null;
 
   for (;;) {
-    let q = db.collection(REPORTS_COLLECTION).orderBy('__name__').limit(args.pageSize);
+    let q = db.collection(REPORTS_COLLECTION)
+      .where('tenantId', '==', args.tenantId)
+      .orderBy('__name__')
+      .limit(args.pageSize);
     if (lastDoc) q = q.startAfter(lastDoc);
 
     const snap = await q.get();
@@ -90,21 +95,48 @@ const run = async () => {
       const date = String(data.date || '');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       const month = date.slice(0, 7);
+      const productId = String(data.productId || '').trim();
       const wasteQuantity = deriveComponentWaste(data.componentScrapItems);
+      const reportType = String(data.reportType || 'finished_product');
+      const quantityProduced = reportType === 'packaging' || reportType === 'component_waste'
+        ? 0
+        : toNumber(data.quantityProduced);
+      const reportCost = toNumber(
+        data.fullManufacturingCostSnapshot
+        ?? data.legacyConversionCostSnapshot
+        ?? data.totalCost,
+      );
 
       const daily = dailyAgg.get(date) || makeAggregate();
-      daily.totalProduction += toNumber(data.quantityProduced);
+      daily.totalProduction += quantityProduced;
       daily.totalWaste += wasteQuantity;
-      daily.totalCost += toNumber(data.totalCost);
+      daily.totalCost += reportCost;
       daily.reportsCount += 1;
       dailyAgg.set(date, daily);
 
       const monthly = monthlyAgg.get(month) || makeAggregate();
-      monthly.totalProduction += toNumber(data.quantityProduced);
+      monthly.totalProduction += quantityProduced;
       monthly.totalWaste += wasteQuantity;
-      monthly.totalCost += toNumber(data.totalCost);
+      monthly.totalCost += reportCost;
       monthly.reportsCount += 1;
       monthlyAgg.set(month, monthly);
+
+      if (productId) {
+        const product = productAgg.get(productId) || makeAggregate();
+        product.totalProduction += quantityProduced;
+        product.totalWaste += wasteQuantity;
+        product.totalCost += reportCost;
+        product.reportsCount += 1;
+        productAgg.set(productId, product);
+
+        const productMonthKey = `${month}__${productId}`;
+        const productMonth = productMonthlyAgg.get(productMonthKey) || makeAggregate();
+        productMonth.totalProduction += quantityProduced;
+        productMonth.totalWaste += wasteQuantity;
+        productMonth.totalCost += reportCost;
+        productMonth.reportsCount += 1;
+        productMonthlyAgg.set(productMonthKey, productMonth);
+      }
     }
 
     lastDoc = snap.docs[snap.docs.length - 1] || null;
@@ -118,6 +150,8 @@ const run = async () => {
     reportsRead: readCount,
     dailyDocsComputed: dailyAgg.size,
     monthlyDocsComputed: monthlyAgg.size,
+    productDocsComputed: productAgg.size,
+    productMonthlyDocsComputed: productMonthlyAgg.size,
     cleanupStale: args.cleanup,
   };
   console.log('[dashboardStats backfill] Summary:', summary);
@@ -153,6 +187,56 @@ const run = async () => {
 
   await writeAggregates(dailyPath, Array.from(dailyAgg.entries()), 'daily');
   await writeAggregates(monthlyPath, Array.from(monthlyAgg.entries()), 'monthly');
+  const writeProductAggregates = async (
+    path: string,
+    entries: Array<[string, Aggregate]>,
+    monthly: boolean,
+  ) => {
+    for (let i = 0; i < entries.length; i += MAX_WRITE_BATCH) {
+      const batch = db.batch();
+      entries.slice(i, i + MAX_WRITE_BATCH).forEach(([id, aggregate]) => {
+        const separator = id.indexOf('__');
+        batch.set(db.doc(`${path}/${id}`), {
+          ...aggregate,
+          productId: monthly ? id.slice(separator + 2) : id,
+          ...(monthly ? { month: id.slice(0, separator) } : {}),
+          updatedAt: FieldValue.serverTimestamp(),
+          backfilledAt: FieldValue.serverTimestamp(),
+          source: 'backfill-script',
+        }, { merge: true });
+      });
+      await batch.commit();
+    }
+  };
+  await writeProductAggregates(`dashboardStats/${args.tenantId}/products`, Array.from(productAgg.entries()), false);
+  await writeProductAggregates(`dashboardStats/${args.tenantId}/productMonths`, Array.from(productMonthlyAgg.entries()), true);
+  const latestMonthByProduct = new Map<string, { month: string; aggregate: Aggregate }>();
+  productMonthlyAgg.forEach((aggregate, key) => {
+    const separator = key.indexOf('__');
+    const month = key.slice(0, separator);
+    const productId = key.slice(separator + 2);
+    const current = latestMonthByProduct.get(productId);
+    if (!current || month > current.month) latestMonthByProduct.set(productId, { month, aggregate });
+  });
+  const productEntries = Array.from(productAgg.entries());
+  for (let chunkIndex = 0; chunkIndex < Math.ceil(productEntries.length / MAX_WRITE_BATCH); chunkIndex += 1) {
+    const batch = db.batch();
+    productEntries.slice(chunkIndex * MAX_WRITE_BATCH, (chunkIndex + 1) * MAX_WRITE_BATCH).forEach(([productId, aggregate]) => {
+      const latest = latestMonthByProduct.get(productId);
+      batch.set(db.doc(`products/${productId}`), {
+        totalProduction: aggregate.totalProduction,
+        totalWaste: aggregate.totalWaste,
+        ...(latest ? {
+          productionStatsMonth: latest.month,
+          monthlyProduction: latest.aggregate.totalProduction,
+          monthlyWaste: latest.aggregate.totalWaste,
+          monthlyProductionCost: latest.aggregate.totalCost,
+        } : {}),
+        productionStatsUpdatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+    await batch.commit();
+  }
 
   if (args.cleanup) {
     const cleanupMissing = async (path: string, validIds: Set<string>) => {

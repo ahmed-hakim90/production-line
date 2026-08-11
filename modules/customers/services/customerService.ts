@@ -14,6 +14,7 @@ import {
   type QueryConstraint,
   type QueryDocumentSnapshot,
   type Unsubscribe,
+  documentId,
 } from 'firebase/firestore';
 import { isConfigured, db } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
@@ -56,6 +57,7 @@ import type {
 } from '../types';
 import { CUSTOMER_FOLLOW_UP_LABELS, isCustomerFollowUpStatus } from '../types';
 import { customerActivityService } from './customerActivityService';
+import { buildSearchPrefixes, normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 
 const CUSTOMER_CODE_PADDING = 5;
 /** Total rows listAll will fetch across pages (import / KPI / lists). */
@@ -151,6 +153,34 @@ export const customerService = {
 
     if (opts?.includeInactive) return rows;
     return rows.filter((r) => r.isActive !== false);
+  },
+
+  async listPaged(params: {
+    pageSize?: 20 | 50;
+    cursor?: QueryDocumentSnapshot | null;
+    search?: string;
+    type?: CustomerType | 'all';
+    status?: 'active' | 'inactive' | 'all';
+  } = {}): Promise<{ items: Customer[]; nextCursor: QueryDocumentSnapshot | null; hasNext: boolean }> {
+    if (!isConfigured) return { items: [], nextCursor: null, hasNext: false };
+    const pageSize = params.pageSize === 50 ? 50 : 20;
+    const constraints: QueryConstraint[] = [];
+    const search = normalizeFirestoreSearch(params.search);
+    if (search.length >= 2) constraints.push(where('searchPrefixes', 'array-contains', search));
+    if (params.type && params.type !== 'all') constraints.push(where('type', '==', params.type));
+    if (params.status === 'active') constraints.push(where('isActive', '==', true));
+    if (params.status === 'inactive') constraints.push(where('isActive', '==', false));
+    constraints.push(orderBy('code', 'asc'), orderBy(documentId()));
+    if (params.cursor) constraints.push(startAfter(params.cursor));
+    constraints.push(limit(pageSize + 1));
+    const snap = await getDocs(tenantQuery(db, CUSTOMERS_COLLECTIONS.CUSTOMERS, ...constraints));
+    const hasNext = snap.docs.length > pageSize;
+    const docs = hasNext ? snap.docs.slice(0, pageSize) : snap.docs;
+    return {
+      items: docs.map((row) => normalizeCustomerDoc(row.id, row.data() as Record<string, unknown>)),
+      nextCursor: docs.length > 0 ? docs[docs.length - 1]! : null,
+      hasNext,
+    };
   },
 
   async getById(id: string): Promise<Customer | null> {
@@ -278,6 +308,7 @@ export const customerService = {
               name: String(input.name).trim(),
               phone,
               phoneDigits,
+              searchPrefixes: buildSearchPrefixes([input.name, explicitCode, phone, phoneDigits]),
               address: input.address?.trim() || '',
               notes: input.notes?.trim() || '',
               isActive: input.isActive !== false,
@@ -334,6 +365,7 @@ export const customerService = {
             name: String(input.name).trim(),
             phone,
             phoneDigits,
+            searchPrefixes: buildSearchPrefixes([input.name, allocated, phone, phoneDigits]),
             address: input.address?.trim() || '',
             notes: input.notes?.trim() || '',
             isActive: input.isActive !== false,
@@ -380,6 +412,7 @@ export const customerService = {
       name: nextName,
       phone: nextPhone,
       phoneDigits,
+      searchPrefixes: buildSearchPrefixes([nextName, nextCode, nextPhone, phoneDigits]),
       address: input.address !== undefined ? String(input.address).trim() : existing.address || '',
       notes: input.notes !== undefined ? String(input.notes).trim() : existing.notes || '',
       isActive: input.isActive !== undefined ? input.isActive !== false : existing.isActive,

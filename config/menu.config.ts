@@ -144,6 +144,16 @@ const badgeSources = {
     const { repairPaymentService } = await import('../modules/repair/services/repairPaymentService');
     return repairPaymentService.countPendingApprovals();
   },
+  pendingRepairExpenseApprovals: async (): Promise<number> => {
+    const { useAppStore } = await import('../store/useAppStore');
+    const permissions = useAppStore.getState().userPermissions;
+    if (
+      permissions['repair.treasury.manage'] !== true
+      || permissions['repair.branches.manage'] !== true
+    ) return 0;
+    const { repairTreasuryService } = await import('../modules/repair/services/repairTreasuryService');
+    return repairTreasuryService.countPendingExpenseApprovals();
+  },
   pendingRepairReplacementApprovals: async (): Promise<number> => {
     const { repairCustomerOperationsService } = await import(
       '../modules/repair/services/repairCustomerOperationsService'
@@ -629,7 +639,14 @@ export const MENU_CONFIG: MenuGroup[] = [
       },
       { key: 'repair-sales-invoice', label: 'فواتير بيع القطع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },
       { key: 'repair-complaints', label: 'الشكاوى', icon: 'report', path: '/repair/complaints', permission: 'repair.complaints.view' },
-      { key: 'repair-treasury', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/treasury', permission: 'repair.treasury.view' },
+      {
+        key: 'repair-treasury',
+        label: 'الخزينة',
+        icon: 'account_balance_wallet',
+        path: '/repair/treasury',
+        permission: 'repair.treasury.view',
+        badgeSource: badgeSources.pendingRepairExpenseApprovals,
+      },
       { key: 'repair-treasury-report', label: 'تقرير الخزينة', icon: 'bar_chart', path: '/repair/treasury-report', permission: 'repair.treasury.view' },
       { key: 'repair-kpis', label: 'أداء الفنيين', icon: 'leaderboard', path: '/repair/technician-kpis', permission: 'repair.technician.view' },
       { key: 'repair-branches', label: 'الفروع', icon: 'store', path: '/repair/branches', permission: 'repair.branches.manage' },

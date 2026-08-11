@@ -25,6 +25,14 @@ type Actor = {
 
 type PaymentMethod = 'cash' | 'card' | 'bank_transfer';
 type ManualEntryType = 'INCOME' | 'EXPENSE' | 'TRANSFER_OUT' | 'TRANSFER_IN';
+type ExpenseApprovalContext = {
+  requestId: string;
+  sessionId: string;
+  requestedBy: string;
+  requestedByName: string;
+};
+
+const REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION = 'repair_treasury_expense_requests';
 
 const roundMoney = (value: unknown): number => {
   const n = Number(value || 0);
@@ -171,7 +179,11 @@ const resolvePostingAccount = async (
   };
 };
 
-async function postManualTreasuryEntry(actor: Actor, data: Record<string, unknown>) {
+async function postManualTreasuryEntry(
+  actor: Actor,
+  data: Record<string, unknown>,
+  expenseApproval?: ExpenseApprovalContext,
+) {
   requirePermission(actor, ['repair.treasury.manage'], 'ليس لديك صلاحية إدارة خزينة الصيانة.');
   const branchId = String(data.branchId || '').trim();
   const entryType = String(data.entryType || '').trim() as ManualEntryType;
@@ -248,22 +260,93 @@ async function postManualTreasuryEntry(actor: Actor, data: Record<string, unknow
   if (sessionDoc.data()?.needsManualClose === true) {
     throw new HttpsError('failed-precondition', 'الخزينة غير متاحة — أقفل يوم أمس أولاً.');
   }
+  if (expenseApproval && sessionDoc.id !== expenseApproval.sessionId) {
+    throw new HttpsError(
+      'failed-precondition',
+      'جلسة الخزينة الأصلية للمصروف أُغلقت. ارفض الطلب وأنشئ طلب مصروف جديداً.',
+    );
+  }
 
   const month = String(sessionDoc.data().openedAt || new Date().toISOString()).slice(0, 7);
   const monthCloseRef = db.collection('repair_treasury_month_closes').doc(`${actor.tenantId}_${branchId}_${month}`);
+
+  if (entryType === 'EXPENSE' && !expenseApproval) {
+    const expenseRequestRef = db.collection(REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION)
+      .doc(`${actor.tenantId}__repair_treasury_expense__${requestId}`);
+    const at = new Date().toISOString();
+    const result = await db.runTransaction(async (tx) => {
+      const [current, monthCloseSnap] = await Promise.all([
+        tx.get(expenseRequestRef),
+        tx.get(monthCloseRef),
+      ]);
+      if (monthCloseSnap.exists && String(monthCloseSnap.data()?.status || '') === 'closed') {
+        throw new HttpsError('failed-precondition', 'شهر الخزينة مقفول.');
+      }
+      if (current.exists) {
+        return {
+          expenseRequestId: expenseRequestRef.id,
+          status: String(current.data()?.status || 'pending'),
+          duplicated: true,
+        };
+      }
+      tx.create(expenseRequestRef, {
+        tenantId: actor.tenantId,
+        branchId,
+        sessionId: sessionDoc.id,
+        requestId,
+        status: 'pending',
+        amount,
+        note,
+        paymentMethod: method,
+        costCenterId: live.costCenterId,
+        expenseType,
+        expenseAccountId,
+        requestedBy: actor.uid,
+        requestedByName: actor.displayName,
+        requestedAt: at,
+        createdAt: at,
+        updatedAt: at,
+      });
+      return { expenseRequestId: expenseRequestRef.id, status: 'pending', duplicated: false };
+    });
+    return {
+      ok: true as const,
+      ...result,
+      amount,
+      entryType,
+      expenseType,
+    };
+  }
+
   const treasuryEntryRef = db.collection('repair_treasury_entries').doc(`${actor.tenantId}__repair_treasury_manual__${requestId}`);
   const journalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_treasury_manual__${requestId}`);
   const at = new Date().toISOString();
   const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairTreasury', at);
   const referenceNo = `TR-${entryType.slice(0, 3)}-${requestId.slice(-6).toUpperCase()}`;
+  const expenseRequestRef = expenseApproval
+    ? db.collection(REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION).doc(expenseApproval.requestId)
+    : null;
 
   const result = await db.runTransaction(async (tx) => {
-    const [treasurySnap, journalSnap, sessionSnap, monthCloseSnap] = await Promise.all([
+    const [treasurySnap, journalSnap, sessionSnap, monthCloseSnap, expenseRequestSnap] = await Promise.all([
       tx.get(treasuryEntryRef),
       tx.get(journalRef),
       tx.get(sessionDoc.ref),
       tx.get(monthCloseRef),
+      expenseRequestRef ? tx.get(expenseRequestRef) : Promise.resolve(null),
     ]);
+    if (expenseApproval) {
+      if (!expenseRequestSnap?.exists || String(expenseRequestSnap.data()?.tenantId || '') !== actor.tenantId) {
+        throw new HttpsError('not-found', 'طلب المصروف غير موجود.');
+      }
+      const requestStatus = String(expenseRequestSnap.data()?.status || '');
+      if (requestStatus === 'rejected') {
+        throw new HttpsError('failed-precondition', 'طلب المصروف مرفوض.');
+      }
+      if (requestStatus !== 'pending' && requestStatus !== 'approved') {
+        throw new HttpsError('failed-precondition', 'حالة طلب المصروف لا تسمح بالاعتماد.');
+      }
+    }
     if (treasurySnap.exists || journalSnap.exists) {
       return {
         entryId: treasuryEntryRef.id,
@@ -293,8 +376,12 @@ async function postManualTreasuryEntry(actor: Actor, data: Record<string, unknow
       expenseAccountId: expenseAccountId || null,
       journalEntryId: postingDecision.enabled ? journalRef.id : null,
       accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
-      createdBy: actor.uid,
-      createdByName: actor.displayName,
+      approvalRequestId: expenseApproval?.requestId || null,
+      approvedBy: expenseApproval ? actor.uid : null,
+      approvedByName: expenseApproval ? actor.displayName : null,
+      approvedAt: expenseApproval ? at : null,
+      createdBy: expenseApproval?.requestedBy || actor.uid,
+      createdByName: expenseApproval?.requestedByName || actor.displayName,
       createdAt: at,
     });
 
@@ -344,6 +431,19 @@ async function postManualTreasuryEntry(actor: Actor, data: Record<string, unknow
       });
     }
 
+    if (expenseRequestRef) {
+      tx.update(expenseRequestRef, {
+        status: 'approved',
+        approvedBy: actor.uid,
+        approvedByName: actor.displayName,
+        approvedAt: at,
+        treasuryEntryId: treasuryEntryRef.id,
+        journalEntryId: postingDecision.enabled ? journalRef.id : null,
+        accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
+        updatedAt: at,
+      });
+    }
+
     return {
       entryId: treasuryEntryRef.id,
       journalEntryId: postingDecision.enabled ? journalRef.id : null,
@@ -371,6 +471,89 @@ const requireAdminTreasury = (actor: Actor) => {
   }
   throw new HttpsError('permission-denied', 'اعتماد التسوية متاح لإدارة المراكز فقط.');
 };
+
+const requireRepairAdminApproval = (actor: Actor) => {
+  if (actor.isSuperAdmin || actor.permissions['repair.branches.manage'] === true) return;
+  throw new HttpsError('permission-denied', 'اعتماد المصروفات متاح لأدمن الصيانة فقط.');
+};
+
+async function approveTreasuryExpense(actor: Actor, data: Record<string, unknown>) {
+  requirePermission(actor, ['repair.treasury.manage'], 'ليس لديك صلاحية إدارة خزينة الصيانة.');
+  requireRepairAdminApproval(actor);
+  const expenseRequestId = String(data.expenseRequestId || '').trim();
+  if (!expenseRequestId) throw new HttpsError('invalid-argument', 'معرّف طلب المصروف مطلوب.');
+  const requestRef = db.collection(REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION).doc(expenseRequestId);
+  const snap = await requestRef.get();
+  if (!snap.exists || String(snap.data()?.tenantId || '') !== actor.tenantId) {
+    throw new HttpsError('not-found', 'طلب المصروف غير موجود.');
+  }
+  const row = snap.data() as Record<string, unknown>;
+  if (String(row.status || '') === 'approved') {
+    return {
+      ok: true as const,
+      expenseRequestId,
+      status: 'approved' as const,
+      entryId: String(row.treasuryEntryId || ''),
+      duplicated: true,
+    };
+  }
+  if (String(row.status || '') !== 'pending') {
+    throw new HttpsError('failed-precondition', 'طلب المصروف ليس بانتظار الاعتماد.');
+  }
+  if (String(row.requestedBy || '') === actor.uid) {
+    throw new HttpsError('failed-precondition', 'لا يمكن لمقدم طلب المصروف اعتماد طلبه.');
+  }
+  const result = await postManualTreasuryEntry(actor, {
+    branchId: row.branchId,
+    entryType: 'EXPENSE',
+    paymentMethod: row.paymentMethod,
+    amount: row.amount,
+    note: row.note,
+    requestId: row.requestId,
+    expenseType: row.expenseType,
+  }, {
+    requestId: expenseRequestId,
+    sessionId: String(row.sessionId || ''),
+    requestedBy: String(row.requestedBy || ''),
+    requestedByName: String(row.requestedByName || row.requestedBy || ''),
+  });
+  return { ...result, expenseRequestId, status: 'approved' as const };
+}
+
+async function rejectTreasuryExpense(actor: Actor, data: Record<string, unknown>) {
+  requirePermission(actor, ['repair.treasury.manage'], 'ليس لديك صلاحية إدارة خزينة الصيانة.');
+  requireRepairAdminApproval(actor);
+  const expenseRequestId = String(data.expenseRequestId || '').trim();
+  const reason = String(data.reason || '').trim();
+  if (!expenseRequestId || reason.length < 3) {
+    throw new HttpsError('invalid-argument', 'سبب رفض المصروف مطلوب.');
+  }
+  const requestRef = db.collection(REPAIR_TREASURY_EXPENSE_REQUESTS_COLLECTION).doc(expenseRequestId);
+  const at = new Date().toISOString();
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(requestRef);
+    if (!snap.exists || String(snap.data()?.tenantId || '') !== actor.tenantId) {
+      throw new HttpsError('not-found', 'طلب المصروف غير موجود.');
+    }
+    if (String(snap.data()?.requestedBy || '') === actor.uid) {
+      throw new HttpsError('failed-precondition', 'لا يمكن لمقدم طلب المصروف رفض طلبه.');
+    }
+    const status = String(snap.data()?.status || '');
+    if (status === 'rejected') return;
+    if (status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'طلب المصروف ليس بانتظار الاعتماد.');
+    }
+    tx.update(requestRef, {
+      status: 'rejected',
+      rejectedBy: actor.uid,
+      rejectedByName: actor.displayName,
+      rejectedAt: at,
+      rejectionReason: reason,
+      updatedAt: at,
+    });
+  });
+  return { ok: true as const, expenseRequestId, status: 'rejected' as const };
+}
 
 const resolveMainBranchId = async (tenantId: string): Promise<{ id: string; name: string }> => {
   const snap = await db.collection('repair_branches')
@@ -714,6 +897,12 @@ export const mutateRepairTreasuryHandler = async (request: CallableRequest) => {
   const operation = String(data.operation || '').trim();
   if (operation === 'post_manual_entry') {
     return postManualTreasuryEntry(actor, data);
+  }
+  if (operation === 'approve_expense') {
+    return approveTreasuryExpense(actor, data);
+  }
+  if (operation === 'reject_expense') {
+    return rejectTreasuryExpense(actor, data);
   }
   if (operation === 'submit_settlement') {
     return submitTreasurySettlement(actor, data);

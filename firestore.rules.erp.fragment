@@ -82,6 +82,12 @@
         && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
+    function pl_validSearchPrefixes() {
+      return !('searchPrefixes' in request.resource.data)
+        || (request.resource.data.searchPrefixes is list
+          && request.resource.data.searchPrefixes.size() <= 80);
+    }
+
     function pl_isRepairBranchAdmin() {
       return pl_hasErpPermission('repair.branches.manage');
     }
@@ -319,6 +325,16 @@
       allow write: if false;
     }
 
+    match /dashboardStats/{tenantId}/products/{productId} {
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
+      allow write: if false;
+    }
+
+    match /dashboardStats/{tenantId}/productMonths/{summaryId} {
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
+      allow write: if false;
+    }
+
     // Alias hardening for snake_case naming in old docs/references.
     match /dashboard_stats/{tenantId}/{docId} {
       allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
@@ -496,6 +512,14 @@
       allow update, delete: if false;
     }
 
+    // Expense requests are server-managed. A treasury operator may submit one,
+    // but only the callable admin approval path can post it as a real entry.
+    match /repair_treasury_expense_requests/{id} {
+      allow read: if pl_hasErpPermission('repair.treasury.manage')
+        && pl_canReadRepairBranchScoped();
+      allow create, update, delete: if false;
+    }
+
     match /repair_sales_invoices/{id} {
       allow read: if (
           pl_hasErpPermission('repair.salesInvoice.view')
@@ -547,7 +571,11 @@
 
     match /{coll}/{docId} {
       allow read: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyRead();
-      allow create: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyWrite();
-      allow update: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyUpdate();
+      allow create: if pl_isErpBusinessCollection(coll)
+        && pl_sameTenantOrLegacyWrite()
+        && pl_validSearchPrefixes();
+      allow update: if pl_isErpBusinessCollection(coll)
+        && pl_sameTenantOrLegacyUpdate()
+        && pl_validSearchPrefixes();
       allow delete: if pl_isErpBusinessCollection(coll) && pl_sameTenantOrLegacyRead();
     }

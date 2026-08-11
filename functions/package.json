@@ -18,6 +18,8 @@
     "backfill:supervisorAssignments:apply": "npm run build && node lib/scripts/backfillSupervisorLineAssignments.js --apply",
     "backfill:tenantId:dry": "npm run build && node lib/scripts/backfillTenantId.js",
     "backfill:tenantId:apply": "npm run build && node lib/scripts/backfillTenantId.js --apply"
+    ,"backfill:search:dry": "npm run build && node lib/scripts/backfillSearchPrefixes.js"
+    ,"backfill:search:apply": "npm run build && node lib/scripts/backfillSearchPrefixes.js --apply"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

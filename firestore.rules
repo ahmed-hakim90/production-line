@@ -163,6 +163,12 @@ service cloud.firestore {
         && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
+    function pl_validSearchPrefixes() {
+      return !('searchPrefixes' in request.resource.data)
+        || (request.resource.data.searchPrefixes is list
+          && request.resource.data.searchPrefixes.size() <= 80);
+    }
+
     function pl_isRepairBranchAdmin() {
       return pl_hasErpPermission('repair.branches.manage');
     }
@@ -823,7 +829,7 @@ service cloud.firestore {
       );
       // Self-create is pending-only (least privilege). Privileged roleId/isActive
       // must be written by Admin SDK (adminCreateUser / bootstrapTenantAdmin / approve).
-      allow create: if (pl_authSignedIn()
+      allow create: if ((pl_authSignedIn()
         && request.auth.uid == userId
         && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive'])
         && request.resource.data.isActive == false
@@ -837,10 +843,12 @@ service cloud.firestore {
         && (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false))
         || (pl_isSuperAdmin()
         && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive'])
-        && (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false));
+        && (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false)))
+        && pl_validSearchPrefixes();
       // isSuperAdmin is never writable from clients (Admin SDK / trusted scripts only).
       allow update: if pl_authSignedIn()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isSuperAdmin'])
+        && pl_validSearchPrefixes()
         && (
         (
           request.auth.uid == userId
@@ -894,6 +902,16 @@ service cloud.firestore {
     }
 
     match /dashboardStats/{tenantId}/monthly/{monthId} {
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
+      allow write: if false;
+    }
+
+    match /dashboardStats/{tenantId}/products/{productId} {
+      allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
+      allow write: if false;
+    }
+
+    match /dashboardStats/{tenantId}/productMonths/{summaryId} {
       allow read: if pl_isActiveUser() && pl_currentUserDoc().data.tenantId == tenantId;
       allow write: if false;
     }
@@ -1026,12 +1044,15 @@ service cloud.firestore {
 
     match /payroll_months/{monthId} {
       allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
-      allow create: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyWrite();
+      allow create: if pl_hasErpPermission('payroll.generate')
+        && pl_sameTenantOrLegacyWrite()
+        && pl_validSearchPrefixes();
       allow delete: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyRead();
       allow update: if (pl_hasErpPermission('payroll.generate')
         || pl_hasErpPermission('payroll.finalize')
         || pl_hasErpPermission('payroll.lock'))
-        && pl_sameTenantOrLegacyUpdate();
+        && pl_sameTenantOrLegacyUpdate()
+        && pl_validSearchPrefixes();
     }
 
     match /payroll_records/{recordId} {
@@ -1042,7 +1063,9 @@ service cloud.firestore {
         || pl_hasErpPermission('payroll.accounts.view')
         || pl_hasErpPermission('payroll.accounts.disburse'))
         && pl_sameTenantOrLegacyRead();
-      allow create: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyWrite();
+      allow create: if pl_hasErpPermission('payroll.generate')
+        && pl_sameTenantOrLegacyWrite()
+        && pl_validSearchPrefixes();
       allow delete: if pl_hasErpPermission('payroll.generate') && pl_sameTenantOrLegacyRead();
       allow update: if (
           pl_hasErpPermission('payroll.generate')
@@ -1050,7 +1073,8 @@ service cloud.firestore {
           || pl_hasErpPermission('payroll.lock')
           || pl_hasErpPermission('payroll.accounts.disburse')
         )
-        && pl_sameTenantOrLegacyUpdate();
+        && pl_sameTenantOrLegacyUpdate()
+        && pl_validSearchPrefixes();
     }
 
     match /payroll_audit_logs/{logId} {
@@ -1277,11 +1301,13 @@ service cloud.firestore {
       allow create: if (
         !pl_hasErpPermission('repair.jobs.technician')
         || pl_hasErpPermission('manufacturing.materials.manage')
-      ) && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      ) && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk())
+        && pl_validSearchPrefixes();
       allow update: if (
         !pl_hasErpPermission('repair.jobs.technician')
         || pl_hasErpPermission('manufacturing.materials.manage')
-      ) && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      ) && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
+        && pl_validSearchPrefixes();
       allow delete: if (
         !pl_hasErpPermission('repair.jobs.technician')
         || pl_hasErpPermission('manufacturing.materials.manage')
@@ -1339,6 +1365,14 @@ service cloud.firestore {
         && pl_canCreateRepairBranchScoped()
         && pl_canCreateRepairTreasuryEntryForOpenSession();
       allow update, delete: if false;
+    }
+
+    // Expense requests are server-managed. A treasury operator may submit one,
+    // but only the callable admin approval path can post it as a real entry.
+    match /repair_treasury_expense_requests/{id} {
+      allow read: if pl_hasErpPermission('repair.treasury.manage')
+        && pl_canReadRepairBranchScoped();
+      allow create, update, delete: if false;
     }
 
     // get of a missing close doc must succeed (resource == null) so monthly report
@@ -1911,9 +1945,11 @@ service cloud.firestore {
       allow read: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
       allow create: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
-        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk())
+        && pl_validSearchPrefixes();
       allow update: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
-        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
+        && pl_validSearchPrefixes();
       allow delete: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }

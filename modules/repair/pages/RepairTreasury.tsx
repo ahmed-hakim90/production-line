@@ -32,6 +32,7 @@ import {
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairTreasuryEntry,
+  type RepairTreasuryExpenseRequest,
   type RepairTreasurySession,
   type RepairTreasurySettlement,
 } from '../types';
@@ -186,6 +187,7 @@ export const RepairTreasury: React.FC = () => {
   const [entriesPage, setEntriesPage] = useState(1);
   const [sessionsPage, setSessionsPage] = useState(1);
   const [settlements, setSettlements] = useState<RepairTreasurySettlement[]>([]);
+  const [expenseRequests, setExpenseRequests] = useState<RepairTreasuryExpenseRequest[]>([]);
   const [settleCounted, setSettleCounted] = useState('');
   const [settleNote, setSettleNote] = useState('');
   const [settleVarianceReason, setSettleVarianceReason] = useState('');
@@ -193,6 +195,7 @@ export const RepairTreasury: React.FC = () => {
     can('repair.branches.manage')
     || can('repair.callCenter.viewAll')
   );
+  const canApproveExpenses = canManage && can('repair.branches.manage');
 
   const allowedBranches = useMemo(() => {
     if (repairCtx.canViewAllBranches) return branches;
@@ -385,6 +388,10 @@ export const RepairTreasury: React.FC = () => {
     () => settlements.filter((row) => row.status === 'submitted'),
     [settlements],
   );
+  const pendingExpenseRequests = useMemo(
+    () => expenseRequests.filter((row) => row.status === 'pending'),
+    [expenseRequests],
+  );
   const branchSettlements = useMemo(
     () => settlements.filter((row) => row.fromBranchId === branchId || row.toBranchId === branchId).slice(0, 12),
     [settlements, branchId],
@@ -460,17 +467,34 @@ export const RepairTreasury: React.FC = () => {
     }
   };
 
+  const loadExpenseRequests = async () => {
+    try {
+      const allowedIds = canApproveExpenses
+        ? undefined
+        : allowedBranches.map((branch) => String(branch.id || '')).filter(Boolean);
+      const rows = await repairTreasuryService.listExpenseRequests(allowedIds);
+      setExpenseRequests(rows);
+    } catch {
+      setExpenseRequests([]);
+    }
+  };
+
   const refreshAll = async (selectedBranchId = branchId) => {
     await load(selectedBranchId, { force: true });
     await Promise.all([
       loadAllBranchSessions(allowedBranches.map((branch) => String(branch.id || '')).filter(Boolean)),
       loadSettlements(),
+      loadExpenseRequests(),
     ]);
   };
 
   useEffect(() => {
     void loadSettlements();
   }, []);
+
+  useEffect(() => {
+    if (canApproveExpenses || allowedBranches.length > 0) void loadExpenseRequests();
+  }, [canApproveExpenses, allowedBranches]);
 
   const openSessionDetails = async (session: RepairTreasurySession) => {
     const sessionId = String(session.id || '');
@@ -589,7 +613,7 @@ export const RepairTreasury: React.FC = () => {
       setEntryNote('');
       setEntryAmount('');
       setEntryExpenseType('');
-      toast.success(entryType === 'EXPENSE' ? 'تم تسجيل المصروف وترحيله محاسبياً.' : 'تم تسجيل الحركة وترحيلها محاسبياً.');
+      toast.success(entryType === 'EXPENSE' ? 'تم إرسال المصروف لاعتماد الإدارة.' : 'تم تسجيل الحركة وترحيلها محاسبياً.');
       await refreshAll(branchId);
     } catch (e: any) {
       toast.error(e?.message || 'تعذر تسجيل الحركة.');
@@ -666,6 +690,37 @@ export const RepairTreasury: React.FC = () => {
     }
   };
 
+  const handleApproveExpense = async (expenseRequestId: string) => {
+    if (!canApproveExpenses || busy || !expenseRequestId) return;
+    if (!window.confirm('اعتماد المصروف وخصمه من الخزينة وترحيله محاسبياً؟')) return;
+    setBusy(true);
+    try {
+      await repairTreasuryService.approveExpense(expenseRequestId);
+      toast.success('تم اعتماد المصروف وترحيله للخزينة والحسابات.');
+      await refreshAll(branchId);
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر اعتماد المصروف.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRejectExpense = async (expenseRequestId: string) => {
+    if (!canApproveExpenses || busy || !expenseRequestId) return;
+    const reason = window.prompt('سبب رفض المصروف:');
+    if (!reason?.trim()) return;
+    setBusy(true);
+    try {
+      await repairTreasuryService.rejectExpense(expenseRequestId, reason.trim());
+      toast.success('تم رفض طلب المصروف.');
+      await refreshAll(branchId);
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر رفض المصروف.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!canView) {
     return (
       <RepairOpsPageShell eyebrow="خزينة الصيانة" dir={dir}>
@@ -722,6 +777,52 @@ export const RepairTreasury: React.FC = () => {
           </Button>
         </div>
       )}
+
+      {pendingExpenseRequests.length > 0 ? (
+        <OpsDashPanel title={`مصروفات بانتظار اعتماد الأدمن (${pendingExpenseRequests.length})`} accent="repair">
+          <div className="space-y-2">
+            {pendingExpenseRequests.map((row) => {
+              const isOwnRequest = String(row.requestedBy || '') === String(user?.id || '');
+              const expenseLabel = REPAIR_TREASURY_EXPENSE_TYPES.find((item) => item.key === row.expenseType)?.label || row.expenseType;
+              return (
+                <div
+                  key={row.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--color-warning)/0.25)]/80 bg-[rgb(var(--color-warning)/0.1)]/50 p-3"
+                >
+                  <div className="min-w-0 text-sm">
+                    <p className="font-semibold">
+                      {expenseLabel} · {fmt(Number(row.amount || 0))} ج.م
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {branchNameMap[row.branchId] || row.branchId} · {row.note || '—'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      مقدم الطلب: {row.requestedByName || '—'}
+                    </p>
+                  </div>
+                  {canApproveExpenses && !isOwnRequest ? (
+                    <div className="flex flex-wrap gap-1">
+                      <Button size="sm" disabled={busy} onClick={() => void handleApproveExpense(String(row.id || ''))}>
+                        اعتماد
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={busy}
+                        onClick={() => void handleRejectExpense(String(row.id || ''))}
+                      >
+                        رفض
+                      </Button>
+                    </div>
+                  ) : (
+                    <ErpStatusBadge label={isOwnRequest ? 'بانتظار أدمن آخر' : 'بانتظار الإدارة'} type="warning" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </OpsDashPanel>
+      ) : null}
 
       {canApproveSettlements && pendingSettlements.length > 0 ? (
         <OpsDashPanel title={`طلبات تسوية بانتظار الاعتماد (${pendingSettlements.length})`} accent="repair">
@@ -961,7 +1062,7 @@ export const RepairTreasury: React.FC = () => {
                         </SelectContent>
                       </Select>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        يُرحَّل المصروف تلقائياً لحسابه في دفتر الحسابات.
+                        يُرسل المصروف أولاً لاعتماد الأدمن، ولا يُخصم أو يُرحَّل محاسبياً قبل الاعتماد.
                       </p>
                     </div>
                   ) : null}
@@ -1005,7 +1106,7 @@ export const RepairTreasury: React.FC = () => {
                       </Button>
                     ) : null}
                     <Button className="w-full" onClick={() => void handleAddEntry()} disabled={!canMutate || busy || !branchId}>
-                      {busy ? 'جارٍ التسجيل...' : 'تسجيل الحركة'}
+                      {busy ? 'جارٍ التسجيل...' : entryType === 'EXPENSE' ? 'إرسال المصروف للاعتماد' : 'تسجيل الحركة'}
                     </Button>
                   </div>
                 </>

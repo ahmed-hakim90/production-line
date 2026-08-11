@@ -301,14 +301,16 @@ export const buildProducts = (
   return raw.map((p) => {
     const prodReports = reports.filter((r) => r.productId === p.id);
     const productiveReports = prodReports.filter((r) => Number(r.quantityProduced || 0) > 0);
-    const totalProduction = prodReports.reduce(
+    const reportsTotalProduction = prodReports.reduce(
       (sum, r) => sum + (r.quantityProduced || 0),
       0
     );
-    const totalWaste = prodReports.reduce(
+    const reportsTotalWaste = prodReports.reduce(
       (sum, r) => sum + getReportWaste(r),
       0
     );
+    const totalProduction = p.totalProduction ?? reportsTotalProduction;
+    const totalWaste = p.totalWaste ?? reportsTotalWaste;
     const config = configs.find((c) => c.productId === p.id);
     const standardMin = effectiveStandardAssemblyMinutes(
       p.id!,

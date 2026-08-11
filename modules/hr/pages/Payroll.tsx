@@ -43,10 +43,11 @@ import type {
   EmploymentType,
 } from '../payroll/types';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const ROWS_PER_PAGE = 15;
+const ROWS_PER_PAGE = 20;
 const PAYROLL_EMPLOYEES_CACHE_KEY = 'hr:payroll:employees';
 
 type PayrollMonthPageData = {
@@ -359,13 +360,12 @@ export const Payroll: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<FirestorePayrollRecord | null>(null);
-  const [visibleCount, setVisibleCount] = useState(ROWS_PER_PAGE);
+  const [currentPage, setCurrentPage] = useState(1);
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [employmentFilter, setEmploymentFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [dataLoaded, setDataLoaded] = useState(() => initialPayrollCache != null);
-  const [payrollEmployees, setPayrollEmployees] = useState<PayrollEmployeeData[]>(initialEmployeesCache ?? []);
-  const [employeesLoaded, setEmployeesLoaded] = useState(() => initialEmployeesCache != null);
+  const [payrollEmployees] = useState<PayrollEmployeeData[]>(initialEmployeesCache ?? []);
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'payroll'),
     [exportImportSettings]
@@ -375,26 +375,6 @@ export const Payroll: React.FC = () => {
   const canLockPayroll = can('payroll.lock');
   const canDistributePayroll = can('payroll.accounts.disburse');
   const canExportFromPage = can('export') && pageControl.exportEnabled;
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { data } = await fetchCachedPageData(
-          PAYROLL_EMPLOYEES_CACHE_KEY,
-          () => loadPayrollEmployees(),
-          { maxAgeMs: 120_000 },
-        );
-        if (!cancelled) {
-          setPayrollEmployees(data);
-          setEmployeesLoaded(true);
-        }
-      } catch {
-        if (!cancelled) setEmployeesLoaded(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   const applyPayrollData = useCallback((data: PayrollMonthPageData) => {
     setPayrollMonth(data.payrollMonth);
@@ -548,9 +528,12 @@ export const Payroll: React.FC = () => {
     return result;
   }, [records, departmentFilter, employmentFilter, searchQuery]);
 
-  const paginatedRecords = filteredRecords.slice(0, visibleCount);
-  const canLoadMoreRecords = paginatedRecords.length < filteredRecords.length;
-  const remainingRecordsCount = Math.max(filteredRecords.length - paginatedRecords.length, 0);
+  const totalRecordPages = Math.max(1, Math.ceil(filteredRecords.length / ROWS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalRecordPages);
+  const paginatedRecords = filteredRecords.slice(
+    (safeCurrentPage - 1) * ROWS_PER_PAGE,
+    safeCurrentPage * ROWS_PER_PAGE,
+  );
 
   // Department options from records
   const departments = useMemo(() => {
@@ -696,7 +679,7 @@ export const Payroll: React.FC = () => {
           <input
             type="month"
             value={month}
-            onChange={(e) => { setMonth(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
+            onChange={(e) => { setMonth(e.target.value); setCurrentPage(1); }}
             className="erp-filter-select"
           />
         </div>
@@ -854,7 +837,7 @@ export const Payroll: React.FC = () => {
       pageId="hr-payroll"
           searchPlaceholder="بحث باسم الموظف..."
           searchValue={searchQuery}
-          onSearchChange={(value) => { setSearchQuery(value); setVisibleCount(ROWS_PER_PAGE); }}
+          onSearchChange={(value) => { setSearchQuery(value); setCurrentPage(1); }}
           quickFilters={[
             {
               key: 'department',
@@ -873,8 +856,8 @@ export const Payroll: React.FC = () => {
           ]}
           quickFilterValues={{ department: departmentFilter, employment: employmentFilter }}
           onQuickFilterChange={(key, value) => {
-            if (key === 'department') { setDepartmentFilter(value); setVisibleCount(ROWS_PER_PAGE); }
-            if (key === 'employment') { setEmploymentFilter(value); setVisibleCount(ROWS_PER_PAGE); }
+            if (key === 'department') { setDepartmentFilter(value); setCurrentPage(1); }
+            if (key === 'employment') { setEmploymentFilter(value); setCurrentPage(1); }
           }}
         />
 
@@ -1007,22 +990,15 @@ export const Payroll: React.FC = () => {
           </div>
 
           {/* Pagination */}
-          {filteredRecords.length > ROWS_PER_PAGE && (
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between">
-              <p className="text-xs text-[var(--color-text-muted)] font-medium">
-                عرض {paginatedRecords.length} من {filteredRecords.length}
-              </p>
-              {canLoadMoreRecords && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setVisibleCount((prev) => prev + ROWS_PER_PAGE)}
-                >
-                  {remainingRecordsCount > 0 ? `تحميل المزيد (متبقي ${remainingRecordsCount})` : 'تحميل المزيد'}
-                </Button>
-              )}
-            </div>
-          )}
+          <DataPaginationFooter
+            page={safeCurrentPage}
+            itemCount={paginatedRecords.length}
+            itemLabel="سجل"
+            hasPrevious={safeCurrentPage > 1}
+            hasNext={safeCurrentPage < totalRecordPages}
+            onPrevious={() => setCurrentPage((value) => Math.max(1, value - 1))}
+            onNext={() => setCurrentPage((value) => Math.min(totalRecordPages, value + 1))}
+          />
         </OpsDashPanel>
       )}
 
@@ -1089,4 +1065,3 @@ export const Payroll: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-

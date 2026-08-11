@@ -1,9 +1,14 @@
+const TERMINAL_STATUSES = new Set(['ready', 'delivered', 'cancelled', 'unrepairable']);
+/** Closed / terminal jobs cannot be newly claimed — but the assigned tech may reopen for view. */
 export function decideTechnicianQrClaim(input) {
-    if (input.isClosed || ['ready', 'delivered', 'cancelled', 'unrepairable'].includes(input.status))
-        return 'terminal';
-    if (!input.currentTechnicianId)
+    const assigned = String(input.currentTechnicianId || '').trim();
+    const isSelf = Boolean(assigned) && input.actorIds.includes(assigned);
+    const isTerminal = input.isClosed || TERMINAL_STATUSES.has(String(input.status || ''));
+    if (isTerminal)
+        return isSelf ? 'already_self' : 'terminal';
+    if (!assigned)
         return 'claim';
-    if (!input.actorIds.includes(input.currentTechnicianId))
+    if (!isSelf)
         return 'assigned_other';
-    return input.currentTechnicianId === input.actorUid ? 'already_self' : 'claim';
+    return assigned === input.actorUid ? 'already_self' : 'claim';
 }

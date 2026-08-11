@@ -1990,8 +1990,8 @@ export const RepairJobDetail: React.FC = () => {
               <p className="mb-3 text-sm text-muted-foreground">
                 {canManageTechnicianAssignment
                   ? (canAssignToMyselfAsTechnician
-                    ? 'غيّر الفني لو مش موجود النهاردة، أو فك الإسناد عشان فني تاني يمسحه من الكارت.'
-                    : 'اختر فنيًا من قائمة الفرع ثم احفظ الإسناد. «إسناد لي» للفني المربوط بالفرع فقط.')
+                    ? 'غيّر الفني لو مش موجود النهاردة، أو فك الإسناد عشان فني تاني يمسحه من الكارت. مسح QR متاح لأي فني في الشركة بدون ربط بالفرع.'
+                    : 'اختر فنيًا من قائمة الفرع ثم احفظ الإسناد. «إسناد لي» من الشاشة دي للفني المربوط بالفرع فقط — أما مسح QR فمتاح لأي فني في الشركة.')
                   : 'الفني الحالي على الطلب.'}
               </p>
               <div className="mb-3 rounded-md border bg-muted/20 px-3 py-2 text-sm">
@@ -2037,7 +2037,7 @@ export const RepairJobDetail: React.FC = () => {
                     </>
                   ) : (
                     <p className="text-xs text-[rgb(var(--color-warning))]">
-                      لا يوجد فنيون مربوطون بهذا الفرع. أضفهم من شاشة الفروع أولًا.
+                      لا يوجد فنيون في قائمة هذا الفرع للإسناد اليدوي. أضفهم من شاشة الفروع، أو خلّي الفني يمسح QR الكارت مباشرة (مش محتاج ربط بالفرع).
                     </p>
                   )}
                   <div className={`grid grid-cols-1 gap-2 ${canAssignToMyselfAsTechnician ? 'sm:grid-cols-2' : ''}`}>

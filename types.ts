@@ -92,6 +92,15 @@ export interface FirestoreProduct {
   /** Unique customer-facing barcode printed on the product box. */
   barcode?: string;
   openingBalance: number;
+  /** Write-time lifetime aggregates maintained from production_reports. */
+  totalProduction?: number;
+  totalWaste?: number;
+  productionStatsUpdatedAt?: unknown;
+  /** Latest production month materialized by aggregateProductionReports. */
+  productionStatsMonth?: string;
+  monthlyProduction?: number;
+  monthlyWaste?: number;
+  monthlyProductionCost?: number;
   avgDailyProduction?: number;
   imageUrl?: string;
   storagePath?: string;
