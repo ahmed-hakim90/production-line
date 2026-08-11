@@ -54,7 +54,7 @@ type BranchFormState = {
   isMain: boolean;
   managerEmployeeId: string;
   managerEmployeeName: string;
-  /** Required: link an existing maintenance-center warehouse. */
+  /** Required on edit: linked maintenance-center warehouse. Unused on create (server provisions). */
   warehouseId: string;
   /** Default on for new centers; explicit false disables credit delivery. */
   allowCreditDelivery: boolean;
@@ -184,7 +184,7 @@ export const RepairBranches: React.FC = () => {
   }, [search, mainFilter]);
 
   useEffect(() => {
-    if (!branchModalOpen) return;
+    if (!branchModalOpen || !editingBranch?.id) return;
     let cancelled = false;
     setWarehouseLoading(true);
     void warehouseService
@@ -207,7 +207,7 @@ export const RepairBranches: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [branchModalOpen]);
+  }, [branchModalOpen, editingBranch?.id]);
 
   useEffect(() => {
     if (!branchModalOpen) {
@@ -407,7 +407,7 @@ export const RepairBranches: React.FC = () => {
       toast.error('اختر المسؤول عن الفرع قبل الحفظ.');
       return;
     }
-    if (!form.warehouseId.trim()) {
+    if (editingBranch?.id && !form.warehouseId.trim()) {
       toast.error('اختر مخزن مركز صيانة مرتبطًا بالفرع.');
       return;
     }
@@ -439,13 +439,11 @@ export const RepairBranches: React.FC = () => {
           isMain: form.isMain,
           managerEmployeeId: form.managerEmployeeId,
           managerEmployeeName: form.managerEmployeeName,
-          technicianIds: [],
-          warehouseId: form.warehouseId.trim(),
           allowCreditDelivery: form.allowCreditDelivery,
           allowCreditSalesInvoices: form.allowCreditSalesInvoices,
           salesInvoicesLocked: form.salesInvoicesLocked,
         });
-        toast.success('تمت إضافة الفرع وربطه بمخزن المركز المختار.');
+        toast.success('تم إنشاء الفرع مع المخازن ومركز التكلفة.');
       }
       setBranchModalOpen(false);
       setEditingBranch(null);
@@ -813,7 +811,7 @@ export const RepairBranches: React.FC = () => {
             <DialogDescription>
               {editingBranch
                 ? 'حدّث بيانات الفرع واختر مخزن مركز الصيانة المرتبط. عند تعيين فرع رئيسي يُلغى الرئيسي السابق تلقائيًا.'
-                : 'أدخل بيانات الفرع واختر مخزن مركز صيانة من القائمة لربطه بالفرع.'}
+                : 'أدخل بيانات الفرع. سيتم إنشاء مخزن مركز الصيانة ومخازن العهدة ومركز التكلفة وربطهم تلقائيًا عند الحفظ.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -885,14 +883,20 @@ export const RepairBranches: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
-            <label className="inline-flex items-center gap-2 text-sm md:col-span-2">
+            <label className="flex items-start gap-2 text-sm md:col-span-2">
               <input
                 type="checkbox"
+                className="mt-0.5"
                 checked={form.isMain}
                 onChange={(e) => setForm((prev) => ({ ...prev, isMain: e.target.checked }))}
                 disabled={branchSaving}
               />
-              فرع رئيسي
+              <span>
+                فرع رئيسي
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  خزينة الإدارة: تسويات نقدية الفروع الأخرى تذهب إليه. فرع رئيسي واحد فقط — تفعيله يلغي الرئيسي السابق.
+                </span>
+              </span>
             </label>
             <div className="md:col-span-2 space-y-2 rounded-md border bg-muted/20 p-3">
               <div className="text-sm font-semibold">سياسات التحصيل والفواتير</div>
@@ -942,71 +946,83 @@ export const RepairBranches: React.FC = () => {
                 </span>
               </label>
             </div>
-            <div className="md:col-span-2 space-y-3 rounded-md border bg-muted/20 p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-sm font-semibold">المخزن المرتبط</div>
-                {canManageWarehouses && linkedWarehouse?.id ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={branchSaving || warehouseLoading}
-                    onClick={openWarehouseEditor}
-                  >
-                    تعديل كامل للمخزن
-                  </Button>
-                ) : null}
-              </div>
-              {warehouseLoading ? (
-                <p className="text-xs text-muted-foreground">جاري تحميل مخازن المراكز…</p>
-              ) : null}
-              <div className="space-y-1.5">
-                <Label>
-                  مخزن مركز الصيانة <span className="text-[rgb(var(--color-danger))]">*</span>
-                </Label>
-                <Select
-                  value={form.warehouseId.trim() || undefined}
-                  onValueChange={(value) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      warehouseId: value,
-                    }));
-                  }}
-                  disabled={branchSaving || warehouseLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر مخزن مركز صيانة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {selectableCenterWarehouses.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={String(warehouse.id || '')}>
-                        {warehouse.name}
-                        {warehouse.code ? ` (${warehouse.code})` : ''}
-                      </SelectItem>
-                    ))}
-                    {selectableCenterWarehouses.length === 0 ? (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                        لا توجد مخازن مراكز متاحة للربط. أنشئ مخزن مركز صيانة من إدارة المخازن أولًا.
-                      </div>
+            {editingBranch ? (
+              <>
+                <div className="md:col-span-2 space-y-3 rounded-md border bg-muted/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-sm font-semibold">المخزن المرتبط</div>
+                    {canManageWarehouses && linkedWarehouse?.id ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={branchSaving || warehouseLoading}
+                        onClick={openWarehouseEditor}
+                      >
+                        تعديل كامل للمخزن
+                      </Button>
                     ) : null}
-                  </SelectContent>
-                </Select>
-              </div>
-              {linkedWarehouse ? (
-                <p className="text-xs text-muted-foreground font-mono">
-                  الكود: {linkedWarehouse.code || '—'} · المعرف: {linkedWarehouse.id || '—'}
+                  </div>
+                  {warehouseLoading ? (
+                    <p className="text-xs text-muted-foreground">جاري تحميل مخازن المراكز…</p>
+                  ) : null}
+                  <div className="space-y-1.5">
+                    <Label>
+                      مخزن مركز الصيانة <span className="text-[rgb(var(--color-danger))]">*</span>
+                    </Label>
+                    <Select
+                      value={form.warehouseId.trim() || undefined}
+                      onValueChange={(value) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          warehouseId: value,
+                        }));
+                      }}
+                      disabled={branchSaving || warehouseLoading}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="اختر مخزن مركز صيانة" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {selectableCenterWarehouses.map((warehouse) => (
+                          <SelectItem key={warehouse.id} value={String(warehouse.id || '')}>
+                            {warehouse.name}
+                            {warehouse.code ? ` (${warehouse.code})` : ''}
+                          </SelectItem>
+                        ))}
+                        {selectableCenterWarehouses.length === 0 ? (
+                          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                            لا توجد مخازن مراكز متاحة للربط. أنشئ مخزن مركز صيانة من إدارة المخازن أولًا.
+                          </div>
+                        ) : null}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {linkedWarehouse ? (
+                    <p className="text-xs text-muted-foreground font-mono">
+                      الكود: {linkedWarehouse.code || '—'} · المعرف: {linkedWarehouse.id || '—'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-[rgb(var(--color-warning))]">اختر مخزنًا من مخازن مراكز الصيانة غير المرتبطة بفرع آخر.</p>
+                  )}
+                </div>
+                <div className="md:col-span-2 rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/60 p-3 text-sm">
+                  <p className="font-semibold text-[rgb(var(--color-primary))]">مركز التكلفة</p>
+                  <p className="mt-1 text-xs text-[rgb(var(--color-primary))]">
+                    {editingBranch.costCenterId
+                      ? `مرتبط بمركز تكلفة (${editingBranch.costCenterId}). يمكن إعادة الربط من «الحسابات ← إعدادات الحسابات».`
+                      : 'غير مرتبط بعد. اربطه بمركز التكلفة من «الحسابات ← إعدادات الحسابات».'}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="md:col-span-2 rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/60 p-3 text-sm">
+                <p className="font-semibold text-[rgb(var(--color-primary))]">الإنشاء التلقائي</p>
+                <p className="mt-1 text-xs text-[rgb(var(--color-primary))]">
+                  سيتم إنشاء مخزن مركز الصيانة ومخازن العهدة ومركز التكلفة وربطهم تلقائيًا عند الحفظ.
                 </p>
-              ) : (
-                <p className="text-xs text-[rgb(var(--color-warning))]">اختر مخزنًا من مخازن مراكز الصيانة غير المرتبطة بفرع آخر.</p>
-              )}
-            </div>
-            <div className="md:col-span-2 rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/60 p-3 text-sm">
-              <p className="font-semibold text-[rgb(var(--color-primary))]">الربط المحاسبي مستقل عن بيانات الفرع التشغيلية</p>
-              <p className="mt-1 text-xs text-[rgb(var(--color-primary))]">
-                بعد حفظ الفرع، اربطه بمركز التكلفة فقط من «الحسابات ← إعدادات الحسابات» —
-                الحسابات الافتراضية تُطبَّق تلقائيًا عند الحفظ.
-              </p>
-            </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

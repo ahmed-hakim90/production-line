@@ -2,6 +2,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { createHash, randomBytes } from 'node:crypto';
 import { getDb } from './adminApp.js';
+import {
+  accountingPostingDecision,
+  queuePendingAccounting,
+  validateAutomaticPostingMaster,
+} from './accountingPostingPolicy.js';
 import { loadProtectedRepairServiceCatalog } from './repairServiceCatalogOps.js';
 import { loadCustomerType, pickRepairSalePrice, roundRepairMoney } from './repairSalePrice.js';
 import { buildWarrantySettlementTotals } from './repairWarrantyAccountingPolicy.js';
@@ -469,6 +474,11 @@ const loadLiveBranchAccounting = async (actor: Actor, branchId: string) => {
   }
   const branchAccounting = await ensureWarrantyAllowanceMapping(actor, branchRef, branchSnap.data()?.accountingAccounts);
   const accountingAccounts = await assertAccountingMapReady(actor.tenantId, branchAccounting);
+  await validateAutomaticPostingMaster({
+    tenantId: actor.tenantId,
+    accountCodes: Object.values(accountingAccounts).map((code) => String(code || "")),
+    costCenterId,
+  });
   return { branchRef, costCenterId, accountingAccounts };
 };
 
@@ -896,6 +906,7 @@ async function collectPayment(actor: Actor, data: Record<string, unknown>) {
   const month = String(sessionDoc.data().openedAt || new Date().toISOString()).slice(0, 7);
   const monthCloseRef = db.collection('repair_treasury_month_closes').doc(`${actor.tenantId}_${branchId}_${month}`);
   const at = new Date().toISOString();
+  const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairPayments', at);
   const result = await db.runTransaction(async (tx) => {
     const [authSnap, finSnap, sessionSnap, paymentSnap, monthCloseSnap, jobSnap] = await Promise.all([
       tx.get(authRef), tx.get(finRef), tx.get(sessionDoc.ref), tx.get(paymentRef), tx.get(monthCloseRef), tx.get(jobRef),
@@ -929,7 +940,9 @@ async function collectPayment(actor: Actor, data: Record<string, unknown>) {
     tx.create(paymentRef, {
       tenantId: actor.tenantId, branchId, jobId, authorizationId, paymentNo, amount, method,
       collectionKind: 'deposit' satisfies PaymentCollectionKind,
-      status: 'posted', treasuryEntryId: treasuryEntryRef.id, journalEntryId: journalRef.id,
+      status: 'posted', treasuryEntryId: treasuryEntryRef.id,
+      journalEntryId: postingDecision.enabled ? journalRef.id : null,
+      accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
       createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
     });
     tx.create(treasuryEntryRef, {
@@ -937,15 +950,23 @@ async function collectPayment(actor: Actor, data: Record<string, unknown>) {
       paymentMethod: method, costCenterId, note: `تحصيل ${paymentNo}`, referenceId: jobId,
       source: 'repair_payment', createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
     });
-    tx.create(journalRef, {
-      tenantId: actor.tenantId, branchId, costCenterId, source: 'repair_payment', sourceId: paymentId,
-      referenceNo: paymentNo, status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
-      totalDebit: amount, totalCredit: amount,
-      lines: [
-        { accountCode: debitAccount.code, accountName: debitAccount.name, debit: amount, credit: 0, costCenterId },
-        { accountCode: accounts.CUSTOMER_DEPOSITS.code, accountName: accounts.CUSTOMER_DEPOSITS.name, debit: 0, credit: amount, costCenterId },
-      ],
-    });
+    if (postingDecision.enabled) {
+      tx.create(journalRef, {
+        tenantId: actor.tenantId, branchId, costCenterId, source: 'repair_payment', sourceId: paymentId,
+        referenceNo: paymentNo, status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
+        totalDebit: amount, totalCredit: amount,
+        lines: [
+          { accountCode: debitAccount.code, accountName: debitAccount.name, debit: amount, credit: 0, costCenterId },
+          { accountCode: accounts.CUSTOMER_DEPOSITS.code, accountName: accounts.CUSTOMER_DEPOSITS.name, debit: 0, credit: amount, costCenterId },
+        ],
+      });
+    } else {
+      queuePendingAccounting(tx, {
+        tenantId: actor.tenantId, source: 'repair_payment', sourceId: paymentId,
+        branchId, costCenterId, amount, date: at, reason: postingDecision.reason,
+        payload: { paymentNo, method, jobId, authorizationId },
+      });
+    }
     // Refresh stale account snapshots frozen when the authorization was first prepared.
     tx.update(authRef, {
       paidAmount: paid,
@@ -1007,6 +1028,7 @@ async function collectReceivable(actor: Actor, data: Record<string, unknown>) {
   const month = String(sessionDoc.data().openedAt || new Date().toISOString()).slice(0, 7);
   const monthCloseRef = db.collection('repair_treasury_month_closes').doc(`${actor.tenantId}_${branchId}_${month}`);
   const at = new Date().toISOString();
+  const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairPayments', at);
   const result = await db.runTransaction(async (tx) => {
     const [authSnap, finSnap, sessionSnap, paymentSnap, monthCloseSnap, jobSnap] = await Promise.all([
       tx.get(authRef), tx.get(finRef), tx.get(sessionDoc.ref), tx.get(paymentRef), tx.get(monthCloseRef), tx.get(jobRef),
@@ -1056,7 +1078,9 @@ async function collectReceivable(actor: Actor, data: Record<string, unknown>) {
     tx.create(paymentRef, {
       tenantId: actor.tenantId, branchId, jobId, authorizationId, paymentNo, amount, method,
       collectionKind: 'receivable' satisfies PaymentCollectionKind,
-      status: 'posted', treasuryEntryId: treasuryEntryRef.id, journalEntryId: journalRef.id,
+      status: 'posted', treasuryEntryId: treasuryEntryRef.id,
+      journalEntryId: postingDecision.enabled ? journalRef.id : null,
+      accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
       createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
     });
     tx.create(treasuryEntryRef, {
@@ -1064,15 +1088,23 @@ async function collectReceivable(actor: Actor, data: Record<string, unknown>) {
       paymentMethod: method, costCenterId, note: `تحصيل ذمة ${paymentNo}`, referenceId: jobId,
       source: 'repair_ar_collection', createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
     });
-    tx.create(journalRef, {
-      tenantId: actor.tenantId, branchId, costCenterId, source: 'repair_ar_collection', sourceId: paymentId,
-      referenceNo: paymentNo, status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
-      totalDebit: amount, totalCredit: amount,
-      lines: [
-        { accountCode: debitAccount.code, accountName: debitAccount.name, debit: amount, credit: 0, costCenterId },
-        { accountCode: accounts.RECEIVABLES.code, accountName: accounts.RECEIVABLES.name, debit: 0, credit: amount, costCenterId },
-      ],
-    });
+    if (postingDecision.enabled) {
+      tx.create(journalRef, {
+        tenantId: actor.tenantId, branchId, costCenterId, source: 'repair_ar_collection', sourceId: paymentId,
+        referenceNo: paymentNo, status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
+        totalDebit: amount, totalCredit: amount,
+        lines: [
+          { accountCode: debitAccount.code, accountName: debitAccount.name, debit: amount, credit: 0, costCenterId },
+          { accountCode: accounts.RECEIVABLES.code, accountName: accounts.RECEIVABLES.name, debit: 0, credit: amount, costCenterId },
+        ],
+      });
+    } else {
+      queuePendingAccounting(tx, {
+        tenantId: actor.tenantId, source: 'repair_ar_collection', sourceId: paymentId,
+        branchId, costCenterId, amount, date: at, reason: postingDecision.reason,
+        payload: { paymentNo, method, jobId, authorizationId },
+      });
+    }
     tx.update(authRef, {
       paidAmount: paid,
       balanceDue: nextBalance,
@@ -1118,6 +1150,7 @@ async function reversePayment(actor: Actor, data: Record<string, unknown>) {
   const reversalTreasuryRef = db.collection('repair_treasury_entries').doc(`${actor.tenantId}__repair_payment_reversal__${paymentId}`);
   const reversalJournalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_payment_reversal__${paymentId}`);
   const at = new Date().toISOString();
+  const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairPayments', at);
   await db.runTransaction(async (tx) => {
     const [paymentSnap, jobSnap, authSnap, finSnap] = await Promise.all([tx.get(paymentRef), tx.get(jobRef), tx.get(authRef), tx.get(finRef)]);
     if (!paymentSnap.exists || !authSnap.exists || !finSnap.exists) throw new HttpsError('failed-precondition', 'بيانات الدفعة غير مكتملة.');
@@ -1144,7 +1177,11 @@ async function reversePayment(actor: Actor, data: Record<string, unknown>) {
     if (!clearingAccount.code || !creditAccount.code) {
       throw new HttpsError('failed-precondition', 'حسابات الفرع غير مكتملة لعكس الدفعة.');
     }
-    tx.update(paymentRef, { status: 'reversed', reversedAt: at, reversedBy: actor.uid, reversalReason: reason });
+    tx.update(paymentRef, {
+      status: 'reversed', reversedAt: at, reversedBy: actor.uid, reversalReason: reason,
+      reversalJournalEntryId: postingDecision.enabled ? reversalJournalRef.id : null,
+      reversalAccountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
+    });
     tx.create(reversalTreasuryRef, {
       tenantId: actor.tenantId, branchId, entryType: 'EXPENSE', amount,
       paymentMethod: method, costCenterId, note: `عكس ${String(payment.paymentNo || paymentId)} — ${reason}`,
@@ -1152,17 +1189,26 @@ async function reversePayment(actor: Actor, data: Record<string, unknown>) {
       source: isReceivableCollect ? 'repair_ar_collection_reversal' : 'repair_payment_reversal',
       createdBy: actor.uid, createdByName: actor.displayName, createdAt: at,
     });
-    tx.create(reversalJournalRef, {
-      tenantId: actor.tenantId, branchId, costCenterId,
-      source: isReceivableCollect ? 'repair_ar_collection_reversal' : 'repair_payment_reversal',
-      sourceId: paymentId, referenceNo: `REV-${String(payment.paymentNo || paymentId)}`,
-      status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
-      totalDebit: amount, totalCredit: amount,
-      lines: [
-        { accountCode: clearingAccount.code, accountName: clearingAccount.name, debit: amount, credit: 0, costCenterId },
-        { accountCode: creditAccount.code, accountName: creditAccount.name, debit: 0, credit: amount, costCenterId },
-      ],
-    });
+    const reversalSource = isReceivableCollect ? 'repair_ar_collection_reversal' : 'repair_payment_reversal';
+    if (postingDecision.enabled) {
+      tx.create(reversalJournalRef, {
+        tenantId: actor.tenantId, branchId, costCenterId,
+        source: reversalSource,
+        sourceId: paymentId, referenceNo: `REV-${String(payment.paymentNo || paymentId)}`,
+        status: 'posted', postedAt: at, createdBy: actor.uid, createdByName: actor.displayName,
+        totalDebit: amount, totalCredit: amount,
+        lines: [
+          { accountCode: clearingAccount.code, accountName: clearingAccount.name, debit: amount, credit: 0, costCenterId },
+          { accountCode: creditAccount.code, accountName: creditAccount.name, debit: 0, credit: amount, costCenterId },
+        ],
+      });
+    } else {
+      queuePendingAccounting(tx, {
+        tenantId: actor.tenantId, source: reversalSource, sourceId: paymentId,
+        branchId, costCenterId, amount, date: at, reason: postingDecision.reason,
+        payload: { paymentNo: String(payment.paymentNo || paymentId), reason },
+      });
+    }
     tx.update(authRef, {
       paidAmount: paid,
       balanceDue: balance,
@@ -1211,6 +1257,7 @@ async function deliver(actor: Actor, data: Record<string, unknown>) {
   const journalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_delivery__${jobId}`);
   const eventRef = scoped.jobRef.collection('service_events').doc(`${jobId}__delivered`);
   const at = new Date().toISOString();
+  const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairSales', at);
   const result = await db.runTransaction(async (tx) => {
     const [jobSnap, finSnap, authSnap, journalSnap] = await Promise.all([
       tx.get(scoped.jobRef), tx.get(finRef), tx.get(authRef), tx.get(journalRef),
@@ -1290,16 +1337,25 @@ async function deliver(actor: Actor, data: Record<string, unknown>) {
       if (totalDebit !== totalCredit) {
         throw new HttpsError('failed-precondition', 'قيد التسليم غير متوازن. أعد تجهيز إذن الدفع.');
       }
-      tx.create(journalRef, {
-        tenantId: actor.tenantId, branchId: scoped.branchId, costCenterId,
-        source: warrantySettlement
-          ? 'repair_warranty_delivery'
-          : (warrantyGross > 0 ? 'repair_partial_warranty_delivery' : 'repair_delivery'),
-        sourceId: jobId,
-        referenceNo: `DEL-${String(job.receiptNo || jobId)}`, status: 'posted', postedAt: at,
-        createdBy: actor.uid, createdByName: actor.displayName, totalDebit, totalCredit,
-        lines: [...debitLines, ...creditLines],
-      });
+      const source = warrantySettlement
+        ? 'repair_warranty_delivery'
+        : (warrantyGross > 0 ? 'repair_partial_warranty_delivery' : 'repair_delivery');
+      if (postingDecision.enabled) {
+        tx.create(journalRef, {
+          tenantId: actor.tenantId, branchId: scoped.branchId, costCenterId,
+          source, sourceId: jobId,
+          referenceNo: `DEL-${String(job.receiptNo || jobId)}`, status: 'posted', postedAt: at,
+          createdBy: actor.uid, createdByName: actor.displayName, totalDebit, totalCredit,
+          lines: [...debitLines, ...creditLines],
+        });
+      } else {
+        queuePendingAccounting(tx, {
+          tenantId: actor.tenantId, source, sourceId: jobId,
+          branchId: scoped.branchId, costCenterId, amount: journalTotal,
+          date: at, reason: postingDecision.reason,
+          payload: { referenceNo: `DEL-${String(job.receiptNo || jobId)}` },
+        });
+      }
     }
     const authorizationNo = String(job.deliveryAuthorizationNo || `DEL-${String(job.receiptNo || jobId)}`);
     const history = Array.isArray(job.statusHistory) ? [...job.statusHistory] : [];
@@ -1316,6 +1372,7 @@ async function deliver(actor: Actor, data: Record<string, unknown>) {
       warrantyScope: resolvedScope,
       deliveryAuthorizationNo: authorizationNo, deliveryAuthorizationIssuedAt: at,
       deliveryAuthorizationIssuedBy: actor.uid, deliveryAuthorizationIssuedByName: actor.displayName,
+      accountingStatus: journalTotal <= 0 || postingDecision.enabled ? 'posted' : 'pending_accounting',
       warranty: (warrantySettlement || partialWarranty) ? 'none' : String(data.warranty || job.warranty || 'none'),
       updatedAt: at,
     });

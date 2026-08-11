@@ -108,7 +108,7 @@ export const workOrderService = {
         db,
         COLLECTION,
         where('lineId', '==', lineId),
-        where('status', 'in', ['pending', 'in_progress']),
+        where('status', 'in', ['pending', 'in_progress', 'paused']),
       );
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));
@@ -150,7 +150,7 @@ export const workOrderService = {
         COLLECTION,
         where('lineId', '==', lineId),
         where('productId', '==', productId),
-        where('status', 'in', ['pending', 'in_progress']),
+        where('status', 'in', ['pending', 'in_progress', 'paused']),
       );
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WorkOrder));

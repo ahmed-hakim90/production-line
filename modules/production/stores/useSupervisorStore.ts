@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { useAppStore } from '../../../store/useAppStore';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import {
   type HistoryPeriod,
@@ -9,11 +10,6 @@ import {
 } from '../services/supervisorDistributionService';
 
 type PendingChangesMap = Record<string, string | null>;
-
-type ToastState = {
-  type: 'success' | 'error';
-  message: string;
-} | null;
 
 interface HistoryContext {
   lineId: string;
@@ -28,7 +24,6 @@ export interface SupervisorStore {
   pendingChanges: PendingChangesMap;
   isLoading: boolean;
   isSaving: boolean;
-  toast: ToastState;
   history: SupervisorAssignmentLogItem[];
   historyLoading: boolean;
   historyError: string | null;
@@ -40,7 +35,6 @@ export interface SupervisorStore {
   saveAll: () => Promise<void>;
   unassign: (lineId: string) => Promise<void>;
   fetchHistory: (lineId: string, lineName: string, period: HistoryPeriod, referenceDate: string) => Promise<void>;
-  clearToast: () => void;
   clearHistory: () => void;
 }
 
@@ -85,7 +79,6 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
   pendingChanges: {},
   isLoading: false,
   isSaving: false,
-  toast: null,
   history: [],
   historyLoading: false,
   historyError: null,
@@ -112,13 +105,8 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
           currentSupervisorName: String(legacyByLine.get(String(line.id))?.supervisorName || '').trim() || null,
         }));
       set({ lines });
-    } catch (error) {
-      set({
-        toast: {
-          type: 'error',
-          message: (error as Error)?.message || 'تعذر تحميل خطوط الإنتاج.',
-        },
-      });
+    } catch {
+      showAppToast('error', 'تعذر تحميل خطوط الإنتاج.');
     } finally {
       set({ isLoading: false });
     }
@@ -137,13 +125,8 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
           isActive: true,
         }));
       set({ supervisors });
-    } catch (error) {
-      set({
-        toast: {
-          type: 'error',
-          message: (error as Error)?.message || 'تعذر تحميل بيانات المشرفين.',
-        },
-      });
+    } catch {
+      showAppToast('error', 'تعذر تحميل بيانات المشرفين.');
     } finally {
       set({ isLoading: false });
     }
@@ -212,19 +195,16 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
         return {
           isSaving: false,
           pendingChanges: nextPending,
-          toast: { type: 'success', message: 'تم الحفظ بنجاح' },
         };
       });
-    } catch (error) {
+      showAppToast('success', 'تم الحفظ بنجاح');
+    } catch {
       set((current) => ({
         isSaving: false,
         lines: current.lines.map((item) => (item.id === lineId ? previousLine : item)),
         pendingChanges: previousPending,
-        toast: {
-          type: 'error',
-          message: (error as Error)?.message || 'تعذر حفظ التغيير.',
-        },
       }));
+      showAppToast('error', 'تعذر حفظ التغيير.');
     }
   },
 
@@ -280,18 +260,15 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
       set({
         isSaving: false,
         pendingChanges: {},
-        toast: { type: 'success', message: 'تم الحفظ بنجاح' },
       });
-    } catch (error) {
+      showAppToast('success', 'تم الحفظ بنجاح');
+    } catch {
       set({
         isSaving: false,
         lines: previousLines,
         pendingChanges: previousPending,
-        toast: {
-          type: 'error',
-          message: (error as Error)?.message || 'تعذر حفظ كل التغييرات.',
-        },
       });
+      showAppToast('error', 'تعذر حفظ كل التغييرات.');
     }
   },
 
@@ -326,19 +303,16 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
         return {
           isSaving: false,
           pendingChanges: nextPending,
-          toast: { type: 'success', message: 'تم الحفظ بنجاح' },
         };
       });
-    } catch (error) {
+      showAppToast('success', 'تم فك التعيين بنجاح');
+    } catch {
       set((state) => ({
         isSaving: false,
         lines: state.lines.map((item) => (item.id === lineId ? previousLine : item)),
         pendingChanges: previousPending,
-        toast: {
-          type: 'error',
-          message: (error as Error)?.message || 'تعذر فك التعيين.',
-        },
       }));
+      showAppToast('error', 'تعذر فك التعيين.');
     }
   },
 
@@ -363,21 +337,17 @@ export const useSupervisorStore = create<SupervisorStore>((set, get) => ({
           action: mapReasonToAction(row.reason),
         }));
       set({ history, historyLoading: false, historyError: null });
-    } catch (error) {
-      const message = (error as Error)?.message || 'تعذر تحميل سجل التعيينات.';
+    } catch {
+      const message = 'تعذر تحميل سجل التعيينات.';
       set({
         history: [],
         historyLoading: false,
         historyError: message,
-        toast: {
-          type: 'error',
-          message,
-        },
       });
+      showAppToast('error', message);
     }
   },
 
-  clearToast: () => set({ toast: null }),
   clearHistory: () =>
     set({ history: [], historyLoading: false, historyError: null, historyContext: null }),
 }));

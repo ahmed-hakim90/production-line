@@ -334,15 +334,19 @@
 }
 
 .progressPrimary {
-  background: var(--color-primary);
+  background: rgb(var(--color-primary));
 }
 
 .progressWarning {
-  background: #d97706;
+  background: rgb(var(--color-warning));
 }
 
 .progressSuccess {
-  background: #16a34a;
+  background: rgb(var(--color-success));
+}
+
+.progressMuted {
+  background: var(--color-text-muted);
 }
 
 .progressLabel {
@@ -387,6 +391,13 @@
   background: rgba(4, 120, 87, 0.1);
 }
 
+.statusCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
 .statusBadge {
   display: inline-flex;
   align-items: center;
@@ -396,24 +407,35 @@
   padding: 4px 8px;
 }
 
+.statusDetail {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
 .status_pending {
-  color: #1d4ed8;
-  background: rgba(29, 78, 216, 0.12);
+  color: rgb(var(--color-primary));
+  background: rgb(var(--color-primary)/0.12);
 }
 
 .status_in_progress {
-  color: #b45309;
-  background: rgba(180, 83, 9, 0.12);
+  color: rgb(var(--color-warning));
+  background: rgb(var(--color-warning)/0.12);
+}
+
+.status_paused {
+  color: var(--color-text-muted);
+  background: var(--color-surface-hover);
 }
 
 .status_completed {
-  color: #047857;
-  background: rgba(4, 120, 87, 0.12);
+  color: rgb(var(--color-success));
+  background: rgb(var(--color-success)/0.12);
 }
 
 .status_cancelled {
-  color: #be123c;
-  background: rgba(190, 18, 60, 0.12);
+  color: rgb(var(--color-danger));
+  background: rgb(var(--color-danger)/0.12);
 }
 
 .actionCell {

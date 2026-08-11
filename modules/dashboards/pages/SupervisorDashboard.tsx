@@ -17,11 +17,13 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SupervisorWorkOrderQuickReportDialog } from '@/modules/dashboards/components/SupervisorWorkOrderQuickReportDialog';
+import { SupervisorDailyReportsPanel } from '@/modules/dashboards/components/SupervisorDailyReportsPanel';
 import { useOperationalDecisionSnapshot } from '@/modules/dashboards/hooks/useOperationalDecisionSnapshot';
 import { SUPERVISOR_PORTAL_PATHS } from '@/modules/dashboards/lib/portalHome';
 import { supervisorLineAssignmentService } from '@/modules/production/services/supervisorLineAssignmentService';
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '@/store/useAppStore';
 import type { ProductionPlan, ProductionReport, WorkOrder } from '@/types';
+import { WORK_ORDER_STATUS_LABELS } from '@/modules/production/utils/workOrderReportLinking';
 import { usePermission } from '@/utils/permissions';
 import {
   calculatePlanProgress,
@@ -32,6 +34,10 @@ import {
   getTodayDateString,
 } from '@/utils/calculations';
 import { resolvePlanReports } from '@/modules/dashboards/lib/decisionMetrics';
+import {
+  filterActiveWorkOrdersForReporter,
+  reportWasEnteredByActor,
+} from '@/modules/dashboards/lib/supervisorReportingAccess';
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
@@ -74,12 +80,7 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'قيد الانتظار',
-  in_progress: 'قيد التنفيذ',
-  completed: 'مكتمل',
-  cancelled: 'ملغي',
-};
+const STATUS_LABELS = WORK_ORDER_STATUS_LABELS;
 
 const CHART_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' };
 const GRID_STROKE = 'color-mix(in srgb, var(--color-border) 80%, transparent)';
@@ -123,6 +124,7 @@ export const SupervisorDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const canCreateReport = can('reports.create') || can('reports.componentInjection.manage');
+  const canCreateForAnySupervisor = can('reports.createForAnySupervisor');
   const tenantPath = useCallback(
     (path: string) => withTenantPath(tenantSlug, path),
     [tenantSlug],
@@ -138,6 +140,8 @@ export const SupervisorDashboard: React.FC = () => {
     todayReports,
     monthlyReports,
     workOrders,
+    printTemplate,
+    tenantCompanyName,
     loading,
   } = useShallowStore((s) => ({
     uid: s.uid,
@@ -149,6 +153,8 @@ export const SupervisorDashboard: React.FC = () => {
     todayReports: s.todayReports,
     monthlyReports: s.monthlyReports,
     workOrders: s.workOrders,
+    printTemplate: s.systemSettings.printTemplate,
+    tenantCompanyName: s.tenantCompanyName,
     loading: s.loading,
   }));
 
@@ -162,12 +168,26 @@ export const SupervisorDashboard: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
   const [quickReportWorkOrder, setQuickReportWorkOrder] = useState<WorkOrder | null>(null);
+  const [workOrderSearch, setWorkOrderSearch] = useState('');
+  const [workOrderSupervisorFilter, setWorkOrderSupervisorFilter] = useState('all');
+  const [workOrderLineFilter, setWorkOrderLineFilter] = useState('all');
+  const [workOrderStatusFilter, setWorkOrderStatusFilter] = useState('all');
+  const [visibleWorkOrdersCount, setVisibleWorkOrdersCount] = useState(10);
   const today = getTodayDateString();
 
   const employee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
     [_rawEmployees, uid],
   );
+
+  const isMyReport = useCallback((report: ProductionReport) => {
+    return reportWasEnteredByActor(
+      report,
+      uid,
+      employee?.id,
+      canCreateForAnySupervisor,
+    );
+  }, [canCreateForAnySupervisor, employee?.id, uid]);
 
   useEffect(() => {
     let cancelled = false;
@@ -211,7 +231,7 @@ export const SupervisorDashboard: React.FC = () => {
     const cacheKey = getProductionReportsRangeCacheKey(start, end);
     const cached = useAppStore.getState().productionReportsRangeCache[cacheKey];
     if (cached) {
-      setPeriodReports(cached.rows.filter((r) => r.employeeId === employee.id));
+      setPeriodReports(cached.rows.filter(isMyReport));
       setPeriodLoading(false);
     } else {
       setPeriodLoading(true);
@@ -220,16 +240,16 @@ export const SupervisorDashboard: React.FC = () => {
     ensureProductionReportsForRange(start, end, { maxAgeMs })
       .then((reports) => {
         if (!cancelled) {
-          setPeriodReports(reports.filter((r) => r.employeeId === employee.id));
+          setPeriodReports(reports.filter(isMyReport));
           setPeriodLoading(false);
         }
       })
       .catch(() => {
         if (cancelled) return;
         if (period === 'daily') {
-          setPeriodReports(todayReports.filter((r) => r.employeeId === employee.id));
+          setPeriodReports(todayReports.filter(isMyReport));
         } else if (period === 'monthly') {
-          setPeriodReports(monthlyReports.filter((r) => r.employeeId === employee.id));
+          setPeriodReports(monthlyReports.filter(isMyReport));
         }
         setPeriodLoading(false);
       });
@@ -237,7 +257,7 @@ export const SupervisorDashboard: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [period, employee?.id, todayReports, monthlyReports, ensureProductionReportsForRange]);
+  }, [period, employee?.id, todayReports, monthlyReports, ensureProductionReportsForRange, isMyReport]);
 
   const refreshPeriodReports = useCallback(async () => {
     if (!employee?.id) return;
@@ -245,23 +265,35 @@ export const SupervisorDashboard: React.FC = () => {
     setPeriodLoading(true);
     try {
       const reports = await ensureProductionReportsForRange(start, end, { force: true });
-      setPeriodReports(reports.filter((r) => r.employeeId === employee.id));
+      setPeriodReports(reports.filter(isMyReport));
     } catch {
       // keep previous periodReports on refresh failure
     } finally {
       setPeriodLoading(false);
     }
-  }, [employee?.id, period, ensureProductionReportsForRange]);
+  }, [employee?.id, period, ensureProductionReportsForRange, isMyReport]);
 
   const myActiveWorkOrders = useMemo(() => {
-    if (!employee) return [] as WorkOrder[];
-    const employeeName = (employee.name || '').trim().toLowerCase();
-    return workOrders.filter((wo) => {
-      if (wo.status !== 'pending' && wo.status !== 'in_progress') return false;
-      if (wo.supervisorId === employee.id) return true;
-      return (wo.supervisorId || '').trim().toLowerCase() === employeeName;
+    return filterActiveWorkOrdersForReporter(workOrders, employee, canCreateForAnySupervisor);
+  }, [employee, workOrders, canCreateForAnySupervisor]);
+
+  const filteredWorkOrders = useMemo(() => {
+    const query = workOrderSearch.trim().toLocaleLowerCase('ar');
+    return myActiveWorkOrders.filter((wo) => {
+      if (workOrderSupervisorFilter !== 'all' && wo.supervisorId !== workOrderSupervisorFilter) return false;
+      if (workOrderLineFilter !== 'all' && wo.lineId !== workOrderLineFilter) return false;
+      if (workOrderStatusFilter !== 'all' && wo.status !== workOrderStatusFilter) return false;
+      if (!query) return true;
+      const productName = _rawProducts.find((row) => row.id === wo.productId)?.name || '';
+      const supervisorName = _rawEmployees.find((row) => row.id === wo.supervisorId)?.name || '';
+      return [wo.workOrderNumber, productName, supervisorName]
+        .some((value) => String(value || '').toLocaleLowerCase('ar').includes(query));
     });
-  }, [employee, workOrders]);
+  }, [myActiveWorkOrders, workOrderLineFilter, workOrderSearch, workOrderStatusFilter, workOrderSupervisorFilter, _rawEmployees, _rawProducts]);
+
+  useEffect(() => {
+    setVisibleWorkOrdersCount(10);
+  }, [workOrderSearch, workOrderSupervisorFilter, workOrderLineFilter, workOrderStatusFilter]);
 
   const kpis = useMemo(() => {
     const totalProduction = periodReports.reduce(
@@ -465,7 +497,7 @@ export const SupervisorDashboard: React.FC = () => {
       key: 'work-orders',
       label: 'أوامر شغل نشطة',
       value: formatNumber(kpis.activeWorkOrdersCount),
-      meta: 'مسندة لك',
+      meta: canCreateForAnySupervisor ? 'لكل المشرفين' : 'مسندة لك',
     },
     {
       key: 'lines',
@@ -481,12 +513,13 @@ export const SupervisorDashboard: React.FC = () => {
     },
   ];
 
-  const workOrdersPreview = myActiveWorkOrders.slice(0, 6);
+  const workOrdersPreview = filteredWorkOrders.slice(0, visibleWorkOrdersCount);
+  const todaysEnteredReports = todayReports.filter(isMyReport);
 
   return (
     <DomainHomeShell
       denseHero
-      eyebrow="لوحة المشرف"
+      eyebrow={canCreateForAnySupervisor ? 'لوحة مشرف الصالة' : 'لوحة المشرف'}
       hero={hero}
       periods={PERIOD_OPTIONS}
       activePeriod={period}
@@ -583,111 +616,186 @@ export const SupervisorDashboard: React.FC = () => {
         title="أوامر الشغل النشطة"
         accent="production"
         action={(
-          <button
-            type="button"
-            className="ops-dash-panel__action"
-            onClick={() => navigate('/work-orders')}
-          >
-            الكل
-          </button>
+          canCreateForAnySupervisor ? (
+            <span className="text-xs font-bold text-[var(--color-text-muted)]">
+              {formatNumber(filteredWorkOrders.length)} أمر
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="ops-dash-panel__action"
+              onClick={() => navigate('/work-orders')}
+            >
+              الكل
+            </button>
+          )
         )}
       >
+        {canCreateForAnySupervisor ? (
+          <div className="mb-3 grid gap-2 md:grid-cols-4">
+            <input
+              type="search"
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
+              value={workOrderSearch}
+              onChange={(event) => setWorkOrderSearch(event.target.value)}
+              placeholder="بحث برقم الأمر أو المنتج"
+            />
+            <select
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
+              value={workOrderSupervisorFilter}
+              onChange={(event) => setWorkOrderSupervisorFilter(event.target.value)}
+            >
+              <option value="all">كل المشرفين</option>
+              {_rawEmployees
+                .filter((row) => row.id && row.isActive !== false && myActiveWorkOrders.some((wo) => wo.supervisorId === row.id))
+                .map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+            </select>
+            <select
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
+              value={workOrderLineFilter}
+              onChange={(event) => setWorkOrderLineFilter(event.target.value)}
+            >
+              <option value="all">كل الخطوط</option>
+              {_rawLines
+                .filter((row) => row.id && myActiveWorkOrders.some((wo) => wo.lineId === row.id))
+                .map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+            </select>
+            <select
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
+              value={workOrderStatusFilter}
+              onChange={(event) => setWorkOrderStatusFilter(event.target.value)}
+            >
+              <option value="all">كل الحالات</option>
+              <option value="pending">{STATUS_LABELS.pending}</option>
+              <option value="in_progress">{STATUS_LABELS.in_progress}</option>
+              <option value="paused">{STATUS_LABELS.paused}</option>
+            </select>
+          </div>
+        ) : null}
         {workOrdersPreview.length === 0 ? (
           <p className="text-sm text-[var(--color-text-muted)] py-4 text-center">
-            لا توجد أوامر شغل نشطة مسندة إليك
+            {canCreateForAnySupervisor ? 'لا توجد أوامر مطابقة للفلاتر.' : 'لا توجد أوامر شغل نشطة مسندة إليك'}
           </p>
         ) : (
-          <ul className="divide-y divide-[var(--color-border)]">
-            {workOrdersPreview.map((wo) => {
-              const product = _rawProducts.find((p) => p.id === wo.productId);
-              const line = _rawLines.find((l) => l.id === wo.lineId);
-              const produced = Math.max(
-                Number(wo.producedQuantity || 0),
-                Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0),
-              );
-              const progress =
-                wo.quantity > 0 ? Math.min(Math.round((produced / wo.quantity) * 100), 100) : 0;
-              return (
-                <li key={wo.id || wo.workOrderNumber} className="py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-[rgb(var(--color-warning))]">
-                          #{wo.workOrderNumber}
-                        </span>
-                        <StatusBadge label={STATUS_LABELS[wo.status] || wo.status} />
+          <>
+            <ul className="divide-y divide-[var(--color-border)]">
+              {workOrdersPreview.map((wo) => {
+                const product = _rawProducts.find((p) => p.id === wo.productId);
+                const line = _rawLines.find((l) => l.id === wo.lineId);
+                const reportSupervisor = _rawEmployees.find((row) => row.id === wo.supervisorId);
+                const canReportForWorkOrder = Boolean(wo.supervisorId && reportSupervisor?.isActive !== false);
+                const produced = Math.max(
+                  Number(wo.producedQuantity || 0),
+                  Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0),
+                );
+                const progress =
+                  wo.quantity > 0 ? Math.min(Math.round((produced / wo.quantity) * 100), 100) : 0;
+                return (
+                  <li key={wo.id || wo.workOrderNumber} className="py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-[rgb(var(--color-warning))]">
+                            #{wo.workOrderNumber}
+                          </span>
+                          <StatusBadge label={STATUS_LABELS[wo.status] || wo.status} />
+                        </div>
+                        <p className="text-sm font-medium text-[var(--color-text)] truncate mt-0.5">
+                          {product?.name ?? '—'}
+                        </p>
+                        <p className="text-[11px] text-[var(--color-text-muted)]">
+                          {line?.name ?? '—'}
+                          {canCreateForAnySupervisor ? ` · المشرف: ${reportSupervisor?.name || 'غير محدد'}` : ''}
+                          {wo.targetDate ? ` · ${wo.targetDate}` : ''}
+                          {' · '}
+                          <span className="tabular-nums">{formatNumber(produced)}/{formatNumber(wo.quantity)}</span>
+                          {' · '}
+                          <span className="tabular-nums font-bold">{progress}%</span>
+                        </p>
+                        {!canReportForWorkOrder ? (
+                          <p className="mt-1 text-[11px] font-bold text-[rgb(var(--color-danger))]">
+                            لا يمكن إنشاء تقرير: الأمر بلا مشرف نشط.
+                          </p>
+                        ) : null}
                       </div>
-                      <p className="text-sm font-medium text-[var(--color-text)] truncate mt-0.5">
-                        {product?.name ?? '—'}
-                      </p>
-                      <p className="text-[11px] text-[var(--color-text-muted)]">
-                        {line?.name ?? '—'}
-                        {wo.targetDate ? ` · ${wo.targetDate}` : ''}
-                        {' · '}
-                        <span className="tabular-nums">{formatNumber(produced)}/{formatNumber(wo.quantity)}</span>
-                        {' · '}
-                        <span className="tabular-nums font-bold">{progress}%</span>
-                      </p>
+                      {canCreateReport && wo.id && canReportForWorkOrder ? (
+                        <PrimaryButton
+                          type="button"
+                          size="sm"
+                          tone="execute"
+                          iconName="add_chart"
+                          className="shrink-0"
+                          onClick={() => setQuickReportWorkOrder(wo)}
+                        >
+                          إنشاء تقرير سريع
+                        </PrimaryButton>
+                      ) : null}
                     </div>
-                    {canCreateReport && wo.id ? (
-                      <PrimaryButton
-                        type="button"
-                        size="sm"
-                        tone="execute"
-                        iconName="add_chart"
-                        className="shrink-0"
-                        onClick={() => setQuickReportWorkOrder(wo)}
-                      >
-                         انشاء تقرير سريع
-                      </PrimaryButton>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                  </li>
+                );
+              })}
+            </ul>
+            {canCreateForAnySupervisor && visibleWorkOrdersCount < filteredWorkOrders.length ? (
+              <div className="pt-3 text-center">
+                <GhostButton type="button" size="sm" onClick={() => setVisibleWorkOrdersCount((value) => value + 10)}>
+                  تحميل المزيد
+                </GhostButton>
+              </div>
+            ) : null}
+          </>
         )}
       </OpsDashPanel>
 
-      <OpsDashPanel
-        title="تقارير الإنتاج"
-        accent="production"
-        action={(
-          <button
-            type="button"
-            className="ops-dash-panel__action"
-            onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.reports)}
-          >
-            التقارير
-          </button>
-        )}
-      >
-        {periodLoading && dailyChartData.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)] py-8 text-center">جاري التحميل…</p>
-        ) : dailyChartData.length > 0 ? (
-          <div className="ops-module-charts__chart ops-module-charts__chart--compact" dir="ltr">
-            <ResponsiveContainer>
-              <BarChart data={dailyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
-                <XAxis dataKey="date" tick={CHART_TICK} axisLine={false} tickLine={false} />
-                <YAxis tick={CHART_TICK} axisLine={false} tickLine={false} allowDecimals={false} width={36} />
-                <Tooltip content={<ChartTooltip />} />
-                <Bar
-                  dataKey="value"
-                  name="الإنتاج"
-                  fill="var(--color-primary-hex)"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <div className="ops-module-charts__empty">
-            <span className="ops-module-charts__empty-mark" aria-hidden />
-            <p className="ops-module-charts__empty-label">لا توجد تقارير إنتاج في الفترة</p>
-          </div>
-        )}
-      </OpsDashPanel>
+      {canCreateForAnySupervisor ? (
+        <SupervisorDailyReportsPanel
+          reports={todaysEnteredReports}
+          employees={_rawEmployees}
+          products={_rawProducts}
+          companyName={tenantCompanyName}
+          printSettings={printTemplate}
+          loading={periodLoading}
+        />
+      ) : (
+        <OpsDashPanel
+          title="تقارير الإنتاج"
+          accent="production"
+          action={(
+            <button
+              type="button"
+              className="ops-dash-panel__action"
+              onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.reports)}
+            >
+              التقارير
+            </button>
+          )}
+        >
+          {periodLoading && dailyChartData.length === 0 ? (
+            <p className="text-sm text-[var(--color-text-muted)] py-8 text-center">جاري التحميل…</p>
+          ) : dailyChartData.length > 0 ? (
+            <div className="ops-module-charts__chart ops-module-charts__chart--compact" dir="ltr">
+              <ResponsiveContainer>
+                <BarChart data={dailyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                  <XAxis dataKey="date" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                  <YAxis tick={CHART_TICK} axisLine={false} tickLine={false} allowDecimals={false} width={36} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Bar
+                    dataKey="value"
+                    name="الإنتاج"
+                    fill="var(--color-primary-hex)"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="ops-module-charts__empty">
+              <span className="ops-module-charts__empty-mark" aria-hidden />
+              <p className="ops-module-charts__empty-label">لا توجد تقارير إنتاج في الفترة</p>
+            </div>
+          )}
+        </OpsDashPanel>
+      )}
 
       {activePlan ? (
         <OpsDashPanel
@@ -772,7 +880,12 @@ export const SupervisorDashboard: React.FC = () => {
       <SupervisorWorkOrderQuickReportDialog
         open={Boolean(quickReportWorkOrder)}
         workOrder={quickReportWorkOrder}
-        supervisorEmployeeId={employee?.id || ''}
+        reportSupervisorEmployeeId={quickReportWorkOrder?.supervisorId || employee?.id || ''}
+        supervisorName={
+          quickReportWorkOrder
+            ? _rawEmployees.find((row) => row.id === quickReportWorkOrder.supervisorId)?.name
+            : employee?.name
+        }
         productName={
           quickReportWorkOrder
             ? _rawProducts.find((p) => p.id === quickReportWorkOrder.productId)?.name

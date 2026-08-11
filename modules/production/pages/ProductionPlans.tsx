@@ -26,6 +26,10 @@ import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { productionPlanService } from '../services/productionPlanService';
 import { filterProductionProducts } from '../utils/isProductionProduct';
+import {
+  loadInjectionComponentOptions,
+  type InjectionComponentOption,
+} from '../utils/injectionComponentOptions';
 import { materialRequirementService } from '@/modules/manufacturing/services/materialRequirementService';
 import { computeLivePlanCostFromLines } from '@/modules/manufacturing/services/planLiveCostService';
 import type { ProductionPlanMaterialRequirements } from '@/modules/manufacturing/types';
@@ -219,12 +223,28 @@ export const ProductionPlans: React.FC = () => {
   const [formAcceptsProductionFromReports, setFormAcceptsProductionFromReports] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(!!searchParams.get('productId'));
+  const [injectionComponents, setInjectionComponents] = useState<InjectionComponentOption[]>([]);
+  const injectionCategoryKeywords = planSettings.injectionRawMaterialCategoryKeywords;
 
   useEffect(() => {
     if (!can('plans.create') && canManageComponentInjectionPlans) {
       setFormPlanType('component_injection');
     }
   }, [can, canManageComponentInjectionPlans]);
+
+  useEffect(() => {
+    let mounted = true;
+    loadInjectionComponentOptions(injectionCategoryKeywords)
+      .then((rows) => {
+        if (mounted) setInjectionComponents(rows);
+      })
+      .catch(() => {
+        if (mounted) setInjectionComponents([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [injectionCategoryKeywords]);
 
   useEffect(() => {
     const status = String(searchParams.get('status') || '');
@@ -287,12 +307,57 @@ export const ProductionPlans: React.FC = () => {
     product.code ? `${product.code} - ${product.name}` : (product.name ?? '')
   );
 
-  const formProductSelectOptions = useMemo(
-    () => filterProductionProducts(_rawProducts)
+  const planItemNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    _rawProducts.forEach((p) => {
+      if (p.id) map.set(p.id, p.name || '—');
+    });
+    injectionComponents.forEach((m) => {
+      if (m.id) map.set(m.id, m.name || '—');
+    });
+    return map;
+  }, [_rawProducts, injectionComponents]);
+
+  const planItemCodeById = useMemo(() => {
+    const map = new Map<string, string>();
+    _rawProducts.forEach((p) => {
+      if (p.id) map.set(p.id, p.code || '');
+    });
+    injectionComponents.forEach((m) => {
+      if (m.id) map.set(m.id, m.code || '');
+    });
+    return map;
+  }, [_rawProducts, injectionComponents]);
+
+  const resolvePlanItemName = (id?: string) => {
+    const key = String(id || '').trim();
+    if (!key) return '—';
+    return planItemNameById.get(key) ?? '—';
+  };
+
+  const resolvePlanItemCode = (id?: string) => {
+    const key = String(id || '').trim();
+    if (!key) return '—';
+    return planItemCodeById.get(key) || '—';
+  };
+
+  const formProductSelectOptions = useMemo(() => {
+    if (formPlanType === 'component_injection') {
+      return injectionComponents.map((m) => ({
+        value: m.id,
+        label: getProductOptionLabel(m),
+      }));
+    }
+    return filterProductionProducts(_rawProducts)
       .filter((p) => Boolean(p.id))
-      .map((p) => ({ value: p.id!, label: getProductOptionLabel(p) })),
-    [_rawProducts],
-  );
+      .map((p) => ({ value: p.id!, label: getProductOptionLabel(p) }));
+  }, [formPlanType, injectionComponents, _rawProducts]);
+
+  useEffect(() => {
+    if (!formProductId) return;
+    const allowed = formProductSelectOptions.some((opt) => opt.value === formProductId);
+    if (!allowed) setFormProductId('');
+  }, [formProductId, formProductSelectOptions]);
 
   const calculations = useMemo(() => {
     if (!formProductId || formQuantity <= 0) return null;
@@ -407,8 +472,8 @@ export const ProductionPlans: React.FC = () => {
     return enrichedPlans.filter((p) => {
       const searchQuery = filterSearch.trim().toLowerCase();
       if (searchQuery) {
-        const productName = (_rawProducts.find((prod) => prod.id === p.productId)?.name ?? '').toLowerCase();
-        const productCode = (_rawProducts.find((prod) => prod.id === p.productId)?.code ?? '').toLowerCase();
+        const productName = resolvePlanItemName(p.productId).toLowerCase();
+        const productCode = resolvePlanItemCode(p.productId).toLowerCase();
         const lineName = (_rawLines.find((line) => line.id === p.lineId)?.name ?? '').toLowerCase();
         if (!productName.includes(searchQuery) && !productCode.includes(searchQuery) && !lineName.includes(searchQuery)) {
           return false;
@@ -422,7 +487,7 @@ export const ProductionPlans: React.FC = () => {
       if (filterDateTo && (p.plannedStartDate || p.startDate) > filterDateTo) return false;
       return true;
     });
-  }, [enrichedPlans, filterSearch, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo, _rawProducts, _rawLines]);
+  }, [enrichedPlans, filterSearch, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo, planItemNameById, planItemCodeById, _rawLines]);
 
   const sortedPlans = useMemo(() => {
     const priorityRank: Record<PlanPriority, number> = {
@@ -451,8 +516,8 @@ export const ProductionPlans: React.FC = () => {
 
       switch (sortField) {
         case 'product':
-          left = (_rawProducts.find((p) => p.id === a.productId)?.name ?? '').toLowerCase();
-          right = (_rawProducts.find((p) => p.id === b.productId)?.name ?? '').toLowerCase();
+          left = resolvePlanItemName(a.productId).toLowerCase();
+          right = resolvePlanItemName(b.productId).toLowerCase();
           break;
         case 'line':
           left = (_rawLines.find((l) => l.id === a.lineId)?.name ?? '').toLowerCase();
@@ -488,7 +553,7 @@ export const ProductionPlans: React.FC = () => {
     });
 
     return sorted;
-  }, [filteredPlans, sortField, sortDirection, _rawProducts, _rawLines]);
+  }, [filteredPlans, sortField, sortDirection, planItemNameById, _rawLines]);
 
   const groupedPlanSections = useMemo<PlanGroupSection[]>(() => {
     if (groupBy === 'none') {
@@ -508,7 +573,9 @@ export const ProductionPlans: React.FC = () => {
           : 'بدون خط';
       } else if (groupBy === 'product') {
         key = plan.productId || 'unknown-product';
-        label = _rawProducts.find((product) => product.id === plan.productId)?.name || 'منتج غير معروف';
+        label = resolvePlanItemName(plan.productId) !== '—'
+          ? resolvePlanItemName(plan.productId)
+          : 'منتج غير معروف';
       } else if (groupBy === 'status') {
         key = plan.effectiveStatus;
         label = STATUS_CONFIG[plan.effectiveStatus].label;
@@ -526,7 +593,7 @@ export const ProductionPlans: React.FC = () => {
     });
 
     return Array.from(groupedMap.values()).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
-  }, [groupBy, sortedPlans, _rawLines, _rawProducts]);
+  }, [groupBy, sortedPlans, _rawLines, planItemNameById]);
 
   const activeDrawerPlan = useMemo(
     () => enrichedPlans.find((plan) => plan.id === activeDrawerPlanId) || null,
@@ -643,6 +710,14 @@ export const ProductionPlans: React.FC = () => {
 
   const handleCreate = async () => {
     if (!formProductId || formQuantity <= 0 || !uid || !calculations) return;
+
+    if (formPlanType === 'component_injection') {
+      const isInjectionComponent = injectionComponents.some((row) => row.id === formProductId);
+      if (!isInjectionComponent) {
+        alert('اختر مكون حقن صالح من قائمة مكونات الحقن');
+        return;
+      }
+    }
 
     if (!planSettings.allowMultipleActivePlans) {
       const existing = await productionPlanService.getActiveByProduct(formProductId);
@@ -781,8 +856,8 @@ export const ProductionPlans: React.FC = () => {
 
   const handleExportPlans = () => {
     exportProductionPlans(sortedPlans as ProductionPlan[], {
-      getProductName: (id) => _rawProducts.find((p) => p.id === id)?.name ?? '—',
-      getProductCode: (id) => _rawProducts.find((p) => p.id === id)?.code ?? '—',
+      getProductName: (id) => resolvePlanItemName(id),
+      getProductCode: (id) => resolvePlanItemCode(id),
       getLineName: (id) => _rawLines.find((l) => l.id === id)?.name ?? '—',
     });
   };
@@ -898,12 +973,38 @@ export const ProductionPlans: React.FC = () => {
           <div className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج *</label>
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع الخطة</label>
+              <Select
+                value={formPlanType}
+                onValueChange={(value) => {
+                  const nextType = value === 'component_injection' ? 'component_injection' : 'finished_product';
+                  setFormPlanType(nextType);
+                  setFormProductId('');
+                }}
+              >
+                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {can('plans.create') && (
+                    <SelectItem value="finished_product">خطة منتج نهائي</SelectItem>
+                  )}
+                  {canManageComponentInjectionPlans && (
+                    <SelectItem value="component_injection">خطة مكون حقن</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                {formPlanType === 'component_injection' ? 'مكون الحقن *' : 'المنتج *'}
+              </label>
               <SearchableSelect
                 options={formProductSelectOptions}
                 value={formProductId}
                 onChange={setFormProductId}
-                placeholder="ابحث واختر المنتج..."
+                placeholder={formPlanType === 'component_injection' ? 'ابحث واختر مكون الحقن...' : 'ابحث واختر المنتج...'}
                 className="h-auto min-h-12 p-3.5 rounded-[var(--border-radius-lg)] bg-[var(--color-card)]"
               />
             </div>
@@ -945,25 +1046,6 @@ export const ProductionPlans: React.FC = () => {
                   {(Object.entries(PRIORITY_CONFIG) as [PlanPriority, typeof PRIORITY_CONFIG[PlanPriority]][]).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v.label}</SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع الخطة</label>
-              <Select
-                value={formPlanType}
-                onValueChange={(value) => setFormPlanType(value === 'component_injection' ? 'component_injection' : 'finished_product')}
-              >
-                <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {can('plans.create') && (
-                    <SelectItem value="finished_product">خطة منتج نهائي</SelectItem>
-                  )}
-                  {canManageComponentInjectionPlans && (
-                    <SelectItem value="component_injection">خطة مكون حقن</SelectItem>
-                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1123,7 +1205,12 @@ export const ProductionPlans: React.FC = () => {
             key: 'product',
             label: 'المنتج',
             placeholder: 'كل المنتجات',
-            options: _rawProducts.map((product) => ({ value: product.id || '', label: product.name })),
+            options: [
+              ..._rawProducts.map((product) => ({ value: product.id || '', label: product.name })),
+              ...injectionComponents
+                .filter((m) => !_rawProducts.some((p) => p.id === m.id))
+                .map((m) => ({ value: m.id, label: m.name })),
+            ],
             width: 'w-[150px]',
           },
           {
@@ -1219,7 +1306,7 @@ export const ProductionPlans: React.FC = () => {
                 <div className="space-y-1">
                   <h3 className="text-lg font-bold text-[var(--color-text)]">تفاصيل الخطة</h3>
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    {_rawProducts.find((p) => p.id === activeDrawerPlan.productId)?.name ?? '—'}
+                    {resolvePlanItemName(activeDrawerPlan.productId)}
                   </p>
                 </div>
                 <button onClick={() => setActiveDrawerPlanId(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors">
@@ -1496,7 +1583,7 @@ export const ProductionPlans: React.FC = () => {
             </div>
             <div className="p-6 space-y-4">
               <p className="page-subtitle">
-                المنتج: <span className="font-bold text-[var(--color-text)]">{_rawProducts.find((p) => p.id === statusPlan.productId)?.name}</span>
+                المنتج: <span className="font-bold text-[var(--color-text)]">{resolvePlanItemName(statusPlan.productId)}</span>
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {(Object.entries(STATUS_CONFIG) as [PlanStatus, typeof STATUS_CONFIG[PlanStatus]][]).map(([key, config]) => (
@@ -1612,7 +1699,7 @@ export const ProductionPlans: React.FC = () => {
                     </div>
                   )}
                   {group.plans.map((plan) => {
-                    const product = _rawProducts.find((p) => p.id === plan.productId);
+                    const productName = resolvePlanItemName(plan.productId);
                     const line = _rawLines.find((l) => l.id === plan.lineId);
                     const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
                     const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
@@ -1625,7 +1712,7 @@ export const ProductionPlans: React.FC = () => {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-bold text-primary">{product?.name ?? '—'}</p>
+                            <p className="text-sm font-bold text-primary">{productName}</p>
                             <p className="text-xs text-[var(--color-text-muted)]">{line?.name ?? '—'}</p>
                           </div>
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${priorityInfo.bg} ${priorityInfo.color}`}>{priorityInfo.label}</span>
@@ -1705,7 +1792,8 @@ export const ProductionPlans: React.FC = () => {
                         </tr>
                       )}
                       {group.plans.map((plan) => {
-                        const product = _rawProducts.find((p) => p.id === plan.productId);
+                        const productName = resolvePlanItemName(plan.productId);
+                        const productCode = resolvePlanItemCode(plan.productId);
                         const line = _rawLines.find((l) => l.id === plan.lineId);
                         const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
                         const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
@@ -1737,9 +1825,9 @@ export const ProductionPlans: React.FC = () => {
                                 }}
                                 className="text-sm font-bold text-primary hover:underline text-right"
                               >
-                                {product?.name ?? '—'}
+                                {productName}
                               </button>
-                              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{product?.code}</p>
+                              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{productCode !== '—' ? productCode : ''}</p>
                             </td>
                             <td className="px-4 py-3.5">
                               {plan.lineId ? (
@@ -1877,7 +1965,7 @@ export const ProductionPlans: React.FC = () => {
               </div>
               <div className="space-y-3">
                 {colPlans.map((plan) => {
-                  const product = _rawProducts.find((p) => p.id === plan.productId);
+                  const productName = resolvePlanItemName(plan.productId);
                   const line = _rawLines.find((l) => l.id === plan.lineId);
                   const priorityInfo = PRIORITY_CONFIG[plan.priority || 'medium'];
                   const smartInfo = SMART_STATUS_CONFIG[plan.smartStatus];
@@ -1889,7 +1977,7 @@ export const ProductionPlans: React.FC = () => {
                       onClick={() => openPlanDrawer(plan.id)}
                     >
                       <div className="flex items-start justify-between mb-2">
-                        <p className="text-sm font-bold text-[var(--color-text)] leading-tight">{product?.name ?? '—'}</p>
+                        <p className="text-sm font-bold text-[var(--color-text)] leading-tight">{productName}</p>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${priorityInfo.bg} ${priorityInfo.color}`}>{priorityInfo.label}</span>
                       </div>
                       <p className="text-xs text-[var(--color-text-muted)] font-medium mb-3">{line?.name ?? '—'}</p>
@@ -1971,7 +2059,7 @@ export const ProductionPlans: React.FC = () => {
 
         <div className="p-5 space-y-3">
           {activePlans.map((plan) => {
-            const product = _rawProducts.find((p) => p.id === plan.productId);
+            const productName = resolvePlanItemName(plan.productId);
             const line = _rawLines.find((l) => l.id === plan.lineId);
             const start = plan.plannedStartDate || plan.startDate;
             const end = plan.plannedEndDate || addDaysToDate(start, plan.estimatedDurationDays || 7);
@@ -1981,7 +2069,7 @@ export const ProductionPlans: React.FC = () => {
             return (
               <div key={plan.id} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
                 <div className="w-full sm:w-36 shrink-0 text-right">
-                  <p className="text-xs font-bold text-[var(--color-text)] truncate">{product?.name ?? '—'}</p>
+                  <p className="text-xs font-bold text-[var(--color-text)] truncate">{productName}</p>
                   <p className="text-[10px] text-[var(--color-text-muted)]">{line?.name ?? '—'}</p>
                 </div>
                 <div className="flex-1 relative h-8 bg-[var(--color-bg)] rounded-[var(--border-radius-base)] overflow-hidden">

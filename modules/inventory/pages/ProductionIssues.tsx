@@ -440,7 +440,7 @@ export const ProductionIssues: React.FC = () => {
       const openWo = workOrders.find(
         (wo) =>
           wo.productId === productId &&
-          (wo.status === 'pending' || wo.status === 'in_progress'),
+          (wo.status === 'pending' || wo.status === 'in_progress' || wo.status === 'paused'),
       );
       if (openWo?.id) {
         setSourceKind('work_order');
@@ -451,7 +451,7 @@ export const ProductionIssues: React.FC = () => {
 
   const sourceOptions = useMemo(() => {
     if (sourceKind === 'work_order') {
-      const open = workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress');
+      const open = workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress' || wo.status === 'paused');
       const selected = sourceId ? workOrders.find((wo) => wo.id === sourceId) : null;
       const rows = selected && !open.some((wo) => wo.id === selected.id)
         ? [selected, ...open]

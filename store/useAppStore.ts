@@ -56,6 +56,7 @@ import {
   isConfigured as isFirebaseConfigured,
   runAssetDepreciationCallable,
   syncBuiltInRolePermissionGrants,
+  createProductionReportFastCallable,
 } from '../services/firebase';
 import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
 import { resolveActivityPacks, type ActivityPackId } from '../lib/activityPacks';
@@ -69,7 +70,6 @@ import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
 import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 import { reportService } from '../modules/production/services/reportService';
-import { createProductionReport } from '../modules/production/usecases/createProductionReport';
 import {
   createRole as createRoleUseCase,
   updateRole as updateRoleUseCase,
@@ -96,6 +96,7 @@ import {
   deriveWorkOrderStatusFromProduced,
   filterUnlinkedReportsEligibleForWorkOrder,
   getWorkOrderEffectiveStartDate,
+  lastProducingReportDateFromReports,
   pickBestAutoLinkedWorkOrder,
   reportDateEligibleForWorkOrder,
   sumProducedFromWorkOrderReports,
@@ -146,6 +147,7 @@ import {
   calculateFullProductionCost,
   type ProductionCostSourceLine,
 } from '../modules/costs/lib/fullProductionCost';
+import { resolveCostingPolicy } from '../utils/costingPolicy';
 import { loadReportsComponentLabelOptions } from '../modules/production/utils/injectionComponentOptions';
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
 import {
@@ -831,6 +833,7 @@ async function persistProductionReportCostSnapshot(
   if (!range) return null;
   const monthRows = await reportService.getByDateRange(range.start, range.end);
   const st = get();
+  const costingPolicy = resolveCostingPolicy(st.systemSettings.costingPolicy);
   const supervisorHourlyRates = buildSupervisorHourlyRatesMap(st._rawEmployees);
   const productCategoryById = new Map<string, string>();
   st._rawProducts.forEach((p) => {
@@ -875,7 +878,15 @@ async function persistProductionReportCostSnapshot(
     * Number(row.quantityProduced || 0);
   const conversionWithDepreciation = Number(withDepreciation?.totalCost ?? legacyConversionCost);
   const depreciationCost = Math.max(0, conversionWithDepreciation - legacyConversionCost);
-  const materialSources = await buildReportMaterialCostSources(row);
+  const rawMaterialSources = await buildReportMaterialCostSources(row);
+  const materialSources = costingPolicy.fullManufacturingEnabled
+    ? rawMaterialSources.filter((source) => {
+        if (source.category === 'packaging') return costingPolicy.includePackaging;
+        if (source.category !== 'material') return true;
+        if (source.status === 'actual') return costingPolicy.includeActualMaterials;
+        return costingPolicy.allowBomEstimateFallback;
+      })
+    : [];
   const applicableCenterIds = new Set(
     st.costCenters
       .filter(isProductionAllocationCostCenter)
@@ -888,16 +899,16 @@ async function persistProductionReportCostSnapshot(
     && applicableCenterValues.every((value) => ['actual', 'closed'].includes(String(value.costingStatus || '')));
   const sourceLines: ProductionCostSourceLine[] = [
     ...materialSources,
-    {
+    ...(costingPolicy.fullManufacturingEnabled && costingPolicy.includeDirectLabor ? [{
       sourceKey: `labor:${reportId}`,
       sourceType: 'labor_standard',
       sourceId: reportId,
       category: 'direct_labor',
       label: 'العمالة المباشرة',
       amount: Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0),
-      status: 'estimated',
-    },
-    {
+      status: 'actual' as const,
+    } satisfies ProductionCostSourceLine] : []),
+    ...(costingPolicy.fullManufacturingEnabled && costingPolicy.includeIndirectCenters ? [{
       sourceKey: `overhead:${reportId}:${ym}`,
       sourceType: 'cost_center_absorption',
       sourceId: ym,
@@ -907,12 +918,13 @@ async function persistProductionReportCostSnapshot(
         0,
         conversionWithDepreciation
           - Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0)
-          - depreciationCost,
+          - depreciationCost
+          - (costingPolicy.includeSupervisor ? 0 : Number(legacyPatch.supervisorIndirectSnapshot || 0)),
       ),
       status: overheadIsActual ? 'actual' : 'estimated',
-    },
+    } satisfies ProductionCostSourceLine] : []),
   ];
-  if (depreciationCost > 0) {
+  if (costingPolicy.fullManufacturingEnabled && costingPolicy.includeDepreciation && depreciationCost > 0) {
     sourceLines.push({
       sourceKey: `depreciation:${reportId}:${ym}`,
       sourceType: effectiveDepreciation.hasScheduledRows ? 'asset_schedule' : 'asset_depreciation',
@@ -980,7 +992,7 @@ function upsertLoadedReportRow(
 }
 
 function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
-  return status === 'pending' || status === 'in_progress';
+  return status === 'pending' || status === 'in_progress' || status === 'paused';
 }
 
 type ProductionReportLinkInput = Pick<
@@ -3175,14 +3187,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
         const supervisorId = String(data.supervisorId || saved?.supervisorId || '').trim();
         if (supervisorId) {
-          const { _rawProducts } = get();
-          const product = _rawProducts.find((p) => p.id === (data.productId || saved?.productId));
+          const { _rawProducts, systemSettings } = get();
+          const productId = data.productId || saved?.productId;
+          let productName = _rawProducts.find((p) => p.id === productId)?.name ?? '';
+          if (!productName && planType === 'component_injection' && productId) {
+            try {
+              const { loadInjectionComponentOptions } = await import('../modules/production/utils/injectionComponentOptions');
+              const keywords = systemSettings.planSettings?.injectionRawMaterialCategoryKeywords;
+              const components = await loadInjectionComponentOptions(keywords);
+              productName = components.find((row) => row.id === productId)?.name ?? '';
+            } catch {
+              productName = '';
+            }
+          }
           const qty = Number(data.plannedQuantity ?? saved?.plannedQuantity ?? 0);
           await notificationService.create({
             recipientId: supervisorId,
             type: 'production_plan_assigned',
             title: 'خطة إنتاج جديدة',
-            message: `خطة إنتاج — ${product?.name ?? ''} — ${Number.isFinite(qty) ? qty : 0} وحدة`,
+            message: `خطة إنتاج — ${productName} — ${Number.isFinite(qty) ? qty : 0} وحدة`,
             referenceId: id,
             isRead: false,
           }).catch((notifyError) => {
@@ -3918,7 +3941,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         productId,
         get()._rawProducts,
       );
-      const reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
+      let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
         employeeId,
         productId,
         ...reportItemSnapshot,
@@ -3937,6 +3960,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         reportType: 'component_waste',
         packagingLines: [],
         componentScrapItems,
+        createdByUid: uid || undefined,
+        createdByNameSnapshot: userDisplayName || userEmail || undefined,
+        entryMode: 'direct',
+        processingVersion: 2,
+        processingState: 'pending',
+        processingStage: 'created',
+        processingError: '',
+        processingAttempts: 0,
       };
 
       trackedOperation = actionTrackerService.startOperation({
@@ -3961,10 +3992,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       let id: string;
       try {
-        id = unwrapOrThrow(await createProductionReport(reportData, {
-          userId: uid ?? undefined,
-          userName: userDisplayName ?? userEmail ?? undefined,
-        })).reportId;
+        const created = await createProductionReportFastCallable(
+          reportData as unknown as Record<string, unknown>,
+        );
+        id = created.reportId;
+        reportData = { ...reportData, reportCode: created.reportCode };
       } catch (createError) {
         const createErr = createError instanceof Error ? createError : new Error(String(createError));
         if (trackedOperation) {
@@ -3990,22 +4022,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       trackedOperation.entityId = id;
       trackedOperation.batchId = id;
 
-      let postSaveWarning: string | null = null;
-      try {
-        await productionInventoryService.applyProductionReportInventory({
-          reportId: id,
-          report: { ...reportData, id },
-          systemSettings,
-          actor: {
-            name: userDisplayName || userEmail || 'System',
-            userId: uid || undefined,
-          },
-          products: get()._rawProducts,
-          componentScrapItems: reportData.componentScrapItems,
+      const wasteCreatedRow: ProductionReport = { ...reportData, id };
+      const wasteToday = getReportOperationalDateString(get().systemSettings);
+      const { start: wasteMonthStart, end: wasteMonthEnd } = getMonthDateRange();
+      set((state) => ({
+        error: null,
+        todayReports: date === wasteToday
+          ? upsertLoadedReportRow(state.todayReports, wasteCreatedRow)
+          : state.todayReports,
+        monthlyReports: date >= wasteMonthStart && date <= wasteMonthEnd
+          ? upsertLoadedReportRow(state.monthlyReports, wasteCreatedRow)
+          : state.monthlyReports,
+        productionReports: date >= wasteMonthStart && date <= wasteMonthEnd
+          ? upsertLoadedReportRow(state.productionReports, wasteCreatedRow)
+          : state.productionReports,
+      }));
+      get().invalidateReportsUiReferenceCache();
+      if (trackedOperation) {
+        actionTrackerService.succeedOperation(trackedOperation, {
+          metadata: { reportId: id, processingState: 'pending' },
         });
-      } catch (error) {
-        postSaveWarning = (error as Error)?.message || 'تم حفظ تقرير الهالك ولكن تعذر تنفيذ حركات المخزون الآلية';
       }
+
+      void (async () => {
+      let postSaveWarning: string | null = null;
 
       try {
         const today = getReportOperationalDateString(get().systemSettings);
@@ -4061,16 +4101,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         console.warn('createComponentWasteReport post-save warning:', postSaveWarning);
       }
       set({ error: postSaveWarning });
-      if (trackedOperation) {
-        actionTrackerService.succeedOperation(trackedOperation, {
-          metadata: {
-            reportId: id,
-            warning: postSaveWarning ?? null,
-          },
-        });
-      }
-
       get().invalidateReportsUiReferenceCache();
+      })().catch((backgroundError) => {
+        console.warn('createComponentWasteReport background processing:', backgroundError);
+      });
       return id;
     } catch (error) {
       if (trackedOperation) {
@@ -4198,6 +4232,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         inventoryReversedAt: _untrustedInventoryReversedAt,
         inventoryReversedBy: _untrustedInventoryReversedBy,
         inventoryReversedByUserId: _untrustedInventoryReversedByUserId,
+        createdByUid: _untrustedCreatedByUid,
+        createdByNameSnapshot: _untrustedCreatedByNameSnapshot,
+        entryMode: _untrustedEntryMode,
+        processingVersion: _untrustedProcessingVersion,
+        processingState: _untrustedProcessingState,
+        processingStage: _untrustedProcessingStage,
+        processingError: _untrustedProcessingError,
+        processingAttempts: _untrustedProcessingAttempts,
+        processingUpdatedAt: _untrustedProcessingUpdatedAt,
         ...trustedReportInput
       } = data as typeof data & Partial<ReportAggregateCostState> & ReportInventoryPostingState;
       const savePayload = normalizePackagingLinesForSave(
@@ -4259,6 +4302,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           lineId: savePayload.lineId,
           employeeId: savePayload.employeeId,
           productId: savePayload.productId,
+          workOrderId: savePayload.workOrderId,
           reportType,
           shift: reportType === 'component_injection' && isInjectionShiftSelected((data as ProductionReport).shift)
             ? (data as ProductionReport).shift
@@ -4285,6 +4329,46 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().workOrders,
         { preserveCompletedWorkOrder: isWorkOrderCompletionPath },
       );
+      const actorUid = String(get().uid || '').trim();
+      const actorEmployee = _rawEmployees.find((row) => row.userId === actorUid) ?? null;
+      const targetEmployee = _rawEmployees.find((row) => row.id === savePayload.employeeId) ?? null;
+      const canCreateForAnySupervisor = hasPermission(permissions, 'reports.createForAnySupervisor');
+      const isDelegatedEntry = Boolean(
+        actorEmployee?.level === 2
+        &&
+        actorEmployee?.id
+        && savePayload.employeeId
+        && savePayload.employeeId !== actorEmployee.id,
+      );
+      const requestedWorkOrderId = String(savePayload.workOrderId || '').trim();
+      if (actorEmployee?.level === 2 && isDelegatedEntry && !canCreateForAnySupervisor) {
+        set({ error: 'غير مصرح بإنشاء تقرير لمشرف آخر.' });
+        return null;
+      }
+      if (requestedWorkOrderId && activeWO?.id !== requestedWorkOrderId) {
+        set({ error: 'أمر الشغل غير موجود أو غير نشط أو لا يطابق بيانات التقرير.' });
+        return null;
+      }
+      if (requestedWorkOrderId && (
+        !activeWO?.supervisorId
+        || activeWO.supervisorId !== savePayload.employeeId
+        || !targetEmployee
+        || targetEmployee.isActive === false
+      )) {
+        set({ error: 'يجب أن يكون التقرير باسم المشرف النشط المعيّن على أمر الشغل.' });
+        return null;
+      }
+      if (isDelegatedEntry && (
+        !canCreateForAnySupervisor
+        || !requestedWorkOrderId
+        || activeWO?.id !== requestedWorkOrderId
+        || activeWO.supervisorId !== savePayload.employeeId
+        || !targetEmployee
+        || targetEmployee.isActive === false
+      )) {
+        set({ error: 'إنشاء التقرير بالنيابة يتطلب أمر شغل ومشرفاً نشطاً مطابقاً له.' });
+        return null;
+      }
       const shouldPostToPlan =
         Boolean(activePlan?.id) &&
         reportType !== 'packaging';
@@ -4392,6 +4476,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         manufacturingCostPostingState: 'pending',
         manufacturingCostPostingError: '',
         workerOutputs,
+        createdByUid: actorUid || undefined,
+        createdByNameSnapshot: get().userDisplayName || get().userEmail || undefined,
+        entryMode: isDelegatedEntry ? 'hall_supervisor_delegate' : 'direct',
+        processingVersion: 2,
+        processingState: 'pending',
+        processingStage: 'created',
+        processingError: '',
+        processingAttempts: 0,
       };
       const rawCycleId =
         typeof (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId === 'string'
@@ -4462,10 +4554,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       let id: string;
       try {
-        id = unwrapOrThrow(await createProductionReport(reportData, {
-          userId: uid ?? undefined,
-          userName: userDisplayName ?? userEmail ?? undefined,
-        })).reportId;
+        const created = await createProductionReportFastCallable(
+          reportData as unknown as Record<string, unknown>,
+        );
+        id = created.reportId;
+        reportData = { ...reportData, reportCode: created.reportCode };
       } catch (createError) {
         const createErr = createError instanceof Error ? createError : new Error(String(createError));
         if (trackedOperation) {
@@ -4490,6 +4583,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       trackedOperation.entityId = id;
       trackedOperation.batchId = reportData.workOrderId || id;
 
+      const createdRow: ProductionReport = { ...reportData, id };
+      const operationalToday = getReportOperationalDateString(get().systemSettings);
+      const { start: currentMonthStart, end: currentMonthEnd } = getMonthDateRange();
+      const createdInToday = String(reportData.date || '') === operationalToday;
+      const createdInMonth = String(reportData.date || '') >= currentMonthStart
+        && String(reportData.date || '') <= currentMonthEnd;
+      invalidateProductionReportsRangeCacheForDates([reportData.date], get, set);
+      const immediateCacheTime = Date.now();
+      const immediateTodayKey = getProductionReportsRangeCacheKey(operationalToday, operationalToday);
+      const immediateMonthKey = getProductionReportsRangeCacheKey(currentMonthStart, currentMonthEnd);
+      set((state) => {
+        const nextToday = createdInToday
+          ? upsertLoadedReportRow(state.todayReports, createdRow)
+          : state.todayReports;
+        const nextMonth = createdInMonth
+          ? upsertLoadedReportRow(state.monthlyReports, createdRow)
+          : state.monthlyReports;
+        return {
+          error: null,
+          todayReports: nextToday,
+          monthlyReports: nextMonth,
+          productionReports: createdInMonth
+            ? upsertLoadedReportRow(state.productionReports, createdRow)
+            : state.productionReports,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            ...(createdInToday ? { [immediateTodayKey]: { rows: nextToday, fetchedAt: immediateCacheTime } } : {}),
+            ...(createdInMonth ? { [immediateMonthKey]: { rows: nextMonth, fetchedAt: immediateCacheTime } } : {}),
+          },
+        };
+      });
+      get().invalidateReportsUiReferenceCache();
+      if (trackedOperation) {
+        actionTrackerService.succeedOperation(trackedOperation, {
+          metadata: { reportId: id, processingState: 'pending' },
+        });
+      }
+
+      void (async () => {
       let postSaveWarning: string | null = null;
       const reportIndustrialCost = calculateIndustrialReportTotalCost({
         workersCount: Number(savePayload.workersCount || 0),
@@ -4516,24 +4648,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث متوسط الإنتاج اليومي';
       }
 
-      if (reportBehavior.autoApplyInventoryOnReportSave) {
-        try {
-          await productionInventoryService.applyProductionReportInventory({
-            reportId: id,
-            report: reportData,
-            systemSettings,
-            actor: {
-              name: get().userDisplayName || get().userEmail || 'System',
-              userId: get().uid || undefined,
-            },
-            products: get()._rawProducts,
-            componentScrapItems,
-          });
-        } catch (error) {
-          postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
-          set({ error: postSaveWarning });
-        }
-      }
+      // Inventory posting is server-authoritative and runs from the report background trigger.
 
       const skipWoProgress = isPackagingThroughputReport(
         { lineId: reportData.lineId, reportType },
@@ -4668,16 +4783,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       } else {
         set({ error: null });
       }
-      if (trackedOperation) {
-        actionTrackerService.succeedOperation(trackedOperation, {
-          metadata: {
-            reportId: id,
-            warning: postSaveWarning ?? null,
-          },
-        });
-      }
+      await reportService.update(id, {
+        processingState: postSaveWarning ? 'failed' : 'completed',
+        processingStage: postSaveWarning ? 'client_background_failed' : 'completed',
+        processingError: postSaveWarning || '',
+        processingUpdatedAt: new Date().toISOString(),
+      }).catch(() => undefined);
 
       get().invalidateReportsUiReferenceCache();
+      })().catch((backgroundError) => {
+        console.warn('createReport background processing:', backgroundError);
+      });
       return id;
     } catch (error) {
       if (trackedOperation) {
@@ -4907,6 +5023,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             lineId: finalMergedReport.lineId,
             employeeId: finalMergedReport.employeeId,
             productId: finalMergedReport.productId,
+            workOrderId: finalMergedReport.workOrderId,
             reportType: nextReportType,
             shift: nextReportType === 'component_injection' && isInjectionShiftSelected(finalMergedReport.shift)
               ? finalMergedReport.shift
@@ -5705,7 +5822,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       const refreshedLinked = planId ? await reportService.getByWorkOrderId(id) : linkedReports;
       const producedQuantity = sumProducedFromWorkOrderReports(id, refreshedLinked);
       const targetQty = Number(wo.quantity || 0);
-      const nextStatus = deriveWorkOrderStatusFromProduced(producedQuantity, targetQty, wo.status);
+      const lastProducingReportDate = lastProducingReportDateFromReports(refreshedLinked);
+      const nextStatus = deriveWorkOrderStatusFromProduced(
+        producedQuantity,
+        targetQty,
+        wo.status,
+        lastProducingReportDate,
+        getTodayDateString(),
+      );
       const statusPatch: Partial<WorkOrder> = {
         producedQuantity,
         status: nextStatus,

@@ -34,6 +34,9 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'reports.create',
     'reports.edit',
     'reports.componentInjection.manage',
+    'workOrders.create',
+    'workOrders.componentInjection.manage',
+    'plans.componentInjection.manage',
     'products.create',
     'products.edit',
     'products.sellingPrice.view',
@@ -60,6 +63,7 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
   ],
   hall_supervisor: [
     'reports.create',
+    'reports.createForAnySupervisor',
     'bom.view',
     'productionWorkers.view',
     'production.workers.view',

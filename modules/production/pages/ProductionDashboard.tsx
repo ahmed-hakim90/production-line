@@ -65,7 +65,7 @@ function lineHasActivePlan(plans: ProductionPlan[], lineId: string): boolean {
 
 function lineHasOpenWorkOrder(workOrders: WorkOrder[], lineId: string): boolean {
   return workOrders.some(
-    (w) => w.lineId === lineId && (w.status === 'in_progress' || w.status === 'pending'),
+    (w) => w.lineId === lineId && (w.status === 'in_progress' || w.status === 'pending' || w.status === 'paused'),
   );
 }
 
@@ -82,7 +82,7 @@ function resolveFlowLineChip(
   }
 
   const waitingPlan = plans.some((p) => p.lineId === line.id && p.status === 'planned');
-  const waitingWo = workOrders.some((w) => w.lineId === line.id && w.status === 'pending');
+  const waitingWo = workOrders.some((w) => w.lineId === line.id && (w.status === 'pending' || w.status === 'paused'));
   const runningPlan = plans.some((p) => p.lineId === line.id && p.status === 'in_progress');
   const runningWo = workOrders.some((w) => w.lineId === line.id && w.status === 'in_progress');
 
@@ -315,7 +315,7 @@ export const ProductionDashboard: React.FC = () => {
   }, [can, fetchWorkOrders, refreshToken]);
 
   const activeWorkOrders = useMemo(
-    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress').length,
+    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress' || wo.status === 'paused').length,
     [workOrders],
   );
 

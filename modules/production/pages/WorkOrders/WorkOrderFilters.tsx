@@ -1,4 +1,5 @@
 import type { WorkOrderStatus } from '../../../../types';
+import { WORK_ORDER_STATUS_LABELS } from '../../utils/workOrderReportLinking';
 import type { WorkOrderFilterState, WorkOrderGroupBy } from './hooks/useWorkOrderFilters';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
@@ -6,6 +7,7 @@ interface FilterCounts {
   all: number;
   pending: number;
   in_progress: number;
+  paused: number;
   completed: number;
   cancelled: number;
 }
@@ -20,10 +22,11 @@ interface WorkOrderFiltersProps {
 
 const STATUS_OPTIONS: Array<{ key: WorkOrderStatus | 'all'; label: string }> = [
   { key: 'all', label: 'الكل' },
-  { key: 'in_progress', label: 'قيد التنفيذ' },
-  { key: 'completed', label: 'مكتمل' },
-  { key: 'pending', label: 'قيد الانتظار' },
-  { key: 'cancelled', label: 'ملغي' },
+  { key: 'in_progress', label: WORK_ORDER_STATUS_LABELS.in_progress },
+  { key: 'pending', label: WORK_ORDER_STATUS_LABELS.pending },
+  { key: 'paused', label: WORK_ORDER_STATUS_LABELS.paused },
+  { key: 'completed', label: WORK_ORDER_STATUS_LABELS.completed },
+  { key: 'cancelled', label: WORK_ORDER_STATUS_LABELS.cancelled },
 ];
 
 export function WorkOrderFilters({

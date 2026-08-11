@@ -51,7 +51,7 @@ const normalizeKeyPart = (value: string) =>
 
 type ReportUniqueKeySource = Pick<
   ProductionReport,
-  'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift'
+  'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift' | 'workOrderId'
 >;
 
 const buildReportUniqueKey = (data: ReportUniqueKeySource, includeInjectionShift = true): string => {
@@ -66,6 +66,8 @@ const buildReportUniqueKey = (data: ReportUniqueKeySource, includeInjectionShift
   if (includeInjectionShift && reportType === 'component_injection') {
     parts.push(normalizeKeyPart(normalizeInjectionShift(data.shift)));
   }
+  const workOrderId = String(data.workOrderId || '').trim();
+  if (workOrderId) parts.push(`wo_${normalizeKeyPart(workOrderId)}`);
   return parts.join('__');
 };
 
@@ -101,6 +103,7 @@ const buildUniqueDocPayload = (reportId: string, data: ReportUniqueKeySource) =>
   employeeId: data.employeeId,
   productId: data.productId,
   reportType: resolveReportType(data.reportType),
+  workOrderId: String(data.workOrderId || '').trim(),
   ...(resolveReportType(data.reportType) === 'component_injection'
     ? { shift: normalizeInjectionShift(data.shift) }
     : {}),
@@ -315,7 +318,7 @@ export const reportService = {
    * Pass `excludeReportId` when updating an existing report so its own key is ignored.
    */
   async hasConflictingUniqueKey(
-    data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift'>,
+    data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift' | 'workOrderId'>,
     excludeReportId?: string | null,
   ): Promise<boolean> {
     if (!isConfigured) return false;
@@ -371,6 +374,7 @@ export const reportService = {
         productId: data.productId,
         reportType: data.reportType,
         shift: data.shift,
+        workOrderId: data.workOrderId,
       });
       const uniqueRef = doc(db, UNIQUE_COLLECTION, uniqueKey);
       const injectionKeysToCheck = resolveReportType(data.reportType) === 'component_injection'
@@ -381,6 +385,7 @@ export const reportService = {
           productId: data.productId,
           reportType: data.reportType,
           shift: data.shift,
+          workOrderId: data.workOrderId,
         })
         : [uniqueKey];
 
@@ -424,6 +429,7 @@ export const reportService = {
               productId: data.productId,
               reportType: data.reportType,
               shift: data.shift,
+              workOrderId: data.workOrderId,
             }),
             createdAt: serverTimestamp(),
           });

@@ -6,6 +6,7 @@ import type {
 } from '../types';
 import { DEFAULT_REPORT_BEHAVIOR_SETTINGS } from '../modules/production/lib/reportBehaviorSettings';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../types';
+import { DEFAULT_COSTING_POLICY } from './costingPolicy';
 import {
   PRINT_DOCUMENT_TYPE_IDS,
   defaultFieldsForDocument,
@@ -391,6 +392,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   printTemplate: DEFAULT_PRINT_TEMPLATE,
   planSettings: DEFAULT_PLAN_SETTINGS,
   costMonthlyWorkingDays: {},
+  costingPolicy: DEFAULT_COSTING_POLICY,
   branding: DEFAULT_BRANDING,
   theme: DEFAULT_THEME,
   dashboardDisplay: DEFAULT_DASHBOARD_DISPLAY,

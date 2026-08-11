@@ -53,7 +53,7 @@ export type Permission =
   | 'production.attendance.view' | 'production.attendance.manage'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
+  | 'reports.view' | 'reports.create' | 'reports.createForAnySupervisor' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
   | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'production.requests.observe'
@@ -202,8 +202,10 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'workOrders.edit', label: 'تعديل أمر شغل' },
       { key: 'workOrders.delete', label: 'حذف أمر شغل' },
       { key: 'workOrders.viewCost', label: 'عرض تكاليف أوامر الشغل' },
+      { key: 'workOrders.componentInjection.manage', label: 'إدارة أوامر شغل مكونات الحقن' },
       { key: 'reports.view', label: 'عرض التقارير' },
       { key: 'reports.create', label: 'إنشاء التقارير' },
+      { key: 'reports.createForAnySupervisor', label: 'إنشاء تقرير لأي مشرف من أمر الشغل' },
       { key: 'reports.edit', label: 'تعديل التقارير' },
       { key: 'reports.delete', label: 'حذف التقارير' },
       { key: 'reports.viewCost', label: 'عرض عمود التكلفة' },
@@ -514,6 +516,16 @@ export function checkPermission(
   // Backward compatibility for old role docs created before this permission existed.
   if (permission === 'employees.viewDetails') {
     return permissions['employees.view'] === true;
+  }
+  // Catalog key was missing historically; allow injection work orders when the role
+  // can create work orders and already manages injection plans/reports.
+  if (permission === 'workOrders.componentInjection.manage') {
+    return permissions['workOrders.create'] === true
+      && (
+        permissions['plans.componentInjection.manage'] === true
+        || permissions['reports.componentInjection.manage'] === true
+        || permissions['roles.manage'] === true
+      );
   }
   if (permission === 'quality.finalInspection.view' || permission === 'quality.ipqc.view' || permission === 'quality.rework.view' || permission === 'quality.capa.view' || permission === 'quality.reports.view') {
     return permissions['quality.view'] === true;

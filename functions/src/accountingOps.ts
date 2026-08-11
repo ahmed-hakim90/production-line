@@ -8,9 +8,15 @@ type AccountingOperation =
   | "seed_defaults"
   | "upsert_account"
   | "save_settings"
+  | "save_costing_policy"
   | "upsert_cost_center"
+  | "upsert_production_cost_center"
+  | "deactivate_production_cost_center"
+  | "close_cost_period"
+  | "reopen_cost_period"
   | "set_period"
   | "post_journal"
+  | "post_opening_balance"
   | "reverse_journal"
   | "readiness"
   | "link_repair_branch"
@@ -27,6 +33,69 @@ type Actor = {
 const money = (value: unknown) => Math.round(Number(value || 0) * 100) / 100;
 const nowIso = () => new Date().toISOString();
 const accountId = (tenantId: string, code: string) => `${tenantId}__${code}`;
+const DEFAULT_CUTOVER_PERIOD = "2026-09";
+
+type AccountingPolicy = {
+  inventoryValuationMethod: "weighted_average";
+  autoPostInventory: boolean;
+  requireCostCenter: boolean;
+  allowManualJournals: boolean;
+  allowJournalReversal: boolean;
+  enforceOpenPeriods: boolean;
+  allowPeriodReopen: boolean;
+  syncCostAndAccountingClose: boolean;
+  autoPostRepairPayments: boolean;
+  autoPostRepairSales: boolean;
+  autoPostRepairCogs: boolean;
+  autoPostRepairTreasury: boolean;
+  cutoverPeriod: string;
+  openingBalanceStatus: string;
+  openingBalanceJournalId?: string;
+};
+
+const DEFAULT_ACCOUNTING_POLICY: AccountingPolicy = {
+  inventoryValuationMethod: "weighted_average",
+  autoPostInventory: true,
+  requireCostCenter: true,
+  allowManualJournals: true,
+  allowJournalReversal: true,
+  enforceOpenPeriods: true,
+  allowPeriodReopen: true,
+  syncCostAndAccountingClose: true,
+  autoPostRepairPayments: true,
+  autoPostRepairSales: true,
+  autoPostRepairCogs: true,
+  autoPostRepairTreasury: true,
+  cutoverPeriod: DEFAULT_CUTOVER_PERIOD,
+  openingBalanceStatus: "pending",
+};
+
+async function accountingPolicy(tenantId: string): Promise<AccountingPolicy> {
+  const snap = await db.collection("accounting_settings").doc(tenantId).get();
+  return {
+    ...DEFAULT_ACCOUNTING_POLICY,
+    ...(snap.exists ? snap.data() : {}),
+  } as AccountingPolicy;
+}
+
+async function writeAccountingAudit(
+  actor: Actor,
+  action: string,
+  entityId: string,
+  before: unknown,
+  after: unknown,
+) {
+  await db.collection("accounting_audit_log").add({
+    tenantId: actor.tenantId,
+    action,
+    entityId,
+    before: before || null,
+    after: after || null,
+    actorUid: actor.uid,
+    actorName: actor.name,
+    createdAt: nowIso(),
+  });
+}
 
 async function actorFromRequest(request: CallableRequest): Promise<Actor> {
   const uid = String(request.auth?.uid || "");
@@ -68,6 +137,18 @@ async function actorFromRequest(request: CallableRequest): Promise<Actor> {
 
 function requirePermission(actor: Actor, permission: string) {
   if (!actor.isSuperAdmin && actor.permissions[permission] !== true) {
+    throw new HttpsError(
+      "permission-denied",
+      "ليس لديك صلاحية تنفيذ هذه العملية المحاسبية.",
+    );
+  }
+}
+
+function requireAnyPermission(actor: Actor, permissions: string[]) {
+  if (
+    !actor.isSuperAdmin
+    && !permissions.some((permission) => actor.permissions[permission] === true)
+  ) {
     throw new HttpsError(
       "permission-denied",
       "ليس لديك صلاحية تنفيذ هذه العملية المحاسبية.",
@@ -253,7 +334,37 @@ async function saveSettings(actor: Actor, input: Record<string, unknown>) {
       "إعدادات السنة المالية أو التقريب غير صالحة.",
     );
   }
+  if (
+    input.inventoryValuationMethod &&
+    input.inventoryValuationMethod !== "weighted_average"
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "المتاح حاليًا هو المتوسط المرجح فقط؛ FIFO والتكلفة المعيارية غير منفذين.",
+    );
+  }
+  const cutoverPeriod = String(input.cutoverPeriod || DEFAULT_CUTOVER_PERIOD).trim();
+  if (!/^\d{4}-\d{2}$/.test(cutoverPeriod)) {
+    throw new HttpsError("invalid-argument", "فترة بدء الحسابات غير صالحة.");
+  }
   const ref = db.collection("accounting_settings").doc(actor.tenantId);
+  const before = await ref.get();
+  const beforeData = before.exists ? before.data() : null;
+  const policyPatch = {
+    inventoryValuationMethod: "weighted_average",
+    autoPostInventory: input.autoPostInventory !== false,
+    requireCostCenter: input.requireCostCenter !== false,
+    allowManualJournals: input.allowManualJournals !== false,
+    allowJournalReversal: input.allowJournalReversal !== false,
+    enforceOpenPeriods: input.enforceOpenPeriods !== false,
+    allowPeriodReopen: input.allowPeriodReopen !== false,
+    syncCostAndAccountingClose: input.syncCostAndAccountingClose !== false,
+    autoPostRepairPayments: input.autoPostRepairPayments !== false,
+    autoPostRepairSales: input.autoPostRepairSales !== false,
+    autoPostRepairCogs: input.autoPostRepairCogs !== false,
+    autoPostRepairTreasury: input.autoPostRepairTreasury !== false,
+    cutoverPeriod,
+  };
   await ref.set(
     {
       tenantId: actor.tenantId,
@@ -262,21 +373,14 @@ async function saveSettings(actor: Actor, input: Record<string, unknown>) {
         .toUpperCase(),
       fiscalYearStartMonth: month,
       decimalPlaces: decimals,
-      inventoryValuationMethod: [
-        "weighted_average",
-        "fifo",
-        "standard",
-      ].includes(String(input.inventoryValuationMethod || ""))
-        ? String(input.inventoryValuationMethod)
-        : "weighted_average",
-      autoPostInventory: input.autoPostInventory !== false,
-      requireCostCenter: input.requireCostCenter !== false,
-      allowManualJournals: input.allowManualJournals !== false,
+      ...policyPatch,
+      openingBalanceStatus: String(beforeData?.openingBalanceStatus || "pending"),
       updatedAt: nowIso(),
       updatedBy: actor.uid,
     },
     { merge: true },
   );
+  await writeAccountingAudit(actor, "settings_updated", actor.tenantId, beforeData, policyPatch);
   return { ok: true };
 }
 
@@ -342,7 +446,6 @@ async function upsertCostCenter(actor: Actor, input: Record<string, unknown>) {
       tenantId: actor.tenantId,
       code,
       name,
-      type: input.type === "indirect" ? "indirect" : "direct",
       accountingCategory: category,
       parentId: parentId || null,
       branchId: String(input.branchId || "").trim() || null,
@@ -351,11 +454,187 @@ async function upsertCostCenter(actor: Actor, input: Record<string, unknown>) {
       isActive: input.isActive !== false,
       updatedAt: at,
       updatedBy: actor.uid,
-      ...(existing.exists ? {} : { createdAt: at, createdBy: actor.uid }),
+      ...(existing.exists
+        ? {}
+        : {
+            type: "direct",
+            productionCostingEnabled: false,
+            createdAt: at,
+            createdBy: actor.uid,
+          }),
     },
     { merge: true },
   );
   return { ok: true, id: ref.id };
+}
+
+const COSTING_BOOLEAN_FLAGS = [
+  "legacyConversionEnabled", "fullManufacturingEnabled", "includeDirectLabor",
+  "includeSupervisor", "includeIndirectCenters", "includeDepreciation",
+  "includeActualMaterials", "includePackaging", "allowBomEstimateFallback",
+  "allowLinePercentageAllocation", "allowQuantityAllocation", "fallbackToQuantity",
+  "prorateOpenPeriod", "allowProvisionalValues", "requireActualBeforeClose",
+  "requireFullAllocationBeforeClose", "freezeClosedSnapshots",
+] as const;
+
+async function saveCostingPolicy(actor: Actor, input: Record<string, unknown>) {
+  requirePermission(actor, "costs.manage");
+  const raw = (input.costingPolicy && typeof input.costingPolicy === "object"
+    ? input.costingPolicy
+    : input) as Record<string, unknown>;
+  const policy: Record<string, unknown> = {};
+  for (const key of COSTING_BOOLEAN_FLAGS) policy[key] = raw[key] !== false;
+  policy.primaryCostView = raw.primaryCostView === "full_manufacturing"
+    ? "full_manufacturing"
+    : "legacy_conversion";
+  policy.dailyAllocationDriver = raw.dailyAllocationDriver === "quantity"
+    ? "quantity"
+    : "work_hours";
+  if (policy.legacyConversionEnabled === false && policy.fullManufacturingEnabled === false) {
+    throw new HttpsError(
+      "failed-precondition",
+      "يجب تشغيل تكلفة التحويل أو التكلفة الصناعية الكاملة على الأقل.",
+    );
+  }
+  if (policy.primaryCostView === "full_manufacturing" && policy.fullManufacturingEnabled === false) {
+    throw new HttpsError(
+      "failed-precondition",
+      "لا يمكن اعتماد التكلفة الكاملة كرقم رئيسي وهي غير مفعلة.",
+    );
+  }
+  if (
+    policy.includeIndirectCenters !== false
+    && policy.allowLinePercentageAllocation === false
+    && policy.allowQuantityAllocation === false
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "فعّل طريقة توزيع واحدة على الأقل للمراكز غير المباشرة.",
+    );
+  }
+  if (policy.allowProvisionalValues === false && policy.allowBomEstimateFallback !== false) {
+    throw new HttpsError(
+      "failed-precondition",
+      "BOM التقديري يحتاج السماح بالقيم المبدئية.",
+    );
+  }
+  const ref = db.collection("system_settings").doc(actor.tenantId);
+  const before = await ref.get();
+  await ref.set({
+    tenantId: actor.tenantId,
+    costingPolicy: policy,
+    updatedAt: nowIso(),
+    updatedBy: actor.uid,
+  }, { merge: true });
+  await writeAccountingAudit(
+    actor,
+    "costing_policy_updated",
+    actor.tenantId,
+    before.data()?.costingPolicy || null,
+    policy,
+  );
+  return { ok: true, costingPolicy: policy };
+}
+
+const PRODUCTION_CENTER_STRING_FIELDS = [
+  "name",
+  "postingMode",
+  "costObjectScope",
+  "allocationDriver",
+  "allocationBasis",
+  "productScope",
+  "valueSource",
+  "employeeScope",
+] as const;
+const PRODUCTION_CENTER_ARRAY_FIELDS = [
+  "productIds",
+  "productCategories",
+  "employeeIds",
+  "employeeDepartmentIds",
+] as const;
+
+async function upsertProductionCostCenter(
+  actor: Actor,
+  input: Record<string, unknown>,
+) {
+  requirePermission(actor, "costs.manage");
+  const id = String(input.id || "").trim();
+  const name = String(input.name || "").trim();
+  if (!id && name.length < 2) {
+    throw new HttpsError("invalid-argument", "اسم مركز التكلفة مطلوب.");
+  }
+  const ref = id
+    ? db.collection("cost_centers").doc(id)
+    : db.collection("cost_centers").doc();
+  const existing = await ref.get();
+  if (
+    existing.exists &&
+    String(existing.data()?.tenantId || "") !== actor.tenantId
+  ) {
+    throw new HttpsError("permission-denied", "مركز التكلفة يتبع شركة أخرى.");
+  }
+  const patch: Record<string, unknown> = {
+    tenantId: actor.tenantId,
+    type: input.type === "direct" ? "direct" : "indirect",
+    productionCostingEnabled: input.productionCostingEnabled !== false,
+    manualAdjustment: Math.max(0, money(input.manualAdjustment)),
+    updatedAt: nowIso(),
+    updatedBy: actor.uid,
+  };
+  for (const key of PRODUCTION_CENTER_STRING_FIELDS) {
+    if (key === "name" || input[key] === undefined) continue;
+    patch[key] = String(input[key] || "").trim();
+  }
+  for (const key of PRODUCTION_CENTER_ARRAY_FIELDS) {
+    if (input[key] === undefined) continue;
+    patch[key] = Array.isArray(input[key])
+      ? Array.from(
+          new Set(
+            (input[key] as unknown[])
+              .map((value) => String(value || "").trim())
+              .filter(Boolean),
+          ),
+        )
+      : [];
+  }
+  if (!existing.exists) {
+    patch.name = name;
+    patch.accountingCategory = "production";
+    patch.allowPosting = true;
+    patch.isActive = true;
+    patch.createdAt = nowIso();
+    patch.createdBy = actor.uid;
+  }
+  await ref.set(patch, { merge: true });
+  return { ok: true, id: ref.id };
+}
+
+async function deactivateProductionCostCenter(
+  actor: Actor,
+  input: Record<string, unknown>,
+) {
+  requirePermission(actor, "costs.manage");
+  const id = String(input.id || "").trim();
+  if (!id) throw new HttpsError("invalid-argument", "معرف المركز مطلوب.");
+  const ref = db.collection("cost_centers").doc(id);
+  const snap = await ref.get();
+  if (
+    !snap.exists ||
+    String(snap.data()?.tenantId || "") !== actor.tenantId
+  ) {
+    throw new HttpsError("not-found", "مركز التكلفة غير موجود.");
+  }
+  await ref.set(
+    {
+      productionCostingEnabled: false,
+      productionCostingDisabledAt: nowIso(),
+      productionCostingDisabledBy: actor.uid,
+      updatedAt: nowIso(),
+      updatedBy: actor.uid,
+    },
+    { merge: true },
+  );
+  return { ok: true, id };
 }
 
 async function setPeriod(actor: Actor, input: Record<string, unknown>) {
@@ -365,9 +644,27 @@ async function setPeriod(actor: Actor, input: Record<string, unknown>) {
   if (!/^\d{4}-\d{2}$/.test(period) || !["open", "closed"].includes(status)) {
     throw new HttpsError("invalid-argument", "الفترة أو حالتها غير صالحة.");
   }
+  const policy = await accountingPolicy(actor.tenantId);
+  if (status === "open" && policy.allowPeriodReopen === false) {
+    throw new HttpsError("failed-precondition", "إعادة فتح الفترات معطلة من الإعدادات.");
+  }
+  if (status === "closed" && policy.syncCostAndAccountingClose !== false) {
+    const costs = await db
+      .collection("monthly_production_costs")
+      .where("tenantId", "==", actor.tenantId)
+      .where("month", "==", period)
+      .get();
+    if (costs.empty || costs.docs.some((snap) => snap.data().isClosed !== true)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "أغلق تكلفة الإنتاج لكل منتجات الشهر قبل إقفال الفترة المحاسبية.",
+      );
+    }
+  }
   const ref = db
     .collection("accounting_periods")
     .doc(`${actor.tenantId}__${period}`);
+  const before = await ref.get();
   await ref.set(
     {
       tenantId: actor.tenantId,
@@ -381,7 +678,206 @@ async function setPeriod(actor: Actor, input: Record<string, unknown>) {
     },
     { merge: true },
   );
+  await writeAccountingAudit(
+    actor,
+    status === "closed" ? "period_closed" : "period_reopened",
+    period,
+    before.exists ? before.data() : null,
+    { period, status },
+  );
   return { ok: true };
+}
+
+async function closeCostPeriod(actor: Actor, input: Record<string, unknown>) {
+  requireAnyPermission(actor, ["costs.closePeriod", "costs.manage"]);
+  const month = String(input.month || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new HttpsError("invalid-argument", "شهر التكاليف غير صالح.");
+  }
+  const settingsSnap = await db.collection("system_settings").doc(actor.tenantId).get();
+  const policy = {
+    requireActualBeforeClose: true,
+    requireFullAllocationBeforeClose: true,
+    freezeClosedSnapshots: true,
+    ...((settingsSnap.data()?.costingPolicy || {}) as Record<string, unknown>),
+  };
+  const periodRef = db.collection("accounting_periods").doc(`${actor.tenantId}__${month}`);
+  const costQuery = db.collection("monthly_production_costs")
+    .where("tenantId", "==", actor.tenantId).where("month", "==", month);
+  const centerQuery = db.collection("cost_centers").where("tenantId", "==", actor.tenantId);
+  const valueQuery = db.collection("cost_center_values")
+    .where("tenantId", "==", actor.tenantId).where("month", "==", month);
+  const allocationQuery = db.collection("cost_allocations")
+    .where("tenantId", "==", actor.tenantId).where("month", "==", month);
+  const closedAt = nowIso();
+
+  const result = await db.runTransaction(async (tx) => {
+    const [periodSnap, costs, centers, values, allocations] = await Promise.all([
+      tx.get(periodRef), tx.get(costQuery), tx.get(centerQuery), tx.get(valueQuery), tx.get(allocationQuery),
+    ]);
+    if (periodSnap.exists && periodSnap.data()?.status === "closed") {
+      throw new HttpsError(
+        "failed-precondition",
+        "الفترة المحاسبية مقفلة بالفعل؛ لا يمكن تغيير لقطة التكاليف.",
+      );
+    }
+    if (costs.empty) {
+      throw new HttpsError("failed-precondition", "احسب تكاليف الشهر قبل الإقفال.");
+    }
+    if (costs.docs.every((snap) => snap.data().isClosed === true)) {
+      return { duplicated: true, count: costs.size };
+    }
+    if (costs.size + values.size > 450) {
+      throw new HttpsError(
+        "resource-exhausted",
+        "عدد لقطات الشهر كبير للإقفال الذري؛ قسّم البيانات أو راجع الدعم.",
+      );
+    }
+    if (
+      policy.requireActualBeforeClose !== false
+      && costs.docs.some((snap) => snap.data().costingStatus !== "actual" && snap.data().costingStatus !== "closed")
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        "لا يمكن الإقفال قبل تحويل كل نتائج الشهر من مبدئية إلى فعلية.",
+      );
+    }
+
+    const productionIndirectCenters = centers.docs.filter((snap) => {
+      const row = snap.data();
+      return row.isActive !== false
+        && row.productionCostingEnabled !== false
+        && String(row.type || "direct") === "indirect";
+    });
+    const valueByCenter = new Map(values.docs.map((snap) => [String(snap.data().costCenterId || ""), snap]));
+    const allocationByCenter = new Map(
+      allocations.docs.map((snap) => [String(snap.data().costCenterId || ""), snap.data()]),
+    );
+    if (policy.requireActualBeforeClose !== false) {
+      const missingActual = productionIndirectCenters.find((center) => {
+        const value = valueByCenter.get(center.id)?.data();
+        return !value || !["actual", "closed"].includes(String(value.costingStatus || ""));
+      });
+      if (missingActual) {
+        throw new HttpsError(
+          "failed-precondition",
+          `اعتمد القيمة الفعلية لمركز التكلفة ${String(missingActual.data().name || missingActual.id)} قبل الإقفال.`,
+        );
+      }
+    }
+    if (policy.requireFullAllocationBeforeClose !== false) {
+      const incomplete = productionIndirectCenters.find((center) => {
+        const row = center.data();
+        if (String(row.allocationBasis || "line_percentage") !== "line_percentage") return false;
+        const allocation = allocationByCenter.get(center.id);
+        const lines = Array.isArray(allocation?.allocations) ? allocation.allocations : [];
+        const total = lines.reduce(
+          (sum: number, raw: unknown) => sum + Number((raw as Record<string, unknown>)?.percentage || 0),
+          0,
+        );
+        return Math.abs(total - 100) > 0.01;
+      });
+      if (incomplete) {
+        throw new HttpsError(
+          "failed-precondition",
+          `يجب أن يكتمل توزيع مركز التكلفة ${String(incomplete.data().name || incomplete.id)} إلى 100%.`,
+        );
+      }
+    }
+
+    for (const snap of costs.docs) {
+      tx.update(snap.ref, {
+        isClosed: true,
+        preCloseCostingStatus: snap.data().costingStatus || "provisional",
+        costingStatus: "closed",
+        closedAt,
+        closedBy: actor.uid,
+        snapshotFrozen: policy.freezeClosedSnapshots !== false,
+      });
+    }
+    for (const snap of values.docs) {
+      tx.update(snap.ref, {
+        preCloseCostingStatus: snap.data().costingStatus || "provisional",
+        costingStatus: "closed",
+        closedAt,
+        closedBy: actor.uid,
+      });
+    }
+    tx.set(db.collection("cost_period_closures").doc(`${actor.tenantId}__${month}`), {
+      tenantId: actor.tenantId,
+      month,
+      status: "closed",
+      closedAt,
+      closedBy: actor.uid,
+      policySnapshot: policy,
+      monthlyCostCount: costs.size,
+    });
+    return { duplicated: false, count: costs.size };
+  });
+  await writeAccountingAudit(actor, "cost_period_closed", month, null, {
+    month,
+    ...result,
+  });
+  return { ok: true, month, ...result };
+}
+
+async function reopenCostPeriod(actor: Actor, input: Record<string, unknown>) {
+  requireAnyPermission(actor, ["costs.closePeriod", "costs.manage"]);
+  const month = String(input.month || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(month)) {
+    throw new HttpsError("invalid-argument", "شهر التكاليف غير صالح.");
+  }
+  const accounting = await accountingPolicy(actor.tenantId);
+  if (accounting.allowPeriodReopen === false) {
+    throw new HttpsError("failed-precondition", "إعادة فتح الفترات معطلة من إعدادات الحسابات.");
+  }
+  const periodRef = db.collection("accounting_periods").doc(`${actor.tenantId}__${month}`);
+  const closureRef = db.collection("cost_period_closures").doc(`${actor.tenantId}__${month}`);
+  const costQuery = db.collection("monthly_production_costs")
+    .where("tenantId", "==", actor.tenantId).where("month", "==", month);
+  const valueQuery = db.collection("cost_center_values")
+    .where("tenantId", "==", actor.tenantId).where("month", "==", month);
+  const reopenedAt = nowIso();
+  const result = await db.runTransaction(async (tx) => {
+    const [period, closure, costs, values] = await Promise.all([
+      tx.get(periodRef), tx.get(closureRef), tx.get(costQuery), tx.get(valueQuery),
+    ]);
+    if (period.exists && period.data()?.status === "closed") {
+      throw new HttpsError(
+        "failed-precondition",
+        "أعد فتح الفترة المحاسبية أولًا ثم أعد فتح فترة التكاليف.",
+      );
+    }
+    if (!closure.exists && costs.docs.every((snap) => snap.data().isClosed !== true)) {
+      return { duplicated: true, count: costs.size };
+    }
+    if (costs.size + values.size > 450) {
+      throw new HttpsError("resource-exhausted", "عدد لقطات الشهر كبير لإعادة الفتح الذرية.");
+    }
+    for (const snap of costs.docs) {
+      tx.update(snap.ref, {
+        isClosed: false,
+        costingStatus: snap.data().preCloseCostingStatus || "provisional",
+        reopenedAt,
+        reopenedBy: actor.uid,
+        snapshotFrozen: false,
+      });
+    }
+    for (const snap of values.docs) {
+      tx.update(snap.ref, {
+        costingStatus: snap.data().preCloseCostingStatus || "actual",
+        reopenedAt,
+        reopenedBy: actor.uid,
+      });
+    }
+    if (closure.exists) tx.delete(closureRef);
+    return { duplicated: false, count: costs.size };
+  });
+  await writeAccountingAudit(actor, "cost_period_reopened", month, null, {
+    month,
+    ...result,
+  });
+  return { ok: true, month, ...result };
 }
 
 function normalizeLines(value: unknown) {
@@ -422,35 +918,11 @@ function normalizeLines(value: unknown) {
   });
 }
 
-async function postJournal(actor: Actor, input: Record<string, unknown>) {
-  requirePermission(actor, "accounting.journals.post");
-  const settings = await db
-    .collection("accounting_settings")
-    .doc(actor.tenantId)
-    .get();
-  if (settings.exists && settings.data()?.allowManualJournals === false) {
-    throw new HttpsError(
-      "failed-precondition",
-      "القيود اليدوية معطلة من إعدادات الحسابات.",
-    );
-  }
-  const date = String(input.date || nowIso().slice(0, 10));
-  const period = date.slice(0, 7);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
-    throw new HttpsError("invalid-argument", "تاريخ القيد غير صالح.");
-  const periodSnap = await db
-    .collection("accounting_periods")
-    .doc(`${actor.tenantId}__${period}`)
-    .get();
-  if (periodSnap.exists && periodSnap.data()?.status === "closed") {
-    throw new HttpsError("failed-precondition", "الفترة المحاسبية مقفلة.");
-  }
-  const lines = normalizeLines(input.lines);
-  const totalDebit = money(lines.reduce((sum, row) => sum + row.debit, 0));
-  const totalCredit = money(lines.reduce((sum, row) => sum + row.credit, 0));
-  if (totalDebit <= 0 || Math.abs(totalDebit - totalCredit) > 0.009) {
-    throw new HttpsError("invalid-argument", "القيد غير متوازن.");
-  }
+async function validatePostingLines(
+  actor: Actor,
+  lines: ReturnType<typeof normalizeLines>,
+  requireCostCenter: boolean,
+) {
   const accountSnaps = await Promise.all(
     lines.map((line) =>
       db
@@ -463,7 +935,8 @@ async function postJournal(actor: Actor, input: Record<string, unknown>) {
     if (
       !snap.exists ||
       snap.data()?.isActive === false ||
-      snap.data()?.allowPosting === false
+      snap.data()?.allowPosting === false ||
+      String(snap.data()?.tenantId || "") !== actor.tenantId
     ) {
       throw new HttpsError(
         "failed-precondition",
@@ -473,7 +946,80 @@ async function postJournal(actor: Actor, input: Record<string, unknown>) {
     lines[index].accountName = String(
       snap.data()?.name || lines[index].accountName,
     );
+    const accountType = String(snap.data()?.type || "");
+    if (
+      requireCostCenter &&
+      ["revenue", "expense", "contra_revenue"].includes(accountType) &&
+      !lines[index].costCenterId
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        `مركز التكلفة مطلوب للحساب ${lines[index].accountCode}.`,
+      );
+    }
   });
+  const centerIds = Array.from(
+    new Set(lines.map((line) => String(line.costCenterId || "")).filter(Boolean)),
+  );
+  const centerSnaps = await Promise.all(
+    centerIds.map((id) => db.collection("cost_centers").doc(id).get()),
+  );
+  centerSnaps.forEach((snap, index) => {
+    if (
+      !snap.exists ||
+      String(snap.data()?.tenantId || "") !== actor.tenantId ||
+      snap.data()?.isActive === false ||
+      snap.data()?.allowPosting === false
+    ) {
+      throw new HttpsError(
+        "failed-precondition",
+        `مركز التكلفة ${centerIds[index]} غير صالح للترحيل.`,
+      );
+    }
+  });
+  return accountSnaps;
+}
+
+async function postJournal(actor: Actor, input: Record<string, unknown>) {
+  requirePermission(actor, "accounting.journals.post");
+  const policy = await accountingPolicy(actor.tenantId);
+  if (policy.allowManualJournals === false) {
+    throw new HttpsError(
+      "failed-precondition",
+      "القيود اليدوية معطلة من إعدادات الحسابات.",
+    );
+  }
+  const date = String(input.date || nowIso().slice(0, 10));
+  const period = date.slice(0, 7);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)))
+    throw new HttpsError("invalid-argument", "تاريخ القيد غير صالح.");
+  if (
+    period >= String(policy.cutoverPeriod || DEFAULT_CUTOVER_PERIOD) &&
+    policy.openingBalanceStatus !== "approved"
+  ) {
+    throw new HttpsError(
+      "failed-precondition",
+      "اعتمد قيد الرصيد الافتتاحي قبل ترحيل قيود فترة القطع.",
+    );
+  }
+  const periodSnap = await db
+    .collection("accounting_periods")
+    .doc(`${actor.tenantId}__${period}`)
+    .get();
+  if (
+    policy.enforceOpenPeriods !== false &&
+    periodSnap.exists &&
+    periodSnap.data()?.status === "closed"
+  ) {
+    throw new HttpsError("failed-precondition", "الفترة المحاسبية مقفلة.");
+  }
+  const lines = normalizeLines(input.lines);
+  const totalDebit = money(lines.reduce((sum, row) => sum + row.debit, 0));
+  const totalCredit = money(lines.reduce((sum, row) => sum + row.credit, 0));
+  if (totalDebit <= 0 || Math.abs(totalDebit - totalCredit) > 0.009) {
+    throw new HttpsError("invalid-argument", "القيد غير متوازن.");
+  }
+  await validatePostingLines(actor, lines, policy.requireCostCenter !== false);
   const requestId = String(input.requestId || "")
     .trim()
     .replace(/[^a-zA-Z0-9_-]/g, "")
@@ -527,11 +1073,93 @@ async function postJournal(actor: Actor, input: Record<string, unknown>) {
     });
     return { duplicated: false, referenceNo };
   });
+  await writeAccountingAudit(actor, "journal_posted", ref.id, null, {
+    ...result,
+    date,
+    totalDebit,
+    totalCredit,
+  });
   return { ok: true, id: ref.id, ...result };
+}
+
+async function postOpeningBalance(actor: Actor, input: Record<string, unknown>) {
+  requirePermission(actor, "accounting.journals.post");
+  const policy = await accountingPolicy(actor.tenantId);
+  const period = String(policy.cutoverPeriod || DEFAULT_CUTOVER_PERIOD);
+  if (policy.openingBalanceStatus === "approved") {
+    return {
+      ok: true,
+      id: String(policy.openingBalanceJournalId || `${actor.tenantId}__opening__${period}`),
+      duplicated: true,
+    };
+  }
+  const lines = normalizeLines(input.lines);
+  const totalDebit = money(lines.reduce((sum, row) => sum + row.debit, 0));
+  const totalCredit = money(lines.reduce((sum, row) => sum + row.credit, 0));
+  if (totalDebit <= 0 || Math.abs(totalDebit - totalCredit) > 0.009) {
+    throw new HttpsError("invalid-argument", "قيد الرصيد الافتتاحي غير متوازن.");
+  }
+  const accountSnaps = await validatePostingLines(actor, lines, false);
+  accountSnaps.forEach((snap) => {
+    if (!["asset", "liability", "equity"].includes(String(snap.data()?.type || ""))) {
+      throw new HttpsError(
+        "failed-precondition",
+        "الرصيد الافتتاحي يقبل حسابات المركز المالي فقط.",
+      );
+    }
+  });
+  const ref = db
+    .collection("accounting_journal_entries")
+    .doc(`${actor.tenantId}__opening__${period}`);
+  const settingsRef = db.collection("accounting_settings").doc(actor.tenantId);
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    if (existing.exists) return;
+    tx.create(ref, {
+      tenantId: actor.tenantId,
+      source: "opening_balance",
+      sourceId: period,
+      referenceNo: `OB-${period.replace("-", "")}`,
+      date: `${period}-01`,
+      period,
+      description: String(input.description || "").trim() || "رصيد افتتاحي معتمد",
+      status: "posted",
+      immutable: true,
+      lines,
+      totalDebit,
+      totalCredit,
+      postedAt: nowIso(),
+      createdAt: nowIso(),
+      createdBy: actor.uid,
+      createdByName: actor.name,
+    });
+    tx.set(
+      settingsRef,
+      {
+        tenantId: actor.tenantId,
+        cutoverPeriod: period,
+        openingBalanceStatus: "approved",
+        openingBalanceJournalId: ref.id,
+        openingBalanceApprovedAt: nowIso(),
+        openingBalanceApprovedBy: actor.uid,
+      },
+      { merge: true },
+    );
+  });
+  await writeAccountingAudit(actor, "opening_balance_approved", ref.id, null, {
+    period,
+    totalDebit,
+    totalCredit,
+  });
+  return { ok: true, id: ref.id };
 }
 
 async function reverseJournal(actor: Actor, input: Record<string, unknown>) {
   requirePermission(actor, "accounting.journals.reverse");
+  const policy = await accountingPolicy(actor.tenantId);
+  if (policy.allowJournalReversal === false) {
+    throw new HttpsError("failed-precondition", "عكس القيود معطل من الإعدادات.");
+  }
   const journalId = String(input.journalId || "").trim();
   const reason = String(input.reason || "").trim();
   if (!journalId || reason.length < 3)
@@ -553,7 +1181,11 @@ async function reverseJournal(actor: Actor, input: Record<string, unknown>) {
     .collection("accounting_periods")
     .doc(`${actor.tenantId}__${period}`)
     .get();
-  if (periodSnap.exists && periodSnap.data()?.status === "closed")
+  if (
+    policy.enforceOpenPeriods !== false &&
+    periodSnap.exists &&
+    periodSnap.data()?.status === "closed"
+  )
     throw new HttpsError("failed-precondition", "الفترة الحالية مقفلة.");
   const reversalRef = db
     .collection("accounting_journal_entries")
@@ -595,6 +1227,10 @@ async function reverseJournal(actor: Actor, input: Record<string, unknown>) {
       reversalJournalId: reversalRef.id,
       reversalReason: reason,
     });
+  });
+  await writeAccountingAudit(actor, "journal_reversed", journalId, original.data(), {
+    reversalJournalId: reversalRef.id,
+    reason,
   });
   return { ok: true, id: reversalRef.id };
 }
@@ -806,15 +1442,28 @@ async function accountingReadiness(actor: Actor) {
       ),
       parentId: String(snap.data().parentId || ""),
       allowPosting: snap.data().allowPosting !== false,
+      productionCostingEnabled: snap.data().productionCostingEnabled !== false,
       isActive: snap.data().isActive !== false,
     })),
   };
 }
 
-async function linkRepairBranch(actor: Actor, input: Record<string, unknown>) {
-  requirePermission(actor, "accounting.settings.manage");
-  const branchId = String(input.branchId || "").trim();
-  const costCenterId = String(input.costCenterId || "").trim();
+/** Link a repair branch to a cost center and default (or overridden) GL accounts. */
+export async function applyRepairBranchAccountingLink(params: {
+  tenantId: string;
+  uid: string;
+  branchId: string;
+  costCenterId: string;
+  accountingAccounts?: Record<string, unknown>;
+  useDefaultAccounts?: boolean;
+}) {
+  const tenantId = String(params.tenantId || "").trim();
+  const uid = String(params.uid || "").trim();
+  const branchId = String(params.branchId || "").trim();
+  const costCenterId = String(params.costCenterId || "").trim();
+  if (!tenantId || !uid) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  }
   if (!branchId || !costCenterId) {
     throw new HttpsError(
       "invalid-argument",
@@ -822,32 +1471,28 @@ async function linkRepairBranch(actor: Actor, input: Record<string, unknown>) {
     );
   }
 
-  // One-click path: ensure default chart exists, then map the branch to it.
-  await ensureDefaultAccounts(actor);
+  await ensureDefaultAccounts({ tenantId, uid });
 
   const branchRef = db.collection("repair_branches").doc(branchId);
   const centerRef = db.collection("cost_centers").doc(costCenterId);
   const [branch, center] = await Promise.all([branchRef.get(), centerRef.get()]);
-  if (
-    !branch.exists ||
-    String(branch.data()?.tenantId || "") !== actor.tenantId
-  ) {
+  if (!branch.exists || String(branch.data()?.tenantId || "") !== tenantId) {
     throw new HttpsError("not-found", "فرع الصيانة غير موجود.");
   }
   if (
     !center.exists ||
-    String(center.data()?.tenantId || "") !== actor.tenantId ||
+    String(center.data()?.tenantId || "") !== tenantId ||
     center.data()?.isActive === false
   ) {
     throw new HttpsError("failed-precondition", "مركز التكلفة غير صالح.");
   }
 
   const inputMap =
-    input.accountingAccounts && typeof input.accountingAccounts === "object"
-      ? (input.accountingAccounts as Record<string, unknown>)
+    params.accountingAccounts && typeof params.accountingAccounts === "object"
+      ? params.accountingAccounts
       : {};
   /** Default: use system map. Explicit overrides only when valid posting accounts. */
-  const useDefaultAccounts = input.useDefaultAccounts !== false;
+  const useDefaultAccounts = params.useDefaultAccounts !== false;
   const candidateCodes = Object.fromEntries(
     REPAIR_ACCOUNT_KEYS.map((key) => {
       const override = String(inputMap[key] || "").trim();
@@ -856,8 +1501,7 @@ async function linkRepairBranch(actor: Actor, input: Record<string, unknown>) {
     }),
   ) as Record<(typeof REPAIR_ACCOUNT_KEYS)[number], string>;
 
-  // If advanced overrides were sent with useDefaultAccounts=false, prefer overrides when valid.
-  if (input.useDefaultAccounts === false) {
+  if (params.useDefaultAccounts === false) {
     for (const key of REPAIR_ACCOUNT_KEYS) {
       const override = String(inputMap[key] || "").trim();
       if (override) candidateCodes[key] = override;
@@ -868,7 +1512,7 @@ async function linkRepairBranch(actor: Actor, input: Record<string, unknown>) {
     REPAIR_ACCOUNT_KEYS.map((key) =>
       db
         .collection("accounting_accounts")
-        .doc(accountId(actor.tenantId, candidateCodes[key]))
+        .doc(accountId(tenantId, candidateCodes[key]))
         .get(),
     ),
   );
@@ -887,12 +1531,11 @@ async function linkRepairBranch(actor: Actor, input: Record<string, unknown>) {
       resolvedCodes[key] = candidateCodes[key];
       continue;
     }
-    // Fall back to default code after seed if override was invalid.
     const defaultCode = DEFAULT_REPAIR_ACCOUNT_MAP[key];
     if (candidateCodes[key] !== defaultCode) {
       const fallbackSnap = await db
         .collection("accounting_accounts")
-        .doc(accountId(actor.tenantId, defaultCode))
+        .doc(accountId(tenantId, defaultCode))
         .get();
       const fallback = fallbackSnap.data();
       if (
@@ -915,16 +1558,31 @@ async function linkRepairBranch(actor: Actor, input: Record<string, unknown>) {
     costCenterId,
     accountingAccounts: resolvedCodes,
     accountingReadyAt: nowIso(),
-    accountingReadyBy: actor.uid,
+    accountingReadyBy: uid,
     updatedAt: nowIso(),
   });
   return {
-    ok: true,
+    ok: true as const,
     branchId,
     costCenterId,
     accountingAccounts: resolvedCodes,
     usedDefaults: useDefaultAccounts,
   };
+}
+
+async function linkRepairBranch(actor: Actor, input: Record<string, unknown>) {
+  requirePermission(actor, "accounting.settings.manage");
+  return applyRepairBranchAccountingLink({
+    tenantId: actor.tenantId,
+    uid: actor.uid,
+    branchId: String(input.branchId || "").trim(),
+    costCenterId: String(input.costCenterId || "").trim(),
+    accountingAccounts:
+      input.accountingAccounts && typeof input.accountingAccounts === "object"
+        ? (input.accountingAccounts as Record<string, unknown>)
+        : undefined,
+    useDefaultAccounts: input.useDefaultAccounts !== false,
+  });
 }
 
 export async function mutateAccountingHandler(request: CallableRequest) {
@@ -938,12 +1596,24 @@ export async function mutateAccountingHandler(request: CallableRequest) {
       return upsertAccount(actor, input);
     case "save_settings":
       return saveSettings(actor, input);
+    case "save_costing_policy":
+      return saveCostingPolicy(actor, input);
     case "upsert_cost_center":
       return upsertCostCenter(actor, input);
+    case "upsert_production_cost_center":
+      return upsertProductionCostCenter(actor, input);
+    case "deactivate_production_cost_center":
+      return deactivateProductionCostCenter(actor, input);
+    case "close_cost_period":
+      return closeCostPeriod(actor, input);
+    case "reopen_cost_period":
+      return reopenCostPeriod(actor, input);
     case "set_period":
       return setPeriod(actor, input);
     case "post_journal":
       return postJournal(actor, input);
+    case "post_opening_balance":
+      return postOpeningBalance(actor, input);
     case "reverse_journal":
       return reverseJournal(actor, input);
     case "readiness":

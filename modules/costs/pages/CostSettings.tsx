@@ -4,12 +4,41 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { formatCost, getDaysInMonth, getWorkingDaysExcludingFriday } from '../../../utils/costCalculations';
+import type { CostingPolicySettings } from '../../../types';
+import { resolveCostingPolicy, validateCostingPolicy } from '../../../utils/costingPolicy';
+import { mutateAccountingCallable } from '../../auth/services/firebase';
+
+type BooleanCostPolicyKey = Exclude<
+  keyof CostingPolicySettings,
+  'primaryCostView' | 'dailyAllocationDriver'
+>;
+
+const COST_POLICY_FLAGS: Array<{ key: BooleanCostPolicyKey; label: string; hint: string }> = [
+  { key: 'legacyConversionEnabled', label: 'تشغيل تكلفة التحويل القديمة', hint: 'يحافظ على رقم العمالة والإشراف والتكاليف غير المباشرة القديم.' },
+  { key: 'fullManufacturingEnabled', label: 'تشغيل التكلفة الصناعية الكاملة', hint: 'يضيف الخامات والتعبئة إلى تكلفة التحويل في نتيجة مستقلة.' },
+  { key: 'includeDirectLabor', label: 'إدخال العمالة المباشرة', hint: 'عدد العمال × ساعات التشغيل × معدل الساعة.' },
+  { key: 'includeSupervisor', label: 'إدخال تكلفة المشرف', hint: 'تُحسب مرة للمشرف/الخط/اليوم ثم توزع على التقارير.' },
+  { key: 'includeIndirectCenters', label: 'إدخال المراكز غير المباشرة', hint: 'يشغّل تحميل مجمعات المصروفات الصناعية على الإنتاج.' },
+  { key: 'includeDepreciation', label: 'إدخال الإهلاك', hint: 'يضم إهلاك الأصول المرتبطة بمراكز الإنتاج مرة واحدة.' },
+  { key: 'includeActualMaterials', label: 'إدخال الخامات الفعلية', hint: 'يعتمد تكلفة الصرف المخزني الفعلية في التكلفة الكاملة.' },
+  { key: 'includePackaging', label: 'إدخال مواد التعبئة', hint: 'يضم مواد التعبئة المصروفة أو المقدرة حسب حالة المصدر.' },
+  { key: 'allowBomEstimateFallback', label: 'السماح بتقدير BOM', hint: 'يستخدم BOM عند غياب الصرف الفعلي ويُبقي النتيجة مبدئية.' },
+  { key: 'allowLinePercentageAllocation', label: 'السماح بتوزيع نسب الخطوط', hint: 'يوزع قيمة المركز على الخطوط بالنسب الشهرية المعرفة.' },
+  { key: 'allowQuantityAllocation', label: 'السماح بالتوزيع حسب الكمية', hint: 'يوزع قيمة المركز على المنتجات داخل نطاقه حسب الكمية الجيدة.' },
+  { key: 'fallbackToQuantity', label: 'Fallback للكمية', hint: 'يستخدم الكمية إذا لم تتوفر ساعات تشغيل صالحة.' },
+  { key: 'prorateOpenPeriod', label: 'تحميل تدريجي للشهر المفتوح', hint: 'لا يحمل قيمة الشهر كاملة قبل مرور أيام التشغيل.' },
+  { key: 'allowProvisionalValues', label: 'السماح بالقيم المبدئية', hint: 'يسمح بالحساب الحي قبل وصول كل المصادر الفعلية.' },
+  { key: 'requireActualBeforeClose', label: 'اشتراط الفعلي قبل الإقفال', hint: 'يمنع إقفال شهر يحتوي مصادر مبدئية.' },
+  { key: 'requireFullAllocationBeforeClose', label: 'اشتراط توزيع 100%', hint: 'يمنع الإقفال إذا كانت نسب أي مركز غير مكتملة.' },
+  { key: 'freezeClosedSnapshots', label: 'تجميد نتائج الشهر المقفول', hint: 'يمنع إعادة كتابة نتائج وتفاصيل الفترات المقفلة.' },
+];
 
 export const CostSettings: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const updateLaborSettings = useAppStore((s) => s.updateLaborSettings);
   const updateSystemSettings = useAppStore((s) => s.updateSystemSettings);
+  const fetchSystemSettings = useAppStore((s) => s.fetchSystemSettings);
   const [hourlyRate, setHourlyRate] = useState<number>(0);
   const [cnyToEgpRate, setCnyToEgpRate] = useState<number>(0);
   const [workingDaysYear, setWorkingDaysYear] = useState<number>(new Date().getFullYear());
@@ -20,6 +49,11 @@ export const CostSettings: React.FC = () => {
   const [savedCny, setSavedCny] = useState(false);
   const [savingDays, setSavingDays] = useState(false);
   const [savedDays, setSavedDays] = useState(false);
+  const [costingPolicy, setCostingPolicy] = useState<CostingPolicySettings>(() =>
+    resolveCostingPolicy(systemSettings.costingPolicy),
+  );
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [savedPolicy, setSavedPolicy] = useState(false);
   const saveToastTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -33,6 +67,26 @@ export const CostSettings: React.FC = () => {
     setHourlyRate(laborSettings?.hourlyRate ?? 0);
     setCnyToEgpRate(laborSettings?.cnyToEgpRate ?? 0);
   }, [laborSettings]);
+
+  useEffect(() => {
+    setCostingPolicy(resolveCostingPolicy(systemSettings.costingPolicy));
+  }, [systemSettings.costingPolicy]);
+
+  const policyErrors = validateCostingPolicy(costingPolicy);
+
+  const handleSaveCostingPolicy = async () => {
+    if (policyErrors.length > 0) return;
+    setSavingPolicy(true);
+    try {
+      await mutateAccountingCallable({ operation: 'save_costing_policy', costingPolicy });
+      await fetchSystemSettings();
+      setSavedPolicy(true);
+      const timer = window.setTimeout(() => setSavedPolicy(false), 2000);
+      saveToastTimersRef.current.push(timer);
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
 
   const monthsOfYear = React.useMemo(() => {
     return Array.from({ length: 12 }, (_, idx) => {
@@ -97,6 +151,77 @@ export const CostSettings: React.FC = () => {
       eyebrow="إعدادات التكلفة"
       rangeLabel="إدارة معدل الأجور وإعدادات حساب التكاليف"
     >
+      <OpsDashPanel title="سياسة حساب التكلفة — تحكم مباشر" accent="costs">
+        <div className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="space-y-2 text-sm font-bold text-[var(--color-text-muted)]">
+              النتيجة الرئيسية
+              <select
+                className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm text-[var(--color-text)]"
+                value={costingPolicy.primaryCostView}
+                onChange={(event) => setCostingPolicy((current) => ({
+                  ...current,
+                  primaryCostView: event.target.value as CostingPolicySettings['primaryCostView'],
+                }))}
+              >
+                <option value="legacy_conversion">تكلفة التحويل القديمة</option>
+                <option value="full_manufacturing">التكلفة الصناعية الكاملة</option>
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-bold text-[var(--color-text-muted)]">
+              أساس توزيع تقارير اليوم
+              <select
+                className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm text-[var(--color-text)]"
+                value={costingPolicy.dailyAllocationDriver}
+                onChange={(event) => setCostingPolicy((current) => ({
+                  ...current,
+                  dailyAllocationDriver: event.target.value as CostingPolicySettings['dailyAllocationDriver'],
+                }))}
+              >
+                <option value="work_hours">ساعات التشغيل</option>
+                <option value="quantity">الكمية الجيدة</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {COST_POLICY_FLAGS.map((flag) => (
+              <label key={flag.key} className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={Boolean(costingPolicy[flag.key])}
+                  onChange={(event) => setCostingPolicy((current) => ({
+                    ...current,
+                    [flag.key]: event.target.checked,
+                  }))}
+                />
+                <span>
+                  <strong className="block text-sm text-[var(--color-text)]">{flag.label}</strong>
+                  <small className="mt-1 block text-[11px] leading-5 text-[var(--color-text-muted)]">{flag.hint}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          {policyErrors.length > 0 ? (
+            <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.08)] p-3 text-sm font-bold text-[rgb(var(--color-danger))]">
+              {policyErrors.map((error) => <p key={error}>{error}</p>)}
+            </div>
+          ) : null}
+
+          <div className="flex justify-end">
+            <Button
+              variant="primary"
+              onClick={handleSaveCostingPolicy}
+              disabled={savingPolicy || policyErrors.length > 0}
+            >
+              {savingPolicy ? 'جاري الحفظ...' : savedPolicy ? 'تم الحفظ' : 'حفظ سياسة التكلفة'}
+            </Button>
+          </div>
+        </div>
+      </OpsDashPanel>
+
       <OpsDashPanel title="معدل الأجور بالساعة" accent="costs">
         <div className="space-y-6">
           <div className="flex items-end gap-4 flex-wrap">

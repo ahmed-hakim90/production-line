@@ -255,6 +255,17 @@ export interface ProductionShiftWorkerSnapshot {
 export interface ProductionReport {
   id?: string;
   reportCode?: string;
+  /** Auth user who entered the report; may differ from employeeId for delegated hall reporting. */
+  createdByUid?: string;
+  createdByNameSnapshot?: string;
+  entryMode?: "direct" | "hall_supervisor_delegate";
+  /** V2 background processing marker; absent means a legacy/client-processed report. */
+  processingVersion?: 2;
+  processingState?: "pending" | "processing" | "completed" | "failed";
+  processingStage?: string;
+  processingError?: string;
+  processingAttempts?: number;
+  processingUpdatedAt?: any;
   employeeId: string;
   productId: string;
   /** Immutable catalog label captured when the report is saved. */
@@ -787,7 +798,7 @@ export interface ProductionPlanFollowUp {
 // â”€â”€â”€ Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type WorkOrderStatus =
-  "pending" | "in_progress" | "completed" | "cancelled";
+  "pending" | "in_progress" | "paused" | "completed" | "cancelled";
 export type WorkOrderPauseReason = "manual";
 
 export interface WorkOrderPauseWindow {
@@ -1094,6 +1105,8 @@ export interface CostCenter {
   branchId?: string | null;
   warehouseId?: string | null;
   allowPosting?: boolean;
+  /** Explicit opt-in/out for the production costing engine. Missing means legacy-compatible. */
+  productionCostingEnabled?: boolean;
   /** How this center reaches a cost object; collect_only never reaches production automatically. */
   postingMode?: "direct_assignment" | "driver_allocation" | "collect_only";
   /** Prevents a repair/admin/shared center from entering production unless explicitly configured. */
@@ -1238,8 +1251,33 @@ export interface MonthlyProductionCost {
   fullCostedQty?: number;
   fullCostCoveragePct?: number;
   fullCostStatus?: "missing" | "partial" | "provisional" | "actual";
+  costingStatus?: "provisional" | "actual" | "closed";
+  revision?: number;
+  costingPolicySnapshot?: CostingPolicySettings;
   isClosed: boolean;
   calculatedAt?: any;
+}
+
+export interface CostingPolicySettings {
+  legacyConversionEnabled: boolean;
+  fullManufacturingEnabled: boolean;
+  primaryCostView: "legacy_conversion" | "full_manufacturing";
+  includeDirectLabor: boolean;
+  includeSupervisor: boolean;
+  includeIndirectCenters: boolean;
+  includeDepreciation: boolean;
+  includeActualMaterials: boolean;
+  includePackaging: boolean;
+  allowBomEstimateFallback: boolean;
+  allowLinePercentageAllocation: boolean;
+  allowQuantityAllocation: boolean;
+  dailyAllocationDriver: "work_hours" | "quantity";
+  fallbackToQuantity: boolean;
+  prorateOpenPeriod: boolean;
+  allowProvisionalValues: boolean;
+  requireActualBeforeClose: boolean;
+  requireFullAllocationBeforeClose: boolean;
+  freezeClosedSnapshots: boolean;
 }
 
 // â”€â”€â”€ System Settings (system_settings/{tenantId}) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1789,6 +1827,7 @@ export interface SystemSettings {
   printTemplate: PrintTemplateSettings;
   planSettings: PlanSettings;
   costMonthlyWorkingDays?: Record<string, number>;
+  costingPolicy: CostingPolicySettings;
   branding?: BrandingSettings;
   theme?: ThemeSettings;
   dashboardDisplay?: DashboardDisplaySettings;

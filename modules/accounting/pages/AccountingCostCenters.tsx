@@ -36,7 +36,6 @@ const emptyForm = () => ({
   id: "",
   code: "",
   name: "",
-  type: "direct" as "direct" | "indirect",
   accountingCategory: "other",
   parentId: "",
   allowPosting: true,
@@ -166,8 +165,8 @@ export const AccountingCostCenters: React.FC = () => {
                       <dd>{COST_CENTER_CATEGORY_LABEL[center.accountingCategory || "other"] || "عام"}</dd>
                     </div>
                     <div>
-                      <dt className="text-[10px] text-muted-foreground">الطبيعة</dt>
-                      <dd>{center.type === "indirect" ? "غير مباشر" : "مباشر"}</dd>
+                      <dt className="text-[10px] text-muted-foreground">تكلفة الإنتاج</dt>
+                      <dd>{center.productionCostingEnabled ? "مرتبط" : "غير مرتبط"}</dd>
                     </div>
                     <div>
                       <dt className="text-[10px] text-muted-foreground">الأب</dt>
@@ -192,7 +191,7 @@ export const AccountingCostCenters: React.FC = () => {
                 <th className="erp-th text-start">الكود</th>
                 <th className="erp-th text-start">المركز</th>
                 <th className="erp-th">التصنيف</th>
-                <th className="erp-th">الطبيعة</th>
+                <th className="erp-th">تكلفة الإنتاج</th>
                 <th className="erp-th">المركز الأب</th>
                 <th className="erp-th">الترحيل</th>
                 <th className="erp-th">الحالة</th>
@@ -226,7 +225,7 @@ export const AccountingCostCenters: React.FC = () => {
                         ] || "عام"}
                       </td>
                       <td className="text-center">
-                        {center.type === "indirect" ? "غير مباشر" : "مباشر"}
+                        {center.productionCostingEnabled ? "مرتبط" : "غير مرتبط"}
                       </td>
                       <td className="text-center">{parent?.name || "—"}</td>
                       <td className="text-center">
@@ -249,7 +248,6 @@ export const AccountingCostCenters: React.FC = () => {
                                 id: center.id,
                                 code: center.code || "",
                                 name: center.name,
-                                type: center.type || "direct",
                                 accountingCategory:
                                   center.accountingCategory || "other",
                                 parentId: center.parentId || "",
@@ -340,26 +338,6 @@ export const AccountingCostCenters: React.FC = () => {
                       </SelectItem>
                     ),
                   )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>الطبيعة</Label>
-              <Select
-                value={form.type}
-                onValueChange={(value) =>
-                  setForm((row) => ({
-                    ...row,
-                    type: value as "direct" | "indirect",
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="direct">مباشر</SelectItem>
-                  <SelectItem value="indirect">غير مباشر</SelectItem>
                 </SelectContent>
               </Select>
             </div>

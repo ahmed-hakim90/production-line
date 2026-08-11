@@ -229,6 +229,7 @@ const isQuickActionFormDraftEmpty = (draft: QuickActionFormDraft) => (
 export const QuickAction: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can, isPackagingOnly } = usePermission();
+  const canCreateForAnySupervisor = can('reports.createForAnySupervisor');
   const createReport = useAppStore((s) => s.createReport);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -825,6 +826,7 @@ export const QuickAction: React.FC = () => {
   );
   const isSupervisorReporter = currentEmployee?.level === 2;
   const shouldLockEmployeeToCurrent = Boolean(currentEmployee?.id)
+    && !canCreateForAnySupervisor
     && (isSupervisorReporter || forceInjectionOnly || forcePackagingOnly);
 
   useEffect(() => {
@@ -1182,7 +1184,7 @@ export const QuickAction: React.FC = () => {
   const activeEmployees = employees.filter((s) => s.isActive && s.level === 2);
   const activeWOs = useMemo(
     () => {
-      const activeOnly = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
+      const activeOnly = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'paused');
       if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return activeOnly;
 
       const currentName = (currentEmployee.name || '').trim().toLowerCase();
@@ -1195,14 +1197,16 @@ export const QuickAction: React.FC = () => {
   );
 
   const scopedActiveWOs = useMemo(() => {
-    const selectedSupervisorId = shouldLockEmployeeToCurrent ? currentEmployee?.id : employeeId;
+    const selectedSupervisorId = canCreateForAnySupervisor
+      ? undefined
+      : shouldLockEmployeeToCurrent ? currentEmployee?.id : employeeId;
     const bySupervisor = !selectedSupervisorId
       ? activeWOs
       : activeWOs.filter(
         (wo) => String(wo.supervisorId || '').trim().toLowerCase() === String(selectedSupervisorId).trim().toLowerCase(),
       );
     return bySupervisor.filter((wo) => workOrderMatchesReportType(wo, resolveReportType(reportType)));
-  }, [activeWOs, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId, reportType]);
+  }, [activeWOs, canCreateForAnySupervisor, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId, reportType]);
 
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
@@ -1236,6 +1240,25 @@ export const QuickAction: React.FC = () => {
     const reportProductId = reportType === 'packaging'
       ? validPackagingLines[0].productId
       : productId;
+    const isDelegatedEntry = Boolean(
+      canCreateForAnySupervisor
+      && currentEmployee?.id
+      && employeeId
+      && employeeId !== currentEmployee.id,
+    );
+    if (isDelegatedEntry && !selectedWorkOrder) {
+      showAppToast('error', 'اختر أمر شغل أولاً لإنشاء تقرير بالنيابة عن مشرف الخط.');
+      return;
+    }
+    if (selectedWorkOrder && (
+      !selectedWorkOrder.supervisorId
+      || selectedWorkOrder.supervisorId !== employeeId
+      || selectedWorkOrder.lineId !== lineId
+      || selectedWorkOrder.productId !== reportProductId
+    )) {
+      showAppToast('error', 'بيانات المشرف والخط والمنتج يجب أن تطابق أمر الشغل المختار.');
+      return;
+    }
     if (requireWorkOrder) {
       if (!selectedWorkOrderId || !selectedWorkOrder) {
         showAppToast('error', 'اختر أمر شغل موجّه للمشرف قبل حفظ التقرير.');
@@ -1653,22 +1676,22 @@ export const QuickAction: React.FC = () => {
       {!saved ? (
         <OpsDashPanel title="بيانات التقرير" accent="production">
           {/* Work Order Selector — list is scoped to the report supervisor */}
-          {(reportBehavior.requireWorkOrderOnQuickAction || can('workOrders.view')) && (
+          {(reportBehavior.requireWorkOrderOnQuickAction || can('workOrders.view') || canCreateForAnySupervisor) && (
             <div className="mb-5">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 flex items-center gap-1">
                 <span className="material-icons-round text-sm text-primary">assignment</span>
-                {reportBehavior.requireWorkOrderOnQuickAction
+                {reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor
                   ? 'أمر شغل موجّه للمشرف (إلزامي)'
                   : 'أمر شغل (اختياري)'}
-                {reportBehavior.requireWorkOrderOnQuickAction && (
+                {(reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor) && (
                   <span className="text-[rgb(var(--color-danger))]" aria-hidden>*</span>
                 )}
               </label>
               <Select
-                value={selectedWorkOrderId || (reportBehavior.requireWorkOrderOnQuickAction ? undefined : 'none')}
+                value={selectedWorkOrderId || ((reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor) ? undefined : 'none')}
                 onValueChange={(value) => {
                   if (value === 'none') {
-                    if (reportBehavior.requireWorkOrderOnQuickAction) return;
+                    if (reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor) return;
                     setSelectedWorkOrderId('');
                     return;
                   }
@@ -1679,14 +1702,14 @@ export const QuickAction: React.FC = () => {
                 <SelectTrigger className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
                   <SelectValue
                     placeholder={
-                      reportBehavior.requireWorkOrderOnQuickAction
+                      reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor
                         ? 'اختر أمر شغل موجّه للمشرف'
                         : 'اختر أمر شغل لتعبئة البيانات تلقائياً'
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {!reportBehavior.requireWorkOrderOnQuickAction && (
+                  {!reportBehavior.requireWorkOrderOnQuickAction && !canCreateForAnySupervisor && (
                     <SelectItem value="none">بدون أمر شغل</SelectItem>
                   )}
                   {scopedActiveWOs.map((wo) => {
@@ -1752,11 +1775,11 @@ export const QuickAction: React.FC = () => {
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">
                 {reportType === 'packaging' ? 'مشرف التغليف *' : 'المشرف *'}
               </label>
-              {shouldLockEmployeeToCurrent && currentEmployee ? (
+              {(shouldLockEmployeeToCurrent && currentEmployee) || (canCreateForAnySupervisor && selectedWorkOrderId) ? (
                 <input
                   type="text"
                   readOnly
-                  value={currentEmployee.name}
+                  value={employees.find((row) => row.id === employeeId)?.name || currentEmployee?.name || '—'}
                   className="w-full px-4 py-2.5 bg-[var(--color-surface-hover)]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
@@ -1777,6 +1800,7 @@ export const QuickAction: React.FC = () => {
                 options={selectableLines.map((l) => ({ value: l.id!, label: l.name }))}
                 value={lineId}
                 onChange={setLineId}
+                disabled={canCreateForAnySupervisor && Boolean(selectedWorkOrderId)}
               />
             </div>
             <div>
@@ -1861,6 +1885,7 @@ export const QuickAction: React.FC = () => {
                           placeholder="اختر المنتج"
                           options={selectableProducts}
                           value={row.productId}
+                          disabled={canCreateForAnySupervisor && Boolean(selectedWorkOrderId)}
                           onChange={(v) => {
                             setPackagingLines((prev) => {
                               const next = [...prev];
@@ -1990,6 +2015,7 @@ export const QuickAction: React.FC = () => {
                     options={selectableProducts}
                     value={productId}
                     onChange={setProductId}
+                    disabled={canCreateForAnySupervisor && Boolean(selectedWorkOrderId)}
                   />
                 </div>
                 <div>

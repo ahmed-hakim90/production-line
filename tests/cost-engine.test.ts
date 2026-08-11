@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { computeProductionCostEngine } from '../utils/costCalculations';
-import type { Asset, AssetDepreciation, CostAllocation, CostCenter, CostCenterValue, ProductionReport } from '../types';
+import type { Asset, AssetDepreciation, CostAllocation, CostCenter, CostCenterValue, CostingPolicySettings, ProductionReport } from '../types';
 
 const month = '2026-05';
 const workingDaysByMonth = { [month]: 20 };
@@ -30,6 +30,7 @@ function runEngine(args: {
   assetDepreciations?: AssetDepreciation[];
   productCategoryById?: Map<string, string>;
   supervisorHourlyRates?: Map<string, number>;
+  costingPolicy?: Partial<CostingPolicySettings>;
 }) {
   return computeProductionCostEngine({
     reports: args.reports,
@@ -43,8 +44,51 @@ function runEngine(args: {
       productCategoryById: args.productCategoryById,
       supervisorHourlyRates: args.supervisorHourlyRates,
       workingDaysByMonth,
+      costingPolicy: args.costingPolicy,
     },
   });
+}
+
+// Golden compatibility: the default policy must retain the pre-merge conversion formula.
+{
+  const center = indirectCenter('cc-golden');
+  const result = runEngine({
+    hourlyRate: 10,
+    reports: [report({ id: 'golden', quantityProduced: 100, workersCount: 2, workHours: 5 })],
+    costCenters: [center],
+    costCenterValues: [value('cc-golden', 2000)],
+    costAllocations: [allocation('cc-golden')],
+    supervisorHourlyRates: new Map([['sup-1', 50]]),
+  });
+  assert.equal(result.byProduct.p1.laborCost, 100);
+  assert.equal(result.byProduct.p1.indirectCost, 350);
+  assert.equal(result.byProduct.p1.totalCost, 450);
+}
+
+{
+  const center = { ...indirectCenter('cc-disabled'), productionCostingEnabled: false };
+  const result = runEngine({
+    hourlyRate: 10,
+    reports: [report({ id: 'flags', workersCount: 2, workHours: 5 })],
+    costCenters: [center],
+    costCenterValues: [value('cc-disabled', 2000)],
+    costAllocations: [allocation('cc-disabled')],
+    supervisorHourlyRates: new Map([['sup-1', 50]]),
+    costingPolicy: { includeDirectLabor: false, includeSupervisor: false },
+  });
+  assert.equal(result.byProduct.p1.totalCost, 0);
+}
+
+{
+  const center = indirectCenter('cc-no-fallback');
+  const result = runEngine({
+    reports: [report({ id: 'no-fallback', quantityProduced: 100, workHours: 0 })],
+    costCenters: [center],
+    costCenterValues: [value('cc-no-fallback', 2000)],
+    costAllocations: [allocation('cc-no-fallback')],
+    costingPolicy: { dailyAllocationDriver: 'work_hours', fallbackToQuantity: false },
+  });
+  assert.equal(result.byProduct.p1.indirectCost, 0);
 }
 
 function indirectCenter(id: string, allocationBasis: CostCenter['allocationBasis'] = 'line_percentage'): CostCenter {

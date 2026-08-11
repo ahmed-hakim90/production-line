@@ -11,6 +11,11 @@ import {
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import {
+  accountingPostingDecision,
+  queuePendingAccounting,
+  validateAutomaticPostingMaster,
+} from './accountingPostingPolicy.js';
+import {
   assertActorWarehousesAllowed,
   resolveBoundInventoryWarehouseId,
 } from './inventoryWarehouseScope.js';
@@ -777,6 +782,19 @@ async function postIssueMovements(params: {
   issueId: string;
 }): Promise<{ referenceNo: string; issue: IssueDoc; changed: boolean }> {
   const { actor, issueId } = params;
+  const postingAt = toIsoNow();
+  const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairCogs', postingAt);
+  const initialIssue = await db.collection(ISSUES_COLLECTION).doc(issueId).get();
+  const initialIssueData = initialIssue.data() as IssueDoc | undefined;
+  if (initialIssueData?.jobId && initialIssueData.branchId) {
+    const branch = await db.collection(BRANCHES_COLLECTION).doc(initialIssueData.branchId).get();
+    const accounts = branch.data()?.accountingAccounts as Record<string, unknown> | undefined;
+    await validateAutomaticPostingMaster({
+      tenantId: actor.tenantId,
+      accountCodes: [String(accounts?.partsCogs || ''), String(accounts?.partsInventory || '')],
+      costCenterId: String(branch.data()?.costCenterId || ''),
+    });
+  }
   return db.runTransaction(async (t) => {
     const issueRef = db.collection(ISSUES_COLLECTION).doc(issueId);
     const issueSnap = await t.get(issueRef);
@@ -1026,17 +1044,16 @@ async function postIssueMovements(params: {
       { merge: true },
     );
 
+    const issueCost = roundMoney(lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0));
     t.update(issueRef, {
       status: 'issued',
       issuedAt: now,
       issuedBy: actor.displayName,
       issuedByUserId: actor.uid,
-      totalCostSnapshot: roundMoney(
-        lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0),
-      ),
+      totalCostSnapshot: issueCost,
+      accountingStatus: !jobId || issueCost <= 0 || postingDecision.enabled ? 'posted' : 'pending_accounting',
     });
 
-    const issueCost = roundMoney(lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0));
     if (jobId && cogsJournalRef && !cogsJournalSnap?.exists && issueCost > 0) {
       const branch = branchSnap?.data() as Record<string, unknown> | undefined;
       const accounts = branch?.accountingAccounts as Record<string, unknown> | undefined;
@@ -1046,24 +1063,33 @@ async function postIssueMovements(params: {
       if (!costCenterId || !cogsCode || !inventoryCode) {
         throw new HttpsError('failed-precondition', 'أكمل مركز التكلفة وحسابات مخزون وتكلفة قطع الغيار للفرع.');
       }
-      t.create(cogsJournalRef, {
-        tenantId: actor.tenantId,
-        branchId: current.branchId,
-        costCenterId,
-        source: 'repair_parts_issue',
-        sourceId: issueId,
-        referenceNo: current.referenceNo,
-        status: 'posted',
-        postedAt: now,
-        createdBy: actor.uid,
-        createdByName: actor.displayName,
-        totalDebit: issueCost,
-        totalCredit: issueCost,
-        lines: [
-          { accountCode: cogsCode, accountName: 'تكلفة قطع الغيار المباعة', debit: issueCost, credit: 0, costCenterId },
-          { accountCode: inventoryCode, accountName: 'مخزون قطع غيار الصيانة', debit: 0, credit: issueCost, costCenterId },
-        ],
-      });
+      if (postingDecision.enabled) {
+        t.create(cogsJournalRef, {
+          tenantId: actor.tenantId,
+          branchId: current.branchId,
+          costCenterId,
+          source: 'repair_parts_issue',
+          sourceId: issueId,
+          referenceNo: current.referenceNo,
+          status: 'posted',
+          postedAt: now,
+          createdBy: actor.uid,
+          createdByName: actor.displayName,
+          totalDebit: issueCost,
+          totalCredit: issueCost,
+          lines: [
+            { accountCode: cogsCode, accountName: 'تكلفة قطع الغيار المباعة', debit: issueCost, credit: 0, costCenterId },
+            { accountCode: inventoryCode, accountName: 'مخزون قطع غيار الصيانة', debit: 0, credit: issueCost, costCenterId },
+          ],
+        });
+      } else {
+        queuePendingAccounting(t, {
+          tenantId: actor.tenantId, source: 'repair_parts_issue', sourceId: issueId,
+          branchId: current.branchId, costCenterId, amount: issueCost,
+          date: now, reason: postingDecision.reason,
+          payload: { referenceNo: current.referenceNo, jobId },
+        });
+      }
     }
 
     if (jobRef && jobSnap?.exists) {

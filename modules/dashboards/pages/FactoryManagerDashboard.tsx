@@ -239,12 +239,12 @@ export const FactoryManagerDashboard: React.FC = () => {
   }, []);
 
   const activeWorkOrders = useMemo(
-    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress'),
+    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress' || wo.status === 'paused'),
     [workOrders],
   );
 
   const qualityKpis = useMemo(() => {
-    const active = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed');
+    const active = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'paused' || w.status === 'completed');
     const totals = active.reduce(
       (acc, wo) => {
         const summary = wo.qualitySummary;

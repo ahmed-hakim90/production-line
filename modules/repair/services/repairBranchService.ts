@@ -1,17 +1,14 @@
 import {
-  addDoc,
   arrayRemove,
   arrayUnion,
-  collection,
   getDoc,
   getDocs,
   orderBy,
   doc,
   updateDoc,
 } from 'firebase/firestore';
-import { db, deleteRepairBranchCascadeCallable, isConfigured } from '../../auth/services/firebase';
+import { db, createRepairBranchProvisionedCallable, deleteRepairBranchCascadeCallable, isConfigured } from '../../auth/services/firebase';
 import { tenantQuery } from '../../../lib/tenantFirestore';
-import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { REPAIR_BRANCHES_COLLECTION } from '../collections';
 import type { RepairBranch } from '../types';
 import { warehouseService } from '../../inventory/services/warehouseService';
@@ -20,6 +17,7 @@ import {
   otherMainBranchIds,
   repairMaintenanceWarehouseName,
 } from '../lib/repairBranchMain';
+import { normalizeRepairBranchCreateInput, type RepairBranchCreateInput } from '../lib/repairBranchProvision';
 
 const nowIso = () => new Date().toISOString();
 
@@ -54,50 +52,13 @@ export const repairBranchService = {
     }
   },
 
-  async create(input: Omit<RepairBranch, 'id' | 'createdAt' | 'tenantId'>): Promise<string | null> {
+  async create(input: RepairBranchCreateInput): Promise<string | null> {
     if (!isConfigured) return null;
-    const name = String(input.name || '').trim();
-    if (!name) throw new Error('اسم الفرع مطلوب.');
-    if (!String(input.managerEmployeeId || '').trim()) {
-      throw new Error('اختر المسؤول عن الفرع قبل الحفظ.');
-    }
-
-    let warehouseId = String(input.warehouseId || '').trim();
-    if (!warehouseId) throw new Error('اختر مخزن مركز صيانة قبل إضافة الفرع.');
-
-    const warehouse = await warehouseService.getById(warehouseId);
-    if (!warehouse?.id) throw new Error('المخزن المختار غير موجود.');
-    if (!isRepairCenterWarehouse(warehouse)) {
-      throw new Error('اختر مخزنًا بدور «مخزن مركز صيانة».');
-    }
-    const taken = await this.findByWarehouseId(warehouseId);
-    if (taken) throw new Error('هذا المخزن مرتبط بفرع صيانة آخر.');
-    const warehouseCode = String(warehouse.code || '').trim();
-    if ((warehouse.warehouseRole || 'general') !== 'maintenance_center') {
-      await warehouseService.update(warehouseId, { warehouseRole: 'maintenance_center' });
-    }
-
-    if (input.isMain) {
-      await clearOtherMainBranches(null);
-    }
-
-    const at = nowIso();
-    const ref = await addDoc(collection(db, REPAIR_BRANCHES_COLLECTION), {
-      ...input,
-      name,
-      phone: String(input.phone || '').trim(),
-      address: String(input.address || '').trim(),
-      isMain: Boolean(input.isMain),
-      warehouseId,
-      warehouseCode,
-      technicianIds: Array.isArray(input.technicianIds) ? input.technicianIds : [],
-      tenantId: getCurrentTenantId(),
-      createdAt: at,
-      updatedAt: at,
-    });
-    const { repairCustomerOperationsService } = await import('./repairCustomerOperationsService');
-    await repairCustomerOperationsService.ensureWarehouses(ref.id);
-    return ref.id;
+    const payload = normalizeRepairBranchCreateInput(input);
+    const result = await createRepairBranchProvisionedCallable(payload);
+    const branchId = String(result.branchId || '').trim();
+    if (!branchId) throw new Error('تعذر إنشاء الفرع.');
+    return branchId;
   },
 
   async findByWarehouseId(warehouseId: string): Promise<RepairBranch | null> {

@@ -1248,8 +1248,8 @@ export const LineDetails: React.FC = () => {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="font-mono text-xs font-bold text-primary">{wo.workOrderNumber}</span>
-                      <Badge variant={wo.status === 'in_progress' ? 'warning' : 'info'}>
-                        {wo.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'}
+                      <Badge variant={wo.status === 'in_progress' ? 'warning' : wo.status === 'paused' ? 'neutral' : wo.status === 'completed' ? 'success' : 'info'}>
+                        {wo.status === 'in_progress' ? 'شغال' : wo.status === 'paused' ? 'متوقف' : wo.status === 'completed' ? 'مكتمل' : wo.status === 'cancelled' ? 'ملغي' : 'مش شغال'}
                       </Badge>
                     </div>
                     <p className="text-sm font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>

@@ -47,6 +47,7 @@ export const GlobalCostCenterModal: React.FC = () => {
     employeeIds: [] as string[],
     employeeDepartmentIds: [] as string[],
     manualAdjustment: 0,
+    productionCostingEnabled: true,
     isActive: true,
   });
   const [saving, setSaving] = useState(false);
@@ -73,6 +74,7 @@ export const GlobalCostCenterModal: React.FC = () => {
         employeeIds: cc.employeeIds || [],
         employeeDepartmentIds: cc.employeeDepartmentIds || [],
         manualAdjustment: Number(cc.manualAdjustment || 0),
+        productionCostingEnabled: cc.productionCostingEnabled !== false,
         isActive: cc.isActive,
       });
     } else {
@@ -91,6 +93,7 @@ export const GlobalCostCenterModal: React.FC = () => {
         employeeIds: [],
         employeeDepartmentIds: [],
         manualAdjustment: 0,
+        productionCostingEnabled: true,
         isActive: true,
       });
     }
@@ -233,8 +236,12 @@ export const GlobalCostCenterModal: React.FC = () => {
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              disabled={Boolean(editingCostCenter)}
               placeholder={t('modalManager.costCenter.namePlaceholder')}
             />
+            {editingCostCenter ? (
+              <p className="text-xs text-[var(--color-text-muted)]">الاسم والحالة العامة يُعدّلان من واجهة مراكز الحسابات.</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.typeRequired')}</label>
@@ -478,11 +485,11 @@ export const GlobalCostCenterModal: React.FC = () => {
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
-              checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              checked={form.productionCostingEnabled}
+              onChange={(e) => setForm({ ...form, productionCostingEnabled: e.target.checked })}
               className="w-5 h-5 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
             />
-            <span className="text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.active')}</span>
+            <span className="text-sm font-bold text-[var(--color-text-muted)]">يدخل في محرك تكلفة الإنتاج</span>
           </label>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">

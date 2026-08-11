@@ -5,6 +5,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getDb } from './adminApp.js';
 import { canWritePortalPin, CUSTOMER_PORTAL_PIN_DIGITS, CUSTOMER_PORTAL_SESSION_MS, nextPortalCredentialVersion, portalSessionMatchesCredential, } from './customerPortalCredentialPolicy.js';
 import { resolveUnrepairableReason } from './repairUnrepairableReasonPolicy.js';
+import { allocateRepairWarehouseSequence, formatRepairWarehouseCode, parseRepairWarehouseSequence, } from './repairWarehouseCodes.js';
 const db = getDb();
 const JOBS = 'repair_jobs';
 const BRANCHES = 'repair_branches';
@@ -100,7 +101,7 @@ function requireBranch(actor, branchId, allowAll = false) {
     if (!actor.branchIds.includes(branchId))
         throw new HttpsError('permission-denied', 'لا يمكنك الوصول إلى مركز آخر.');
 }
-export async function ensureRepairCustomerWarehouses(tenantId, branchId) {
+export async function ensureRepairCustomerWarehouses(tenantId, branchId, options) {
     const branchRef = db.collection(BRANCHES).doc(branchId);
     const branchSnap = await branchRef.get();
     if (!branchSnap.exists)
@@ -109,34 +110,50 @@ export async function ensureRepairCustomerWarehouses(tenantId, branchId) {
     if (text(branch.tenantId, 128) !== tenantId)
         throw new HttpsError('permission-denied', 'المركز خارج الشركة.');
     const branchName = text(branch.name, 160) || 'مركز';
-    const suffix = safeId(text(branch.warehouseCode || branchId, 40)).toUpperCase();
     const custodyWarehouseId = text(branch.custodyWarehouseId, 128) || `repair-custody-${branchId}`;
     const unrepairableWarehouseId = text(branch.unrepairableWarehouseId, 128) || `repair-unrepairable-${branchId}`;
+    const [custodySnap, unrepairableSnap] = await Promise.all([
+        db.collection(WAREHOUSES).doc(custodyWarehouseId).get(),
+        db.collection(WAREHOUSES).doc(unrepairableWarehouseId).get(),
+    ]);
+    const existingCustodyCode = text(custodySnap.data()?.code, 64) || text(branch.custodyWarehouseCode, 64);
+    const existingUnrepairableCode = text(unrepairableSnap.data()?.code, 64) || text(branch.unrepairableWarehouseCode, 64);
+    let sequence = Number(options?.sequence || 0) > 0
+        ? Math.floor(Number(options?.sequence))
+        : parseRepairWarehouseSequence(text(branch.warehouseCode, 64))
+            || parseRepairWarehouseSequence(existingCustodyCode)
+            || parseRepairWarehouseSequence(existingUnrepairableCode)
+            || 0;
+    if ((!existingCustodyCode || !existingUnrepairableCode) && sequence <= 0) {
+        sequence = await allocateRepairWarehouseSequence(tenantId);
+    }
+    const custodyCode = existingCustodyCode || formatRepairWarehouseCode('RCW', sequence || 1);
+    const unrepairableCode = existingUnrepairableCode || formatRepairWarehouseCode('RUW', sequence || 1);
     const at = nowIso();
     const batch = db.batch();
     batch.set(db.collection(WAREHOUSES).doc(custodyWarehouseId), {
         tenantId,
         name: `عهدة أجهزة العملاء - ${branchName}`,
-        code: `RCW-${suffix}`.slice(0, 64),
+        code: custodyCode,
         warehouseRole: 'repair_customer_custody',
         isActive: true,
-        createdAt: at,
+        createdAt: custodySnap.exists ? custodySnap.data()?.createdAt || at : at,
         updatedAt: at,
     }, { merge: true });
     batch.set(db.collection(WAREHOUSES).doc(unrepairableWarehouseId), {
         tenantId,
         name: `غير قابل للإصلاح - ${branchName}`,
-        code: `RUW-${suffix}`.slice(0, 64),
+        code: unrepairableCode,
         warehouseRole: 'repair_unrepairable',
         isActive: true,
-        createdAt: at,
+        createdAt: unrepairableSnap.exists ? unrepairableSnap.data()?.createdAt || at : at,
         updatedAt: at,
     }, { merge: true });
     batch.set(branchRef, {
         custodyWarehouseId,
-        custodyWarehouseCode: `RCW-${suffix}`.slice(0, 64),
+        custodyWarehouseCode: custodyCode,
         unrepairableWarehouseId,
-        unrepairableWarehouseCode: `RUW-${suffix}`.slice(0, 64),
+        unrepairableWarehouseCode: unrepairableCode,
         updatedAt: at,
     }, { merge: true });
     await batch.commit();

@@ -585,8 +585,7 @@ service cloud.firestore {
         'cost_deviation_analysis',
         'line_worker_assignments', 'raw_materials',
         'component_scrap_records',
-        'cost_centers', 'cost_center_values',
-        'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations',
+        'labor_settings', 'assets', 'asset_depreciations',
         'activity_logs', 'departments', 'job_positions', 'shifts', 'hr_settings',
         'penalty_rules', 'late_rules', 'allowance_types', 'attendance_raw_logs', 'attendance_logs',
         'attendance_records', 'attendance_monthly_summaries', 'attendance_import_history',
@@ -930,19 +929,86 @@ service cloud.firestore {
 
     // Same tenant isolation as pl_isErpBusinessCollection writes, but NOT listed there so
     // generic delete (open on many collections) does not apply to financial snapshots.
+    function pl_costPeriodIsOpen(tenantId, month) {
+      return !exists(
+        /databases/$(database)/documents/cost_period_closures/$(tenantId + '__' + month)
+      );
+    }
+
     match /monthly_production_costs/{docId} {
       allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
-      allow create: if pl_isActiveUser() && pl_sameTenantOrLegacyWrite();
-      allow update: if pl_isActiveUser() && pl_sameTenantOrLegacyUpdate();
+      allow create: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyWrite()
+        && pl_costPeriodIsOpen(request.resource.data.tenantId, request.resource.data.month);
+      allow update: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyUpdate()
+        && request.resource.data.month == resource.data.month
+        && pl_costPeriodIsOpen(resource.data.tenantId, resource.data.month);
       allow delete: if false;
     }
 
     // Alias for requested monthly_costs naming.
     match /monthly_costs/{docId} {
       allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
-      allow create: if pl_isActiveUser() && pl_sameTenantOrLegacyWrite();
-      allow update: if pl_isActiveUser() && pl_sameTenantOrLegacyUpdate();
+      allow create: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyWrite()
+        && pl_costPeriodIsOpen(request.resource.data.tenantId, request.resource.data.month);
+      allow update: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyUpdate()
+        && request.resource.data.month == resource.data.month
+        && pl_costPeriodIsOpen(resource.data.tenantId, resource.data.month);
       allow delete: if false;
+    }
+
+    match /cost_centers/{docId} {
+      allow read: if (
+        pl_hasErpPermission('costs.view')
+        || pl_hasErpPermission('costs.manage')
+        || pl_hasErpPermission('accounting.view')
+        || pl_hasErpPermission('accounting.settings.manage')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    match /cost_center_values/{docId} {
+      allow read: if (
+        pl_hasErpPermission('costs.view') || pl_hasErpPermission('costs.manage')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyWrite()
+        && pl_costPeriodIsOpen(request.resource.data.tenantId, request.resource.data.month);
+      allow update: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyUpdate()
+        && request.resource.data.month == resource.data.month
+        && pl_costPeriodIsOpen(resource.data.tenantId, resource.data.month);
+      allow delete: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyRead()
+        && pl_costPeriodIsOpen(resource.data.tenantId, resource.data.month);
+    }
+
+    match /cost_allocations/{docId} {
+      allow read: if (
+        pl_hasErpPermission('costs.view') || pl_hasErpPermission('costs.manage')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyWrite()
+        && pl_costPeriodIsOpen(request.resource.data.tenantId, request.resource.data.month);
+      allow update: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyUpdate()
+        && request.resource.data.month == resource.data.month
+        && pl_costPeriodIsOpen(resource.data.tenantId, resource.data.month);
+      allow delete: if pl_hasErpPermission('costs.manage')
+        && pl_sameTenantOrLegacyRead()
+        && pl_costPeriodIsOpen(resource.data.tenantId, resource.data.month);
+    }
+
+    match /cost_period_closures/{docId} {
+      allow read: if (
+        pl_hasErpPermission('costs.view')
+        || pl_hasErpPermission('costs.manage')
+        || pl_hasErpPermission('accounting.view')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
     }
 
     match /user_presence/{userId} {
@@ -1131,6 +1197,7 @@ service cloud.firestore {
     match /accounting_journal_entries/{id} {
       allow read: if (
         pl_hasErpPermission('accounting.view')
+        || pl_hasErpPermission('accounting.settings.manage')
         || pl_hasErpPermission('accounting.journals.post')
         || pl_hasErpPermission('repair.finance.view')
         || pl_hasErpPermission('repair.accounting.manage')
@@ -1145,6 +1212,25 @@ service cloud.firestore {
 
     match /accounting_periods/{id} {
       allow read: if pl_hasErpPermission('accounting.view') && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    match /accounting_posting_outbox/{id} {
+      allow read: if (
+        pl_hasErpPermission('accounting.view')
+        || pl_hasErpPermission('accounting.settings.manage')
+        || pl_hasErpPermission('accounting.journals.post')
+        || pl_hasErpPermission('repair.finance.view')
+        || pl_hasErpPermission('repair.accounting.manage')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    match /accounting_audit_log/{id} {
+      allow read: if (
+        pl_hasErpPermission('accounting.view')
+        || pl_hasErpPermission('accounting.settings.manage')
+      ) && pl_sameTenantOrLegacyRead();
       allow create, update, delete: if false;
     }
 

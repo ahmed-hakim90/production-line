@@ -35,7 +35,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Search, Filter, SlidersHorizontal, Zap, Printer } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { SupervisorLineAssignment } from './SupervisorLineAssignment';
 
 // Performance Score
@@ -1193,7 +1192,11 @@ export const Supervisors: React.FC = () => {
     <ModuleOpsPageShell
       className="erpnext-supervisors"
       eyebrow="المشرفين"
-      rangeLabel="لوحة إدارة مشرفي خطوط الإنتاج وتحليل الأداء"
+      rangeLabel={
+        activeTab === 'assignments'
+          ? 'تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط'
+          : 'لوحة إدارة مشرفي خطوط الإنتاج وتحليل الأداء'
+      }
       actions={activeTab === 'list' && hasActiveFilters ? (
         <Button type="button" variant="secondary" onClick={clearAllFilters}>
           مسح الفلاتر
@@ -1203,31 +1206,26 @@ export const Supervisors: React.FC = () => {
       {supervisorTabs.length > 1 && (
         <OpsDashPanel accent="production">
           <div className="flex flex-wrap gap-2">
-          {supervisorTabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleTabChange(tab.id)}
-                className={cn(
-                  'inline-flex items-center gap-2 rounded-[var(--border-radius-base)] px-4 py-2 text-sm font-bold transition-all',
-                  isActive
-                    ? 'bg-primary text-white shadow-sm'
-                    : 'text-[var(--color-text-muted)] hover:bg-[var(--color-muted)] hover:text-[var(--color-text)]',
-                )}
-              >
-                <span className="material-icons-round text-lg">{tab.icon}</span>
-                {tab.label}
-              </button>
-            );
-          })}
+            {supervisorTabs.map((tab) => {
+              const isActive = activeTab === tab.id;
+              return (
+                <Button
+                  key={tab.id}
+                  type="button"
+                  variant={isActive ? 'primary' : 'outline'}
+                  onClick={() => handleTabChange(tab.id)}
+                >
+                  <span className="material-icons-round text-sm">{tab.icon}</span>
+                  {tab.label}
+                </Button>
+              );
+            })}
           </div>
         </OpsDashPanel>
       )}
 
       {activeTab === 'assignments' ? (
-        <SupervisorLineAssignment />
+        <SupervisorLineAssignment embedded />
       ) : (
         <>
       {/* Stat Cards (clickable) */}

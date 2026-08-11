@@ -439,7 +439,7 @@ export const buildProductionLines = (
     const lineReports = todayReports.filter((r) => r.lineId === line.id);
 
     const activeWO = workOrders.find(
-      (w) => w.lineId === line.id && (w.status === 'in_progress' || w.status === 'pending')
+      (w) => w.lineId === line.id && (w.status === 'in_progress' || w.status === 'pending' || w.status === 'paused')
     );
 
     const achievement = activeWO

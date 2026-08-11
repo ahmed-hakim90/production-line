@@ -230,7 +230,7 @@ export const ProductionIssueRequests: React.FC = () => {
   }, [openPlans]);
 
   const openWorkOrders = useMemo(
-    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress'),
+    () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress' || wo.status === 'paused'),
     [workOrders],
   );
 

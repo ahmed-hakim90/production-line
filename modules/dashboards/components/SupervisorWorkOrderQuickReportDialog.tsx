@@ -39,7 +39,8 @@ import type { ProductionReport, ProductionReportShift, WorkOrder } from '@/types
 type Props = {
   open: boolean;
   workOrder: WorkOrder | null;
-  supervisorEmployeeId: string;
+  reportSupervisorEmployeeId: string;
+  supervisorName?: string;
   productName?: string;
   lineName?: string;
   onClose: () => void;
@@ -52,7 +53,8 @@ const INPUT_CLASS =
 export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
   open,
   workOrder,
-  supervisorEmployeeId,
+  reportSupervisorEmployeeId,
+  supervisorName,
   productName,
   lineName,
   onClose,
@@ -99,7 +101,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
     try {
       const assignments = await lineAssignmentService.getByLineAndDate(wo.lineId, reportDate);
       if (hasDistributedLineLabor(assignments.length)) {
-        const count = countOperatorsFromAssignments(assignments, supervisorEmployeeId);
+        const count = countOperatorsFromAssignments(assignments, reportSupervisorEmployeeId);
         setDistributed(true);
         setDistributedCount(count);
         setWorkers(String(count));
@@ -109,7 +111,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
     } finally {
       setLoadingWorkers(false);
     }
-  }, [lines, reportDate, supervisorEmployeeId]);
+  }, [lines, reportDate, reportSupervisorEmployeeId]);
 
   useEffect(() => {
     if (!open || !workOrder) return;
@@ -155,7 +157,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
         const fromAssignments = buildWorkersCountAutoFillFromAssignments(
           assignments,
           { reportType, isPackagingLine },
-          supervisorEmployeeId,
+          reportSupervisorEmployeeId,
         );
         if (sumWorkersCountPatch(fromAssignments) > 0) {
           workersPatch = fromAssignments;
@@ -166,7 +168,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
     }
 
     const payload: Omit<ProductionReport, 'id' | 'createdAt'> = {
-      employeeId: supervisorEmployeeId || workOrder.supervisorId,
+      employeeId: reportSupervisorEmployeeId || workOrder.supervisorId,
       productId: workOrder.productId,
       lineId: workOrder.lineId,
       date: reportDate,
@@ -217,7 +219,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
           <DialogTitle>تقرير أمر شغل</DialogTitle>
           <DialogDescription>
             {workOrder
-              ? `#${workOrder.workOrderNumber} · ${productName || '—'} · ${lineName || '—'}`
+              ? `#${workOrder.workOrderNumber} · ${productName || '—'} · ${lineName || '—'} · المشرف: ${supervisorName || '—'}`
               : 'أدخل كمية اليوم وساعات العمل وعدد العمالة.'}
           </DialogDescription>
         </DialogHeader>

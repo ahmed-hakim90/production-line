@@ -33,6 +33,10 @@ import {
   loadWorkOrderCardMetricsData,
   type WorkOrderCardMetricsData,
 } from '../utils/workOrderCardMetrics';
+import {
+  deriveWorkOrderStatusFromProduced,
+  lastProducingReportDateFromReports,
+} from '../../production/utils/workOrderReportLinking';
 import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import { SearchableSelect } from '@/components/UI';
 import { useActiveRoutingPlansQuery } from '../../production/routing/hooks/routingQueries';
@@ -188,7 +192,13 @@ export const EmployeeDashboard: React.FC = () => {
     [activeRoutingPlans, selectedRoutingPlanId],
   );
 
-  const STATUS_LABELS: Record<string, string> = { pending: 'قيد الانتظار', in_progress: 'قيد التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
+  const STATUS_LABELS = {
+    pending: 'مش شغال',
+    in_progress: 'شغال',
+    paused: 'متوقف',
+    completed: 'مكتمل',
+    cancelled: 'ملغي',
+  };
   const resolveWorkOrderProducedNow = useCallback((wo: WorkOrder): number => {
     const producedFromOrder = Number(wo.producedQuantity || 0);
     const producedFromScans = Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0);
@@ -254,7 +264,7 @@ export const EmployeeDashboard: React.FC = () => {
     if (!employee) return [];
     const employeeName = (employee.name || '').trim().toLowerCase();
     return workOrders.filter((wo) => {
-      if (wo.status !== 'pending' && wo.status !== 'in_progress') return false;
+      if (wo.status !== 'pending' && wo.status !== 'in_progress' && wo.status !== 'paused') return false;
       if (wo.supervisorId === employee.id) return true;
       return (wo.supervisorId || '').trim().toLowerCase() === employeeName;
     });
@@ -1075,8 +1085,15 @@ export const EmployeeDashboard: React.FC = () => {
                         const line = _rawLines.find((l) => l.id === wo.lineId);
                         const isSupervisor = wo.supervisorId === employee.id;
                         const producedNow = resolveWorkOrderProducedNow(wo);
-                        const reportCount = (wo.id ? workOrderCardMetricsData.reportsByWorkOrderId[wo.id]?.length : 0) || 0;
-                        const effectiveStatus = wo.status === 'in_progress' && reportCount === 0 ? 'pending' : wo.status;
+                        const linkedReports = (wo.id ? workOrderCardMetricsData.reportsByWorkOrderId[wo.id] : undefined) || [];
+                        const reportCount = linkedReports.length;
+                        const effectiveStatus = deriveWorkOrderStatusFromProduced(
+                          producedNow,
+                          Number(wo.quantity || 0),
+                          wo.status,
+                          lastProducingReportDateFromReports(linkedReports),
+                          getTodayDateString(),
+                        );
                         const prog = wo.quantity > 0 ? Math.min((producedNow / wo.quantity) * 100, 100) : 0;
                         const remaining = Math.max(wo.quantity - producedNow, 0);
                         const metrics = getWorkOrderCardMetrics(wo, product, workOrderCardMetricsData, {

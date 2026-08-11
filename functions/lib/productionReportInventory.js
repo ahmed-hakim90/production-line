@@ -16,6 +16,8 @@ const USERS = 'users';
 const ROLES = 'roles';
 const REPORTS = 'production_reports';
 const PRODUCTS = 'products';
+const MATERIALS = 'materials';
+const RAW_MATERIALS = 'raw_materials';
 const ORDERS = 'production_issue_orders';
 const STOCK_ITEMS = 'stock_items';
 const STOCK_TX = 'stock_transactions';
@@ -657,11 +659,170 @@ async function finalizeReverseOperation(actor, reportId) {
         }
     });
 }
-export const applyProductionReportInventory = onCall({
-    region: 'us-central1',
-    memory: '512MiB',
-}, async (request) => {
-    const uid = requireAuth(request);
+async function resolveMaterialMovementLine(actor, id, fallbackName = '') {
+    const itemId = String(id || '').trim();
+    if (!itemId)
+        return null;
+    const [materialSnap, rawSnap] = await Promise.all([
+        db.collection(MATERIALS).doc(itemId).get(),
+        db.collection(RAW_MATERIALS).doc(itemId).get(),
+    ]);
+    const material = materialSnap.data();
+    if (materialSnap.exists && String(material?.tenantId || '') === actor.tenantId) {
+        return {
+            itemType: 'material',
+            itemId,
+            itemName: String(material?.name || fallbackName || itemId),
+            itemCode: String(material?.code || ''),
+            unit: String(material?.baseUnit || 'unit'),
+        };
+    }
+    const raw = rawSnap.data();
+    if (rawSnap.exists && String(raw?.tenantId || '') === actor.tenantId) {
+        return {
+            itemType: 'raw_material',
+            itemId,
+            itemName: String(raw?.name || fallbackName || itemId),
+            itemCode: String(raw?.code || ''),
+            unit: String(raw?.unit || 'unit'),
+        };
+    }
+    return null;
+}
+async function applyNonFinishedProductionReportInventory(actor, reportId, report) {
+    const settingsSnap = await db.collection(SYSTEM_SETTINGS).doc(actor.tenantId).get();
+    const routing = resolveInventoryRoutingFromSettings((settingsSnap.data() || {}));
+    const reportType = String(report.reportType || '').trim();
+    const intents = [];
+    if (reportType === 'packaging') {
+        if (!routing.enablePackagingStockTransfer)
+            return { ok: true, skipped: true, reportId };
+        const source = String(routing.packagingSourceWarehouseId || '').trim();
+        const target = String(routing.packagingTargetWarehouseId || '').trim();
+        if (!source || !target || source === target) {
+            throw new HttpsError('failed-precondition', 'مخزنا مصدر ووجهة التغليف غير مضبوطين بشكل صحيح.');
+        }
+        assertActorWarehouseInvolved(actor.boundWarehouseId, [source, target]);
+        const quantities = new Map();
+        const lines = Array.isArray(report.packagingLines) && report.packagingLines.length > 0
+            ? report.packagingLines
+            : [{ productId: report.productId, quantityPieces: report.quantityProduced }];
+        for (const line of lines) {
+            const productId = String(line.productId || '').trim();
+            const quantity = toNumber(line.quantityPieces);
+            if (productId && quantity > 0)
+                quantities.set(productId, (quantities.get(productId) || 0) + quantity);
+        }
+        for (const [productId, quantity] of quantities) {
+            const productSnap = await db.collection(PRODUCTS).doc(productId).get();
+            const product = productSnap.data();
+            if (!productSnap.exists || String(product?.tenantId || '') !== actor.tenantId) {
+                throw new HttpsError('permission-denied', 'يتضمن تقرير التغليف منتجاً خارج شركتك.');
+            }
+            intents.push({
+                warehouseId: source,
+                toWarehouseId: target,
+                itemType: 'finished_good',
+                itemId: productId,
+                itemName: String(product?.name || productId),
+                itemCode: String(product?.code || ''),
+                unit: 'piece',
+                movementType: 'TRANSFER',
+                quantity,
+                allowNegative: routing.allowNegativeFinishedTransferStock,
+                sourceModule: 'packaging',
+                sourceId: reportId,
+                note: `Packaging stock transfer from report ${reportId}`,
+            });
+        }
+    }
+    else if (reportType === 'component_injection') {
+        const wip = String(routing.productionWipWarehouseId || '').trim();
+        if (!wip)
+            throw new HttpsError('failed-precondition', 'مخزن تحت التسليم غير مضبوط.');
+        assertActorWarehouseInvolved(actor.boundWarehouseId, [wip, routing.wasteWarehouseId]);
+        const producedLine = await resolveMaterialMovementLine(actor, String(report.productId || ''), String(report.productNameSnapshot || ''));
+        if (!producedLine)
+            throw new HttpsError('failed-precondition', 'مكون الحقن غير موجود في مواد الشركة.');
+        const producedQty = toNumber(report.quantityProduced);
+        if (producedQty > 0) {
+            intents.push({
+                warehouseId: wip,
+                ...producedLine,
+                movementType: 'IN',
+                quantity: producedQty,
+                sourceModule: 'production_report',
+                sourceId: reportId,
+                note: `Production WIP entry (component) from report ${reportId}`,
+            });
+        }
+        const wasteWarehouse = String(routing.wasteWarehouseId || '').trim();
+        for (const scrap of report.componentScrapItems || []) {
+            const quantity = toNumber(scrap.quantity);
+            if (!(quantity > 0) || !wasteWarehouse)
+                continue;
+            const scrapLine = await resolveMaterialMovementLine(actor, String(scrap.materialId || ''), String(scrap.materialName || '')) || producedLine;
+            intents.push({
+                warehouseId: wasteWarehouse,
+                ...scrapLine,
+                movementType: 'IN',
+                quantity,
+                sourceModule: 'production_report',
+                sourceId: reportId,
+                note: `Component scrap IN from production report ${reportId}`,
+            });
+        }
+    }
+    else if (reportType === 'component_waste') {
+        const source = String(routing.decomposedWarehouseId || '').trim();
+        const target = String(routing.wasteWarehouseId || '').trim();
+        if (!source || !target)
+            throw new HttpsError('failed-precondition', 'مخزنا المفكك والهالك غير مضبوطين.');
+        assertActorWarehouseInvolved(actor.boundWarehouseId, [source, target]);
+        for (const scrap of report.componentScrapItems || []) {
+            const quantity = toNumber(scrap.quantity);
+            const line = await resolveMaterialMovementLine(actor, String(scrap.materialId || ''), String(scrap.materialName || ''));
+            if (!(quantity > 0) || !line)
+                continue;
+            intents.push({
+                warehouseId: source,
+                toWarehouseId: target,
+                ...line,
+                movementType: 'TRANSFER',
+                quantity,
+                allowNegative: routing.allowNegativeDecomposedStock,
+                sourceModule: 'production_report',
+                sourceId: reportId,
+                note: `Component waste transfer from production report ${reportId}`,
+            });
+        }
+    }
+    const existingMovements = await loadSourceMovements(actor.tenantId, reportId);
+    const applyPlan = attachLegacyMovementMatches(buildDeterministicMovementPlan(reportId, 'apply', intents), existingMovements);
+    const claimed = await claimApplyOperation({
+        actor,
+        reportId,
+        applyPlan,
+        handover: null,
+        reportBasis: {
+            productId: String(report.productId || '').trim(),
+            quantityProduced: toNumber(report.quantityProduced),
+            reportType,
+            workOrderId: String(report.workOrderId || '').trim(),
+            productionPlanId: String(report.productionPlanId || '').trim(),
+        },
+    });
+    if (claimed.idempotent)
+        return { ok: true, idempotent: true, reportId };
+    for (const movement of claimed.operation.applyPlan || []) {
+        await postWarehouseMovement({ ...movement, actor, reportId, expectedOperationState: 'applying' });
+    }
+    const finalState = await finalizeApplyOperation(actor, reportId);
+    if (finalState !== 'applied')
+        throw new HttpsError('aborted', 'بدأ عكس المخزون أثناء الترحيل.');
+    return { ok: true, reportId };
+}
+export async function applyProductionReportInventoryInternal(uid, reportId) {
     const actor = await loadActor(uid);
     if (!hasPermission(actor, [
         'reports.create',
@@ -670,7 +831,6 @@ export const applyProductionReportInventory = onCall({
     ])) {
         throw new HttpsError('permission-denied', 'لا تملك صلاحية ترحيل مخزون تقرير الإنتاج.');
     }
-    const reportId = requireReportId(request);
     {
         const pathSettingsSnap = await db.collection(SYSTEM_SETTINGS).doc(actor.tenantId).get();
         assertOperationPathEnabledServer(pathSettingsSnap.data() || {}, REPORT_CREATE_OPERATION_KEY);
@@ -684,7 +844,7 @@ export const applyProductionReportInventory = onCall({
     }
     const reportType = String(report.reportType || 'finished_product').trim() || 'finished_product';
     if (reportType !== 'finished_product') {
-        throw new HttpsError('failed-precondition', 'ترحيل هذا نوع التقرير يتم عبر مسار العميل الحالي حالياً.');
+        return applyNonFinishedProductionReportInventory(actor, reportId, report);
     }
     const producedQty = toNumber(report.quantityProduced);
     if (report.inventoryAppliedAt) {
@@ -868,7 +1028,11 @@ export const applyProductionReportInventory = onCall({
         throw new HttpsError('aborted', 'بدأ عكس مخزون التقرير أثناء الترحيل.');
     }
     return { ok: true, reportId, handover: useHandover };
-});
+}
+export const applyProductionReportInventory = onCall({
+    region: 'us-central1',
+    memory: '512MiB',
+}, async (request) => applyProductionReportInventoryInternal(requireAuth(request), requireReportId(request)));
 export const reverseProductionReportInventory = onCall({
     region: 'us-central1',
     memory: '512MiB',

@@ -2,10 +2,11 @@ import React, { useMemo } from 'react';
 import { Edit2, Eye, RotateCcw, ScanLine, Trash2, X } from 'lucide-react';
 import { formatNumber } from '../../../../utils/calculations';
 import { RowActionsMenu, type RowActionMenuEntry } from '../../../../src/components/erp/RowActionsMenu';
-import { WorkOrderStatusBadge } from './WorkOrderStatusBadge';
+import { WORK_ORDER_STATUS_LABELS } from '../../utils/workOrderReportLinking';
+import { WORK_ORDER_STATUS_STYLE } from './WorkOrderStatusBadge';
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import type { WorkOrderRowView } from './WorkOrderRow';
-import styles from './WorkOrders.module.css';
+import { Button } from '../../components/UI';
 
 type Props = {
   row: WorkOrderRowView;
@@ -32,9 +33,9 @@ export const WorkOrderMobileCard: React.FC<Props> = ({
   const produced = Number(order.producedQuantity || 0);
   const target = Number(order.quantity || 0);
   const progress = target > 0 ? Math.min(100, Math.round((produced / target) * 100)) : 0;
-  const canClose = order.status === 'in_progress';
+  const canClose = row.effectiveStatus === 'in_progress' || row.effectiveStatus === 'paused';
   const canOpenScanner = Boolean(onOpenScanner && order.id && order.status !== 'cancelled');
-  const isDeviationUp = row.deviationPct > 0;
+  const statusStyle = WORK_ORDER_STATUS_STYLE[row.effectiveStatus];
 
   const actions: RowActionMenuEntry[] = useMemo(
     () => [
@@ -106,7 +107,7 @@ export const WorkOrderMobileCard: React.FC<Props> = ({
     <div
       role="button"
       tabIndex={0}
-      className={styles.mobileCard}
+      className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5 cursor-pointer hover:bg-[var(--color-bg)]/40 transition-colors"
       onClick={() => onRowClick(order)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -115,49 +116,46 @@ export const WorkOrderMobileCard: React.FC<Props> = ({
         }
       }}
     >
-      <div className={styles.mobileCardTop}>
-        <div className={styles.mobileCardTitleBlock}>
-          <span className={styles.mobileCardWo}>{order.workOrderNumber}</span>
-          <span className={styles.mobileCardProduct}>{row.productName}</span>
-          <span className={styles.mobileCardLine}>{row.lineName}</span>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-sm font-bold text-primary">{order.workOrderNumber}</p>
+          <p className="text-sm font-bold text-[var(--color-text)]">{row.productName}</p>
+          <p className="text-xs text-[var(--color-text-muted)]">{row.lineName}</p>
         </div>
-        <div
-          className={styles.mobileCardActions}
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <WorkOrderStatusBadge status={order.status} />
+        <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
           <RowActionsMenu items={actions} />
         </div>
       </div>
-      <div className={styles.mobileCardMeta}>
-        <div>
-          <span>الكمية</span>
-          <strong>{formatNumber(produced)}/{formatNumber(target)}</strong>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
+          <p className="text-[var(--color-text-muted)] mb-0.5">الحالة</p>
+          <p className={`font-bold ${statusStyle.color}`}>{WORK_ORDER_STATUS_LABELS[row.effectiveStatus]}</p>
+          <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">{row.statusDetail}</p>
         </div>
-        <div>
-          <span>التقدم</span>
-          <strong>{progress}%</strong>
-        </div>
-        <div>
-          <span>المتبقي</span>
-          <strong className={styles[`deadline_${row.expectedEndTone}`]}>{row.remainingDaysLabel}</strong>
-        </div>
-        <div>
-          <span>الانحراف</span>
-          <strong>
-            {isDeviationUp ? '▲' : '▼'} {Math.abs(row.deviationPct).toFixed(1)}%
-          </strong>
+        <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
+          <p className="text-[var(--color-text-muted)] mb-0.5">التقدم</p>
+          <p className="font-bold text-primary">{progress}%</p>
         </div>
       </div>
-      <div className={styles.progressBar}>
-        <div
-          className={`${styles.progressFill} ${
-            progress >= 80 ? styles.progressSuccess : progress >= 40 ? styles.progressWarning : styles.progressPrimary
-          }`}
-          style={{ width: `${progress}%` }}
-        />
+      <div className="h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${statusStyle.bar}`} style={{ width: `${progress}%` }} />
       </div>
+      <div className="text-xs text-[var(--color-text-muted)] space-y-1">
+        <p><span className="font-bold">الكمية:</span> {formatNumber(produced)} / {formatNumber(target)}</p>
+        <p><span className="font-bold">المتبقي:</span> {row.remainingDaysLabel}</p>
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRowClick(order);
+        }}
+      >
+        تفاصيل الأمر
+      </Button>
     </div>
   );
 };

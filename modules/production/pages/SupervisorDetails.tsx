@@ -545,7 +545,7 @@ export const SupervisorDetails: React.FC = () => {
   ), [workOrders, periodRange.start, periodRange.end, today]);
 
   const activePeriodWorkOrders = useMemo(() => (
-    periodWorkOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress')
+    periodWorkOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress' || wo.status === 'paused')
   ), [periodWorkOrders]);
 
   const activeExecutionRows = useMemo(() => (

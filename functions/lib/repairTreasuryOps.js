@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import { ensureDefaultAccounts } from './accountingOps.js';
+import { accountingPostingDecision, queuePendingAccounting, validateAutomaticPostingMaster, } from './accountingPostingPolicy.js';
 import { getRepairTreasuryExpenseType, REPAIR_MANUAL_INCOME_ACCOUNT_CODE, } from './repairTreasuryExpenseTypes.js';
 const db = getDb();
 const roundMoney = (value) => {
@@ -104,6 +105,11 @@ const loadBranchPaymentAccounts = async (actor, branchId) => {
                 name: String(account.name || key),
             }];
     }));
+    await validateAutomaticPostingMaster({
+        tenantId: actor.tenantId,
+        accountCodes: Object.values(accounts).map((account) => account.code),
+        costCenterId,
+    });
     return { branchRef, costCenterId, accounts, branchName: String(branchSnap.data()?.name || branchId) };
 };
 const resolvePostingAccount = async (tenantId, code, expectedType) => {
@@ -197,6 +203,7 @@ async function postManualTreasuryEntry(actor, data) {
     const treasuryEntryRef = db.collection('repair_treasury_entries').doc(`${actor.tenantId}__repair_treasury_manual__${requestId}`);
     const journalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_treasury_manual__${requestId}`);
     const at = new Date().toISOString();
+    const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairTreasury', at);
     const referenceNo = `TR-${entryType.slice(0, 3)}-${requestId.slice(-6).toUpperCase()}`;
     const result = await db.runTransaction(async (tx) => {
         const [treasurySnap, journalSnap, sessionSnap, monthCloseSnap] = await Promise.all([
@@ -208,7 +215,7 @@ async function postManualTreasuryEntry(actor, data) {
         if (treasurySnap.exists || journalSnap.exists) {
             return {
                 entryId: treasuryEntryRef.id,
-                journalEntryId: journalRef.id,
+                journalEntryId: postingDecision.enabled ? journalRef.id : null,
                 duplicated: true,
             };
         }
@@ -231,50 +238,61 @@ async function postManualTreasuryEntry(actor, data) {
             sourceId: requestId,
             expenseType: expenseType || null,
             expenseAccountId: expenseAccountId || null,
-            journalEntryId: journalRef.id,
+            journalEntryId: postingDecision.enabled ? journalRef.id : null,
+            accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
             createdBy: actor.uid,
             createdByName: actor.displayName,
             createdAt: at,
         });
-        tx.create(journalRef, {
-            tenantId: actor.tenantId,
-            branchId,
-            costCenterId: live.costCenterId,
-            source: 'repair_treasury_manual',
-            sourceId: requestId,
-            expenseType: expenseType || null,
-            referenceNo,
-            description: note,
-            status: 'posted',
-            postedAt: at,
-            date: at.slice(0, 10),
-            createdBy: actor.uid,
-            createdByName: actor.displayName,
-            createdAt: at,
-            totalDebit: amount,
-            totalCredit: amount,
-            lines: [
-                {
-                    accountCode: debit.code,
-                    accountName: debit.name,
-                    debit: amount,
-                    credit: 0,
-                    costCenterId: live.costCenterId,
-                    description: note,
-                },
-                {
-                    accountCode: credit.code,
-                    accountName: credit.name,
-                    debit: 0,
-                    credit: amount,
-                    costCenterId: live.costCenterId,
-                    description: note,
-                },
-            ],
-        });
+        if (postingDecision.enabled) {
+            tx.create(journalRef, {
+                tenantId: actor.tenantId,
+                branchId,
+                costCenterId: live.costCenterId,
+                source: 'repair_treasury_manual',
+                sourceId: requestId,
+                expenseType: expenseType || null,
+                referenceNo,
+                description: note,
+                status: 'posted',
+                postedAt: at,
+                date: at.slice(0, 10),
+                createdBy: actor.uid,
+                createdByName: actor.displayName,
+                createdAt: at,
+                totalDebit: amount,
+                totalCredit: amount,
+                lines: [
+                    {
+                        accountCode: debit.code,
+                        accountName: debit.name,
+                        debit: amount,
+                        credit: 0,
+                        costCenterId: live.costCenterId,
+                        description: note,
+                    },
+                    {
+                        accountCode: credit.code,
+                        accountName: credit.name,
+                        debit: 0,
+                        credit: amount,
+                        costCenterId: live.costCenterId,
+                        description: note,
+                    },
+                ],
+            });
+        }
+        else {
+            queuePendingAccounting(tx, {
+                tenantId: actor.tenantId, source: 'repair_treasury_manual', sourceId: requestId,
+                branchId, costCenterId: live.costCenterId, amount, date: at,
+                reason: postingDecision.reason,
+                payload: { referenceNo, entryType, method, expenseType: expenseType || null, note },
+            });
+        }
         return {
             entryId: treasuryEntryRef.id,
-            journalEntryId: journalRef.id,
+            journalEntryId: postingDecision.enabled ? journalRef.id : null,
             duplicated: false,
         };
     });
@@ -468,6 +486,7 @@ async function approveTreasurySettlement(actor, data) {
     const toEntryRef = db.collection('repair_treasury_entries').doc(`${actor.tenantId}__repair_hq_settlement_in__${settlementId}`);
     const journalRef = db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_hq_settlement__${settlementId}`);
     const at = new Date().toISOString();
+    const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairTreasury', at);
     const note = String(settlement.note || `تسوية خزينة إلى ${main.name}`).trim();
     const result = await db.runTransaction(async (tx) => {
         const [settlementSnap, fromEntrySnap, toEntrySnap, journalSnap, fromSessionSnap, toSessionSnap, fromMonthCloseSnap, toMonthCloseSnap,] = await Promise.all([
@@ -487,7 +506,7 @@ async function approveTreasurySettlement(actor, data) {
             return {
                 fromEntryId: fromEntryRef.id,
                 toEntryId: toEntryRef.id,
-                journalEntryId: journalRef.id,
+                journalEntryId: postingDecision.enabled ? journalRef.id : null,
                 duplicated: true,
             };
         }
@@ -519,7 +538,8 @@ async function approveTreasurySettlement(actor, data) {
             sourceId: settlementId,
             settlementId,
             counterpartBranchId: toBranchId,
-            journalEntryId: journalRef.id,
+            journalEntryId: postingDecision.enabled ? journalRef.id : null,
+            accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
             createdBy: actor.uid,
             createdByName: actor.displayName,
             createdAt: at,
@@ -537,46 +557,55 @@ async function approveTreasurySettlement(actor, data) {
             sourceId: settlementId,
             settlementId,
             counterpartBranchId: fromBranchId,
-            journalEntryId: journalRef.id,
+            journalEntryId: postingDecision.enabled ? journalRef.id : null,
+            accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
             createdBy: actor.uid,
             createdByName: actor.displayName,
             createdAt: at,
         });
-        tx.create(journalRef, {
-            tenantId: actor.tenantId,
-            branchId: toBranchId,
-            costCenterId: toLive.costCenterId,
-            source: 'repair_hq_settlement',
-            sourceId: settlementId,
-            referenceNo: `HQ-${settlementId.slice(-8).toUpperCase()}`,
-            description: note,
-            status: 'posted',
-            postedAt: at,
-            date: at.slice(0, 10),
-            createdBy: actor.uid,
-            createdByName: actor.displayName,
-            createdAt: at,
-            totalDebit: amount,
-            totalCredit: amount,
-            lines: [
-                {
-                    accountCode: toLive.accounts.cash.code,
-                    accountName: toLive.accounts.cash.name,
-                    debit: amount,
-                    credit: 0,
-                    costCenterId: toLive.costCenterId,
-                    description: note,
-                },
-                {
-                    accountCode: fromLive.accounts.cash.code,
-                    accountName: fromLive.accounts.cash.name,
-                    debit: 0,
-                    credit: amount,
-                    costCenterId: fromLive.costCenterId,
-                    description: note,
-                },
-            ],
-        });
+        if (postingDecision.enabled)
+            tx.create(journalRef, {
+                tenantId: actor.tenantId,
+                branchId: toBranchId,
+                costCenterId: toLive.costCenterId,
+                source: 'repair_hq_settlement',
+                sourceId: settlementId,
+                referenceNo: `HQ-${settlementId.slice(-8).toUpperCase()}`,
+                description: note,
+                status: 'posted',
+                postedAt: at,
+                date: at.slice(0, 10),
+                createdBy: actor.uid,
+                createdByName: actor.displayName,
+                createdAt: at,
+                totalDebit: amount,
+                totalCredit: amount,
+                lines: [
+                    {
+                        accountCode: toLive.accounts.cash.code,
+                        accountName: toLive.accounts.cash.name,
+                        debit: amount,
+                        credit: 0,
+                        costCenterId: toLive.costCenterId,
+                        description: note,
+                    },
+                    {
+                        accountCode: fromLive.accounts.cash.code,
+                        accountName: fromLive.accounts.cash.name,
+                        debit: 0,
+                        credit: amount,
+                        costCenterId: fromLive.costCenterId,
+                        description: note,
+                    },
+                ],
+            });
+        else
+            queuePendingAccounting(tx, {
+                tenantId: actor.tenantId, source: 'repair_hq_settlement', sourceId: settlementId,
+                branchId: toBranchId, costCenterId: toLive.costCenterId, amount, date: at,
+                reason: postingDecision.reason,
+                payload: { fromBranchId, toBranchId, note },
+            });
         tx.update(settlementRef, {
             status: 'approved',
             approvedBy: actor.uid,
@@ -584,7 +613,8 @@ async function approveTreasurySettlement(actor, data) {
             approvedAt: at,
             fromEntryId: fromEntryRef.id,
             toEntryId: toEntryRef.id,
-            journalEntryId: journalRef.id,
+            journalEntryId: postingDecision.enabled ? journalRef.id : null,
+            accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
             fromSessionId: fromSession.id,
             toSessionId: toSession.id,
             updatedAt: at,
@@ -592,7 +622,7 @@ async function approveTreasurySettlement(actor, data) {
         return {
             fromEntryId: fromEntryRef.id,
             toEntryId: toEntryRef.id,
-            journalEntryId: journalRef.id,
+            journalEntryId: postingDecision.enabled ? journalRef.id : null,
             duplicated: false,
         };
     });

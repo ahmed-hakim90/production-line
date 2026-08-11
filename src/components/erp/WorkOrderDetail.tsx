@@ -7,7 +7,7 @@ import { StatusBadge } from "./StatusBadge"
 import { cn } from "@/lib/utils"
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
-type WorkOrderDetailStatus = "قيد التنفيذ" | "مكتمل" | "موقف" | "قيد الانتظار" | "ملغي"
+type WorkOrderDetailStatus = string
 type TabId = "dates" | "costs" | "notes"
 
 interface WorkOrderDetailProps {

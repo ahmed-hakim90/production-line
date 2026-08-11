@@ -1,15 +1,9 @@
 import {
-  collection,
   doc,
   getDocs,
   getDoc,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  serverTimestamp,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
-import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { db, isConfigured, mutateAccountingCallable } from '../../auth/services/firebase';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { CostCenter } from '../../../types';
 
@@ -42,12 +36,11 @@ export const costCenterService = {
   async create(data: Omit<CostCenter, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
-      const ref = await addDoc(collection(db, COLLECTION), {
+      const result = await mutateAccountingCallable({
+        operation: 'upsert_production_cost_center',
         ...data,
-        tenantId: getCurrentTenantId(),
-        createdAt: serverTimestamp(),
       });
-      return ref.id;
+      return String(result.id || '') || null;
     } catch (error) {
       console.error('costCenterService.create error:', error);
       throw error;
@@ -58,7 +51,11 @@ export const costCenterService = {
     if (!isConfigured) return;
     try {
       const { id: _id, createdAt: _ts, ...fields } = data as any;
-      await updateDoc(doc(db, COLLECTION, id), fields);
+      await mutateAccountingCallable({
+        operation: 'upsert_production_cost_center',
+        id,
+        ...fields,
+      });
     } catch (error) {
       console.error('costCenterService.update error:', error);
       throw error;
@@ -68,7 +65,10 @@ export const costCenterService = {
   async delete(id: string): Promise<void> {
     if (!isConfigured) return;
     try {
-      await deleteDoc(doc(db, COLLECTION, id));
+      await mutateAccountingCallable({
+        operation: 'deactivate_production_cost_center',
+        id,
+      });
     } catch (error) {
       console.error('costCenterService.delete error:', error);
       throw error;

@@ -1,6 +1,11 @@
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import {
+  accountingPostingDecision,
+  queuePendingAccounting,
+  validateAutomaticPostingMaster,
+} from './accountingPostingPolicy.js';
+import {
   buildInventoryMaterialMovements,
   buildPartQuantityDeltas,
   stockItemsBalanceDocId,
@@ -743,11 +748,18 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
     assertBranchAllowsCreditSalesInvoice(branch);
   }
   const accounting = await requireInvoiceAccounting(actor, branch, { credit: isCreditSale });
+  await validateAutomaticPostingMaster({
+    tenantId: actor.tenantId,
+    accountCodes: Object.values(accounting.accounts).map((code) => String(code || "")),
+    costCenterId: accounting.costCenterId,
+  });
   // Credit sales post to AR — no cash till movement on post/cancel of the receivable leg.
   const previewTreasuryDelta = isCreditSale
     ? 0
     : (operation === 'post' ? nextTotal : -previousTotal);
   const sessionRef = await getOpenTreasurySession(actor, branchId, Math.abs(previewTreasuryDelta) > 0.00001);
+  const postingAt = new Date().toISOString();
+  const postingDecision = await accountingPostingDecision(actor.tenantId, 'autoPostRepairSales', postingAt);
 
   const result = await db.runTransaction(async (tx) => {
     const currentInvoiceSnap = await tx.get(invoiceRef);
@@ -1078,7 +1090,8 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
           : `عكس فاتورة بيع قطع غيار ${invoiceNo}`,
         referenceId: operation === 'post' ? invoiceRef.id : `${invoiceRef.id}:cancel:v${revision}`,
         source: 'repair_sales_invoice',
-        journalEntryId: journalRef.id,
+        journalEntryId: postingDecision.enabled ? journalRef.id : null,
+        accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
         createdBy: actor.uid,
         createdByName: actor.displayName,
         createdAt: at,
@@ -1118,17 +1131,36 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
       ...line, debit: line.credit, credit: line.debit,
     }));
     const journalTotal = Math.round((gross + cogs) * 100) / 100;
-    tx.create(journalRef, {
-      tenantId: actor.tenantId, branchId, costCenterId, source: 'repair_sales_invoice', sourceId: invoiceRef.id,
-      referenceNo: operation === 'post' ? invoiceNo : `${invoiceNo}-REV-${revision}`,
-      status: 'posted', immutable: true, reversalOf: operation === 'cancel' ? String(current.journalEntryId || '') : '',
-      postedAt: at, createdAt: at, createdBy: actor.uid, createdByName: actor.displayName,
-      totalDebit: journalTotal, totalCredit: journalTotal, lines: journalLines,
-    });
+    if (postingDecision.enabled) {
+      tx.create(journalRef, {
+        tenantId: actor.tenantId, branchId, costCenterId, source: 'repair_sales_invoice', sourceId: invoiceRef.id,
+        referenceNo: operation === 'post' ? invoiceNo : `${invoiceNo}-REV-${revision}`,
+        status: 'posted', immutable: true, reversalOf: operation === 'cancel' ? String(current.journalEntryId || '') : '',
+        postedAt: at, createdAt: at, createdBy: actor.uid, createdByName: actor.displayName,
+        totalDebit: journalTotal, totalCredit: journalTotal, lines: journalLines,
+      });
+    } else {
+      queuePendingAccounting(tx, {
+        tenantId: actor.tenantId,
+        source: operation === 'post' ? 'repair_sales_invoice' : 'repair_sales_invoice_reversal',
+        sourceId: `${invoiceRef.id}__v${revision}`,
+        branchId, costCenterId, amount: journalTotal, date: at,
+        reason: postingDecision.reason,
+        payload: { invoiceId: invoiceRef.id, invoiceNo, operation, revision },
+      });
+    }
     const hasTreasuryMovement = Boolean(sessionRef) && Math.abs(treasuryDelta) > 0.00001;
     tx.update(invoiceRef, operation === 'post'
-      ? { journalEntryId: journalRef.id, ...(hasTreasuryMovement ? { treasuryEntryId: treasuryEntryRef.id } : {}), costCenterId }
-      : { reversalJournalEntryId: journalRef.id, ...(hasTreasuryMovement ? { reversalTreasuryEntryId: treasuryEntryRef.id } : {}) });
+      ? {
+          journalEntryId: postingDecision.enabled ? journalRef.id : null,
+          accountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
+          ...(hasTreasuryMovement ? { treasuryEntryId: treasuryEntryRef.id } : {}), costCenterId,
+        }
+      : {
+          reversalJournalEntryId: postingDecision.enabled ? journalRef.id : null,
+          reversalAccountingStatus: postingDecision.enabled ? 'posted' : 'pending_accounting',
+          ...(hasTreasuryMovement ? { reversalTreasuryEntryId: treasuryEntryRef.id } : {}),
+        });
 
     return {
       id: invoiceRef.id,

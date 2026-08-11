@@ -16,6 +16,21 @@ import {
   WORK_ORDER_UPDATE_PATHS,
   isOperationPathEnabled,
 } from '../../../modules/system/lib/operationPathSettings';
+import { filterProductionProducts } from '../../../modules/production/utils/isProductionProduct';
+import {
+  loadInjectionComponentOptions,
+  type InjectionComponentOption,
+} from '../../../modules/production/utils/injectionComponentOptions';
+import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
+import { ProductionLineStatus } from '../../../types';
+import { PLAN_STATUS_SORT_RANK } from '../../../modules/production/utils/productionPlanReports';
+
+const LINKABLE_PLAN_STATUSES = new Set(['planned', 'in_progress', 'paused']);
+const PLAN_STATUS_LABEL: Record<string, string> = {
+  in_progress: 'شغال',
+  planned: 'مش شغال',
+  paused: 'متوقف',
+};
 
 const DEFAULT_BREAK_START = '12:00';
 const DEFAULT_BREAK_END = '12:30';
@@ -73,6 +88,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const createWorkOrder = useAppStore((s) => s.createWorkOrder);
   const updateWorkOrder = useAppStore((s) => s.updateWorkOrder);
+  const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
   const plans = useAppStore((s) => s.productionPlans);
   const products = useAppStore((s) => s._rawProducts);
   const lines = useAppStore((s) => s._rawLines);
@@ -82,29 +98,101 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const lineStatuses = useAppStore((s) => s.lineStatuses);
+  const injectionCategoryKeywords = systemSettings.planSettings?.injectionRawMaterialCategoryKeywords
+    ?? DEFAULT_PLAN_SETTINGS.injectionRawMaterialCategoryKeywords;
   const [form, setForm] = useState<WorkOrderFormState>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [injectionComponents, setInjectionComponents] = useState<InjectionComponentOption[]>([]);
   const canCreateFinishedWorkOrders = can('workOrders.create');
   const canManageComponentInjectionWorkOrders = can('workOrders.componentInjection.manage');
   const canChooseWorkOrderType = canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders;
+
+  useEffect(() => {
+    let mounted = true;
+    loadInjectionComponentOptions(injectionCategoryKeywords)
+      .then((rows) => {
+        if (mounted) setInjectionComponents(rows);
+      })
+      .catch(() => {
+        if (mounted) setInjectionComponents([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [injectionCategoryKeywords]);
 
   const supervisors = useMemo(
     () => employees.filter((e) => e.level === 2 && e.isActive),
     [employees],
   );
 
-  const productNameById = useMemo(
-    () => new Map(products.map((p) => [p.id!, p.name])),
-    [products],
-  );
+  const productNameById = useMemo(() => {
+    const map = new Map(products.map((p) => [p.id!, p.name]));
+    injectionComponents.forEach((m) => {
+      if (m.id && !map.has(m.id)) map.set(m.id, m.name);
+    });
+    return map;
+  }, [products, injectionComponents]);
+
+  const selectableProductOptions = useMemo(() => {
+    if (form.workOrderType === 'component_injection') {
+      return injectionComponents.map((m) => ({
+        value: m.id,
+        label: m.code ? `${m.name} (${m.code})` : m.name,
+      }));
+    }
+    return filterProductionProducts(products)
+      .filter((p) => Boolean(p.id))
+      .map((p) => ({ value: p.id!, label: `${p.name} (${p.code})` }));
+  }, [form.workOrderType, injectionComponents, products]);
+
+  const injectionLineIds = useMemo(() => {
+    const ids = new Set<string>();
+    lines.forEach((line) => {
+      if (line.id && line.status === ProductionLineStatus.INJECTION) ids.add(line.id);
+    });
+    lineStatuses.forEach((status) => {
+      if (status.isInjectionLine && status.lineId) ids.add(status.lineId);
+    });
+    return ids;
+  }, [lines, lineStatuses]);
+
+  const selectableLines = useMemo(() => {
+    if (form.workOrderType !== 'component_injection') return lines;
+    return lines.filter((line) => line.id && injectionLineIds.has(line.id));
+  }, [form.workOrderType, lines, injectionLineIds]);
+
+  useEffect(() => {
+    if (!form.productId) return;
+    if (selectableProductOptions.some((opt) => opt.value === form.productId)) return;
+    setForm((f) => ({ ...f, productId: '' }));
+  }, [form.productId, selectableProductOptions]);
+
+  useEffect(() => {
+    if (!form.lineId) return;
+    if (selectableLines.some((line) => line.id === form.lineId)) return;
+    setForm((f) => ({ ...f, lineId: '' }));
+  }, [form.lineId, selectableLines]);
 
   const activePlans = useMemo(
-    () => plans.filter((p) => p.status === 'planned' || p.status === 'in_progress'),
-    [plans],
+    () => plans
+      .filter((p) => {
+        if (!LINKABLE_PLAN_STATUSES.has(p.status)) return false;
+        const planIsInjection = p.planType === 'component_injection';
+        if (planIsInjection) return canManageComponentInjectionWorkOrders;
+        return canCreateFinishedWorkOrders;
+      })
+      .sort((a, b) => {
+        const statusDiff = (PLAN_STATUS_SORT_RANK[a.status] ?? 99) - (PLAN_STATUS_SORT_RANK[b.status] ?? 99);
+        if (statusDiff !== 0) return statusDiff;
+        return String(b.plannedStartDate || b.startDate || '').localeCompare(String(a.plannedStartDate || a.startDate || ''));
+      }),
+    [plans, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders],
   );
 
   const selectedPlan = useMemo(
@@ -116,19 +204,45 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     () => {
       const optionPlans = [...activePlans];
       if (selectedPlan?.id && !optionPlans.some((p) => p.id === selectedPlan.id)) {
-        optionPlans.unshift(selectedPlan);
+        const selectedAllowed = selectedPlan.planType === 'component_injection'
+          ? canManageComponentInjectionWorkOrders
+          : canCreateFinishedWorkOrders;
+        if (selectedAllowed) optionPlans.unshift(selectedPlan);
       }
 
       return [
         { value: '', label: t('modalManager.createWorkOrder.noPlan') },
-        ...optionPlans.map((p) => ({
-          value: p.id!,
-          label: `${productNameById.get(p.productId) || t('modalManager.createWorkOrder.unknownProduct')} — ${t('modalManager.createWorkOrder.remaining')}: ${formatNumber(Math.max((p.plannedQuantity || 0) - (p.producedQuantity || 0), 0))}${p.plannedEndDate ? ` - ${p.plannedEndDate}` : ''}`,
-        })),
+        ...optionPlans.map((p) => {
+          const typeLabel = p.planType === 'component_injection' ? 'حقن' : 'منتج';
+          const statusLabel = PLAN_STATUS_LABEL[p.status] || p.status;
+          const name = productNameById.get(p.productId) || t('modalManager.createWorkOrder.unknownProduct');
+          const remaining = formatNumber(Math.max((p.plannedQuantity || 0) - (p.producedQuantity || 0), 0));
+          return {
+            value: p.id!,
+            label: `[${typeLabel} · ${statusLabel}] ${name} — ${t('modalManager.createWorkOrder.remaining')}: ${remaining}${p.plannedEndDate ? ` - ${p.plannedEndDate}` : ''}`,
+          };
+        }),
       ];
     },
-    [activePlans, productNameById, selectedPlan, t],
+    [
+      activePlans,
+      productNameById,
+      selectedPlan,
+      canCreateFinishedWorkOrders,
+      canManageComponentInjectionWorkOrders,
+      t,
+    ],
   );
+
+  useEffect(() => {
+    if (!form.planId || !selectedPlan) return;
+    const planIsInjection = selectedPlan.planType === 'component_injection';
+    const allowed = planIsInjection
+      ? canManageComponentInjectionWorkOrders
+      : canCreateFinishedWorkOrders;
+    if (allowed) return;
+    setForm((f) => ({ ...f, planId: '' }));
+  }, [form.planId, selectedPlan, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
 
   const selectedPlanRemaining = useMemo(
     () => (
@@ -146,6 +260,8 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       return;
     }
 
+    void fetchProductionPlans({ maxAgeMs: 30_000 }).catch(() => undefined);
+
     const mode = payload && typeof payload.mode === 'string' ? payload.mode : '';
     const workOrderId =
       payload && typeof payload.workOrderId === 'string' ? payload.workOrderId.trim() : '';
@@ -162,10 +278,16 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       const planRemaining = selectedPayloadPlan
         ? Math.max((selectedPayloadPlan.plannedQuantity || 0) - (selectedPayloadPlan.producedQuantity || 0), 0)
         : 0;
+      const inferredTypeFromPlan = selectedPayloadPlan?.planType === 'component_injection'
+        ? 'component_injection' as const
+        : base.workOrderType;
+      const defaultType = !canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders
+        ? 'component_injection' as const
+        : inferredTypeFromPlan;
       const prefilled = {
         ...base,
         planId: selectedPayloadPlan?.id || payloadPlanId,
-        workOrderType: selectedPayloadPlan?.planType === 'component_injection' ? 'component_injection' : base.workOrderType,
+        workOrderType: defaultType,
         productId: selectedPayloadPlan?.productId || payloadProductId,
         lineId: selectedPayloadPlan?.lineId || '',
         quantity: planRemaining,
@@ -173,11 +295,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         targetDate: planTargetDate,
         durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
       };
-      setForm(
-        !canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders
-          ? { ...prefilled, workOrderType: 'component_injection' }
-          : prefilled,
-      );
+      setForm(prefilled);
       setError(null);
       setMessage(null);
       return;
@@ -218,7 +336,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isOpen, payload, plans, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders]);
+  }, [isOpen, payload, plans, canCreateFinishedWorkOrders, canManageComponentInjectionWorkOrders, fetchProductionPlans, t]);
 
   const openForEdit =
     isOpen &&
@@ -248,7 +366,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   if (!canUseModal) return null;
 
   const missingRequiredFields = [
-    !form.productId ? 'المنتج' : '',
+    !form.productId ? (form.workOrderType === 'component_injection' ? 'مكون الحقن' : 'المنتج') : '',
     !form.lineId ? 'خط الإنتاج' : '',
     !form.supervisorId ? 'المشرف' : '',
     form.quantity <= 0 ? 'الكمية' : '',
@@ -397,9 +515,13 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                 setForm((f) => ({
                   ...f,
                   planId: value,
-                  workOrderType: plan?.planType === 'component_injection' ? 'component_injection' : f.workOrderType,
-                  productId: plan?.productId || f.productId,
-                  lineId: plan?.lineId || f.lineId,
+                  workOrderType: !plan
+                    ? f.workOrderType
+                    : plan.planType === 'component_injection'
+                      ? 'component_injection'
+                      : 'finished_product',
+                  productId: plan?.productId || (value ? '' : f.productId),
+                  lineId: plan?.lineId || (value ? '' : f.lineId),
                   quantity: remaining,
                   startDate: planStartDate,
                   targetDate: planTargetDate,
@@ -409,6 +531,11 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
               placeholder="اختر خطة أو اتركه بدون خطة"
               className="bg-[var(--color-card)]"
             />
+            {activePlans.length === 0 && (
+              <p className="mt-2 text-[11px] font-bold text-[var(--color-text-muted)]">
+                لا توجد خطط متاحة للربط. تظهر هنا الخطط بحالة شغال أو مش شغال أو متوقف حسب صلاحياتك.
+              </p>
+            )}
             {selectedPlan && (
               <div className="mt-2 rounded-[var(--border-radius-base)] border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-3 py-2 text-xs font-bold text-[rgb(var(--color-primary))] space-y-1">
                 <p>
@@ -421,7 +548,9 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                       <span className="mx-1 text-[rgb(var(--color-primary))]">/</span>
                       {lines.find((l) => l.id === selectedPlan.lineId)?.name || t('modalManager.createWorkOrder.unknownLine')}
                     </>
-                  ) : null}
+                  ) : (
+                    <span className="text-[var(--color-text-muted)]"> — اختر خط الإنتاج لأمر الشغل</span>
+                  )}
                 </p>
                 <p className={selectedPlan.acceptsProductionFromReports === false ? 'text-[rgb(var(--color-warning))]' : 'text-[rgb(var(--color-primary))]'}>
                   {selectedPlan.acceptsProductionFromReports === false
@@ -440,6 +569,9 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                 onChange={(e) => setForm((f) => ({
                   ...f,
                   workOrderType: e.target.value === 'component_injection' ? 'component_injection' : 'finished_product',
+                  productId: '',
+                  lineId: '',
+                  planId: '',
                 }))}
                 className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
               >
@@ -452,15 +584,25 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           {!selectedPlan && (
             <>
               <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)]">
-                بيانات أمر شغل بدون خطة: اختر المنتج وخط الإنتاج يدوياً.
+                {form.workOrderType === 'component_injection'
+                  ? 'بيانات أمر شغل بدون خطة: اختر مكون الحقن وخط الحقن يدوياً.'
+                  : 'بيانات أمر شغل بدون خطة: اختر المنتج وخط الإنتاج يدوياً.'}
               </div>
               <div>
-                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productRequired')}</label>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                  {form.workOrderType === 'component_injection'
+                    ? 'مكون الحقن *'
+                    : t('modalManager.createWorkOrder.productRequired')}
+                </label>
                 <SearchableSelect
-                  options={products.map((p) => ({ value: p.id!, label: `${p.name} (${p.code})` }))}
+                  options={selectableProductOptions}
                   value={form.productId}
                   onChange={(value) => setForm((f) => ({ ...f, productId: value }))}
-                  placeholder={t('modalManager.createWorkOrder.searchAndSelectProduct')}
+                  placeholder={
+                    form.workOrderType === 'component_injection'
+                      ? 'ابحث واختر مكون الحقن...'
+                      : t('modalManager.createWorkOrder.searchAndSelectProduct')
+                  }
                   className="bg-[var(--color-card)]"
                 />
               </div>
@@ -476,7 +618,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                   className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
                 >
                   <option value="">{t('modalManager.createWorkOrder.selectLine')}</option>
-                  {lines.map((l) => (
+                  {selectableLines.map((l) => (
                     <option key={l.id} value={l.id!}>{l.name}</option>
                   ))}
                 </select>

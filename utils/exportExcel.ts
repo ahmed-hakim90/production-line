@@ -702,8 +702,9 @@ export const exportAllEmployees = (
 // ─── Work Orders Export ──────────────────────────────────────────────────────
 
 const WO_STATUS_AR: Record<string, string> = {
-  pending: 'قيد الانتظار',
-  in_progress: 'قيد التنفيذ',
+  pending: 'مش شغال',
+  in_progress: 'شغال',
+  paused: 'متوقف',
   completed: 'مكتمل',
   cancelled: 'ملغي',
 };

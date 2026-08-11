@@ -15,6 +15,7 @@ import { getCurrentTenantId } from "../../../lib/currentTenant";
 import type {
   AccountingAccount,
   AccountingJournalEntry,
+  AccountingOutboxItem,
   AccountingPeriod,
   AccountingSettings,
   InventoryValuationResult,
@@ -72,6 +73,16 @@ export const accountingService = {
       autoPostInventory: true,
       requireCostCenter: true,
       allowManualJournals: true,
+      allowJournalReversal: true,
+      enforceOpenPeriods: true,
+      allowPeriodReopen: true,
+      syncCostAndAccountingClose: true,
+      autoPostRepairPayments: true,
+      autoPostRepairSales: true,
+      autoPostRepairCogs: true,
+      autoPostRepairTreasury: true,
+      cutoverPeriod: "2026-09",
+      openingBalanceStatus: "pending",
     };
     if (!isConfigured) return fallback;
     const snap = await getDoc(
@@ -95,6 +106,19 @@ export const accountingService = {
     );
   },
 
+  async listPendingOutbox(): Promise<AccountingOutboxItem[]> {
+    if (!isConfigured) return [];
+    const snap = await getDocs(
+      query(
+        collection(db, "accounting_posting_outbox"),
+        where("tenantId", "==", getCurrentTenantId()),
+      ),
+    );
+    return tenantRows<AccountingOutboxItem>(snap)
+      .filter((row) => row.status === "pending")
+      .sort((a, b) => String(b.updatedAt || b.date).localeCompare(String(a.updatedAt || a.date)));
+  },
+
   seedDefaults: () => mutateAccountingCallable({ operation: "seed_defaults" }),
   upsertAccount: (input: Record<string, unknown>) =>
     mutateAccountingCallable({ operation: "upsert_account", ...input }),
@@ -106,6 +130,8 @@ export const accountingService = {
     mutateAccountingCallable({ operation: "set_period", period, status }),
   postJournal: (input: Record<string, unknown>) =>
     mutateAccountingCallable({ operation: "post_journal", ...input }),
+  postOpeningBalance: (input: Record<string, unknown>) =>
+    mutateAccountingCallable({ operation: "post_opening_balance", ...input }),
   reverseJournal: (journalId: string, reason: string) =>
     mutateAccountingCallable({
       operation: "reverse_journal",

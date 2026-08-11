@@ -100,6 +100,12 @@ assert.equal(deriveWorkOrderStatusFromProduced(0, 100, 'pending'), 'pending');
 assert.equal(deriveWorkOrderStatusFromProduced(40, 100, 'pending'), 'in_progress');
 assert.equal(deriveWorkOrderStatusFromProduced(100, 100, 'in_progress'), 'completed');
 assert.equal(deriveWorkOrderStatusFromProduced(40, 100, 'cancelled'), 'cancelled');
+assert.equal(deriveWorkOrderStatusFromProduced(40, 100, 'in_progress', '2026-06-10', '2026-06-10'), 'in_progress');
+assert.equal(deriveWorkOrderStatusFromProduced(40, 100, 'in_progress', '2026-06-09', '2026-06-10'), 'in_progress');
+assert.equal(deriveWorkOrderStatusFromProduced(40, 100, 'in_progress', '2026-06-08', '2026-06-10'), 'paused');
+assert.equal(deriveWorkOrderStatusFromProduced(40, 100, 'paused', '2026-06-10', '2026-06-10'), 'in_progress');
+assert.equal(deriveWorkOrderStatusFromProduced(100, 100, 'paused', '2026-06-01', '2026-06-10'), 'completed');
+assert.equal(deriveWorkOrderStatusFromProduced(40, 100, 'cancelled', '2026-06-01', '2026-06-10'), 'cancelled');
 
 const candidates = filterUnlinkedReportsEligibleForWorkOrder(wo(), [
   report({ id: 'before', date: '2026-07-01', workOrderId: '' }),

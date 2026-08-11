@@ -1,5 +1,60 @@
-import type { ProductionReport, WorkOrder } from '../../../types';
+import type { ProductionReport, WorkOrder, WorkOrderStatus } from '../../../types';
 import { countsTowardProductManufacturingVolume, resolveReportType, workOrderMatchesReportType } from './reportTypes';
+
+export const WORK_ORDER_STATUS_SORT_RANK: Record<WorkOrderStatus, number> = {
+  in_progress: 0,
+  pending: 1,
+  paused: 2,
+  completed: 3,
+  cancelled: 4,
+};
+
+/** Idle threshold: 2 calendar days without producing reports → paused. */
+export const WORK_ORDER_IDLE_DAYS_BEFORE_PAUSED = 2;
+
+export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
+  in_progress: 'شغال',
+  pending: 'مش شغال',
+  paused: 'متوقف',
+  completed: 'مكتمل',
+  cancelled: 'ملغي',
+};
+
+const daysBetweenCalendarDates = (fromDate: string, toDate: string): number => {
+  const from = new Date(`${fromDate}T00:00:00`);
+  const to = new Date(`${toDate}T00:00:00`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0;
+  return Math.floor((to.getTime() - from.getTime()) / 86_400_000);
+};
+
+export function isOpenWorkOrderStatus(status?: WorkOrderStatus | string | null): boolean {
+  return status === 'pending' || status === 'in_progress' || status === 'paused';
+}
+
+export function lastProducingReportDateFromReports(reports: ProductionReport[]): string | null {
+  const dates = reports
+    .filter((report) => Number(report.quantityProduced || 0) > 0 && Boolean(report.date))
+    .map((report) => String(report.date).slice(0, 10))
+    .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+    .sort((a, b) => a.localeCompare(b));
+  return dates[dates.length - 1] || null;
+}
+
+export function getWorkOrderStatusDetail(
+  status: WorkOrderStatus,
+  remainingDays?: number,
+): string {
+  if (status === 'completed') return 'تم بلوغ كمية أمر الشغل';
+  if (status === 'cancelled') return 'أمر الشغل ملغي';
+  if (status === 'paused') return 'مرّ يومان بدون إنتاج';
+  if (status === 'pending') return 'بانتظار أول إنتاج';
+  if (typeof remainingDays === 'number') {
+    if (remainingDays > 0) return `${remainingDays} يوم متبقي`;
+    if (remainingDays === 0) return 'آخر يوم في الأمر';
+    return 'تجاوز تاريخ الانتهاء';
+  }
+  return 'شغال حالياً على الأمر';
+}
 
 /** YYYY-MM-DD from Firestore Timestamp, Date, ISO string, or existing date string. */
 export function toCalendarDateString(value: unknown): string | null {
@@ -73,8 +128,8 @@ export function pickBestAutoLinkedWorkOrder(
   criteria: AutoLinkWorkOrderCriteria,
 ): WorkOrder | null {
   const allowedStatuses = criteria.includeCompleted
-    ? new Set<WorkOrder['status']>(['pending', 'in_progress', 'completed'])
-    : new Set<WorkOrder['status']>(['pending', 'in_progress']);
+    ? new Set<WorkOrder['status']>(['pending', 'in_progress', 'paused', 'completed'])
+    : new Set<WorkOrder['status']>(['pending', 'in_progress', 'paused']);
   const filtered = workOrders.filter((wo) => (
     Boolean(wo?.id)
     && allowedStatuses.has(wo.status)
@@ -95,6 +150,7 @@ export function pickBestAutoLinkedWorkOrder(
       if (wo.lineId === criteria.lineId) value += 8;
       if (supervisorId && wo.supervisorId === supervisorId) value += 4;
       if (wo.status === 'in_progress') value += 2;
+      if (wo.status === 'paused') value += 1.5;
       if (wo.status === 'pending') value += 1;
       if (wo.status === 'completed') value += 0.5;
       return value;
@@ -148,10 +204,19 @@ export function deriveWorkOrderStatusFromProduced(
   producedQty: number,
   targetQty: number,
   previousStatus: WorkOrder['status'],
+  lastProducingReportDate?: string | null,
+  todayDate?: string,
 ): WorkOrder['status'] {
   if (previousStatus === 'cancelled') return 'cancelled';
   if (producedQty <= 0) return 'pending';
   if (targetQty > 0 && producedQty >= targetQty) return 'completed';
+
+  const lastDate = String(lastProducingReportDate || '').trim().slice(0, 10);
+  const today = String(todayDate || '').trim().slice(0, 10);
+  if (lastDate && today) {
+    const idleDays = daysBetweenCalendarDates(lastDate, today);
+    if (idleDays >= WORK_ORDER_IDLE_DAYS_BEFORE_PAUSED) return 'paused';
+  }
   return 'in_progress';
 }
 

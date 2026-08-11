@@ -1,10 +1,10 @@
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
+import { WORK_ORDER_STATUS_LABELS } from '../../utils/workOrderReportLinking';
 import type { WorkOrderGroupBy } from './hooks/useWorkOrderFilters';
 import { WorkOrderRow, type WorkOrderRowView } from './WorkOrderRow';
 import { WorkOrderMobileCard } from './WorkOrderMobileCard';
-import styles from './WorkOrders.module.css';
 import { TableSkeleton } from '@/src/shared/ui/skeletons';
 import { Button } from '@/components/UI';
 
@@ -30,13 +30,6 @@ interface GroupBucket {
   rows: WorkOrderRowView[];
 }
 
-const STATUS_LABEL: Record<WorkOrderStatus, string> = {
-  pending: 'قيد الانتظار',
-  in_progress: 'قيد التنفيذ',
-  completed: 'مكتمل',
-  cancelled: 'ملغي',
-};
-
 const groupRows = (rows: WorkOrderRowView[], groupBy: WorkOrderGroupBy): GroupBucket[] => {
   if (groupBy === 'none') {
     return [{ key: 'all', label: 'كل أوامر الشغل', rows }];
@@ -52,11 +45,11 @@ const groupRows = (rows: WorkOrderRowView[], groupBy: WorkOrderGroupBy): GroupBu
       key = row.order.lineId || 'line_unknown';
       label = row.lineName || 'بدون خط';
     } else if (groupBy === 'status') {
-      key = row.order.status;
-      label = STATUS_LABEL[row.order.status];
+      key = row.effectiveStatus;
+      label = WORK_ORDER_STATUS_LABELS[row.effectiveStatus];
     } else if (groupBy === 'supervisor') {
       key = row.order.supervisorId || 'supervisor_unknown';
-      label = (row.order as any).supervisorName || 'بدون مشرف';
+      label = (row.order as { supervisorName?: string }).supervisorName || 'بدون مشرف';
     }
 
     if (!map.has(key)) {
@@ -101,28 +94,32 @@ export function WorkOrdersTable({
 
   if (loading) {
     return (
-      <div className={styles.tableWrap}>
-        <TableSkeleton rows={10} columns={6} />
+      <div className="p-4">
+        <TableSkeleton rows={10} columns={8} />
       </div>
     );
   }
 
   if (rows.length === 0) {
-    return <div className={styles.emptyState}>لا توجد أوامر شغل مطابقة للفلاتر الحالية.</div>;
+    return (
+      <div className="p-12 text-center text-[var(--color-text-muted)]">
+        <span className="material-icons-round text-5xl mb-3 block opacity-30">assignment</span>
+        <p className="font-bold text-base">لا توجد أوامر شغل مطابقة للفلاتر الحالية</p>
+        <p className="text-sm mt-1">جرب تغيير معايير التصفية أو أنشئ أمر شغل جديد</p>
+      </div>
+    );
   }
 
   return (
-    <div className={styles.tableWrap}>
-      {grouped.map((group) => (
-        <div key={group.key} className={styles.groupBlock}>
-          {groupBy !== 'none' && (
-            <div className={styles.groupHeader}>
-              <span>{group.label}</span>
-              <span>{group.rows.length} أمر</span>
-            </div>
-          )}
-
-          <div className="erp-mobile-card-list p-2">
+    <div className="space-y-4">
+      <div className="md:hidden space-y-3 px-3 pb-3">
+        {grouped.map((group) => (
+          <div key={group.key} className="space-y-2.5">
+            {groupBy !== 'none' && (
+              <div className="px-1 text-[11px] font-bold text-[var(--color-text-muted)]">
+                {group.label} ({group.rows.length})
+              </div>
+            )}
             {group.rows.map((row) => (
               <WorkOrderMobileCard
                 key={`m-${row.order.id}`}
@@ -137,22 +134,33 @@ export function WorkOrdersTable({
               />
             ))}
           </div>
+        ))}
+      </div>
 
-          <div className={`erp-desktop-table ${styles.tableScroll}`}>
-            <table className={`${styles.table} erp-table`}>
-              <thead>
-                <tr>
-                  <th>رقم الأمر</th>
-                  <th>المنتج + الخط</th>
-                  <th>الكمية</th>
-                  <th>التقدم</th>
-                  <th>الأيام المتبقية</th>
-                  <th>الانحراف</th>
-                  <th>الحالة</th>
-                  <th>إجراءات</th>
-                </tr>
-              </thead>
-              <tbody>
+      <div className="hidden md:block overflow-x-auto">
+        <table className="erp-table w-full text-right border-collapse">
+          <thead>
+            <tr className="bg-[var(--color-bg)]/50 border-b border-[var(--color-border)]">
+              <th className="erp-th">رقم الأمر</th>
+              <th className="erp-th">المنتج + الخط</th>
+              <th className="erp-th text-center">الكمية</th>
+              <th className="erp-th text-center">التقدم</th>
+              <th className="erp-th text-center">الأيام المتبقية</th>
+              <th className="erp-th text-center">الانحراف</th>
+              <th className="erp-th text-center">الحالة</th>
+              <th className="erp-th text-center">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--color-border)]">
+            {grouped.map((group) => (
+              <React.Fragment key={group.key}>
+                {groupBy !== 'none' && (
+                  <tr className="bg-[var(--color-bg)]/70">
+                    <td className="px-4 py-2.5 text-xs font-bold text-[var(--color-text-muted)]" colSpan={8}>
+                      {group.label} ({group.rows.length})
+                    </td>
+                  </tr>
+                )}
                 {group.rows.map((row) => (
                   <WorkOrderRow
                     key={row.order.id}
@@ -166,20 +174,20 @@ export function WorkOrdersTable({
                     onOpenScanner={onOpenScanner}
                   />
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-      <div className={styles.tableFooter}>
-        {hasMore && <div ref={loaderRef} className={styles.loadSentinel} aria-hidden="true" />}
+      <div className="flex flex-col items-center gap-2 py-3">
+        {hasMore && <div ref={loaderRef} className="h-1 w-full" aria-hidden="true" />}
         {hasMore ? (
-          <Button type="button" className={styles.loadMoreBtn} onClick={onLoadMore} disabled={loadingMore}>
+          <Button type="button" variant="outline" onClick={onLoadMore} disabled={loadingMore}>
             {loadingMore ? 'جاري التحميل...' : 'تحميل المزيد'}
           </Button>
         ) : (
-          <span className={styles.endText}>تم تحميل كل النتائج</span>
+          <span className="text-xs font-bold text-[var(--color-text-muted)]">تم تحميل كل النتائج</span>
         )}
       </div>
     </div>

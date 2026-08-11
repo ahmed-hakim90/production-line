@@ -110,6 +110,7 @@ export type AccountingReadiness = {
     name: string;
     code: string;
     type?: "direct" | "indirect";
+    productionCostingEnabled?: boolean;
     accountingCategory?: string;
     parentId?: string;
     allowPosting?: boolean;

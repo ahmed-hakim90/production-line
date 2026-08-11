@@ -21,13 +21,14 @@ import {
 } from "firebase/auth";
 import { getFunctions, httpsCallable, Functions } from "firebase/functions";
 
+const viteEnv = (import.meta.env ?? {}) as Record<string, string | undefined>;
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: viteEnv.VITE_FIREBASE_API_KEY,
+  authDomain: viteEnv.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: viteEnv.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: viteEnv.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: viteEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: viteEnv.VITE_FIREBASE_APP_ID,
 };
 
 const isConfigured =
@@ -854,9 +855,15 @@ export type MutateAccountingInput = Record<string, unknown> & {
     | "seed_defaults"
     | "upsert_account"
     | "save_settings"
+    | "save_costing_policy"
     | "upsert_cost_center"
+    | "upsert_production_cost_center"
+    | "deactivate_production_cost_center"
+    | "close_cost_period"
+    | "reopen_cost_period"
     | "set_period"
     | "post_journal"
+    | "post_opening_balance"
     | "reverse_journal"
     | "readiness"
     | "link_repair_branch"
@@ -1110,6 +1117,47 @@ export const adminDeleteTenantCascadeCallable = async (
   }
 };
 
+export const createRepairBranchProvisionedCallable = async (input: {
+  name: string;
+  phone?: string;
+  address?: string;
+  isMain?: boolean;
+  managerEmployeeId: string;
+  managerEmployeeName?: string;
+  allowCreditDelivery?: boolean;
+  allowCreditSalesInvoices?: boolean;
+  salesInvoicesLocked?: boolean;
+}): Promise<{
+  ok: true;
+  branchId: string;
+  warehouseId: string;
+  warehouseCode: string;
+  custodyWarehouseId: string;
+  unrepairableWarehouseId: string;
+  costCenterId: string;
+}> => {
+  if (!isConfigured || !functionsClient)
+    throw new Error("Firebase not configured");
+  const callable = httpsCallable<
+    typeof input,
+    {
+      ok: true;
+      branchId: string;
+      warehouseId: string;
+      warehouseCode: string;
+      custodyWarehouseId: string;
+      unrepairableWarehouseId: string;
+      costCenterId: string;
+    }
+  >(functionsClient, "createRepairBranchProvisioned");
+  try {
+    const result = await callable(input);
+    return result.data;
+  } catch (error: unknown) {
+    throw normalizeCallableError(error);
+  }
+};
+
 export const deleteRepairBranchCascadeCallable = async (
   branchId: string,
 ): Promise<{
@@ -1201,6 +1249,38 @@ export const importTenantBackupCallable = async (
     });
     return result.data;
   } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const createProductionReportFastCallable = async (
+  report: Record<string, unknown>,
+): Promise<{ ok: true; reportId: string; reportCode: string }> => {
+  if (!isConfigured || !functionsClient) throw new Error("Firebase not configured");
+  const callable = httpsCallable<
+    { report: Record<string, unknown> },
+    { ok: true; reportId: string; reportCode: string }
+  >(functionsClient, "createProductionReportFast");
+  try {
+    const result = await callable({ report });
+    return result.data;
+  } catch (error: unknown) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const retryProductionReportProcessingCallable = async (
+  reportId: string,
+): Promise<{ ok: true; reportId: string }> => {
+  if (!isConfigured || !functionsClient) throw new Error("Firebase not configured");
+  const callable = httpsCallable<
+    { reportId: string },
+    { ok: true; reportId: string }
+  >(functionsClient, "retryProductionReportProcessing");
+  try {
+    const result = await callable({ reportId: reportId.trim() });
+    return result.data;
+  } catch (error: unknown) {
     throw normalizeCallableError(error);
   }
 };

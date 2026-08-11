@@ -3,8 +3,7 @@ import { Edit2, Eye, RotateCcw, ScanLine, Trash2, X } from 'lucide-react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { formatNumber } from '../../../../utils/calculations';
-import { WorkOrderStatusBadge } from './WorkOrderStatusBadge';
-import styles from './WorkOrders.module.css';
+import { WorkOrderStatusBadge, WORK_ORDER_STATUS_STYLE } from './WorkOrderStatusBadge';
 import { RowActionsMenu, type RowActionMenuEntry } from '../../../../src/components/erp/RowActionsMenu';
 
 export interface WorkOrderRowView {
@@ -17,6 +16,7 @@ export interface WorkOrderRowView {
   deviationPct: number;
   storedStatus: WorkOrderStatus;
   effectiveStatus: WorkOrderStatus;
+  statusDetail: string;
   startDateLabel: string;
   estimatedDays: number;
   dailyAverage: number;
@@ -38,20 +38,21 @@ interface WorkOrderRowProps {
   onOpenScanner?: (order: WorkOrder) => void;
 }
 
-const progressColorClass = (progress: number): string => {
-  if (progress >= 80) return styles.progressSuccess;
-  if (progress >= 40) return styles.progressWarning;
-  return styles.progressPrimary;
-};
-
 function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onCloseOrder, onDelete, onReopenCompleted, onOpenScanner }: WorkOrderRowProps) {
   const { order } = row;
   const produced = Number(order.producedQuantity || 0);
   const target = Number(order.quantity || 0);
   const progress = target > 0 ? Math.min(100, Math.round((produced / target) * 100)) : 0;
   const isDeviationUp = row.deviationPct > 0;
-  const canClose = order.status === 'in_progress';
+  const canClose = row.effectiveStatus === 'in_progress' || row.effectiveStatus === 'paused';
   const canOpenScanner = Boolean(onOpenScanner && order.id && order.status !== 'cancelled');
+  const statusStyle = WORK_ORDER_STATUS_STYLE[row.effectiveStatus];
+  const deadlineClass =
+    row.expectedEndTone === 'overdue'
+      ? 'text-[rgb(var(--color-danger))]'
+      : row.expectedEndTone === 'near'
+        ? 'text-[rgb(var(--color-warning))]'
+        : 'text-[var(--color-text-muted)]';
 
   const actions: RowActionMenuEntry[] = [
     {
@@ -112,43 +113,52 @@ function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onClos
   ];
 
   return (
-    <tr className={styles.tableRow} onClick={() => onRowClick(order)}>
-      <td className={styles.cellStrong}>
-        <button className={styles.linkLike} onClick={() => onRowClick(order)} type="button">
+    <tr
+      className="hover:bg-[var(--color-bg)]/50 transition-colors cursor-pointer"
+      onClick={() => onRowClick(order)}
+    >
+      <td className="px-4 py-3.5">
+        <button className="text-sm font-bold text-primary hover:underline text-right" type="button">
           {order.workOrderNumber}
         </button>
       </td>
-      <td>
-        <div className={styles.cellStack}>
-          <span className={styles.cellPrimary}>{row.productName}</span>
-          <span className={styles.cellSecondary}>{row.lineName}</span>
-        </div>
+      <td className="px-4 py-3.5">
+        <p className="text-sm font-bold text-[var(--color-text)]">{row.productName}</p>
+        <p className="text-[11px] text-[var(--color-text-muted)] font-medium">{row.lineName}</p>
       </td>
-      <td className={styles.monoCell}>{formatNumber(produced)}/{formatNumber(target)}</td>
-      <td>
-        <div className={styles.progressCell}>
-          <div className={styles.progressBar}>
+      <td className="px-4 py-3.5 text-center">
+        <p className="text-sm font-bold text-[var(--color-text)]">{formatNumber(target)}</p>
+        <p className="text-[10px] text-[var(--color-text-muted)]">متبقي: {formatNumber(row.remainingQuantity)}</p>
+      </td>
+      <td className="px-4 py-3.5 text-center">
+        <div className="flex flex-col items-center gap-1.5">
+          <span className={`text-sm font-bold ${progress >= 100 ? 'text-[rgb(var(--color-success))]' : progress >= 50 ? 'text-[rgb(var(--color-primary))]' : 'text-[rgb(var(--color-warning))]'}`}>
+            {progress}%
+          </span>
+          <div className="w-20 h-1.5 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
             <div
-              className={`${styles.progressFill} ${progressColorClass(progress)}`}
+              className={`h-full rounded-full transition-all duration-500 ${statusStyle.bar}`}
               style={{ width: `${progress}%` }}
             />
           </div>
-          <span className={styles.progressLabel}>{progress}%</span>
+          <span className="text-[10px] text-[var(--color-text-muted)] font-medium">
+            {formatNumber(produced)} / {formatNumber(target)}
+          </span>
         </div>
       </td>
-      <td>
-        <span className={`${styles.deadline} ${styles[`deadline_${row.expectedEndTone}`]}`}>
-          {row.remainingDaysLabel}
-        </span>
+      <td className="px-4 py-3.5 text-center">
+        <span className={`text-xs font-bold ${deadlineClass}`}>{row.remainingDaysLabel}</span>
       </td>
-      <td>
-        <span className={`${styles.deviationBadge} ${isDeviationUp ? styles.deviationUp : styles.deviationDown}`}>
+      <td className="px-4 py-3.5 text-center">
+        <span className={`text-xs font-bold ${isDeviationUp ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
           {isDeviationUp ? '▲' : '▼'} {Math.abs(row.deviationPct).toFixed(1)}%
         </span>
       </td>
-      <td><WorkOrderStatusBadge status={order.status} /></td>
-      <td>
-        <div className={styles.actionCell} onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-3.5 text-center">
+        <WorkOrderStatusBadge status={row.effectiveStatus} detail={row.statusDetail} />
+      </td>
+      <td className="px-4 py-3.5 text-center">
+        <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
           <RowActionsMenu items={actions} />
         </div>
       </td>
@@ -176,5 +186,7 @@ export const WorkOrderRow = React.memo(
     prev.row.order.estimatedCost === next.row.order.estimatedCost &&
     prev.row.expectedEndLabel === next.row.expectedEndLabel &&
     prev.row.expectedEndTone === next.row.expectedEndTone &&
-    prev.row.deviationPct === next.row.deviationPct,
+    prev.row.deviationPct === next.row.deviationPct &&
+    prev.row.effectiveStatus === next.row.effectiveStatus &&
+    prev.row.statusDetail === next.row.statusDetail,
 );

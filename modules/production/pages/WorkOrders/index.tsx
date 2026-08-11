@@ -11,7 +11,13 @@ import { MODAL_KEYS } from '../../../../components/modal-manager/modalKeys';
 import { isConfigured } from '../../../auth/services/firebase';
 import { useAppStore, useShallowStore } from '../../../../store/useAppStore';
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
-import { addDaysToDate, formatNumber } from '../../../../utils/calculations';
+import { addDaysToDate, formatNumber, getTodayDateString } from '../../../../utils/calculations';
+import {
+  deriveWorkOrderStatusFromProduced,
+  getWorkOrderStatusDetail,
+  WORK_ORDER_STATUS_LABELS,
+  WORK_ORDER_STATUS_SORT_RANK,
+} from '../../utils/workOrderReportLinking';
 import { estimateReportCost } from '../../../../utils/costCalculations';
 import { exportWorkOrders, type WorkOrderExportRow } from '../../../../utils/exportExcel';
 import { useManagedPrint } from '../../../../utils/printManager';
@@ -32,6 +38,10 @@ import { useWorkOrdersRealtime } from './hooks/useWorkOrdersRealtime';
 import { useWorkOrderStore } from './store/workOrderStore';
 import type { WorkOrderRowView } from './WorkOrderRow';
 import styles from './WorkOrders.module.css';
+import {
+  loadReportsComponentLabelOptions,
+  type InjectionComponentOption,
+} from '../../utils/injectionComponentOptions';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import {
   PRODUCTION_REPORT_OPERATION_KEYS,
@@ -59,15 +69,9 @@ const normalizeDateRange = (dateRange: { from: string; to: string } | null) => {
 interface WorkOrderReportMeta {
   count: number;
   firstReportDate: string | null;
+  lastProducingReportDate: string | null;
   producedQuantity: number;
 }
-
-const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {
-  pending: 'قيد الانتظار',
-  in_progress: 'قيد التنفيذ',
-  completed: 'مكتمل',
-  cancelled: 'ملغي',
-};
 
 const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
   const explicit = Number((order as any).estimatedDays ?? (order as any).estimatedDurationDays ?? 0);
@@ -118,8 +122,11 @@ export const WorkOrders: React.FC = () => {
   }, [userRoleName, loggedInSupervisor]);
 
   const { filters, setFilter, clearFilters } = useWorkOrderFilters();
+  const realtimeStatus = filters.status === 'completed' || filters.status === 'cancelled'
+    ? filters.status
+    : 'all';
   const { orders: liveOrders, loading, loadingMore, hasMore, error, loadMore } = useWorkOrdersRealtime({
-    status: filters.status,
+    status: realtimeStatus,
     lineId: filters.lineId,
     supervisorId: scopedSupervisorId,
     dateRange: normalizeDateRange(filters.dateRange),
@@ -129,6 +136,21 @@ export const WorkOrders: React.FC = () => {
   const updateOrder = useWorkOrderStore((s) => s.updateOrder);
   const setSelectedOrder = useWorkOrderStore((s) => s.setSelectedOrder);
   const orderMap = useWorkOrderStore((s) => s.orders);
+  const [componentLabelOptions, setComponentLabelOptions] = useState<InjectionComponentOption[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    loadReportsComponentLabelOptions()
+      .then((rows) => {
+        if (mounted) setComponentLabelOptions(rows);
+      })
+      .catch(() => {
+        if (mounted) setComponentLabelOptions([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const selectedOrderId = useWorkOrderStore((s) => s.selectedOrderId);
 
   const [syncingStatus, setSyncingStatus] = useState<string | null>(null);
@@ -190,8 +212,12 @@ export const WorkOrders: React.FC = () => {
   }, [liveOrders, setOrders]);
 
   const productNameMap = useMemo(() => {
-    return new Map(_rawProducts.map((p) => [p.id || '', p.name]));
-  }, [_rawProducts]);
+    const map = new Map(_rawProducts.map((p) => [p.id || '', p.name]));
+    componentLabelOptions.forEach((row) => {
+      if (row.id && !map.has(row.id)) map.set(row.id, row.name);
+    });
+    return map;
+  }, [_rawProducts, componentLabelOptions]);
 
   const lineNameMap = useMemo(() => {
     return new Map(_rawLines.map((line) => [line.id || '', line.name]));
@@ -236,17 +262,23 @@ export const WorkOrders: React.FC = () => {
         orderIds.map(async (id) => {
           try {
             const reports = await reportService.getByWorkOrderId(id);
-            const firstReportDate = reports.reduce<string | null>((minDate, report) => {
-              const date = String(report.date || '').trim();
+            const producingDates = reports
+              .filter((report) => Number(report.quantityProduced || 0) > 0)
+              .map((report) => String(report.date || '').trim().slice(0, 10))
+              .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+              .sort((a, b) => a.localeCompare(b));
+            const firstReportDate = producingDates[0] || reports.reduce<string | null>((minDate, report) => {
+              const date = String(report.date || '').trim().slice(0, 10);
               if (!date) return minDate;
               if (!minDate || date < minDate) return date;
               return minDate;
             }, null);
+            const lastProducingReportDate = producingDates[producingDates.length - 1] || null;
             const producedQuantity = sumQuantityProducedForWorkOrderExcludingPackaging(reports, _rawLines);
-            return [id, { count: reports.length, firstReportDate, producedQuantity }] as const;
+            return [id, { count: reports.length, firstReportDate, lastProducingReportDate, producedQuantity }] as const;
           } catch (error) {
             console.error('work order report meta error', error);
-            return [id, { count: -1, firstReportDate: null, producedQuantity: 0 }] as const;
+            return [id, { count: -1, firstReportDate: null, lastProducingReportDate: null, producedQuantity: 0 }] as const;
           }
         }),
       );
@@ -290,18 +322,22 @@ export const WorkOrders: React.FC = () => {
       const expectedEnd = String(expectedEndByFirstReport || (order as any).expectedEnd || order.targetDate || '');
       const deviationPct = Number((order as any).executionDeviationPct ?? 0);
       const supervisorName = supervisorNameMap.get(order.supervisorId || '') || '—';
-      const effectiveStatus: WorkOrderStatus =
-        order.status === 'in_progress' && reportMeta && reportMeta.count === 0
-          ? 'pending'
-          : order.status;
       const quantity = Number(order.quantity || 0);
       const producedFromOrder = Number(order.producedQuantity || 0);
       const producedFromScans = Number(order.actualProducedFromScans || order.scanSummary?.completedUnits || 0);
       const producedFromReports = Number(reportMeta?.producedQuantity || 0);
       const produced = Math.max(producedFromOrder, producedFromScans, producedFromReports);
+      const effectiveStatus = deriveWorkOrderStatusFromProduced(
+        produced,
+        quantity,
+        order.status,
+        reportMeta?.lastProducingReportDate,
+        getTodayDateString(),
+      );
       const hasExecutionSignal = reportCount > 0 || produced > 0 || Boolean((order as any).startedAt);
       const diff = expectedEnd ? dayDiff(expectedEnd) : 0;
       const isCompleted = effectiveStatus === 'completed';
+      const statusDetail = getWorkOrderStatusDetail(effectiveStatus, diff);
       const isDelayTrackable = !isCompleted && ((effectiveStatus === 'in_progress') || hasExecutionSignal);
       const expectedEndTone = isDelayTrackable
         ? (diff < 0 ? 'overdue' : diff <= 3 ? 'near' : 'normal')
@@ -380,6 +416,7 @@ export const WorkOrders: React.FC = () => {
         deviationPct,
         storedStatus: order.status,
         effectiveStatus,
+        statusDetail,
         startDateLabel: executionStartDate || '—',
         estimatedDays,
         dailyAverage,
@@ -409,6 +446,21 @@ export const WorkOrders: React.FC = () => {
     () => (selectedOrderId ? (rowViews.find((row) => row.order.id === selectedOrderId) ?? null) : null),
     [selectedOrderId, rowViews],
   );
+
+  const visibleRowViews = useMemo(() => {
+    const filtered = filters.status === 'all'
+      ? rowViews
+      : rowViews.filter((row) => row.effectiveStatus === filters.status);
+    return [...filtered].sort((a, b) => {
+      const statusDiff =
+        (WORK_ORDER_STATUS_SORT_RANK[a.effectiveStatus] ?? 99)
+        - (WORK_ORDER_STATUS_SORT_RANK[b.effectiveStatus] ?? 99);
+      if (statusDiff !== 0) return statusDiff;
+      const aAt = (a.order.createdAt as { seconds?: number } | undefined)?.seconds || 0;
+      const bAt = (b.order.createdAt as { seconds?: number } | undefined)?.seconds || 0;
+      return bAt - aAt;
+    });
+  }, [filters.status, rowViews]);
   const selectedOrder = selectedRowView?.order ?? null;
   const selectedProductName = selectedRowView?.productName ?? '—';
   const selectedLineName = selectedRowView?.lineName ?? '—';
@@ -418,28 +470,24 @@ export const WorkOrders: React.FC = () => {
 
   const counts = useMemo(() => {
     const byStatus = {
-      all: allOrders.length,
+      all: rowViews.length,
       pending: 0,
       in_progress: 0,
+      paused: 0,
       completed: 0,
       cancelled: 0,
     };
-    for (const order of allOrders) {
-      const meta = order.id ? reportMetaByOrderId[order.id] : undefined;
-      const effectiveStatus: WorkOrderStatus =
-        order.status === 'in_progress' && meta && meta.count === 0
-          ? 'pending'
-          : order.status;
-      byStatus[effectiveStatus] += 1;
+    for (const row of rowViews) {
+      byStatus[row.effectiveStatus] += 1;
     }
     return byStatus;
-  }, [allOrders, reportMetaByOrderId]);
+  }, [rowViews]);
 
   const kpis = useMemo(() => {
-    const inProgress = counts.in_progress;
-    const completed = counts.completed;
+    const working = counts.in_progress;
+    const paused = counts.paused;
     const overdue = rowViews.filter((row) => row.expectedEndTone === 'overdue').length;
-    return { inProgress, completed, overdue };
+    return { working, paused, overdue };
   }, [counts, rowViews]);
 
   const handleStatusChange = async (id: string, status: WorkOrderStatus) => {
@@ -510,6 +558,7 @@ export const WorkOrders: React.FC = () => {
         [order.id!]: {
           count: result.reportCount,
           firstReportDate: prev[order.id!]?.firstReportDate ?? null,
+          lastProducingReportDate: prev[order.id!]?.lastProducingReportDate ?? null,
           producedQuantity: result.producedQuantity,
         },
       }));
@@ -540,7 +589,7 @@ export const WorkOrders: React.FC = () => {
       if (stored !== 'completed') return;
       if (
         !window.confirm(
-          'أمر الشغل مسجّل كمكتمل. هل تريد إعادته إلى «قيد التنفيذ»؟ استخدم ذلك عند الإغلاق بالخطأ؛ يمكنك إغلاقه مرة أخرى بعد التصحيح.',
+          'أمر الشغل مسجّل كمكتمل. هل تريد إعادته إلى «شغال»؟ استخدم ذلك عند الإغلاق بالخطأ؛ يمكنك إغلاقه مرة أخرى بعد التصحيح.',
         )
       ) {
         return;
@@ -634,7 +683,7 @@ export const WorkOrders: React.FC = () => {
   };
 
   const handleExport = () => {
-    const detailedRows: WorkOrderExportRow[] = rowViews.map((row) => ({
+    const detailedRows: WorkOrderExportRow[] = visibleRowViews.map((row) => ({
       workOrderNumber: row.order.workOrderNumber,
       productName: row.productName,
       lineName: row.lineName,
@@ -659,7 +708,7 @@ export const WorkOrders: React.FC = () => {
     }));
 
     exportWorkOrders(
-      searchedOrders,
+      visibleRowViews.map((row) => row.order),
       {
         getProductName: (id) => productNameMap.get(id) || '—',
         getLineName: (id) => lineNameMap.get(id) || '—',
@@ -685,11 +734,16 @@ export const WorkOrders: React.FC = () => {
     <ModuleOpsPageShell
       className={styles.page}
       eyebrow="أوامر الشغل"
-      rangeLabel="نسخة محسّنة مع تفاصيل في درج جانبي وتحديث مباشر"
+      rangeLabel="إدارة وتتبع أوامر الشغل"
       hero={[
-        { key: 'inProgress', label: 'قيد التنفيذ', value: kpis.inProgress },
-        { key: 'completed', label: 'مكتمل', value: kpis.completed },
-        { key: 'overdue', label: 'متأخر', value: kpis.overdue },
+        { key: 'working', label: 'شغال', value: kpis.working },
+        {
+          key: 'paused',
+          label: 'متوقف',
+          value: kpis.paused,
+          accent: kpis.paused > 0,
+        },
+        { key: 'overdue', label: 'متأخر', value: kpis.overdue, accent: kpis.overdue > 0 },
       ]}
       actions={(
         <div className="flex flex-wrap items-center gap-2">
@@ -705,7 +759,7 @@ export const WorkOrders: React.FC = () => {
               طلب صرف إنتاج
             </Button>
           ) : null}
-          {rowViews.length > 0 ? (
+          {visibleRowViews.length > 0 ? (
             <Button type="button" variant="outline" onClick={handleExport}>
               <span className="material-icons-round text-sm">download</span>
               تصدير أوامر الشغل Excel
@@ -737,7 +791,7 @@ export const WorkOrders: React.FC = () => {
         )}
 
         <WorkOrdersTable
-          rows={rowViews}
+          rows={visibleRowViews}
           groupBy={filters.groupBy}
           loading={loading}
           loadingMore={loadingMore}

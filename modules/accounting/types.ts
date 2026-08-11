@@ -61,6 +61,17 @@ export interface AccountingSettings {
   autoPostInventory: boolean;
   requireCostCenter: boolean;
   allowManualJournals: boolean;
+  allowJournalReversal: boolean;
+  enforceOpenPeriods: boolean;
+  allowPeriodReopen: boolean;
+  syncCostAndAccountingClose: boolean;
+  autoPostRepairPayments: boolean;
+  autoPostRepairSales: boolean;
+  autoPostRepairCogs: boolean;
+  autoPostRepairTreasury: boolean;
+  cutoverPeriod: string;
+  openingBalanceStatus: "pending" | "approved";
+  openingBalanceJournalId?: string;
 }
 
 export interface AccountingPeriod {
@@ -68,6 +79,22 @@ export interface AccountingPeriod {
   tenantId: string;
   period: string;
   status: "open" | "closed";
+  updatedAt?: string;
+}
+
+export interface AccountingOutboxItem {
+  id?: string;
+  tenantId: string;
+  source: string;
+  sourceId: string;
+  branchId?: string | null;
+  costCenterId?: string | null;
+  amount?: number;
+  date: string;
+  period: string;
+  status: "pending" | "posted" | "failed";
+  pendingReason: "automation_disabled" | "opening_balance_pending" | "period_closed";
+  attempts?: number;
   updatedAt?: string;
 }
 

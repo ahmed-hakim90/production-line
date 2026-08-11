@@ -7,8 +7,10 @@ import type {
   FirestoreEmployee,
   Asset,
   AssetDepreciation,
+  CostingPolicySettings,
 } from '../types';
 import { countsTowardProductManufacturingVolume } from '../modules/production/utils/reportTypes';
+import { resolveCostingPolicy } from './costingPolicy';
 
 export interface LineCostData {
   laborCost: number;
@@ -94,6 +96,7 @@ export type CostCenterProductScope = NonNullable<CostCenter['productScope']>;
  */
 export const isProductionAllocationCostCenter = (center: CostCenter): boolean => {
   if (!center.isActive || !center.id || center.type !== 'indirect') return false;
+  if (center.productionCostingEnabled === false) return false;
   if (center.postingMode && center.postingMode !== 'driver_allocation') return false;
   if (center.costObjectScope && !['production', 'shared'].includes(center.costObjectScope)) return false;
   if (
@@ -421,6 +424,7 @@ export interface LiveCostComputationOptions {
   payrollNetByEmployee?: Map<string, number>;
   payrollNetByDepartment?: Map<string, number>;
   workingDaysByMonth?: Record<string, number>;
+  costingPolicy?: Partial<CostingPolicySettings>;
 }
 
 export interface LiveCostComputationResult {
@@ -498,8 +502,9 @@ export const computeProductionCostEngine = ({
   costAllocations,
   options = {},
 }: ProductionCostEngineInput): ProductionCostEngineResult => {
-  const assets = options.assets || [];
-  const assetDepreciations = options.assetDepreciations || [];
+  const policy = resolveCostingPolicy(options.costingPolicy);
+  const assets = policy.includeDepreciation ? (options.assets || []) : [];
+  const assetDepreciations = policy.includeDepreciation ? (options.assetDepreciations || []) : [];
   const productCategoryById = options.productCategoryById || new Map<string, string>();
   const result: LiveCostComputationResult = {
     totalProduction: 0,
@@ -537,7 +542,9 @@ export const computeProductionCostEngine = ({
     });
   }
 
-  const activeIndirectCenters = costCenters.filter(isProductionAllocationCostCenter);
+  const activeIndirectCenters = policy.includeIndirectCenters
+    ? costCenters.filter(isProductionAllocationCostCenter)
+    : [];
   const monthsInScope = new Set<string>();
   reports.forEach((report) => {
     const month = String(report.date?.slice(0, 7) || '');
@@ -618,6 +625,7 @@ export const computeProductionCostEngine = ({
     let totalDaily = 0;
     const centerDaily = new Map<string, number>();
     activeIndirectCenters.forEach((center) => {
+      if (!policy.allowLinePercentageAllocation) return;
       if ((center.allocationBasis || 'line_percentage') !== 'line_percentage') return;
       const centerId = String(center.id || '');
       const allocation = allocationByCenterMonth.get(`${centerId}__${month}`);
@@ -663,6 +671,7 @@ export const computeProductionCostEngine = ({
     const monthTotals = monthProductQtyTotals.get(month) || new Map<string, number>();
     const allProductIds = Array.from(monthTotals.keys());
     const rules = activeIndirectCenters
+      .filter(() => policy.allowQuantityAllocation)
       .filter((center) => (center.allocationBasis || 'line_percentage') === 'by_qty')
       .map((center) => {
         const centerId = String(center.id || '');
@@ -673,11 +682,13 @@ export const computeProductionCostEngine = ({
           depreciationByMonthCenter,
           options.workingDaysByMonth,
         );
-        const monthlyAmount = getByQtyEffectiveMonthlyAmount(
-          resolvedAmount,
-          workingDays,
-          Number(monthActiveDays.get(month) || 0),
-        );
+        const monthlyAmount = policy.prorateOpenPeriod
+          ? getByQtyEffectiveMonthlyAmount(
+              resolvedAmount,
+              workingDays,
+              Number(monthActiveDays.get(month) || 0),
+            )
+          : resolvedAmount;
         const allowedProductIds = center.productScope === 'selected'
           ? (center.productIds || []).map((id) => String(id))
           : center.productScope === 'category'
@@ -698,23 +709,32 @@ export const computeProductionCostEngine = ({
   };
 
   const manufacturingReports = reports.filter(countsTowardProductManufacturingVolume);
-  const supervisorShareMap = options.supervisorHourlyRates
+  const supervisorShareMap = policy.includeSupervisor && options.supervisorHourlyRates
     ? buildSupervisorIndirectShareMap(manufacturingReports, options.supervisorHourlyRates, hourlyRate)
     : new Map<string, number>();
 
   manufacturingReports.forEach((report) => {
     const qty = Number(report.quantityProduced || 0);
     if (qty <= 0 || !report.productId) return;
-    const laborCost = Number(report.workersCount || 0) * Number(report.workHours || 0) * hourlyRate;
+    const laborCost = policy.includeDirectLabor
+      ? Number(report.workersCount || 0) * Number(report.workHours || 0) * hourlyRate
+      : 0;
     const month = String(report.date?.slice(0, 7) || getCurrentMonth());
     const lineDateKey = `${report.lineId}_${report.date}`;
     const lineDateTotalHours = Number(lineDateHoursTotals.get(lineDateKey) || 0);
     const lineDateTotalQty = Number(lineDateQtyTotals.get(lineDateKey) || 0);
     const reportHours = Math.max(0, Number(report.workHours || 0));
     let shareRatio = 0;
-    if (lineDateTotalHours > 0 && reportHours > 0) {
+    if (
+      policy.dailyAllocationDriver === 'work_hours' &&
+      lineDateTotalHours > 0 &&
+      reportHours > 0
+    ) {
       shareRatio = reportHours / lineDateTotalHours;
-    } else if (lineDateTotalQty > 0) {
+    } else if (
+      lineDateTotalQty > 0 &&
+      (policy.dailyAllocationDriver === 'quantity' || policy.fallbackToQuantity)
+    ) {
       shareRatio = qty / lineDateTotalQty;
     }
 

@@ -149,6 +149,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   );
 
   const canCreateFinishedReportsBase = can('reports.create');
+  const canCreateForAnySupervisor = can('reports.createForAnySupervisor');
   const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
   const forcePackagingOnly = isPackagingOnly;
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
@@ -180,12 +181,13 @@ export const GlobalCreateReportModal: React.FC = () => {
   );
   const isSupervisorReporter = currentEmployee?.level === 2;
   const shouldLockEmployeeToCurrent = Boolean(currentEmployee?.id)
+    && !canCreateForAnySupervisor
     && (isSupervisorReporter || forceInjectionOnly || forcePackagingOnly);
 
   const activeWorkOrders = useMemo(
     () =>
       workOrders.filter((w) => {
-        if (w.status !== 'pending' && w.status !== 'in_progress') return false;
+        if (w.status !== 'pending' && w.status !== 'in_progress' && w.status !== 'paused') return false;
         if (!workOrderMatchesReportType(w, resolveReportType(form.reportType))) return false;
         if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return true;
         return w.supervisorId === currentEmployee.id;
@@ -585,6 +587,28 @@ export const GlobalCreateReportModal: React.FC = () => {
       openErrorOverlay(t('modalManager.createReport.injectionPermissionDenied'));
       return;
     }
+    const selectedWorkOrder = form.workOrderId
+      ? activeWorkOrders.find((row) => row.id === form.workOrderId) ?? null
+      : null;
+    const isDelegatedEntry = Boolean(
+      canCreateForAnySupervisor
+      && currentEmployee?.id
+      && form.employeeId
+      && form.employeeId !== currentEmployee.id,
+    );
+    if (isDelegatedEntry && !selectedWorkOrder) {
+      openErrorOverlay('اختر أمر شغل أولاً لإنشاء تقرير بالنيابة عن مشرف الخط.');
+      return;
+    }
+    if (selectedWorkOrder && (
+      !selectedWorkOrder.supervisorId
+      || selectedWorkOrder.supervisorId !== form.employeeId
+      || selectedWorkOrder.lineId !== form.lineId
+      || selectedWorkOrder.productId !== form.productId
+    )) {
+      openErrorOverlay('بيانات المشرف والخط والمنتج يجب أن تطابق أمر الشغل المختار.');
+      return;
+    }
     if (form.reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(form.shift)) {
       openErrorOverlay('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
       return;
@@ -812,11 +836,11 @@ export const GlobalCreateReportModal: React.FC = () => {
                   ? t('modalManager.createReport.packagingSupervisorRequired')
                   : t('modalManager.createReport.supervisorRequired')}
               </label>
-              {shouldLockEmployeeToCurrent && currentEmployee ? (
+              {(shouldLockEmployeeToCurrent && currentEmployee) || (canCreateForAnySupervisor && form.workOrderId) ? (
                 <input
                   type="text"
                   readOnly
-                  value={currentEmployee.name}
+                  value={employees.find((row) => row.id === form.employeeId)?.name || currentEmployee?.name || '—'}
                   className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
@@ -833,11 +857,11 @@ export const GlobalCreateReportModal: React.FC = () => {
           {form.reportType === 'component_injection' && (
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.supervisorRequired')}</label>
-              {shouldLockEmployeeToCurrent && currentEmployee ? (
+              {(shouldLockEmployeeToCurrent && currentEmployee) || (canCreateForAnySupervisor && form.workOrderId) ? (
                 <input
                   type="text"
                   readOnly
-                  value={currentEmployee.name}
+                  value={employees.find((row) => row.id === form.employeeId)?.name || currentEmployee?.name || '—'}
                   className="w-full border border-[var(--color-border)] bg-[var(--color-surface-hover)]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
                 />
               ) : (
@@ -868,6 +892,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                 }))}
                 value={form.lineId}
                 onChange={(v) => setForm((prev) => ({ ...prev, lineId: v, workOrderId: '' }))}
+                disabled={canCreateForAnySupervisor && Boolean(form.workOrderId)}
               />
             </div>
             {form.reportType !== 'packaging' && (
@@ -880,6 +905,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                   options={selectableProducts}
                   value={form.productId}
                   onChange={(v) => setForm((prev) => ({ ...prev, productId: v, workOrderId: '' }))}
+                  disabled={canCreateForAnySupervisor && Boolean(form.workOrderId)}
                 />
               </div>
             )}
@@ -935,6 +961,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                         placeholder={t('modalManager.createReport.selectProduct')}
                         options={selectableProducts}
                         value={row.productId}
+                        disabled={canCreateForAnySupervisor && Boolean(form.workOrderId)}
                         onChange={(v) => {
                           setForm((prev) => {
                             const next = [...(prev.packagingLines || [])];

@@ -478,8 +478,8 @@ export const WorkOrderScanner: React.FC = () => {
       rangeLabel={`${workOrder.workOrderNumber} — ${productName} — ${lineName}`}
       actions={(
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={workOrder.status === 'completed' ? 'success' : workOrder.status === 'in_progress' ? 'warning' : 'info'}>
-            {workOrder.status === 'completed' ? 'مكتمل' : workOrder.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'}
+          <Badge variant={workOrder.status === 'completed' ? 'success' : workOrder.status === 'in_progress' ? 'warning' : workOrder.status === 'paused' ? 'neutral' : 'info'}>
+            {workOrder.status === 'completed' ? 'مكتمل' : workOrder.status === 'in_progress' ? 'شغال' : workOrder.status === 'paused' ? 'متوقف' : workOrder.status === 'cancelled' ? 'ملغي' : 'مش شغال'}
           </Badge>
           {workOrder.status !== 'completed' && (
             <Button

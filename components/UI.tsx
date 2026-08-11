@@ -356,7 +356,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         </UiButton>
       </PopoverTrigger>
       <PopoverContent
-        className="z-[500] w-[--radix-popover-trigger-width] max-w-[min(100vw-1.5rem,28rem)] p-0"
+        className="w-[--radix-popover-trigger-width] max-w-[min(100vw-1.5rem,28rem)] p-0"
         align="start"
         collisionPadding={16}
         onOpenAutoFocus={(e) => {

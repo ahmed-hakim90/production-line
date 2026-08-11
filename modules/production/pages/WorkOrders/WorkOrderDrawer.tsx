@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
+import { WORK_ORDER_STATUS_LABELS } from '../../utils/workOrderReportLinking';
 import { WorkOrderDetail } from '../../../../src/components/erp/WorkOrderDetail';
 import type { WorkOrderRowView } from './WorkOrderRow';
 
@@ -23,12 +24,7 @@ interface WorkOrderDrawerProps {
   reconcilingReports?: boolean;
 }
 
-const STATUS_AR_MAP: Record<WorkOrderStatus, 'قيد التنفيذ' | 'مكتمل' | 'قيد الانتظار' | 'ملغي'> = {
-  pending: 'قيد الانتظار',
-  in_progress: 'قيد التنفيذ',
-  completed: 'مكتمل',
-  cancelled: 'ملغي',
-};
+const STATUS_AR_MAP: Record<WorkOrderStatus, string> = WORK_ORDER_STATUS_LABELS;
 
 const toDayDiff = (value: string | undefined): number => {
   if (!value) return 0;

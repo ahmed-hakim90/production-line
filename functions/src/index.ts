@@ -62,6 +62,7 @@ import { mutateRepairTreasuryHandler } from './repairTreasuryOps.js';
 import { mutateSparePartsPurchaseInvoiceHandler } from './sparePartsPurchaseInvoiceOps.js';
 import { repairTechnicianOpsHandler } from './repairTechnicianOps.js';
 import { mutateAccountingHandler } from './accountingOps.js';
+import { createRepairBranchProvisionedHandler } from './repairBranchProvision.js';
 import { mutateRepairServiceCatalogHandler } from './repairServiceCatalogOps.js';
 import { updateRepairPartsPricingHandler } from './repairPartsPricingOps.js';
 import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js';
@@ -73,6 +74,14 @@ import {
   mutateRepairCustomerOpsHandler,
 } from './repairCustomerPortalOps.js';
 import { getCustomerFinancialAnalyticsHandler } from './customerFinancialAnalytics.js';
+import {
+  createProductionReportFastHandler,
+  retryProductionReportProcessingHandler,
+} from './productionReportFast.js';
+import {
+  processProductionReportBackground,
+  shouldProcessProductionReportUpdate,
+} from './productionReportBackground.js';
 
 initializeApp();
 
@@ -830,6 +839,32 @@ export const onProductionReportCreated = onDocumentCreated(
       }, { merge: true });
     });
     await batch.commit();
+  },
+);
+
+export const processProductionReportOnCreate = onDocumentCreated(
+  {
+    document: 'production_reports/{reportId}',
+    region: 'us-central1',
+    memory: '512MiB',
+    retry: true,
+  },
+  async (event) => {
+    if (!event.data?.exists) return;
+    await processProductionReportBackground(String(event.params.reportId || event.data.id));
+  },
+);
+
+export const processProductionReportOnRetry = onDocumentUpdated(
+  {
+    document: 'production_reports/{reportId}',
+    region: 'us-central1',
+    memory: '512MiB',
+    retry: true,
+  },
+  async (event) => {
+    if (!event.data || !shouldProcessProductionReportUpdate(event.data.before, event.data.after)) return;
+    await processProductionReportBackground(String(event.params.reportId || event.data.after.id));
   },
 );
 
@@ -2423,6 +2458,11 @@ export const mutateAccounting = onCall(
   mutateAccountingHandler,
 );
 
+export const createRepairBranchProvisioned = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  createRepairBranchProvisionedHandler,
+);
+
 export const mutateRepairServiceCatalog = onCall(
   { region: 'us-central1', memory: '256MiB' },
   mutateRepairServiceCatalogHandler,
@@ -2466,6 +2506,16 @@ export const mutateRepairCustomerOps = onCall(
 export const getCustomerFinancialAnalytics = onCall(
   { region: 'us-central1', memory: '512MiB' },
   getCustomerFinancialAnalyticsHandler,
+);
+
+export const createProductionReportFast = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  createProductionReportFastHandler,
+);
+
+export const retryProductionReportProcessing = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  retryProductionReportProcessingHandler,
 );
 
 export { confirmProductionHandoverReceipt } from './productionHandover.js';

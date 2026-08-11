@@ -2518,7 +2518,7 @@ export const Reports: React.FC = () => {
 
   const hasDuplicateLineSupervisorReport = useCallback(
     async (
-      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift'>,
+      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId' | 'workOrderId' | 'reportType' | 'shift'>,
       excludeReportId?: string | null,
     ) => {
       if (resolveReportType(payload.reportType) === 'packaging') return false;
@@ -2529,6 +2529,7 @@ export const Reports: React.FC = () => {
           lineId: payload.lineId,
           employeeId: payload.employeeId,
           productId: payload.productId,
+          workOrderId: payload.workOrderId,
           reportType,
           shift: reportType === 'component_injection' && isInjectionShiftSelected(payload.shift)
             ? payload.shift
@@ -2672,6 +2673,7 @@ export const Reports: React.FC = () => {
         lineId: payload.lineId,
         employeeId: payload.employeeId,
         productId: payload.productId,
+        workOrderId: payload.workOrderId,
         reportType: resolveReportType(payload.reportType),
         shift: resolveReportType(payload.reportType) === 'component_injection' && isInjectionShiftSelected(payload.shift)
           ? payload.shift
@@ -4849,7 +4851,7 @@ export const Reports: React.FC = () => {
               {/* Work Order Selector */}
               {!editId && can('workOrders.view') && (() => {
                 const activeWOs = workOrders.filter((w) => {
-                  if (w.status !== 'pending' && w.status !== 'in_progress') return false;
+                  if (w.status !== 'pending' && w.status !== 'in_progress' && w.status !== 'paused') return false;
                   if (!workOrderMatchesReportType(w, resolveReportType(form.reportType))) return false;
                   if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return true;
                   return w.supervisorId === currentEmployee.id;
@@ -6080,8 +6082,9 @@ export const Reports: React.FC = () => {
         const wo = woMap.get(viewWOReport.workOrderId!);
         if (!wo) return null;
         const statusLabels: Record<string, { label: string; color: string }> = {
-          pending: { label: 'قيد الانتظار', color: 'text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)]' },
-          in_progress: { label: 'قيد التنفيذ', color: 'text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] dark:bg-[rgb(var(--color-primary)/0.15)]' },
+          pending: { label: 'مش شغال', color: 'text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)]' },
+          in_progress: { label: 'شغال', color: 'text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)]' },
+          paused: { label: 'متوقف', color: 'text-[var(--color-text-muted)] bg-[var(--color-surface-hover)]' },
           completed: { label: 'مكتمل', color: 'text-[rgb(var(--color-success))] bg-[rgb(var(--color-success)/0.1)]' },
           cancelled: { label: 'ملغي', color: 'text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)]' },
         };

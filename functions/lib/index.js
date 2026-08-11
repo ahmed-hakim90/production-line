@@ -22,11 +22,14 @@ import { mutateRepairTreasuryHandler } from './repairTreasuryOps.js';
 import { mutateSparePartsPurchaseInvoiceHandler } from './sparePartsPurchaseInvoiceOps.js';
 import { repairTechnicianOpsHandler } from './repairTechnicianOps.js';
 import { mutateAccountingHandler } from './accountingOps.js';
+import { createRepairBranchProvisionedHandler } from './repairBranchProvision.js';
 import { mutateRepairServiceCatalogHandler } from './repairServiceCatalogOps.js';
 import { updateRepairPartsPricingHandler } from './repairPartsPricingOps.js';
 import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js';
 import { createCustomerServiceRequestHandler, customerPortalLoginHandler, getCustomerPortalHomeHandler, lookupPortalProductHandler, mutateRepairCustomerOpsHandler, } from './repairCustomerPortalOps.js';
 import { getCustomerFinancialAnalyticsHandler } from './customerFinancialAnalytics.js';
+import { createProductionReportFastHandler, retryProductionReportProcessingHandler, } from './productionReportFast.js';
+import { processProductionReportBackground, shouldProcessProductionReportUpdate, } from './productionReportBackground.js';
 initializeApp();
 const db = getFirestore();
 const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
@@ -674,6 +677,26 @@ export const onProductionReportCreated = onDocumentCreated({
         }, { merge: true });
     });
     await batch.commit();
+});
+export const processProductionReportOnCreate = onDocumentCreated({
+    document: 'production_reports/{reportId}',
+    region: 'us-central1',
+    memory: '512MiB',
+    retry: true,
+}, async (event) => {
+    if (!event.data?.exists)
+        return;
+    await processProductionReportBackground(String(event.params.reportId || event.data.id));
+});
+export const processProductionReportOnRetry = onDocumentUpdated({
+    document: 'production_reports/{reportId}',
+    region: 'us-central1',
+    memory: '512MiB',
+    retry: true,
+}, async (event) => {
+    if (!event.data || !shouldProcessProductionReportUpdate(event.data.before, event.data.after))
+        return;
+    await processProductionReportBackground(String(event.params.reportId || event.data.after.id));
 });
 export const adminDeleteUserHard = onCall({
     region: 'us-central1',
@@ -1866,6 +1889,7 @@ export const mutateRepairTreasury = onCall({ region: 'us-central1', memory: '512
 export const mutateSparePartsPurchaseInvoice = onCall({ region: 'us-central1', memory: '512MiB' }, mutateSparePartsPurchaseInvoiceHandler);
 export const repairTechnicianOps = onCall({ region: 'us-central1', memory: '256MiB' }, repairTechnicianOpsHandler);
 export const mutateAccounting = onCall({ region: 'us-central1', memory: '512MiB' }, mutateAccountingHandler);
+export const createRepairBranchProvisioned = onCall({ region: 'us-central1', memory: '512MiB' }, createRepairBranchProvisionedHandler);
 export const mutateRepairServiceCatalog = onCall({ region: 'us-central1', memory: '256MiB' }, mutateRepairServiceCatalogHandler);
 export const updateRepairPartsPricing = onCall({ region: 'us-central1', memory: '512MiB' }, updateRepairPartsPricingHandler);
 export const createInventoryCountSession = onCall({ region: 'us-central1', memory: '512MiB' }, createInventoryCountSessionHandler);
@@ -1875,6 +1899,8 @@ export const lookupPortalProduct = onCall({ region: 'us-central1', memory: '256M
 export const createCustomerServiceRequest = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, createCustomerServiceRequestHandler);
 export const mutateRepairCustomerOps = onCall({ region: 'us-central1', memory: '512MiB', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, mutateRepairCustomerOpsHandler);
 export const getCustomerFinancialAnalytics = onCall({ region: 'us-central1', memory: '512MiB' }, getCustomerFinancialAnalyticsHandler);
+export const createProductionReportFast = onCall({ region: 'us-central1', memory: '512MiB' }, createProductionReportFastHandler);
+export const retryProductionReportProcessing = onCall({ region: 'us-central1', memory: '256MiB' }, retryProductionReportProcessingHandler);
 export { confirmProductionHandoverReceipt } from './productionHandover.js';
 export { issueProductionIssueStock } from './productionIssueStock.js';
 export { applyProductionReportInventory, reverseProductionReportInventory, } from './productionReportInventory.js';

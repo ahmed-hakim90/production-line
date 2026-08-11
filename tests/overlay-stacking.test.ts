@@ -46,6 +46,11 @@ assert.match(read('modules/repair/components/RepairModalShell.tsx'), /MODAL_SHEL
 assert.doesNotMatch(select, /z-\[70\]/);
 assert.doesNotMatch(popover, /z-\[70\]/);
 
+/** SearchableSelect must not pin PopoverContent under modal shells (z-[500] regression). */
+const searchableSelect = read('components/UI.tsx');
+assert.match(searchableSelect, /export const SearchableSelect/);
+assert.doesNotMatch(searchableSelect, /PopoverContent[\s\S]{0,200}z-\[(?:50|70|100|200|300|500)\]/);
+
 {
   const el = { closest: (sel: string) => (sel.includes('data-radix-select-content') ? {} : null) };
   assert.equal(isRadixFloatingTarget(el as unknown as Element), true);

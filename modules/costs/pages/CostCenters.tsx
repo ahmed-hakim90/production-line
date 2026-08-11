@@ -250,7 +250,7 @@ export const CostCenters: React.FC = () => {
       actions.push({
         label: 'توزيع',
         icon: <Eye className="h-4 w-4" />,
-        onClick: () => navigate(`/accounting/cost-centers/${cc.id}`),
+        onClick: () => navigate(`/cost-centers/${cc.id}`),
       });
     }
     if (canManage) {
@@ -261,7 +261,7 @@ export const CostCenters: React.FC = () => {
           onClick: () => openEdit(cc),
         },
         {
-          label: 'حذف',
+          label: 'إيقاف عن تكلفة الإنتاج',
           icon: <Trash2 className="h-4 w-4" />,
           onClick: () => setDeleteConfirm(cc.id!),
           variant: 'danger',
@@ -414,7 +414,7 @@ export const CostCenters: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 {cc.type === 'indirect' && (
-                  <Button variant="ghost" onClick={() => navigate(`/accounting/cost-centers/${cc.id}`)} className="flex-1">
+                  <Button variant="ghost" onClick={() => navigate(`/cost-centers/${cc.id}`)} className="flex-1">
                     التوزيع
                   </Button>
                 )}
@@ -433,7 +433,7 @@ export const CostCenters: React.FC = () => {
                       onClick={() => setDeleteConfirm(cc.id!)}
                       className="border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
                     >
-                      حذف
+                      إيقاف عن التكلفة
                     </Button>
                   </>
                 )}
@@ -457,8 +457,8 @@ export const CostCenters: React.FC = () => {
         <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-none w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <span className="material-icons-round text-[rgb(var(--color-danger))] text-4xl mb-3">warning</span>
-            <h3 className="text-lg font-medium mb-2">حذف مركز التكلفة</h3>
-            <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا المركز؟ لا يمكن التراجع عن هذا الإجراء.</p>
+            <h3 className="text-lg font-medium mb-2">إيقاف المركز عن تكلفة الإنتاج</h3>
+            <p className="text-sm text-[var(--color-text-muted)] mb-6">سيظل المركز وبياناته التاريخية موجودين، لكنه لن يدخل في حسابات الإنتاج الجديدة.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirm(null)}>إلغاء</Button>
               <Button
@@ -466,7 +466,7 @@ export const CostCenters: React.FC = () => {
                 onClick={() => handleDelete(deleteConfirm)}
                 className="border-[rgb(var(--color-danger)/0.25)] text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)]"
               >
-                حذف
+                تأكيد الإيقاف
               </Button>
             </div>
           </div>
@@ -476,4 +476,3 @@ export const CostCenters: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-

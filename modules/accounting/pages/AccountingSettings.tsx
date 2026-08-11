@@ -13,6 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePermission } from "@/utils/permissions";
 import { useAccountingBaseData } from "../hooks/useAccountingBaseData";
@@ -20,7 +28,7 @@ import {
   REPAIR_ACCOUNT_LABELS,
   REPAIR_ACCOUNT_TYPES,
 } from "../lib/accountingUi";
-import type { AccountingSettings } from "../types";
+import type { AccountingJournalLine, AccountingSettings } from "../types";
 import { accountingService } from "../services/accountingService";
 
 export const AccountingSettingsPage: React.FC = () => {
@@ -28,6 +36,7 @@ export const AccountingSettingsPage: React.FC = () => {
   const {
     accounts,
     periods,
+    pendingOutbox,
     settings,
     setSettings,
     readiness,
@@ -44,6 +53,12 @@ export const AccountingSettingsPage: React.FC = () => {
   const [advancedBranchIds, setAdvancedBranchIds] = useState<
     Record<string, boolean>
   >({});
+  const [openingDialogOpen, setOpeningDialogOpen] = useState(false);
+  const [openingDescription, setOpeningDescription] = useState("رصيد افتتاحي معتمد في 2026-09-01");
+  const [openingLines, setOpeningLines] = useState<AccountingJournalLine[]>([
+    { accountCode: "", accountName: "", debit: 0, credit: 0, costCenterId: "" },
+    { accountCode: "", accountName: "", debit: 0, credit: 0, costCenterId: "" },
+  ]);
 
   useEffect(() => {
     if (!readiness) return;
@@ -138,12 +153,13 @@ export const AccountingSettingsPage: React.FC = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="weighted_average">متوسط مرجح</SelectItem>
-                  <SelectItem value="fifo">
+                  <SelectItem value="fifo" disabled>
                     الوارد أولًا يصرف أولًا FIFO
                   </SelectItem>
-                  <SelectItem value="standard">تكلفة معيارية</SelectItem>
+                  <SelectItem value="standard" disabled>تكلفة معيارية</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="mt-1 text-xs text-muted-foreground">FIFO والتكلفة المعيارية غير متاحين حتى يوجد دفتر طبقات تقييم معتمد.</p>
             </div>
             <div>
               <Label>عدد الخانات العشرية</Label>
@@ -165,9 +181,17 @@ export const AccountingSettingsPage: React.FC = () => {
             </div>
             {(
               [
-                ["autoPostInventory", "ترحيل حركات المخزون آليًا"],
-                ["requireCostCenter", "إلزام مركز التكلفة"],
+                ["autoPostInventory", "ترحيل حركات المخزون المدعومة آليًا"],
+                ["requireCostCenter", "إلزام مركز التكلفة لحسابات الإيراد والمصروف"],
                 ["allowManualJournals", "السماح بالقيود اليدوية"],
+                ["allowJournalReversal", "السماح بعكس القيود"],
+                ["enforceOpenPeriods", "منع الترحيل في الفترات المقفلة"],
+                ["allowPeriodReopen", "السماح بإعادة فتح الفترات"],
+                ["syncCostAndAccountingClose", "ربط إقفال الحسابات بإقفال التكاليف"],
+                ["autoPostRepairPayments", "ترحيل تحصيلات الصيانة آليًا"],
+                ["autoPostRepairSales", "ترحيل مبيعات الصيانة آليًا"],
+                ["autoPostRepairCogs", "ترحيل تكلفة قطع الصيانة آليًا"],
+                ["autoPostRepairTreasury", "ترحيل خزينة الصيانة آليًا"],
               ] as const
             ).map(([key, label]) => (
               <label
@@ -187,6 +211,22 @@ export const AccountingSettingsPage: React.FC = () => {
                 {label}
               </label>
             ))}
+            <div>
+              <Label>فترة القطع</Label>
+              <Input value={settings.cutoverPeriod} disabled />
+              <p className="mt-1 text-xs text-muted-foreground">يبدأ الضبط الجديد من 2026-09-01.</p>
+            </div>
+            <div className="rounded-lg border p-3 text-sm">
+              <p className="text-xs text-muted-foreground">الرصيد الافتتاحي</p>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <Badge variant={settings.openingBalanceStatus === "approved" ? "default" : "secondary"}>
+                  {settings.openingBalanceStatus === "approved" ? "معتمد" : "بانتظار الاعتماد"}
+                </Badge>
+                {settings.openingBalanceStatus !== "approved" && can("accounting.journals.post") ? (
+                  <Button size="sm" variant="outline" onClick={() => setOpeningDialogOpen(true)}>تحميل الرصيد</Button>
+                ) : null}
+              </div>
+            </div>
             {can("accounting.settings.manage") ? (
               <Button
                 className="md:col-span-2"
@@ -262,6 +302,28 @@ export const AccountingSettingsPage: React.FC = () => {
           </div>
         </OpsDashPanel>
       </div>
+
+      <OpsDashPanel
+        title="مراجعة الترحيلات المحاسبية المعلقة"
+        action={<Badge variant={pendingOutbox.length > 0 ? "destructive" : "secondary"}>{pendingOutbox.length} معلّق</Badge>}
+      >
+        {pendingOutbox.length === 0 ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">لا توجد عمليات تشغيلية بانتظار الترحيل المحاسبي.</p>
+        ) : (
+          <div className="space-y-2">
+            {pendingOutbox.slice(0, 20).map((item) => (
+              <div key={item.id || `${item.source}-${item.sourceId}`} className="grid gap-2 rounded-lg border p-3 text-sm md:grid-cols-[1fr_140px_140px]">
+                <div>
+                  <strong>{item.source}</strong>
+                  <p className="text-xs text-muted-foreground">{item.sourceId} · {item.pendingReason}</p>
+                </div>
+                <span className="font-mono">{item.period}</span>
+                <span className="font-mono">{Number(item.amount || 0).toLocaleString("ar-EG")} ج.م</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </OpsDashPanel>
 
       <OpsDashPanel
         title="ربط فروع الصيانة بالحسابات ومراكز التكلفة"
@@ -516,6 +578,78 @@ export const AccountingSettingsPage: React.FC = () => {
           ) : null}
         </div>
       </OpsDashPanel>
+
+      <Dialog open={openingDialogOpen} onOpenChange={setOpeningDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>اعتماد الرصيد الافتتاحي — 2026-09-01</DialogTitle>
+            <DialogDescription>حسابات الأصول والالتزامات وحقوق الملكية فقط. القيد ثابت بعد اعتماده.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>البيان</Label>
+              <Input value={openingDescription} onChange={(event) => setOpeningDescription(event.target.value)} />
+            </div>
+            {openingLines.map((line, index) => (
+              <div key={index} className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_140px_140px_auto]">
+                <Select
+                  value={line.accountCode || "none"}
+                  onValueChange={(value) => setOpeningLines((current) => current.map((row, rowIndex) =>
+                    rowIndex === index
+                      ? { ...row, accountCode: value === "none" ? "" : value, accountName: accounts.find((account) => account.code === value)?.name || "" }
+                      : row,
+                  ))}
+                >
+                  <SelectTrigger><SelectValue placeholder="الحساب" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">اختر الحساب</SelectItem>
+                    {accounts
+                      .filter((account) => account.allowPosting && account.isActive && ["asset", "liability", "equity"].includes(account.type))
+                      .map((account) => (
+                        <SelectItem key={account.code} value={account.code}>{account.code} — {account.name}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number"
+                  min="0"
+                  value={line.debit || ""}
+                  placeholder="مدين"
+                  onChange={(event) => setOpeningLines((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, debit: Number(event.target.value || 0), credit: 0 } : row))}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  value={line.credit || ""}
+                  placeholder="دائن"
+                  onChange={(event) => setOpeningLines((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, credit: Number(event.target.value || 0), debit: 0 } : row))}
+                />
+                <Button size="sm" variant="outline" disabled={openingLines.length <= 2} onClick={() => setOpeningLines((current) => current.filter((_, rowIndex) => rowIndex !== index))}>حذف</Button>
+              </div>
+            ))}
+            <Button size="sm" variant="outline" onClick={() => setOpeningLines((current) => [...current, { accountCode: "", accountName: "", debit: 0, credit: 0, costCenterId: "" }])}>إضافة سطر</Button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpeningDialogOpen(false)}>إلغاء</Button>
+            <Button
+              disabled={
+                busy ||
+                openingLines.some((line) => !line.accountCode || (Number(line.debit || 0) <= 0 && Number(line.credit || 0) <= 0)) ||
+                Math.abs(openingLines.reduce((sum, line) => sum + Number(line.debit || 0) - Number(line.credit || 0), 0)) > 0.009
+              }
+              onClick={() => void (async () => {
+                const saved = await run(
+                  () => accountingService.postOpeningBalance({ description: openingDescription, lines: openingLines }),
+                  "تم اعتماد الرصيد الافتتاحي.",
+                );
+                if (saved) setOpeningDialogOpen(false);
+              })()}
+            >
+              اعتماد نهائي
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ModuleOpsPageShell>
   );
 };

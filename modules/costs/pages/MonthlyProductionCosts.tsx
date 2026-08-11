@@ -242,6 +242,7 @@ export const MonthlyProductionCosts: React.FC = () => {
   const [calculateProgress, setCalculateProgress] = useState({ done: 0, total: 0, productId: '' });
   const [calculateStartedAt, setCalculateStartedAt] = useState<number | null>(null);
   const [closingMonth, setClosingMonth] = useState(false);
+  const [reopeningMonth, setReopeningMonth] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [analysisProductId, setAnalysisProductId] = useState<string | null>(null);
@@ -589,6 +590,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         assets,
         assetDepreciations,
         systemSettings.costMonthlyWorkingDays,
+        systemSettings.costingPolicy,
         (progress) => {
           if (!mountedRef.current) return;
           setCalculateProgress(progress);
@@ -622,6 +624,20 @@ export const MonthlyProductionCosts: React.FC = () => {
         setClosingMonth(false);
         setConfirmClose(false);
       }
+    }
+  };
+
+  const handleReopenMonth = async () => {
+    setReopeningMonth(true);
+    try {
+      await monthlyProductionCostService.reopenMonth(month);
+      await fetchRecords({ force: true });
+      toast.success('تمت إعادة فتح فترة التكاليف. أي إعادة حساب ستنشئ revision جديدًا.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر إعادة فتح الشهر.';
+      toast.error(message);
+    } finally {
+      if (mountedRef.current) setReopeningMonth(false);
     }
   };
 
@@ -663,7 +679,15 @@ export const MonthlyProductionCosts: React.FC = () => {
   );
 
   const totalQty = displayRecords.reduce((s, r) => s + r.totalProducedQty, 0);
-  const totalCost = displayRecords.reduce((s, r) => s + r.totalProductionCost, 0);
+  const fullCostIsPrimary = systemSettings.costingPolicy.primaryCostView === 'full_manufacturing'
+    && systemSettings.costingPolicy.fullManufacturingEnabled;
+  const primaryTotalFor = (record: MonthlyProductionCost) => fullCostIsPrimary
+    ? Number(record.fullManufacturingCost || 0)
+    : Number(record.totalProductionCost || 0);
+  const primaryAverageFor = (record: MonthlyProductionCost) => fullCostIsPrimary
+    ? Number(record.fullManufacturingAverageUnitCost || 0)
+    : Number(record.averageUnitCost || 0);
+  const totalCost = displayRecords.reduce((sum, record) => sum + primaryTotalFor(record), 0);
   const totalFullManufacturingCost = displayRecords.reduce(
     (sum, row) => sum + Number(row.fullManufacturingCost || 0),
     0,
@@ -859,7 +883,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         const cartons = cartonsFromProducedQty(qty, raw?.unitsPerCarton ?? 0);
         row['إنتاج بالكرتونة'] = cartons != null ? cartons : '—';
       }
-      if (baseColumns.totalCost) row['إجمالي التكلفة'] = r.totalProductionCost;
+      if (baseColumns.totalCost) row['إجمالي التكلفة الرئيسية'] = primaryTotalFor(r);
       if (baseColumns.directIndirect) {
         row['مباشر'] = directCost;
         row['مباشر / وحدة'] = qty > 0 ? directCost / qty : 0;
@@ -871,7 +895,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         row[`${center.name} - إجمالي`] = centerTotal;
         row[`${center.name} - وحدة`] = qty > 0 ? centerTotal / qty : 0;
       });
-      if (baseColumns.avgUnit) row['متوسط تكلفة الوحدة'] = r.averageUnitCost;
+      if (baseColumns.avgUnit) row['متوسط تكلفة الوحدة الرئيسي'] = primaryAverageFor(r);
       if (baseColumns.prevMonthAvgClosed) {
         row['متوسط تكلفة الشهر السابق (معتمد)'] =
           closedPrevAvg != null ? closedPrevAvg : '—';
@@ -940,8 +964,8 @@ export const MonthlyProductionCosts: React.FC = () => {
     () => [
       { key: 'products', label: 'عدد المنتجات', value: displayRecords.length },
       { key: 'qty', label: 'إجمالي الكمية', value: formatCost(totalQty), meta: 'وحدة' },
-      { key: 'total', label: 'إجمالي تكلفة التحويل', value: formatCost(totalCost), meta: 'ج.م' },
-      { key: 'avg', label: 'متوسط التحويل للوحدة', value: formatCost(overallAvg), meta: 'ج.م' },
+      { key: 'total', label: fullCostIsPrimary ? 'إجمالي التكلفة الكاملة' : 'إجمالي تكلفة التحويل', value: formatCost(totalCost), meta: 'ج.م' },
+      { key: 'avg', label: fullCostIsPrimary ? 'متوسط التكلفة الكاملة للوحدة' : 'متوسط التحويل للوحدة', value: formatCost(overallAvg), meta: 'ج.م' },
       {
         key: 'full',
         label: 'تكلفة التصنيع الكاملة',
@@ -949,7 +973,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         meta: totalFullManufacturingCost > 0 ? `تغطية ${formatCost(fullCostCoveragePct)}%` : undefined,
       },
     ],
-    [displayRecords.length, totalQty, totalCost, overallAvg, totalFullManufacturingCost, fullCostCoveragePct],
+    [displayRecords.length, totalQty, totalCost, overallAvg, totalFullManufacturingCost, fullCostCoveragePct, fullCostIsPrimary],
   );
 
   return (
@@ -992,6 +1016,12 @@ export const MonthlyProductionCosts: React.FC = () => {
               </>
             )
           ) : null}
+          {canClose && allClosed ? (
+            <Button variant="outline" onClick={handleReopenMonth} disabled={reopeningMonth}>
+              <span className="material-icons-round text-[18px] ml-1">lock_open</span>
+              {reopeningMonth ? 'جاري إعادة الفتح...' : `إعادة فتح ${monthLabel}`}
+            </Button>
+          ) : null}
         </div>
       )}
     >
@@ -1000,7 +1030,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         <div className="bg-[rgb(var(--color-success)/0.1)] border border-[rgb(var(--color-success)/0.25)] rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
           <span className="material-icons-round text-[rgb(var(--color-success))]">lock</span>
           <p className="text-sm font-semibold text-[rgb(var(--color-success))]">
-            فترة {monthLabel} مُغلقة — لا يمكن إعادة الحساب
+            فترة {monthLabel} مُغلقة — لا يمكن إعادة الحساب قبل إعادة فتحها بصلاحية معتمدة
           </p>
         </div>
       )}
@@ -1155,7 +1185,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                       <span className="block text-[10px] font-normal opacity-80">كمية ÷ وحدات/كرتونة</span>
                     </th>
                   )}
-                  {baseColumns.totalCost && <th className="erp-th">إجمالي التكلفة</th>}
+                  {baseColumns.totalCost && <th className="erp-th">{fullCostIsPrimary ? 'إجمالي التكلفة الكاملة' : 'إجمالي تكلفة التحويل'}</th>}
                   {baseColumns.directIndirect && <th className="erp-th">مباشر / غير مباشر</th>}
                   {visibleCenterColumns.map((center) => (
                     <th key={center.id} className="erp-th min-w-[180px]">
@@ -1279,7 +1309,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                     )}
                     {baseColumns.totalCost && (
                       <td className="py-3 px-4 font-mono font-semibold text-[rgb(var(--color-warning))]">
-                        {formatCost(r.totalProductionCost)}
+                        {formatCost(primaryTotalFor(r))}
                       </td>
                     )}
                     {baseColumns.directIndirect && (

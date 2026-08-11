@@ -15,6 +15,7 @@ import {
 import { migratePrintTemplateV1 } from '../../../utils/print/migratePrintTemplate';
 import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import { resolveOperationPathSettings } from './operationPathSettings';
+import { resolveCostingPolicy } from '../../../utils/costingPolicy';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -154,6 +155,7 @@ export function resolveSystemSettings(
       productionWorkerSettings: resolveProductionWorkerSettings(
         DEFAULT_SYSTEM_SETTINGS.productionWorkerSettings,
       ),
+      costingPolicy: resolveCostingPolicy(DEFAULT_SYSTEM_SETTINGS.costingPolicy),
     };
   }
 
@@ -166,5 +168,6 @@ export function resolveSystemSettings(
     repairSettings: resolveRepairSettings(input.repairSettings),
     operationPaths: resolveOperationPaths(input.operationPaths),
     productionWorkerSettings: resolveProductionWorkerSettings(input.productionWorkerSettings),
+    costingPolicy: resolveCostingPolicy(input.costingPolicy),
   };
 }

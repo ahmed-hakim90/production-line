@@ -10,7 +10,7 @@ import {
   orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { db, isConfigured, mutateAccountingCallable } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { IPayrollProvider, MonthlyPayrollData } from '../../shared/contracts/IPayrollProvider';
@@ -25,7 +25,9 @@ import type {
   Asset,
   AssetDepreciation,
   ProductionReport,
+  CostingPolicySettings,
 } from '../../../types';
+import { resolveCostingPolicy } from '../../../utils/costingPolicy';
 import { resolveReportType } from '../../production/utils/reportTypes';
 import {
   computeProductionCostEngine,
@@ -586,6 +588,7 @@ export const monthlyProductionCostService = {
     workingDaysByMonth?: Record<string, number>,
     precomputedContext?: MonthCalculationContext,
     providerOverrides?: CostServiceProviderOverrides,
+    costingPolicyInput?: Partial<CostingPolicySettings>,
   ): Promise<MonthlyProductionCost | null> {
     if (!isConfigured) return null;
 
@@ -614,6 +617,7 @@ export const monthlyProductionCostService = {
       if (!pid) return;
       productCategoryById.set(pid, String(report.productCategory || '').trim());
     });
+    const costingPolicy = resolveCostingPolicy(costingPolicyInput);
     const engine = computeProductionCostEngine({
       reports: legacyReports,
       hourlyRate,
@@ -626,6 +630,7 @@ export const monthlyProductionCostService = {
         productCategoryById,
         supervisorHourlyRates,
         workingDaysByMonth,
+        costingPolicy,
       },
     });
 
@@ -666,18 +671,50 @@ export const monthlyProductionCostService = {
     const totalCost = totalLabor + totalIndirect;
     const avgUnitCost = totalQty > 0 ? totalCost / totalQty : 0;
     const indirectCenterSnapshots = engine.centerSnapshots;
-    const fullCostSummary = summarizeFullManufacturingCost(productReports);
+    const rawFullCostSummary = summarizeFullManufacturingCost(productReports);
+    const materialCost = costingPolicy.includeActualMaterials
+      ? rawFullCostSummary.materialCost
+      : 0;
+    const packagingCost = costingPolicy.includePackaging
+      ? rawFullCostSummary.packagingCost
+      : 0;
+    const fullManufacturingCost = costingPolicy.fullManufacturingEnabled
+      ? totalCost + materialCost + packagingCost
+      : 0;
+    const fullCostSummary = {
+      ...rawFullCostSummary,
+      materialCost,
+      packagingCost,
+      fullManufacturingCost,
+      fullManufacturingAverageUnitCost: rawFullCostSummary.fullCostedQty > 0
+        ? fullManufacturingCost / rawFullCostSummary.fullCostedQty
+        : 0,
+      fullCostStatus: costingPolicy.fullManufacturingEnabled
+        ? rawFullCostSummary.fullCostStatus
+        : 'missing' as const,
+    };
+    const sourceValues = costCenterValues.filter((value) => value.month === month);
+    const sourcesActual = sourceValues.length === 0 || sourceValues.every(
+      (value) => value.costingStatus === 'actual' || value.costingStatus === 'closed',
+    );
+    const costingStatus: MonthlyProductionCost['costingStatus'] =
+      sourcesActual && (!costingPolicy.fullManufacturingEnabled || fullCostSummary.fullCostStatus === 'actual')
+        ? 'actual'
+        : 'provisional';
 
     const record: Omit<MonthlyProductionCost, 'id'> = {
       productId,
       month,
       totalProducedQty: totalQty,
-      directCost: totalLabor,
-      indirectCost: totalIndirect,
+      directCost: costingPolicy.legacyConversionEnabled ? totalLabor : 0,
+      indirectCost: costingPolicy.legacyConversionEnabled ? totalIndirect : 0,
       indirectCenterSnapshots,
-      totalProductionCost: totalCost,
-      averageUnitCost: avgUnitCost,
+      totalProductionCost: costingPolicy.legacyConversionEnabled ? totalCost : 0,
+      averageUnitCost: costingPolicy.legacyConversionEnabled ? avgUnitCost : 0,
       ...fullCostSummary,
+      costingStatus,
+      revision: Math.max(1, Number(existing?.revision || 0) + 1),
+      costingPolicySnapshot: costingPolicy,
       isClosed: false,
       calculatedAt: serverTimestamp(),
     };
@@ -700,6 +737,7 @@ export const monthlyProductionCostService = {
     assets: Asset[] = [],
     assetDepreciations: AssetDepreciation[] = [],
     workingDaysByMonth?: Record<string, number>,
+    costingPolicy?: Partial<CostingPolicySettings>,
     onProgress?: (progress: CalculateAllProgress) => void,
     providerOverrides?: CostServiceProviderOverrides,
   ): Promise<MonthlyProductionCost[]> {
@@ -736,6 +774,7 @@ export const monthlyProductionCostService = {
         workingDaysByMonth,
         context,
         providerOverrides,
+        costingPolicy,
       );
       if (result) results.push(result);
       done += 1;
@@ -745,45 +784,17 @@ export const monthlyProductionCostService = {
   },
 
   async closeMonth(productId: string, month: string): Promise<void> {
-    if (!isConfigured) return;
-    const id = docId(productId, month);
-    const existing = await this.getByProductAndMonth(productId, month);
-    if (!existing) return;
-    await setDoc(
-      doc(db, COLLECTION, id),
-      { ...existing, isClosed: true, calculatedAt: serverTimestamp(), tenantId: getCurrentTenantId() },
-      { merge: true },
-    );
+    if (!isConfigured || !productId) return;
+    await mutateAccountingCallable({ operation: 'close_cost_period', month });
   },
 
   async closeMonthForAll(productIds: string[], month: string): Promise<void> {
     if (!isConfigured || productIds.length === 0) return;
-    const uniqueProductIds = Array.from(new Set(productIds.map((pid) => String(pid || '').trim()).filter(Boolean)));
-    let batch = writeBatch(db);
-    let pendingOps = 0;
-    const commitChunk = async () => {
-      if (pendingOps === 0) return;
-      await batch.commit();
-      batch = writeBatch(db);
-      pendingOps = 0;
-    };
-    for (const pid of uniqueProductIds) {
-      batch.set(
-        doc(db, COLLECTION, docId(pid, month)),
-        {
-          productId: pid,
-          month,
-          isClosed: true,
-          calculatedAt: serverTimestamp(),
-          tenantId: getCurrentTenantId(),
-        },
-        { merge: true },
-      );
-      pendingOps += 1;
-      if (pendingOps >= 450) {
-        await commitChunk();
-      }
-    }
-    await commitChunk();
+    await mutateAccountingCallable({ operation: 'close_cost_period', month });
+  },
+
+  async reopenMonth(month: string): Promise<void> {
+    if (!isConfigured) return;
+    await mutateAccountingCallable({ operation: 'reopen_cost_period', month });
   },
 };

@@ -440,7 +440,7 @@ export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeMo
       };
     }
     const active = workOrders.filter(
-      (w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed',
+      (w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'paused' || w.status === 'completed',
     );
     const totals = active.reduce(
       (acc, wo) => {

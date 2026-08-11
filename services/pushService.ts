@@ -22,7 +22,8 @@ import { FIREBASE_MESSAGING_SW_SCOPE } from '../utils/clientCachePurge';
 const DEVICE_COLLECTION = 'user_devices';
 const USER_COLLECTION = 'users';
 const TOKEN_SUBCOLLECTION = 'fcmTokens';
-const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
+const viteEnv = (import.meta.env ?? {}) as Record<string, string | undefined>;
+const VAPID_KEY = viteEnv.VITE_FIREBASE_VAPID_KEY as string | undefined;
 
 /** Uncompressed P-256 public key length expected by Web Push / FCM. */
 const VAPID_PUBLIC_KEY_BYTES = 65;
@@ -65,12 +66,12 @@ const resolvedVapidKey = resolveVapidKey(VAPID_KEY);
 
 function buildFirebaseConfig() {
   return {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    apiKey: viteEnv.VITE_FIREBASE_API_KEY,
+    authDomain: viteEnv.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: viteEnv.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: viteEnv.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: viteEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: viteEnv.VITE_FIREBASE_APP_ID,
   };
 }
 

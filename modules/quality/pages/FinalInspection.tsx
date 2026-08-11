@@ -60,7 +60,7 @@ export const FinalInspection: React.FC = () => {
   }, []);
 
   const activeWorkOrders = useMemo(
-    () => workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress'),
+    () => workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'paused'),
     [workOrders],
   );
   const selectedWorkOrder = useMemo(
