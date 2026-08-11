@@ -183,6 +183,11 @@ function testDeterministicReportInventoryIdentities() {
   ];
   const first = buildDeterministicMovementPlan('report-1', 'apply', movements);
   const retry = buildDeterministicMovementPlan('report-1', 'apply', [...movements].reverse());
+  assert.equal(
+    first.some((movement) => Object.values(movement).some((value) => value === undefined)),
+    false,
+    'inventory operation snapshots must be safe to persist in Firestore',
+  );
   assert.deepEqual(
     first.map((movement) => movement.movementId),
     retry.map((movement) => movement.movementId),

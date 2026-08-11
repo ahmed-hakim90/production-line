@@ -165,6 +165,7 @@ import { assetDepreciationService } from '../modules/costs/services/assetDepreci
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { checkPermission, isPackagingOnlyPermissions, normalizeRolePermissions, type Permission } from '../utils/permissions';
 import { applyBuiltinRolePermissionLocks } from '../utils/builtinRolePermissionLocks';
+import { resolveBootstrapDataAccess } from '../lib/bootstrapDataAccess';
 import { DEFAULT_PLAN_SETTINGS, DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
 import {
   applyAppTheme,
@@ -1022,7 +1023,6 @@ async function resolveProductionReportExecutionLinks(
         isActiveWorkOrderStatus(selected.status)
         || (options?.preserveCompletedWorkOrder === true && selected.status === 'completed')
       )
-      && selected.lineId === input.lineId
       && selected.productId === input.productId
       && workOrderMatchesReportType(selected, reportType)
       && reportDateEligibleForWorkOrder(input.date, selected)
@@ -1038,9 +1038,15 @@ async function resolveProductionReportExecutionLinks(
     };
 
     try {
-      (await workOrderService.getActiveByLineAndProduct(input.lineId, input.productId)).forEach(addCandidate);
+      (await workOrderService.getActiveByProduct(input.productId)).forEach(addCandidate);
     } catch {
       // Cached/all-work-order fallbacks keep report entry usable if a compound query index is unavailable.
+    }
+
+    try {
+      (await workOrderService.getActiveByLineAndProduct(input.lineId, input.productId)).forEach(addCandidate);
+    } catch {
+      // Same-line compound query is optional when product-scoped active WOs already loaded.
     }
 
     cachedWorkOrders
@@ -1507,6 +1513,11 @@ interface AppState {
     data: Omit<ProductionReport, 'id' | 'createdAt'>,
     context: { path: ProductionReportCreatePath },
   ) => Promise<string | null>;
+  queueReportCreate: (
+    data: Omit<ProductionReport, 'id' | 'createdAt'>,
+    context: { path: ProductionReportCreatePath },
+  ) => { optimisticId: string; completion: Promise<string | null> };
+  retryQueuedReportCreate: (optimisticId: string) => Promise<string | null>;
   createComponentWasteReport: (data: CreateComponentWasteReportInput) => Promise<string | null>;
   updateReport: (
     id: string,
@@ -2199,6 +2210,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const tenantId = get().userProfile?.tenantId;
+    const bootstrapAccess = resolveBootstrapDataAccess((permission) =>
+      hasPermission(get().userPermissions, permission),
+    );
     const [
       rawProducts,
       allCategories,
@@ -2225,9 +2239,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       productionPlanService.getAll(),
       productionPlanFollowUpService.getAll(),
       workOrderService.getAll(),
-      costCenterService.getAll(),
-      costCenterValueService.getAll(),
-      costAllocationService.getAll(),
+      bootstrapAccess.costCenters ? costCenterService.getAll() : Promise.resolve([]),
+      bootstrapAccess.costDetails ? costCenterValueService.getAll() : Promise.resolve([]),
+      bootstrapAccess.costDetails ? costAllocationService.getAll() : Promise.resolve([]),
       laborSettingsService.get(),
       assetService.getAll(),
       assetDepreciationService.getByPeriod(currentMonth),
@@ -4333,15 +4347,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       const actorEmployee = _rawEmployees.find((row) => row.userId === actorUid) ?? null;
       const targetEmployee = _rawEmployees.find((row) => row.id === savePayload.employeeId) ?? null;
       const canCreateForAnySupervisor = hasPermission(permissions, 'reports.createForAnySupervisor');
-      const isDelegatedEntry = Boolean(
-        actorEmployee?.level === 2
-        &&
+      const targetsAnotherEmployee = Boolean(
         actorEmployee?.id
         && savePayload.employeeId
         && savePayload.employeeId !== actorEmployee.id,
       );
+      const isDelegatedEntry = canCreateForAnySupervisor && targetsAnotherEmployee;
       const requestedWorkOrderId = String(savePayload.workOrderId || '').trim();
-      if (actorEmployee?.level === 2 && isDelegatedEntry && !canCreateForAnySupervisor) {
+      if (actorEmployee?.level === 2 && targetsAnotherEmployee && !canCreateForAnySupervisor) {
         set({ error: 'غير مصرح بإنشاء تقرير لمشرف آخر.' });
         return null;
       }
@@ -4808,6 +4821,214 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ error: getReportDuplicateMessage(error, 'تعذر حفظ التقرير') });
       return null;
     }
+  },
+
+  queueReportCreate: (data, context) => {
+    const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const optimisticId = `local-report-${randomPart}`;
+    const actorUid = String(get().uid || '').trim();
+    const actorEmployee = get().currentEmployee;
+    const canDelegate = hasPermission(
+      get().userPermissions,
+      'reports.createForAnySupervisor',
+    );
+    const optimisticRow: ProductionReport = {
+      ...data,
+      id: optimisticId,
+      createdAt: new Date().toISOString(),
+      createdByUid: actorUid || undefined,
+      createdByNameSnapshot: get().userDisplayName || get().userEmail || undefined,
+      entryMode: canDelegate
+        && actorEmployee?.id
+        && actorEmployee.id !== data.employeeId
+        ? 'hall_supervisor_delegate'
+        : 'direct',
+      processingVersion: 2,
+      processingState: 'pending',
+      processingStage: 'waiting_for_save',
+      processingAttempts: 0,
+      clientSaveState: 'saving',
+      clientSaveError: '',
+      clientCreatePath: context.path,
+      clientCreatePayload: data as unknown as Record<string, unknown>,
+    };
+    const operationalToday = getReportOperationalDateString(get().systemSettings);
+    const { start: monthStart, end: monthEnd } = getMonthDateRange();
+    const inToday = String(data.date || '') === operationalToday;
+    const inMonth = String(data.date || '') >= monthStart && String(data.date || '') <= monthEnd;
+    const todayKey = getProductionReportsRangeCacheKey(operationalToday, operationalToday);
+    const monthKey = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+
+    set((state) => {
+      const nextToday = inToday
+        ? upsertLoadedReportRow(state.todayReports, optimisticRow)
+        : state.todayReports;
+      const nextMonth = inMonth
+        ? upsertLoadedReportRow(state.monthlyReports, optimisticRow)
+        : state.monthlyReports;
+      return {
+        error: null,
+        todayReports: nextToday,
+        monthlyReports: nextMonth,
+        productionReports: inMonth
+          ? upsertLoadedReportRow(state.productionReports, optimisticRow)
+          : state.productionReports,
+        productionReportsRangeCache: {
+          ...state.productionReportsRangeCache,
+          ...(inToday
+            ? { [todayKey]: { rows: nextToday, fetchedAt: Date.now() } }
+            : {}),
+          ...(inMonth
+            ? { [monthKey]: { rows: nextMonth, fetchedAt: Date.now() } }
+            : {}),
+        },
+      };
+    });
+
+    const completion = (async (): Promise<string | null> => {
+      const createdId = await get().createReport(data, context);
+      if (!createdId) {
+        const message = get().error || 'تعذر حفظ التقرير.';
+        set((state) => {
+          const markFailed = (rows: ProductionReport[]) => rows.map((row) => (
+            row.id === optimisticId
+              ? {
+                  ...row,
+                  clientSaveState: 'failed' as const,
+                  clientSaveError: message,
+                  processingStage: 'save_failed',
+                }
+              : row
+          ));
+          return {
+            todayReports: markFailed(state.todayReports),
+            monthlyReports: markFailed(state.monthlyReports),
+            productionReports: markFailed(state.productionReports),
+            productionReportsRangeCache: Object.fromEntries(
+              Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+                key,
+                { ...value, rows: markFailed(value.rows) },
+              ]),
+            ),
+          };
+        });
+        return null;
+      }
+
+      set((state) => {
+        const removeOptimistic = (rows: ProductionReport[]) => rows.filter(
+          (row) => row.id !== optimisticId,
+        );
+        return {
+          todayReports: removeOptimistic(state.todayReports),
+          monthlyReports: removeOptimistic(state.monthlyReports),
+          productionReports: removeOptimistic(state.productionReports),
+          productionReportsRangeCache: Object.fromEntries(
+            Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+              key,
+              { ...value, rows: removeOptimistic(value.rows) },
+            ]),
+          ),
+        };
+      });
+      return createdId;
+    })().catch((error) => {
+      const message = error instanceof Error ? error.message : 'تعذر حفظ التقرير.';
+      set((state) => {
+        const markFailed = (rows: ProductionReport[]) => rows.map((row) => (
+          row.id === optimisticId
+            ? {
+                ...row,
+                clientSaveState: 'failed' as const,
+                clientSaveError: message,
+                processingStage: 'save_failed',
+              }
+            : row
+        ));
+        return {
+          todayReports: markFailed(state.todayReports),
+          monthlyReports: markFailed(state.monthlyReports),
+          productionReports: markFailed(state.productionReports),
+          productionReportsRangeCache: Object.fromEntries(
+            Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+              key,
+              { ...value, rows: markFailed(value.rows) },
+            ]),
+          ),
+        };
+      });
+      return null;
+    });
+
+    return { optimisticId, completion };
+  },
+
+  retryQueuedReportCreate: async (optimisticId) => {
+    const optimistic = [
+      ...get().todayReports,
+      ...get().monthlyReports,
+      ...get().productionReports,
+    ].find((row) => row.id === optimisticId && row.clientSaveState === 'failed');
+    const payload = optimistic?.clientCreatePayload;
+    const path = optimistic?.clientCreatePath as ProductionReportCreatePath | undefined;
+    if (!optimistic || !payload || !path) return null;
+
+    set((state) => {
+      const markSaving = (rows: ProductionReport[]) => rows.map((row) => (
+        row.id === optimisticId
+          ? { ...row, clientSaveState: 'saving' as const, clientSaveError: '', processingStage: 'waiting_for_save' }
+          : row
+      ));
+      return {
+        todayReports: markSaving(state.todayReports),
+        monthlyReports: markSaving(state.monthlyReports),
+        productionReports: markSaving(state.productionReports),
+        productionReportsRangeCache: Object.fromEntries(
+          Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+            key,
+            { ...value, rows: markSaving(value.rows) },
+          ]),
+        ),
+      };
+    });
+
+    const createdId = await get().createReport(
+      payload as Omit<ProductionReport, 'id' | 'createdAt'>,
+      { path },
+    );
+    if (!createdId) {
+      const message = get().error || 'تعذر حفظ التقرير.';
+      set((state) => {
+        const markFailed = (rows: ProductionReport[]) => rows.map((row) => (
+          row.id === optimisticId
+            ? { ...row, clientSaveState: 'failed' as const, clientSaveError: message, processingStage: 'save_failed' }
+            : row
+        ));
+        return {
+          todayReports: markFailed(state.todayReports),
+          monthlyReports: markFailed(state.monthlyReports),
+          productionReports: markFailed(state.productionReports),
+        };
+      });
+      return null;
+    }
+    set((state) => {
+      const removeOptimistic = (rows: ProductionReport[]) => rows.filter((row) => row.id !== optimisticId);
+      return {
+        todayReports: removeOptimistic(state.todayReports),
+        monthlyReports: removeOptimistic(state.monthlyReports),
+        productionReports: removeOptimistic(state.productionReports),
+        productionReportsRangeCache: Object.fromEntries(
+          Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+            key,
+            { ...value, rows: removeOptimistic(value.rows) },
+          ]),
+        ),
+      };
+    });
+    return createdId;
   },
 
   updateReport: async (id, data, context) => {
@@ -5787,12 +6008,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const startDate = getWorkOrderEffectiveStartDate(wo) || getReportOperationalDateString(get().systemSettings);
-      const endDate = String(wo.targetDate || '').trim() || getReportOperationalDateString(get().systemSettings);
+      const today = getReportOperationalDateString(get().systemSettings);
+      const targetDate = String(wo.targetDate || '').trim();
+      // Include reports after targetDate while the WO is still open (common after a line move).
+      const endDate = [targetDate, today].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().at(-1) || today;
       const rangeStart = startDate <= endDate ? startDate : endDate;
       const rangeEnd = startDate <= endDate ? endDate : startDate;
 
-      const rangeReports = await reportService.getByDateRange(rangeStart, rangeEnd);
-      const toLink = filterUnlinkedReportsEligibleForWorkOrder(wo, rangeReports);
+      const [rangeReports, productReports] = await Promise.all([
+        reportService.getByDateRange(rangeStart, rangeEnd),
+        reportService.getByProduct(wo.productId).catch(() => [] as ProductionReport[]),
+      ]);
+      const reportById = new Map<string, ProductionReport>();
+      for (const report of [...rangeReports, ...productReports]) {
+        if (report.id) reportById.set(String(report.id), report);
+      }
+      const toLink = filterUnlinkedReportsEligibleForWorkOrder(wo, Array.from(reportById.values()));
       const planId = String(wo.planId || '').trim();
       let linked = 0;
 

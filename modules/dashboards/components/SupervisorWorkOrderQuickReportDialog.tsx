@@ -60,7 +60,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
   onClose,
   onSaved,
 }) => {
-  const createReport = useAppStore((s) => s.createReport);
+  const queueReportCreate = useAppStore((s) => s.queueReportCreate);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const lines = useAppStore((s) => s._rawLines);
   const reportBehavior = useMemo(() => resolveReportBehaviorSettings(systemSettings), [systemSettings]);
@@ -71,6 +71,9 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
   const [shift, setShift] = useState<ProductionReportShift | ''>('');
   const [distributed, setDistributed] = useState(false);
   const [distributedCount, setDistributedCount] = useState(0);
+  const [distributedAssignments, setDistributedAssignments] = useState<
+    Awaited<ReturnType<typeof lineAssignmentService.getByLineAndDate>>
+  >([]);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -97,6 +100,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
     setShift('');
     setDistributed(false);
     setDistributedCount(0);
+    setDistributedAssignments([]);
     setLoadingWorkers(true);
     try {
       const assignments = await lineAssignmentService.getByLineAndDate(wo.lineId, reportDate);
@@ -104,6 +108,7 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
         const count = countOperatorsFromAssignments(assignments, reportSupervisorEmployeeId);
         setDistributed(true);
         setDistributedCount(count);
+        setDistributedAssignments(assignments);
         setWorkers(String(count));
       }
     } catch {
@@ -151,19 +156,16 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
       isPackagingLine,
     });
 
-    if (distributed) {
-      try {
-        const assignments = await lineAssignmentService.getByLineAndDate(workOrder.lineId, reportDate);
-        const fromAssignments = buildWorkersCountAutoFillFromAssignments(
-          assignments,
-          { reportType, isPackagingLine },
-          reportSupervisorEmployeeId,
-        );
-        if (sumWorkersCountPatch(fromAssignments) > 0) {
-          workersPatch = fromAssignments;
-        }
-      } catch {
-        // Fall back to total workersCount seed.
+    // Prefer role breakdown from line distribution only when the supervisor kept the auto-filled count.
+    // If they edited the number, persist the manual headcount instead.
+    if (distributed && workersCount === distributedCount) {
+      const fromAssignments = buildWorkersCountAutoFillFromAssignments(
+        distributedAssignments,
+        { reportType, isPackagingLine },
+        reportSupervisorEmployeeId,
+      );
+      if (sumWorkersCountPatch(fromAssignments) > 0) {
+        workersPatch = fromAssignments;
       }
     }
 
@@ -187,41 +189,62 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
       absentAssignments: workersPatch.absentAssignments,
       workHours,
       workOrderId: workOrder.id,
+      productionPlanId: workOrder.planId || undefined,
+      productionPlanLinkMode: workOrder.planId ? 'manual' : undefined,
       reportType,
       ...(isInjection && isInjectionShiftSelected(shift) ? { shift } : {}),
       notes: `تقرير سريع من لوحة المشرف — أمر ${workOrder.workOrderNumber}`,
     };
 
     setSaving(true);
-    try {
-      const createdId = await createReport(payload, {
-        path: PRODUCTION_REPORT_CREATE_PATHS.supervisorDashboard,
-      });
+    const queued = queueReportCreate(payload, {
+      path: PRODUCTION_REPORT_CREATE_PATHS.supervisorDashboard,
+    });
+    showAppToast('success', 'تمت إضافة التقرير للجدول وجارٍ تأكيد حفظه.');
+    onClose();
+    setSaving(false);
+    void queued.completion.then((createdId) => {
       if (!createdId) {
         const storeError = useAppStore.getState().error;
-        showAppToast('error', getReportDuplicateMessage(storeError, 'تعذر حفظ التقرير.'));
+        showAppToast('error', getReportDuplicateMessage(storeError, 'تعذر حفظ التقرير. استخدم إعادة المحاولة من الجدول.'));
         return;
       }
-      showAppToast('success', 'تم حفظ تقرير أمر الشغل.');
+      showAppToast('success', 'تم تأكيد حفظ التقرير، والترحيل مستمر في الخلفية.');
       onSaved?.();
-      onClose();
-    } catch (error) {
-      showAppToast('error', getReportDuplicateMessage(error, 'تعذر حفظ التقرير.'));
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-md" dir="rtl">
-        <DialogHeader>
+        <DialogHeader className="space-y-2 text-start sm:text-start">
           <DialogTitle>تقرير أمر شغل</DialogTitle>
-          <DialogDescription>
-            {workOrder
-              ? `#${workOrder.workOrderNumber} · ${productName || '—'} · ${lineName || '—'} · المشرف: ${supervisorName || '—'}`
-              : 'أدخل كمية اليوم وساعات العمل وعدد العمالة.'}
-          </DialogDescription>
+          {workOrder ? (
+            <DialogDescription asChild>
+              <div className="space-y-1.5 text-start">
+                <p className="font-mono text-xs font-bold text-[rgb(var(--color-warning))]">
+                  #{workOrder.workOrderNumber}
+                </p>
+                <p className="text-sm font-medium leading-snug text-[var(--color-text)]">
+                  {productName || '—'}
+                </p>
+                <dl className="grid gap-1 text-xs text-[var(--color-text-muted)]">
+                  <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                    <dt className="shrink-0 font-bold text-[var(--color-text)]">الخط</dt>
+                    <dd className="min-w-0">{lineName || '—'}</dd>
+                  </div>
+                  <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+                    <dt className="shrink-0 font-bold text-[var(--color-text)]">المشرف</dt>
+                    <dd className="min-w-0">{supervisorName || '—'}</dd>
+                  </div>
+                </dl>
+              </div>
+            </DialogDescription>
+          ) : (
+            <DialogDescription>
+              أدخل كمية اليوم وساعات العمل وعدد العمالة.
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         <div className="space-y-4 py-1">
@@ -278,14 +301,13 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
               value={workers}
               onChange={(e) => setWorkers(e.target.value)}
               placeholder="0"
-              readOnly={distributed}
-              disabled={loadingWorkers || distributed}
+              disabled={loadingWorkers}
             />
             {loadingWorkers ? (
               <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">جاري التحقق من توزيع العمالة…</p>
             ) : distributed ? (
               <p className="mt-1 text-[11px] font-medium text-[rgb(var(--color-primary))]">
-                تم أخذ {distributedCount} عامل من توزيع الخط اليوم — لا حاجة لإدخال يدوي.
+                المصدر الافتراضي: توزيع الخط اليوم ({distributedCount}) — ويمكنك التعديل يدويًا.
               </p>
             ) : (
               <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">

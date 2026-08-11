@@ -3,8 +3,14 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { MENU_CONFIG, ALL_MENU_ITEMS, type MenuItem } from '../config/menu.config';
+import {
+  MENU_CONFIG,
+  ALL_MENU_ITEMS,
+  canAccessMenuItem,
+  type MenuItem,
+} from '../config/menu.config';
 import { logicalPathnameFromLocation } from '../lib/tenantPaths';
+import { usePermission } from '../utils/permissions';
 
 // ─── Badge Counts (HR approvals + payroll, refreshed every 60s) ───────────────
 
@@ -13,9 +19,12 @@ const BADGE_INTERVAL = 60_000;
 export function useBadgeCounts() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const mounted = useRef(true);
+  const { can } = usePermission();
 
   const refresh = useCallback(async () => {
-    const items = ALL_MENU_ITEMS.filter((i) => i.badgeSource);
+    const items = ALL_MENU_ITEMS.filter(
+      (item) => item.badgeSource && canAccessMenuItem(can, item),
+    );
     const results = await Promise.allSettled(
       items.map(async (item) => ({ key: item.key, count: await item.badgeSource!() })),
     );
@@ -28,7 +37,7 @@ export function useBadgeCounts() {
       }
     }
     setCounts(next);
-  }, []);
+  }, [can]);
 
   useEffect(() => {
     mounted.current = true;

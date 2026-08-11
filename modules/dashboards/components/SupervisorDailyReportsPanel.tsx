@@ -13,6 +13,7 @@ import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import { exportNodeToPng } from '@/src/shared/utils/exportNodeToImage';
 import { shareImageBlobToWhatsApp } from '@/utils/reportExport';
 import { retryProductionReportProcessingCallable } from '@/modules/auth/services/firebase';
+import { useAppStore } from '@/store/useAppStore';
 import { firstTwoSupervisorNames } from '@/modules/dashboards/lib/supervisorReportingAccess';
 import type { FirestoreEmployee, FirestoreProduct, ProductionReport, PrintTemplateSettings } from '@/types';
 import { formatNumber } from '@/utils/calculations';
@@ -35,6 +36,9 @@ type SummaryRow = {
   workers: number;
   hours: number;
   processingState?: ProductionReport['processingState'];
+  processingError?: string;
+  clientSaveState?: ProductionReport['clientSaveState'];
+  clientSaveError?: string;
 };
 
 const reportQuantity = (report: ProductionReport): number => {
@@ -63,7 +67,12 @@ const reportWorkers = (report: ProductionReport): number => {
   return detailed > 0 ? detailed : Number(report.workersCount || 0);
 };
 
-const processingLabel = (state?: ProductionReport['processingState']) => {
+const processingLabel = (
+  state?: ProductionReport['processingState'],
+  clientSaveState?: ProductionReport['clientSaveState'],
+) => {
+  if (clientSaveState === 'saving') return 'جارٍ الحفظ';
+  if (clientSaveState === 'failed') return 'فشل الحفظ';
   if (state === 'pending' || state === 'processing') return 'جاري الترحيل';
   if (state === 'failed') return 'تعذر الترحيل';
   return '';
@@ -147,6 +156,7 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
   const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [retryingReportId, setRetryingReportId] = useState('');
+  const retryQueuedReportCreate = useAppStore((state) => state.retryQueuedReportCreate);
 
   const rows = useMemo<SummaryRow[]>(() => {
     const employeeNames = new Map(employees.filter((row) => row.id).map((row) => [String(row.id), row.name]));
@@ -162,8 +172,16 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
         workers: reportWorkers(report),
         hours: Number(report.workHours || 0),
         processingState: report.processingState,
+        processingError: report.processingError,
+        clientSaveState: report.clientSaveState,
+        clientSaveError: report.clientSaveError,
       }));
   }, [employees, products, reports]);
+
+  const confirmedRows = useMemo(
+    () => rows.filter((row) => !row.clientSaveState),
+    [rows],
+  );
 
   const totals = useMemo(() => rows.reduce(
     (acc, row) => ({
@@ -185,7 +203,7 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
   }, [imageBlob]);
 
   const createImage = async () => {
-    if (!captureRef.current || rows.length === 0 || creatingImage) return;
+    if (!captureRef.current || confirmedRows.length === 0 || creatingImage) return;
     setCreatingImage(true);
     try {
       const blob = await exportNodeToPng(captureRef.current);
@@ -213,13 +231,30 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
     }
   };
 
+  const retryClientSave = async (optimisticId: string) => {
+    if (!optimisticId || retryingReportId) return;
+    setRetryingReportId(optimisticId);
+    try {
+      const createdId = await retryQueuedReportCreate(optimisticId);
+      if (!createdId) {
+        showAppToast('error', 'تعذر حفظ التقرير. راجع رسالة الخطأ ثم أعد المحاولة.');
+        return;
+      }
+      showAppToast('success', 'تم تأكيد حفظ التقرير، والترحيل مستمر في الخلفية.');
+    } catch (error) {
+      showAppToast('error', error instanceof Error ? error.message : 'تعذرت إعادة محاولة الحفظ.');
+    } finally {
+      setRetryingReportId('');
+    }
+  };
+
   return (
     <>
       <OpsDashPanel
         title="تقارير اليوم التي أدخلتها"
         accent="production"
         action={(
-          <PrimaryButton type="button" size="sm" tone="share" iconName="image" disabled={rows.length === 0 || creatingImage} onClick={() => { void createImage(); }}>
+          <PrimaryButton type="button" size="sm" tone="share" iconName="image" disabled={confirmedRows.length === 0 || creatingImage} onClick={() => { void createImage(); }}>
             {creatingImage ? 'جاري إنشاء الصورة…' : 'إنشاء صورة'}
           </PrimaryButton>
         )}
@@ -229,6 +264,12 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
         ) : rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-[var(--color-text-muted)]">لم تُدخل تقارير إنتاج اليوم بعد.</p>
         ) : (
+          <div>
+            {rows.some((row) => row.clientSaveState) ? (
+              <p className="mb-2 text-xs font-bold text-[rgb(var(--color-warning))]">
+                الصفوف الجاري حفظها تظهر فورًا، وتدخل في الصورة بعد تأكيد الحفظ فقط.
+              </p>
+            ) : null}
           <div className="overflow-x-auto">
             <table className="erp-table w-full min-w-[680px] text-sm">
               <thead className="erp-thead">
@@ -246,12 +287,21 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
                     <td className="px-3 py-2.5 font-bold text-[var(--color-text)]">{row.productName}</td>
                     <td className="px-3 py-2.5">
                       <span className="font-medium">{row.supervisorName}</span>
-                      {processingLabel(row.processingState) ? (
-                        <span className={`me-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${row.processingState === 'failed' ? 'bg-[rgb(var(--color-danger)/0.12)] text-[rgb(var(--color-danger))]' : 'bg-[rgb(var(--color-warning)/0.12)] text-[rgb(var(--color-warning))]'}`}>
-                          {processingLabel(row.processingState)}
+                      {processingLabel(row.processingState, row.clientSaveState) ? (
+                        <span className={`me-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${row.clientSaveState === 'failed' || row.processingState === 'failed' ? 'bg-[rgb(var(--color-danger)/0.12)] text-[rgb(var(--color-danger))]' : 'bg-[rgb(var(--color-warning)/0.12)] text-[rgb(var(--color-warning))]'}`} title={row.clientSaveError || undefined}>
+                          {processingLabel(row.processingState, row.clientSaveState)}
                         </span>
                       ) : null}
-                      {row.processingState === 'failed' && row.reportId ? (
+                      {row.clientSaveState === 'failed' && row.reportId ? (
+                        <button
+                          type="button"
+                          className="me-2 text-[10px] font-black text-[rgb(var(--color-primary))] underline"
+                          disabled={Boolean(retryingReportId)}
+                          onClick={() => { void retryClientSave(row.reportId!); }}
+                        >
+                          {retryingReportId === row.reportId ? 'جاري الحفظ…' : 'إعادة الحفظ'}
+                        </button>
+                      ) : row.processingState === 'failed' && row.reportId ? (
                         <button
                           type="button"
                           className="me-2 text-[10px] font-black text-[rgb(var(--color-primary))] underline"
@@ -260,6 +310,11 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
                         >
                           {retryingReportId === row.reportId ? 'جاري الإرسال…' : 'إعادة المحاولة'}
                         </button>
+                      ) : null}
+                      {(row.clientSaveState === 'failed' ? row.clientSaveError : row.processingState === 'failed' ? row.processingError : '') ? (
+                        <p className="mt-1 max-w-md text-[10px] font-bold text-[rgb(var(--color-danger))]">
+                          {row.clientSaveState === 'failed' ? row.clientSaveError : row.processingError}
+                        </p>
                       ) : null}
                     </td>
                     <td className="px-3 py-2.5 text-center font-bold tabular-nums">{formatNumber(row.quantity)}</td>
@@ -279,11 +334,12 @@ export function SupervisorDailyReportsPanel({ reports, employees, products, comp
               </tfoot>
             </table>
           </div>
+          </div>
         )}
       </OpsDashPanel>
 
       <div style={{ position: 'fixed', left: '-99999px', top: 0, width: 1080, background: '#fff', pointerEvents: 'none' }}>
-        <SummaryImage rows={rows} companyName={companyName} accent={accent} targetRef={captureRef} />
+        <SummaryImage rows={confirmedRows} companyName={companyName} accent={accent} targetRef={captureRef} />
       </div>
 
       <Dialog open={Boolean(imageBlob)} onOpenChange={(open) => { if (!open) setImageBlob(null); }}>

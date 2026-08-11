@@ -4,7 +4,9 @@ import type { FirestoreEmployee, ProductionReport, WorkOrder } from '../types.ts
 import {
   filterActiveWorkOrdersForReporter,
   firstTwoSupervisorNames,
+  indexTodayReportStateByWorkOrder,
   reportWasEnteredByActor,
+  sortWorkOrdersByTodayReportState,
 } from '../modules/dashboards/lib/supervisorReportingAccess.ts';
 import {
   buildProductionReportFastUniqueKey,
@@ -80,6 +82,19 @@ assert.equal(reportWasEnteredByActor(delegatedReport, 'another-uid', supervisorA
 assert.equal(reportWasEnteredByActor({ ...delegatedReport, createdByUid: undefined }, 'hall-uid', hall.id, true), false);
 assert.equal(firstTwoSupervisorNames('أحمد محمد علي الطويل جداً'), 'أحمد محمد');
 
+const reportStateByWorkOrder = indexTodayReportStateByWorkOrder([
+  { ...delegatedReport, id: 'local-1', clientSaveState: 'saving' },
+  { ...delegatedReport, id: 'report-confirmed' },
+  { ...delegatedReport, id: 'local-2', workOrderId: 'wo-2', clientSaveState: 'failed' },
+]);
+assert.deepEqual(reportStateByWorkOrder.get('wo-1'), { state: 'saved', reportId: 'report-confirmed' });
+assert.deepEqual(reportStateByWorkOrder.get('wo-2'), { state: 'failed', reportId: 'local-2' });
+assert.deepEqual(
+  sortWorkOrdersByTodayReportState(orders.slice(0, 2), reportStateByWorkOrder).map((row) => row.id),
+  ['wo-2', 'wo-1'],
+  'orders without a confirmed daily report stay above completed report orders',
+);
+
 const validAssignment = {
   actorTenantId: 'tenant-1',
   actorEmployeeId: hall.id!,
@@ -103,8 +118,16 @@ const validAssignment = {
 assert.equal(validateProductionReportAssignment(validAssignment), null);
 assert.equal(validateProductionReportAssignment({
   ...validAssignment,
+  actorEmployeeLevel: 1,
+}), null, 'hall delegation is permission-based and must not depend on employee level');
+assert.equal(validateProductionReportAssignment({
+  ...validAssignment,
   targetEmployeeId: supervisorB.id!,
-})?.message, 'المشرف أو الخط أو المنتج لا يطابق أمر الشغل.');
+})?.message, 'المشرف أو المنتج لا يطابق أمر الشغل.');
+assert.equal(validateProductionReportAssignment({
+  ...validAssignment,
+  reportLineId: 'line-moved',
+}), null, 'line move must not block explicit WO assignment when product+supervisor match');
 assert.equal(validateProductionReportAssignment({
   ...validAssignment,
   canCreateForAnySupervisor: false,
@@ -145,5 +168,15 @@ assert.match(backgroundSource, /processingState: 'processing'/);
 assert.match(backgroundSource, /processingState: 'completed'/);
 assert.match(backgroundSource, /processingState: 'failed'/);
 assert.match(backgroundSource, /applyProductionReportInventoryInternal/);
+
+const quickDialogSource = readFileSync(new URL('../modules/dashboards/components/SupervisorWorkOrderQuickReportDialog.tsx', import.meta.url), 'utf8');
+assert.match(quickDialogSource, /queueReportCreate\(payload/);
+assert.match(quickDialogSource, /تمت إضافة التقرير للجدول وجارٍ تأكيد حفظه/);
+assert.doesNotMatch(quickDialogSource, /await createReport\(payload/);
+
+const dailyPanelSource = readFileSync(new URL('../modules/dashboards/components/SupervisorDailyReportsPanel.tsx', import.meta.url), 'utf8');
+assert.match(dailyPanelSource, /clientSaveState === 'failed'/);
+assert.match(dailyPanelSource, /retryQueuedReportCreate/);
+assert.match(dailyPanelSource, /confirmedRows/);
 
 console.log('hall-supervisor-reporting.test.ts: ok');

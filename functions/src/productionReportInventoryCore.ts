@@ -26,6 +26,12 @@ export type DeterministicInventoryMovement = InventoryMovementIntent & {
 
 const normalizePart = (value: unknown): string => String(value ?? '').trim();
 
+const omitUndefined = <T extends Record<string, unknown>>(value: T): T => (
+  Object.fromEntries(
+    Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined),
+  ) as T
+);
+
 const hashIdentity = (...parts: string[]): string =>
   createHash('sha256').update(parts.join('\u001f')).digest('hex').slice(0, 40);
 
@@ -57,7 +63,7 @@ export function buildDeterministicMovementPlan(
 
   const sorted = movements
     .filter((movement) => Number(movement.quantity) > 0)
-    .map((movement) => ({
+    .map((movement) => omitUndefined({
       ...movement,
       warehouseId: normalizePart(movement.warehouseId),
       toWarehouseId: normalizePart(movement.toWarehouseId) || undefined,

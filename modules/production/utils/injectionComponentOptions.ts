@@ -75,6 +75,18 @@ export async function loadInjectionComponentOptions(
   return filterInjectionComponentOptions(merged, categoryKeywords);
 }
 
+export function catalogOrComponentName(
+  id: string | undefined | null,
+  products: Array<{ id?: string; name?: string }>,
+  components: Array<{ id: string; name: string }>,
+): string {
+  const key = String(id || '').trim();
+  if (!key) return '';
+  const fromProduct = String(products.find((row) => row.id === key)?.name || '').trim();
+  if (fromProduct) return fromProduct;
+  return String(components.find((row) => row.id === key)?.name || '').trim();
+}
+
 export async function loadReportsComponentLabelOptions(): Promise<InjectionComponentOption[]> {
   const [{ rawMaterialService }, { materialService }] = await Promise.all([
     import('../../inventory/services/rawMaterialService'),

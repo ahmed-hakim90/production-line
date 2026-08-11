@@ -37,6 +37,11 @@ import {
   deriveWorkOrderStatusFromProduced,
   lastProducingReportDateFromReports,
 } from '../../production/utils/workOrderReportLinking';
+import {
+  catalogOrComponentName,
+  loadReportsComponentLabelOptions,
+  type InjectionComponentOption,
+} from '../../production/utils/injectionComponentOptions';
 import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import { SearchableSelect } from '@/components/UI';
 import { useActiveRoutingPlansQuery } from '../../production/routing/hooks/routingQueries';
@@ -165,6 +170,7 @@ export const EmployeeDashboard: React.FC = () => {
   const today = getTodayDateString();
 
   const [woPrintData, setWoPrintData] = useState<WorkOrderPrintData | null>(null);
+  const [componentLabelOptions, setComponentLabelOptions] = useState<InjectionComponentOption[]>([]);
   const woPrintRef = useRef<HTMLDivElement>(null);
   const handleWoPrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
 
@@ -206,13 +212,13 @@ export const EmployeeDashboard: React.FC = () => {
   }, []);
 
   const triggerWOPrint = useCallback(async (wo: WorkOrder) => {
-    const product = _rawProducts.find((p) => p.id === wo.productId);
+    const productName = catalogOrComponentName(wo.productId, _rawProducts, componentLabelOptions) || '—';
     const line = _rawLines.find((l) => l.id === wo.lineId);
     const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
     const producedNow = resolveWorkOrderProducedNow(wo);
     setWoPrintData({
       workOrderNumber: wo.workOrderNumber,
-      productName: product?.name ?? '—',
+      productName,
       lineName: line?.name ?? '—',
       supervisorName: supervisor?.name ?? '—',
       quantity: wo.quantity,
@@ -229,7 +235,7 @@ export const EmployeeDashboard: React.FC = () => {
     await new Promise((r) => setTimeout(r, 300));
     handleWoPrint();
     setTimeout(() => setWoPrintData(null), 1000);
-  }, [_rawProducts, _rawLines, _rawEmployees, can, handleWoPrint, resolveWorkOrderProducedNow]);
+  }, [_rawProducts, _rawLines, _rawEmployees, can, componentLabelOptions, handleWoPrint, resolveWorkOrderProducedNow]);
 
   const employee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
@@ -259,6 +265,20 @@ export const EmployeeDashboard: React.FC = () => {
 
     return () => { cancelled = true; };
   }, [employee?.id, today]);
+
+  useEffect(() => {
+    let mounted = true;
+    loadReportsComponentLabelOptions()
+      .then((rows) => {
+        if (mounted) setComponentLabelOptions(rows);
+      })
+      .catch(() => {
+        if (mounted) setComponentLabelOptions([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const myActiveWorkOrders = useMemo(() => {
     if (!employee) return [];
@@ -429,7 +449,6 @@ export const EmployeeDashboard: React.FC = () => {
 
     if (!plan) return null;
 
-    const product = _rawProducts.find((p) => p.id === plan.productId);
     const line = _rawLines.find((l) => l.id === plan.lineId);
 
     const historical = resolvePlanReports(plan, planReports);
@@ -448,7 +467,7 @@ export const EmployeeDashboard: React.FC = () => {
 
     return {
       plan,
-      productName: product?.name ?? '—',
+      productName: catalogOrComponentName(plan.productId, _rawProducts, componentLabelOptions) || '—',
       lineName: line?.name ?? '—',
       plannedQuantity: plan.plannedQuantity,
       periodProduced,
@@ -457,7 +476,7 @@ export const EmployeeDashboard: React.FC = () => {
       progress,
       status: plan.status,
     };
-  }, [employee?.id, productionPlans, planReports, todayReports, monthlyReports, periodReports, _rawProducts, _rawLines, assignedLineIds]);
+  }, [employee?.id, productionPlans, planReports, todayReports, monthlyReports, periodReports, _rawProducts, _rawLines, assignedLineIds, componentLabelOptions]);
 
   const assignedLines = useMemo(
     () => _rawLines.filter((line) => line.id && assignedLineIds.has(line.id)),
@@ -1166,7 +1185,9 @@ export const EmployeeDashboard: React.FC = () => {
 
                             <div className="flex items-center gap-2">
                               <span className="material-icons-round text-[var(--color-text-muted)] text-base">inventory_2</span>
-                              <p className="text-xs font-bold text-[var(--color-text)]">{product?.name ?? '—'}</p>
+                              <p className="text-xs font-bold text-[var(--color-text)]">
+                                {catalogOrComponentName(wo.productId, _rawProducts, componentLabelOptions) || '—'}
+                              </p>
                               <span className="text-[var(--color-text-muted)] dark:text-[var(--color-text-muted)]">آ·</span>
                               <span className="material-icons-round text-[var(--color-text-muted)] text-sm">precision_manufacturing</span>
                               <span className="text-xs font-bold text-[var(--color-text-muted)]">{line?.name ?? '—'}</span>

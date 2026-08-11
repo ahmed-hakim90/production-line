@@ -255,6 +255,11 @@ export interface ProductionShiftWorkerSnapshot {
 export interface ProductionReport {
   id?: string;
   reportCode?: string;
+  /** Client-only optimistic queue state; never persisted to Firestore. */
+  clientSaveState?: "saving" | "failed";
+  clientSaveError?: string;
+  clientCreatePath?: string;
+  clientCreatePayload?: Record<string, unknown>;
   /** Auth user who entered the report; may differ from employeeId for delegated hall reporting. */
   createdByUid?: string;
   createdByNameSnapshot?: string;

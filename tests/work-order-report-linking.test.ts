@@ -84,7 +84,21 @@ const wrongLine = pickBestAutoLinkedWorkOrder(
     reportDate: '2026-07-12',
   },
 );
-assert.equal(wrongLine, null);
+assert.equal(wrongLine?.id, 'wo-other-line', 'same product on another line still links after a line move');
+
+const prefersSameLine = pickBestAutoLinkedWorkOrder(
+  [
+    wo({ id: 'wo-other-line', lineId: 'line-2', status: 'in_progress' }),
+    wo({ id: 'wo-same-line', lineId: 'line-1', status: 'pending' }),
+  ],
+  {
+    lineId: 'line-1',
+    productId: 'product-1',
+    reportType: 'finished_product',
+    reportDate: '2026-07-12',
+  },
+);
+assert.equal(prefersSameLine?.id, 'wo-same-line', 'same-line WO still wins when both exist');
 
 const linkedReports = [
   report({ id: 'a', workOrderId: 'wo-1', quantityProduced: 10 }),
@@ -113,6 +127,6 @@ const candidates = filterUnlinkedReportsEligibleForWorkOrder(wo(), [
   report({ id: 'already', date: '2026-07-12', workOrderId: 'wo-1' }),
   report({ id: 'other-line', date: '2026-07-12', workOrderId: '', lineId: 'line-2' }),
 ]);
-assert.deepEqual(candidates.map((r) => r.id), ['ok']);
+assert.deepEqual(candidates.map((r) => r.id).sort(), ['ok', 'other-line']);
 
 console.log('work-order-report-linking.test.ts: ok');

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 const normalizePart = (value) => String(value ?? '').trim();
+const omitUndefined = (value) => Object.fromEntries(Object.entries(value).filter(([, fieldValue]) => fieldValue !== undefined));
 const hashIdentity = (...parts) => createHash('sha256').update(parts.join('\u001f')).digest('hex').slice(0, 40);
 const movementSortKey = (movement) => [
     normalizePart(movement.sourceModule),
@@ -24,7 +25,7 @@ export function buildDeterministicMovementPlan(reportId, phase, movements) {
         throw new Error('reportId is required');
     const sorted = movements
         .filter((movement) => Number(movement.quantity) > 0)
-        .map((movement) => ({
+        .map((movement) => omitUndefined({
         ...movement,
         warehouseId: normalizePart(movement.warehouseId),
         toWarehouseId: normalizePart(movement.toWarehouseId) || undefined,

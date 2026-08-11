@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { resolvePortalKind } from '../modules/dashboards/lib/portalHome.ts';
+import {
+  resolvePortalKind,
+  shouldUseSupervisorDashboard,
+} from '../modules/dashboards/lib/portalHome.ts';
 
 assert.equal(
   resolvePortalKind({
@@ -108,6 +111,27 @@ assert.equal(
   }),
   'repair_technician',
   'technician keeps repair portal even with bound warehouse',
+);
+
+assert.equal(
+  shouldUseSupervisorDashboard(
+    { can: (p) => p === 'reports.createForAnySupervisor' },
+    1,
+  ),
+  true,
+  'hall supervisor permission opens the supervisor dashboard regardless of employee level',
+);
+
+assert.equal(
+  shouldUseSupervisorDashboard({ can: () => false }, 2),
+  true,
+  'line supervisors keep the level-2 dashboard path',
+);
+
+assert.equal(
+  shouldUseSupervisorDashboard({ can: () => false }, 1),
+  false,
+  'ordinary employees remain on the employee dashboard',
 );
 
 console.log('portal-home.test.ts passed');

@@ -170,7 +170,7 @@ export async function createProductionReportFastHandler(request: CallableRequest
   const targetEmployee = targetEmployeeSnap.data() as { tenantId?: string; isActive?: boolean } | undefined;
   const workOrderId = clean(input.workOrderId);
   const delegated = Boolean(
-    Number(actorEmployee?.level || 0) === 2
+    can(actor, 'reports.createForAnySupervisor')
     && actorEmployeeId
     && actorEmployeeId !== clean(input.employeeId),
   );

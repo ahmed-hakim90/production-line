@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  catalogOrComponentName,
   filterInjectionComponentOptions,
   mergeInjectionComponentOptions,
 } from '../modules/production/utils/injectionComponentOptions.ts';
@@ -58,5 +59,18 @@ assert.equal(merged.some((row) => row.id === 'raw-legacy-1'), false, 'linked leg
 
 const injectionOnly = filterInjectionComponentOptions(merged, 'حقن');
 assert.equal(injectionOnly.some((row) => row.code === 'INJ-00018'), true);
+
+assert.equal(
+  catalogOrComponentName('mat-1', [{ id: 'prod-1', name: 'منتج تام' }], merged),
+  'فانوس ابيض pp',
+);
+assert.equal(
+  catalogOrComponentName('prod-1', [{ id: 'prod-1', name: 'منتج تام' }], merged),
+  'منتج تام',
+);
+assert.equal(
+  catalogOrComponentName('missing', [{ id: 'prod-1', name: 'منتج تام' }], merged),
+  '',
+);
 
 console.log('injection-component-options.test.ts: ok');

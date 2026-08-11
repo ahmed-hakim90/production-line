@@ -35,15 +35,14 @@ export function validateProductionReportAssignment(
     return { code: 'failed-precondition', message: 'مشرف التقرير غير موجود أو غير نشط.' };
   }
 
-  const delegated = Boolean(
-    input.actorEmployeeLevel === 2
-    &&
+  const targetsAnotherEmployee = Boolean(
     input.actorEmployeeId
     && input.actorEmployeeId !== input.targetEmployeeId,
   );
+  const delegated = input.canCreateForAnySupervisor && targetsAnotherEmployee;
   if (
     input.actorEmployeeLevel === 2
-    && delegated
+    && targetsAnotherEmployee
     && !input.canCreateForAnySupervisor
   ) {
     return { code: 'permission-denied', message: 'غير مصرح بإنشاء تقرير لمشرف آخر.' };
@@ -64,12 +63,12 @@ export function validateProductionReportAssignment(
   if (!workOrder.supervisorId) {
     return { code: 'failed-precondition', message: 'لا يمكن إنشاء تقرير لأمر شغل بلا مشرف.' };
   }
+  // Line may change after the work order was opened; product + supervisor remain the authority.
   if (
     workOrder.supervisorId !== input.targetEmployeeId
-    || workOrder.lineId !== input.reportLineId
     || workOrder.productId !== input.reportProductId
   ) {
-    return { code: 'failed-precondition', message: 'المشرف أو الخط أو المنتج لا يطابق أمر الشغل.' };
+    return { code: 'failed-precondition', message: 'المشرف أو المنتج لا يطابق أمر الشغل.' };
   }
   return null;
 }

@@ -1813,7 +1813,9 @@ export const importTenantBackup = onCall(
 export const resolveTenantSlug = onCall(
   {
     region: 'us-central1',
-    memory: '128MiB',
+    // This function shares the main Functions bundle; 128MiB intermittently
+    // fails during cold start and surfaces in browsers as a misleading CORS error.
+    memory: '256MiB',
     cors: true,
     invoker: 'public',
   },
@@ -2459,7 +2461,12 @@ export const mutateAccounting = onCall(
 );
 
 export const createRepairBranchProvisioned = onCall(
-  { region: 'us-central1', memory: '512MiB' },
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    cors: true,
+    invoker: 'public',
+  },
   createRepairBranchProvisionedHandler,
 );
 
@@ -2509,12 +2516,22 @@ export const getCustomerFinancialAnalytics = onCall(
 );
 
 export const createProductionReportFast = onCall(
-  { region: 'us-central1', memory: '512MiB' },
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+    cors: true,
+    invoker: 'public',
+  },
   createProductionReportFastHandler,
 );
 
 export const retryProductionReportProcessing = onCall(
-  { region: 'us-central1', memory: '256MiB' },
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+    cors: true,
+    invoker: 'public',
+  },
   retryProductionReportProcessingHandler,
 );
 

@@ -3,7 +3,7 @@ import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { lazyNamed } from '../../shared/routes/lazyNamed';
-import { resolvePortalKind } from '../lib/portalHome';
+import { resolvePortalKind, shouldUseSupervisorDashboard } from '../lib/portalHome';
 
 const AdminDashboard = lazyNamed(() => import('./AdminDashboard'), 'AdminDashboard');
 const Dashboard = lazyNamed(() => import('./Dashboard'), 'Dashboard');
@@ -50,13 +50,16 @@ export const HomeDashboardRouter: React.FC = () => {
     inventoryWarehouseId: userProfile?.inventoryWarehouseId,
   });
 
-  const isSupervisorEmployee = currentEmployee?.level === 2;
+  const useSupervisorDashboard = shouldUseSupervisorDashboard(
+    { can },
+    currentEmployee?.level,
+  );
 
   let body: React.ReactNode = <Dashboard />;
   if (portal === 'admin') body = <AdminDashboard />;
   else if (portal === 'factory_manager') body = <FactoryManagerDashboard />;
   else if (portal === 'employee') {
-    body = isSupervisorEmployee ? <SupervisorDashboard /> : <EmployeeDashboard />;
+    body = useSupervisorDashboard ? <SupervisorDashboard /> : <EmployeeDashboard />;
   } else if (portal === 'warehouse_manager') body = <WarehouseManagerHome />;
   else if (portal === 'repair') body = <RepairDashboard />;
   else if (portal === 'repair_technician') body = <RepairTechnicianHome />;

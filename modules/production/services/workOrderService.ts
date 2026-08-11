@@ -160,6 +160,23 @@ export const workOrderService = {
     }
   },
 
+  /** Open work orders for a product on any line (product may move between lines). */
+  async getActiveByProduct(productId: string): Promise<WorkOrder[]> {
+    if (!isConfigured) return [];
+    try {
+      // Prefer product-only query (indexed) then filter open statuses client-side —
+      // avoids requiring a tenantId+productId+status composite index.
+      const q = tenantQuery(db, COLLECTION, where('productId', '==', productId));
+      const snap = await getDocs(q);
+      return snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as WorkOrder))
+        .filter((wo) => wo.status === 'pending' || wo.status === 'in_progress' || wo.status === 'paused');
+    } catch (error) {
+      console.error('workOrderService.getActiveByProduct error:', error);
+      throw error;
+    }
+  },
+
   async create(data: Omit<WorkOrder, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {

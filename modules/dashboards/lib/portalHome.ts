@@ -75,6 +75,17 @@ export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind 
   return 'generic';
 }
 
+/**
+ * Hall supervisors are identified by their delegated-report permission, not by
+ * the linked employee level. Line supervisors keep the legacy level-2 path.
+ */
+export function shouldUseSupervisorDashboard(
+  checker: Pick<PortalPermissionChecker, 'can'>,
+  employeeLevel?: number | null,
+): boolean {
+  return checker.can('reports.createForAnySupervisor') || employeeLevel === 2;
+}
+
 /** Supervisor day-to-day entry points (curated; one clear path each). */
 export const SUPERVISOR_PORTAL_PATHS = {
   dashboard: '/supervisor',

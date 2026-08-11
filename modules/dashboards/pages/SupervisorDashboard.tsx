@@ -24,6 +24,11 @@ import { supervisorLineAssignmentService } from '@/modules/production/services/s
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '@/store/useAppStore';
 import type { ProductionPlan, ProductionReport, WorkOrder } from '@/types';
 import { WORK_ORDER_STATUS_LABELS } from '@/modules/production/utils/workOrderReportLinking';
+import {
+  catalogOrComponentName,
+  loadReportsComponentLabelOptions,
+  type InjectionComponentOption,
+} from '@/modules/production/utils/injectionComponentOptions';
 import { usePermission } from '@/utils/permissions';
 import {
   calculatePlanProgress,
@@ -36,8 +41,51 @@ import {
 import { resolvePlanReports } from '@/modules/dashboards/lib/decisionMetrics';
 import {
   filterActiveWorkOrdersForReporter,
+  indexTodayReportStateByWorkOrder,
   reportWasEnteredByActor,
+  sortWorkOrdersByTodayReportState,
 } from '@/modules/dashboards/lib/supervisorReportingAccess';
+import {
+  resolveProductCategoryFilterKey,
+  resolveProductCategoryLeafName,
+} from '@/modules/catalog/lib/resolveProductCategory';
+
+const ACTIVE_WO_FILTERS_STORAGE_PREFIX = 'supervisor.activeWoFilters.v1';
+
+type ActiveWoPersistedFilters = {
+  supervisorId?: string;
+  lineId?: string;
+  status?: string;
+  categoryKey?: string;
+};
+
+function activeWoFiltersStorageKey(tenantSlug: string | undefined, uid: string | null | undefined): string | null {
+  const slug = String(tenantSlug || '').trim();
+  const userId = String(uid || '').trim();
+  if (!slug || !userId) return null;
+  return `${ACTIVE_WO_FILTERS_STORAGE_PREFIX}:${slug}:${userId}`;
+}
+
+function readActiveWoPersistedFilters(key: string | null): ActiveWoPersistedFilters {
+  if (!key || typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as ActiveWoPersistedFilters;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeActiveWoPersistedFilters(key: string | null, value: ActiveWoPersistedFilters): void {
+  if (!key || typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore quota / private-mode failures
+  }
+}
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
@@ -134,6 +182,7 @@ export const SupervisorDashboard: React.FC = () => {
     uid,
     _rawEmployees,
     _rawProducts,
+    _productCategories,
     _rawLines,
     productionPlans,
     planReports,
@@ -147,6 +196,7 @@ export const SupervisorDashboard: React.FC = () => {
     uid: s.uid,
     _rawEmployees: s._rawEmployees,
     _rawProducts: s._rawProducts,
+    _productCategories: s._productCategories,
     _rawLines: s._rawLines,
     productionPlans: s.productionPlans,
     planReports: s.planReports,
@@ -159,6 +209,7 @@ export const SupervisorDashboard: React.FC = () => {
   }));
 
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+  const retryQueuedReportCreate = useAppStore((s) => s.retryQueuedReportCreate);
   const { snapshot: decisionSnapshot, loading: decisionLoading, refresh: refreshDecision } =
     useOperationalDecisionSnapshot();
 
@@ -172,8 +223,56 @@ export const SupervisorDashboard: React.FC = () => {
   const [workOrderSupervisorFilter, setWorkOrderSupervisorFilter] = useState('all');
   const [workOrderLineFilter, setWorkOrderLineFilter] = useState('all');
   const [workOrderStatusFilter, setWorkOrderStatusFilter] = useState('all');
+  const [workOrderCategoryFilter, setWorkOrderCategoryFilter] = useState('all');
+  const [woFiltersHydrated, setWoFiltersHydrated] = useState(false);
   const [visibleWorkOrdersCount, setVisibleWorkOrdersCount] = useState(10);
+  const [componentLabelOptions, setComponentLabelOptions] = useState<InjectionComponentOption[]>([]);
   const today = getTodayDateString();
+  const woFiltersStorageKey = activeWoFiltersStorageKey(tenantSlug, uid);
+
+  useEffect(() => {
+    if (!woFiltersStorageKey) {
+      setWoFiltersHydrated(true);
+      return;
+    }
+    const saved = readActiveWoPersistedFilters(woFiltersStorageKey);
+    if (saved.supervisorId) setWorkOrderSupervisorFilter(saved.supervisorId);
+    if (saved.lineId) setWorkOrderLineFilter(saved.lineId);
+    if (saved.status) setWorkOrderStatusFilter(saved.status);
+    if (saved.categoryKey) setWorkOrderCategoryFilter(saved.categoryKey);
+    setWoFiltersHydrated(true);
+  }, [woFiltersStorageKey]);
+
+  useEffect(() => {
+    if (!woFiltersHydrated || !woFiltersStorageKey) return;
+    writeActiveWoPersistedFilters(woFiltersStorageKey, {
+      supervisorId: workOrderSupervisorFilter,
+      lineId: workOrderLineFilter,
+      status: workOrderStatusFilter,
+      categoryKey: workOrderCategoryFilter,
+    });
+  }, [
+    woFiltersHydrated,
+    woFiltersStorageKey,
+    workOrderSupervisorFilter,
+    workOrderLineFilter,
+    workOrderStatusFilter,
+    workOrderCategoryFilter,
+  ]);
+
+  useEffect(() => {
+    let mounted = true;
+    loadReportsComponentLabelOptions()
+      .then((rows) => {
+        if (mounted) setComponentLabelOptions(rows);
+      })
+      .catch(() => {
+        if (mounted) setComponentLabelOptions([]);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const employee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
@@ -276,24 +375,66 @@ export const SupervisorDashboard: React.FC = () => {
   const myActiveWorkOrders = useMemo(() => {
     return filterActiveWorkOrdersForReporter(workOrders, employee, canCreateForAnySupervisor);
   }, [employee, workOrders, canCreateForAnySupervisor]);
+  const todayReportStateByWorkOrder = useMemo(
+    () => indexTodayReportStateByWorkOrder(todayReports),
+    [todayReports],
+  );
+
+  const workOrderCategoryOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const wo of myActiveWorkOrders) {
+      const product = _rawProducts.find((row) => row.id === wo.productId);
+      if (!product) continue;
+      const key = resolveProductCategoryFilterKey(product);
+      if (!key || byKey.has(key)) continue;
+      const label = resolveProductCategoryLeafName(product, _productCategories) || 'بدون فئة';
+      byKey.set(key, label);
+    }
+    return [...byKey.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }, [myActiveWorkOrders, _rawProducts, _productCategories]);
 
   const filteredWorkOrders = useMemo(() => {
     const query = workOrderSearch.trim().toLocaleLowerCase('ar');
-    return myActiveWorkOrders.filter((wo) => {
+    const matching = myActiveWorkOrders.filter((wo) => {
       if (workOrderSupervisorFilter !== 'all' && wo.supervisorId !== workOrderSupervisorFilter) return false;
       if (workOrderLineFilter !== 'all' && wo.lineId !== workOrderLineFilter) return false;
       if (workOrderStatusFilter !== 'all' && wo.status !== workOrderStatusFilter) return false;
+      if (workOrderCategoryFilter !== 'all') {
+        const product = _rawProducts.find((row) => row.id === wo.productId);
+        const categoryKey = product ? resolveProductCategoryFilterKey(product) : '';
+        if (categoryKey !== workOrderCategoryFilter) return false;
+      }
       if (!query) return true;
-      const productName = _rawProducts.find((row) => row.id === wo.productId)?.name || '';
+      const productName = catalogOrComponentName(wo.productId, _rawProducts, componentLabelOptions);
       const supervisorName = _rawEmployees.find((row) => row.id === wo.supervisorId)?.name || '';
       return [wo.workOrderNumber, productName, supervisorName]
         .some((value) => String(value || '').toLocaleLowerCase('ar').includes(query));
     });
-  }, [myActiveWorkOrders, workOrderLineFilter, workOrderSearch, workOrderStatusFilter, workOrderSupervisorFilter, _rawEmployees, _rawProducts]);
+    return sortWorkOrdersByTodayReportState(matching, todayReportStateByWorkOrder);
+  }, [
+    myActiveWorkOrders,
+    workOrderLineFilter,
+    workOrderSearch,
+    workOrderStatusFilter,
+    workOrderSupervisorFilter,
+    workOrderCategoryFilter,
+    _rawEmployees,
+    _rawProducts,
+    componentLabelOptions,
+    todayReportStateByWorkOrder,
+  ]);
 
   useEffect(() => {
     setVisibleWorkOrdersCount(10);
-  }, [workOrderSearch, workOrderSupervisorFilter, workOrderLineFilter, workOrderStatusFilter]);
+  }, [
+    workOrderSearch,
+    workOrderSupervisorFilter,
+    workOrderLineFilter,
+    workOrderStatusFilter,
+    workOrderCategoryFilter,
+  ]);
 
   const kpis = useMemo(() => {
     const totalProduction = periodReports.reduce(
@@ -394,7 +535,6 @@ export const SupervisorDashboard: React.FC = () => {
     );
     if (!plan) return null;
 
-    const product = _rawProducts.find((p) => p.id === plan.productId);
     const line = plan.lineId ? _rawLines.find((l) => l.id === plan.lineId) : undefined;
     const historical = resolvePlanReports(plan, planReports);
     const fromReports = historical.reduce(
@@ -410,7 +550,7 @@ export const SupervisorDashboard: React.FC = () => {
 
     return {
       plan,
-      productName: product?.name ?? '—',
+      productName: catalogOrComponentName(plan.productId, _rawProducts, componentLabelOptions) || '—',
       lineName: line?.name ?? '—',
       plannedQuantity: plan.plannedQuantity,
       periodProduced,
@@ -429,6 +569,7 @@ export const SupervisorDashboard: React.FC = () => {
     _rawProducts,
     _rawLines,
     assignedLineIds,
+    componentLabelOptions,
   ]);
 
   const dailyChartData = useMemo(() => {
@@ -632,7 +773,7 @@ export const SupervisorDashboard: React.FC = () => {
         )}
       >
         {canCreateForAnySupervisor ? (
-          <div className="mb-3 grid gap-2 md:grid-cols-4">
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
             <input
               type="search"
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
@@ -662,6 +803,16 @@ export const SupervisorDashboard: React.FC = () => {
             </select>
             <select
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
+              value={workOrderCategoryFilter}
+              onChange={(event) => setWorkOrderCategoryFilter(event.target.value)}
+            >
+              <option value="all">فئة المنتج</option>
+              {workOrderCategoryOptions.map((row) => (
+                <option key={row.value} value={row.value}>{row.label}</option>
+              ))}
+            </select>
+            <select
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
               value={workOrderStatusFilter}
               onChange={(event) => setWorkOrderStatusFilter(event.target.value)}
             >
@@ -680,10 +831,11 @@ export const SupervisorDashboard: React.FC = () => {
           <>
             <ul className="divide-y divide-[var(--color-border)]">
               {workOrdersPreview.map((wo) => {
-                const product = _rawProducts.find((p) => p.id === wo.productId);
+                const productName = catalogOrComponentName(wo.productId, _rawProducts, componentLabelOptions) || '—';
                 const line = _rawLines.find((l) => l.id === wo.lineId);
                 const reportSupervisor = _rawEmployees.find((row) => row.id === wo.supervisorId);
                 const canReportForWorkOrder = Boolean(wo.supervisorId && reportSupervisor?.isActive !== false);
+                const reportState = wo.id ? todayReportStateByWorkOrder.get(wo.id) : undefined;
                 const produced = Math.max(
                   Number(wo.producedQuantity || 0),
                   Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0),
@@ -701,7 +853,7 @@ export const SupervisorDashboard: React.FC = () => {
                           <StatusBadge label={STATUS_LABELS[wo.status] || wo.status} />
                         </div>
                         <p className="text-sm font-medium text-[var(--color-text)] truncate mt-0.5">
-                          {product?.name ?? '—'}
+                          {productName}
                         </p>
                         <p className="text-[11px] text-[var(--color-text-muted)]">
                           {line?.name ?? '—'}
@@ -719,16 +871,51 @@ export const SupervisorDashboard: React.FC = () => {
                         ) : null}
                       </div>
                       {canCreateReport && wo.id && canReportForWorkOrder ? (
-                        <PrimaryButton
-                          type="button"
-                          size="sm"
-                          tone="execute"
-                          iconName="add_chart"
-                          className="shrink-0"
-                          onClick={() => setQuickReportWorkOrder(wo)}
-                        >
-                          إنشاء تقرير سريع
-                        </PrimaryButton>
+                        reportState?.state === 'saved' ? (
+                          <GhostButton
+                            type="button"
+                            size="sm"
+                            tone="approve"
+                            iconName="check_circle"
+                            className="shrink-0"
+                            disabled
+                          >
+                            تم عمل تقرير اليوم
+                          </GhostButton>
+                        ) : reportState?.state === 'saving' ? (
+                          <GhostButton
+                            type="button"
+                            size="sm"
+                            tone="edit"
+                            iconName="hourglass_top"
+                            className="shrink-0"
+                            disabled
+                          >
+                            جارٍ حفظ التقرير
+                          </GhostButton>
+                        ) : reportState?.state === 'failed' && reportState.reportId ? (
+                          <PrimaryButton
+                            type="button"
+                            size="sm"
+                            tone="undo"
+                            iconName="refresh"
+                            className="shrink-0"
+                            onClick={() => { void retryQueuedReportCreate(reportState.reportId!); }}
+                          >
+                            إعادة حفظ التقرير
+                          </PrimaryButton>
+                        ) : (
+                          <PrimaryButton
+                            type="button"
+                            size="sm"
+                            tone="execute"
+                            iconName="add_chart"
+                            className="shrink-0"
+                            onClick={() => setQuickReportWorkOrder(wo)}
+                          >
+                            إنشاء تقرير سريع
+                          </PrimaryButton>
+                        )
                       ) : null}
                     </div>
                   </li>
@@ -888,7 +1075,7 @@ export const SupervisorDashboard: React.FC = () => {
         }
         productName={
           quickReportWorkOrder
-            ? _rawProducts.find((p) => p.id === quickReportWorkOrder.productId)?.name
+            ? catalogOrComponentName(quickReportWorkOrder.productId, _rawProducts, componentLabelOptions) || undefined
             : undefined
         }
         lineName={
@@ -898,7 +1085,6 @@ export const SupervisorDashboard: React.FC = () => {
         }
         onClose={() => setQuickReportWorkOrder(null)}
         onSaved={() => {
-          void refreshPeriodReports();
           void refreshDecision();
         }}
       />

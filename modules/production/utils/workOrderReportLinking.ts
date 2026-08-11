@@ -130,10 +130,11 @@ export function pickBestAutoLinkedWorkOrder(
   const allowedStatuses = criteria.includeCompleted
     ? new Set<WorkOrder['status']>(['pending', 'in_progress', 'paused', 'completed'])
     : new Set<WorkOrder['status']>(['pending', 'in_progress', 'paused']);
+  // Product + type + start-date are the hard join keys. Line is preferred when ranking
+  // so a product that moved to another line still counts toward its open work order.
   const filtered = workOrders.filter((wo) => (
     Boolean(wo?.id)
     && allowedStatuses.has(wo.status)
-    && wo.lineId === criteria.lineId
     && wo.productId === criteria.productId
     && workOrderMatchesReportType(wo, criteria.reportType)
     && (
@@ -147,7 +148,7 @@ export function pickBestAutoLinkedWorkOrder(
   const ranked = [...filtered].sort((a, b) => {
     const score = (wo: WorkOrder) => {
       let value = 0;
-      if (wo.lineId === criteria.lineId) value += 8;
+      if (criteria.lineId && wo.lineId === criteria.lineId) value += 8;
       if (supervisorId && wo.supervisorId === supervisorId) value += 4;
       if (wo.status === 'in_progress') value += 2;
       if (wo.status === 'paused') value += 1.5;
@@ -234,7 +235,7 @@ export function filterUnlinkedReportsEligibleForWorkOrder(
     if (reportType === 'component_waste') return false;
     if (!workOrderMatchesReportType(wo, reportType)) return false;
     if (!reportDateEligibleForWorkOrder(report.date, wo)) return false;
-    if (wo.lineId && report.lineId && report.lineId !== wo.lineId) return false;
+    // Line may change after WO creation — still attach same-product reports from start date.
     return true;
   });
 }

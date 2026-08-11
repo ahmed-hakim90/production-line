@@ -1467,7 +1467,9 @@ export const importTenantBackup = onCall({
 /** Public: resolve tenant slug before login (client cannot read tenant_slugs without auth). */
 export const resolveTenantSlug = onCall({
     region: 'us-central1',
-    memory: '128MiB',
+    // This function shares the main Functions bundle; 128MiB intermittently
+    // fails during cold start and surfaces in browsers as a misleading CORS error.
+    memory: '256MiB',
     cors: true,
     invoker: 'public',
 }, async (request) => {
@@ -1889,7 +1891,12 @@ export const mutateRepairTreasury = onCall({ region: 'us-central1', memory: '512
 export const mutateSparePartsPurchaseInvoice = onCall({ region: 'us-central1', memory: '512MiB' }, mutateSparePartsPurchaseInvoiceHandler);
 export const repairTechnicianOps = onCall({ region: 'us-central1', memory: '256MiB' }, repairTechnicianOpsHandler);
 export const mutateAccounting = onCall({ region: 'us-central1', memory: '512MiB' }, mutateAccountingHandler);
-export const createRepairBranchProvisioned = onCall({ region: 'us-central1', memory: '512MiB' }, createRepairBranchProvisionedHandler);
+export const createRepairBranchProvisioned = onCall({
+    region: 'us-central1',
+    memory: '512MiB',
+    cors: true,
+    invoker: 'public',
+}, createRepairBranchProvisionedHandler);
 export const mutateRepairServiceCatalog = onCall({ region: 'us-central1', memory: '256MiB' }, mutateRepairServiceCatalogHandler);
 export const updateRepairPartsPricing = onCall({ region: 'us-central1', memory: '512MiB' }, updateRepairPartsPricingHandler);
 export const createInventoryCountSession = onCall({ region: 'us-central1', memory: '512MiB' }, createInventoryCountSessionHandler);
@@ -1899,8 +1906,18 @@ export const lookupPortalProduct = onCall({ region: 'us-central1', memory: '256M
 export const createCustomerServiceRequest = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, createCustomerServiceRequestHandler);
 export const mutateRepairCustomerOps = onCall({ region: 'us-central1', memory: '512MiB', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, mutateRepairCustomerOpsHandler);
 export const getCustomerFinancialAnalytics = onCall({ region: 'us-central1', memory: '512MiB' }, getCustomerFinancialAnalyticsHandler);
-export const createProductionReportFast = onCall({ region: 'us-central1', memory: '512MiB' }, createProductionReportFastHandler);
-export const retryProductionReportProcessing = onCall({ region: 'us-central1', memory: '256MiB' }, retryProductionReportProcessingHandler);
+export const createProductionReportFast = onCall({
+    region: 'us-central1',
+    memory: '512MiB',
+    cors: true,
+    invoker: 'public',
+}, createProductionReportFastHandler);
+export const retryProductionReportProcessing = onCall({
+    region: 'us-central1',
+    memory: '256MiB',
+    cors: true,
+    invoker: 'public',
+}, retryProductionReportProcessingHandler);
 export { confirmProductionHandoverReceipt } from './productionHandover.js';
 export { issueProductionIssueStock } from './productionIssueStock.js';
 export { applyProductionReportInventory, reverseProductionReportInventory, } from './productionReportInventory.js';

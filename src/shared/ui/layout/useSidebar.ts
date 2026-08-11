@@ -1,7 +1,13 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { ALL_MENU_ITEMS, MENU_CONFIG, type MenuItem } from '@/config/menu.config';
+import {
+  ALL_MENU_ITEMS,
+  MENU_CONFIG,
+  canAccessMenuItem,
+  type MenuItem,
+} from '@/config/menu.config';
 import { logicalPathnameFromLocation } from '@/lib/tenantPaths';
+import { usePermission } from '@/utils/permissions';
 
 const SIDEBAR_COLLAPSE_KEY = 'ui.sidebar.collapsed';
 const BADGE_REFRESH_INTERVAL = 60_000;
@@ -57,9 +63,12 @@ export function useSidebar(): SidebarContextValue {
 export function useSidebarBadges() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const mountedRef = useRef(true);
+  const { can } = usePermission();
 
   const refresh = useCallback(async () => {
-    const itemsWithBadges = ALL_MENU_ITEMS.filter((item) => item.badgeSource);
+    const itemsWithBadges = ALL_MENU_ITEMS.filter(
+      (item) => item.badgeSource && canAccessMenuItem(can, item),
+    );
     if (!itemsWithBadges.length) return;
 
     const results = await Promise.allSettled(
@@ -78,7 +87,7 @@ export function useSidebarBadges() {
       }
     });
     setCounts(nextCounts);
-  }, []);
+  }, [can]);
 
   useEffect(() => {
     mountedRef.current = true;
