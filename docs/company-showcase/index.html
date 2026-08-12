@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ForgeOps — عرض النظام للشركة</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">
+      ForgeOps
+      <small>عرض الشركة · v4.0.126</small>
+    </div>
+    <nav>
+      <a class="active" href="index.html">نظرة عامة</a>
+      <a href="data-and-scale.html">البيانات والتحمل</a>
+      <a href="modules/02-production.html">الإنتاج</a>
+      <a href="modules/04-inventory.html">المخازن</a>
+      <a href="modules/05-repair.html">الصيانة</a>
+      <a href="modules/08-accounting.html">الحسابات</a>
+      <button type="button" onclick="window.print()">طباعة / PDF</button>
+    </nav>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="eyebrow">منصة تشغيل المصنع والصيانة · Multi-tenant ERP</div>
+      <h1>نظام واحد… يشغّل المصنع والمركز والخزينة</h1>
+      <p class="lead">
+        ForgeOps منصة عربية RTL تربط الإنتاج، المخازن، الصيانة، الموارد البشرية، الجودة، والحسابات
+        في مصدر بيانات واحد — مع صلاحيات دقيقة وعزل كامل بين الشركات.
+      </p>
+      <div class="hero-meta">
+        <span>10 موديولات تشغيلية</span>
+        <span>Firebase Auth + Firestore + Functions</span>
+        <span>لوحات حسب الدور</span>
+        <span>طباعة ومشاركة واتساب</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="grid-4">
+        <div class="card kpi"><strong>مصدر واحد</strong><span>بدل Excel وواتساب ودفاتر</span></div>
+        <div class="card kpi"><strong>تتبع كامل</strong><span>من خطّة الإنتاج حتى التسليم</span></div>
+        <div class="card kpi"><strong>حوكمة</strong><span>أدوار · موافقات · سجل نشاط</span></div>
+        <div class="card kpi"><strong>قرارات أسرع</strong><span>KPIs وطوابير قرار لحظية</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>المشكلة التي يحلها النظام</h2>
+      <p class="sub">قبل ForgeOps: بيانات متناثرة، أرقام إنتاج غير موثوقة، تضارب بين الأقسام، وصلاحيات غير منضبطة.</p>
+      <div class="grid-3">
+        <div class="card">
+          <h3>تشغيل يومي حقيقي</h3>
+          <p>ليس نظام تقارير فقط — خطط، أوامر شغل، صرف مواد، تحويلات، جرد، وتحصيل.</p>
+        </div>
+        <div class="card">
+          <h3>مساران متوازيان</h3>
+          <p>تصنيع في المصنع + صيانة في المراكز، مع تموين قطع غيار وخزينة وفواتير.</p>
+        </div>
+        <div class="card">
+          <h3>عزل الشركات</h3>
+          <p>كل شركة لها مسار <code>/t/{slug}/</code> وبيانات معزولة — نفس المنصة لعدة مستأجرين.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>المسار التشغيلي الأساسي</h2>
+      <p class="sub">من الكتالوج إلى التكلفة الشهرية — مع مسار صيانة موازٍ.</p>
+      <div class="card">
+        <div class="flow">
+          <span class="step">كتالوج + BOM</span><span class="arrow">←</span>
+          <span class="step">خطة إنتاج</span><span class="arrow">←</span>
+          <span class="step">صرف للإنتاج</span><span class="arrow">←</span>
+          <span class="step">تقرير يومي</span><span class="arrow">←</span>
+          <span class="step">مخزون / تحويلات</span><span class="arrow">←</span>
+          <span class="step">تكلفة شهرية</span>
+        </div>
+        <p style="margin:14px 0 0;color:var(--muted);font-size:14px;">
+          مسار الصيانة الموازي: استلام → تشخيص → تقدير → موافقة عميل → إصلاح/قطع → تحصيل → تسليم.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>هندسة البيانات — باختصار</h2>
+      <p class="sub">الداتا مش متناثرة: كل موديول يملك كيانه، والمسارات الحساسة تثبت على السيرفر.</p>
+      <div class="grid-3">
+        <div class="card">
+          <h3>مصدر حقيقة واحد</h3>
+          <p>Firestore لكل شركة (<code>tenantId</code>). الإنتاج لا يغيّر الرصيد؛ المخازن تملك الحركات؛ الصيانة تملك الطلب.</p>
+        </div>
+        <div class="card">
+          <h3>حماية الكتابة</h3>
+          <p>صرف/تحويلات الإنتاج الحساسة عبر Cloud Functions. الواجهة تُظهر الصلاحيات؛ القواعد والـ Functions تمنع التجاوز.</p>
+        </div>
+        <div class="card">
+          <h3>قوائم محدودة لا مسح أعمى</h3>
+          <p>الشاشات التشغيلية تعمل بفلاتر وحدود صفحات. التقارير الثقيلة تعتمد ملخصات — مش فتح كل التاريخ في المتصفح.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>يستحمل لحد فين؟</h2>
+      <p class="sub">تقييم سعة موجّه للإدارة — الحجم المستهدف مريح على Firebase؛ العنق الحقيقي هو نمط التحميل لا عدد الصفوف.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>البند</th><th>الحجم المستهدف</th><th>الحكم</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>أصناف / منتجات</td><td>~7,000</td><td><span class="badge ok">مريح</span> — مع تحميل كسول/صفحات</td></tr>
+            <tr><td>عملاء</td><td>~8,000</td><td><span class="badge ok">مريح</span> — سجل عملاء + بحث</td></tr>
+            <tr><td>مستخدمون نشطون</td><td>~100</td><td><span class="badge ok">مريح جدًا</span> — مصنع + مراكز</td></tr>
+            <tr><td>شغل يومي كثيف</td><td>قراءة/كتابة مستمرة</td><td><span class="badge warn">ممكن</span> — بفهارس وملخصات KPI</td></tr>
+            <tr><td>تحليلات تاريخية ضخمة</td><td>كل السنوات دفعة واحدة</td><td><span class="badge warn">ليس من الواجهة مباشرة</span> — ملخصات / BI</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout blue" style="margin-top:14px">
+        التفصيل الكامل: كيف الداتا بتتحرك، سيناريوهات الضغط، وخارطة النمو —
+        <a href="data-and-scale.html"><strong>صفحة البيانات والتحمل ←</strong></a>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>لقطات من الشاشات الفعلية</h2>
+      <p class="sub">صور حقيقية من بيئة التشغيل — ليست mockups.</p>
+      <div class="shot-grid">
+        <figure class="shot wide">
+          <img src="../handover/_screenshots/01-home.png" alt="الصفحة الرئيسية" />
+          <figcaption>الرئيسية — لوحة حسب الدور (مدير مصنع / مشرف / فني / إدارة)</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../handover/_screenshots/11-reports.png" alt="تقارير الإنتاج" />
+          <figcaption>تقارير الإنتاج — الرقم اليومي الموثوق</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../handover/_screenshots/30-inventory.png" alt="لوحة المخازن" />
+          <figcaption>لوحة المخازن — أرصدة وتنبيهات وموافقات</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../handover/_screenshots/40-monthly-costs.png" alt="التكلفة الشهرية" />
+          <figcaption>تكلفة الإنتاج الشهرية — ربط الكميات بالتكلفة</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../handover/_screenshots/50-roles.png" alt="الأدوار والصلاحيات" />
+          <figcaption>الأدوار والصلاحيات — مصفوفة عرض/إضافة/تعديل/حذف</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>خريطة الموديولات</h2>
+      <p class="sub">اضغط أي موديول لشرح تفصيلي + صور الشاشات + من يستخدمه وماذا يفعل.</p>
+      <div class="grid-3">
+        <a class="card mod-card" href="modules/01-dashboards.html">
+          <div class="num">01</div>
+          <h3>لوحات التحكم</h3>
+          <p>نظرة تشغيلية حسب الدور وطابور قرارات.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/02-production.html">
+          <div class="num">02</div>
+          <h3>الإنتاج</h3>
+          <p>خطط، أوامر شغل، تقارير، خطوط، مسارات، تغليف.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/03-catalog.html">
+          <div class="num">03</div>
+          <h3>الكتالوج والمواد</h3>
+          <p>منتجات، فئات، مواد تصنيعية، BOM، تخطيط احتياجات.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/04-inventory.html">
+          <div class="num">04</div>
+          <h3>المخازن</h3>
+          <p>أرصدة، تحويلات، صرف إنتاج، تموين مراكز، جرد.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/05-repair.html">
+          <div class="num">05</div>
+          <h3>الصيانة</h3>
+          <p>طلبات، فنيين، قطع غيار، خزينة، تحصيل، بوابة عميل.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/06-customers.html">
+          <div class="num">06</div>
+          <h3>العملاء</h3>
+          <p>سجل عملاء موحّد مربوط بطلبات الصيانة.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/07-hr.html">
+          <div class="num">07</div>
+          <h3>الموارد البشرية</h3>
+          <p>موظفين، حضور، إجازات، سلف، رواتب، موافقات.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/08-accounting.html">
+          <div class="num">08</div>
+          <h3>الحسابات والتكاليف</h3>
+          <p>قيود، تقييم مخزون، تكلفة شهرية، أصول وإهلاك.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/09-quality.html">
+          <div class="num">09</div>
+          <h3>الجودة</h3>
+          <p>فحص نهائي، IPQC، إعادة تشغيل، CAPA.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="modules/10-system.html">
+          <div class="num">10</div>
+          <h3>النظام</h3>
+          <p>مستخدمون، أدوار، إعدادات، سجل نشاط، جاهزية.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+        <a class="card mod-card" href="data-and-scale.html">
+          <div class="num">∞</div>
+          <h3>البيانات والتحمل</h3>
+          <p>هندسة الداتا، السعة (~7k صنف / ~8k عميل / ~100 يوزر)، والحدود.</p>
+          <span class="cta">افتح الشرح ←</span>
+        </a>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>من يستخدم ماذا؟</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>الدور</th><th>المدخل الطبيعي</th><th>ماذا يفعل يوميًا</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>مدير مصنع / إدارة</td><td>الرئيسية + لوحات الإنتاج/المخازن</td><td>متابعة KPIs وطابور القرارات والموافقات</td></tr>
+            <tr><td>مشرف خط</td><td>الرئيسية + إدخال سريع + تقارير</td><td>تسجيل الإنتاج اليومي ومتابعة العمالة</td></tr>
+            <tr><td>مخزن مستلزمات</td><td>صرف للإنتاج + أرصدة</td><td>تجهيز واعتماد وصرف المواد للخطوط</td></tr>
+            <tr><td>مخزن قطع مركزي</td><td>تموين المراكز</td><td>اعتماد/تجهيز إذن صرف للمراكز</td></tr>
+            <tr><td>استقبال صيانة</td><td>طلب جديد + طلبات الصيانة</td><td>استلام جهاز، إسناد، تحصيل، تسليم</td></tr>
+            <tr><td>فني صيانة</td><td>لوحة الفني / طلباتي</td><td>تشخيص → قطع → إنهاء عبر مساحة العمل</td></tr>
+            <tr><td>حسابات / تكاليف</td><td>الحسابات + التكلفة الشهرية</td><td>تقييم مخزون، تكلفة إنتاج، ربحية صيانة</td></tr>
+            <tr><td>موارد بشرية</td><td>لوحة HR</td><td>حضور، إجازات، سلف، رواتب، موافقات</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="callout blue">
+        كل صفحة موديول تشرح: <strong>ماذا يفعل</strong> · <strong>قيمة للأعمال</strong> · <strong>الشاشات الرئيسية</strong> · <strong>الصور الفعلية</strong> · <strong>من يملك القرار</strong>.
+        لتحديث اللقطات: <code>npm run showcase:screens</code> (يتطلب <code>npm run dev</code> + بيانات دخول handover).
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>ForgeOps · وثيقة عرض للشركة · أغسطس 2026</span>
+      <span>الصور من بيئة حقيقية · ليست بيانات تجريبية مزيفة في الواجهة</span>
+    </footer>
+  </main>
+</body>
+</html>

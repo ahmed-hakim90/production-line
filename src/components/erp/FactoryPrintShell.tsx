@@ -1,4 +1,4 @@
-import { forwardRef, type CSSProperties, type ReactNode } from 'react'
+import { forwardRef, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Factory_DEFAULT_FOOTER_TAGLINE,
@@ -6,7 +6,9 @@ import {
   resolveImageExportPalette,
 } from '@/utils/imageExportTheme'
 import { resolvePrintAccentHex } from '@/utils/printTheme'
+import { PrintBrandHeader } from './PrintBrandHeader'
 import { PrintExtraLines } from './PrintExtraLines'
+import { PRINT_SURFACE } from '@/utils/print/printSurface'
 
 export type FactoryPrintMetaCard = {
   label: string
@@ -123,7 +125,6 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
     // @media print (printManager + index.css) forces 100% of the printable area.
     const resolvedWidth = paperWidth ?? width
     const resolvedPadding = padding ?? (dense ? '14px 16px' : '28px 32px')
-    const headerBorderStyle: CSSProperties = { borderBottomColor: accent }
     const meta = metaCards ?? []
     const kpiList = kpis ?? []
     const customLines = extraLines ?? []
@@ -137,7 +138,7 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
         lang="ar"
         data-print-font={fontFamily}
         className={cn(
-          'print-root print-report arabic-export-root bg-[var(--color-card)] mx-auto print:mx-0 print:w-full print:max-w-none print:min-w-0',
+          'print-root print-report arabic-export-root mx-auto print:mx-0 print:w-full print:max-w-none print:min-w-0',
           !paperWidth && 'w-[640px]',
           className,
         )}
@@ -153,69 +154,49 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
           boxSizing: 'border-box',
           padding: resolvedPadding,
           flexShrink: 0,
-          color: '#0f172a',
+          color: PRINT_SURFACE.text,
+          background: PRINT_SURFACE.card,
         }}
       >
-        <header className="flex items-start justify-between gap-3 border-b-2 pb-3 mb-4" style={headerBorderStyle}>
-          <div className="flex items-start gap-3 min-w-0">
-            {logoUrl ? (
-              <img src={logoUrl} alt="" className={cn('w-auto object-contain shrink-0', dense ? 'h-8' : 'h-10')} />
-            ) : null}
-            <div className="min-w-0">
-              <h1
-                className={cn('font-extrabold text-[var(--color-text)] leading-tight', dense ? 'text-[15px]' : 'text-[18px]')}
-                style={{ letterSpacing: 'normal' }}
-              >
-                {companyName}
-              </h1>
-              <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accent, letterSpacing: 'normal' }}>
-                ForgeOps
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-0.5 shrink-0">
-            <span
-              className="inline-flex items-center justify-center rounded-md font-extrabold"
-              style={{
-                fontSize: dense ? '12px' : '13px',
-                lineHeight: 1.3,
-                padding: dense ? '4px 8px' : '5px 10px',
-                background: palette.badgeBg,
-                color: palette.badgeText,
-                letterSpacing: 'normal',
-                maxWidth: '220px',
-                textAlign: 'center',
-              }}
-            >
-              {documentType}
-            </span>
-            <span className="text-[11px] text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
-              {printDate}
-            </span>
-          </div>
-        </header>
+        <PrintBrandHeader
+          companyName={companyName}
+          documentType={documentType}
+          printDate={printDate}
+          logoUrl={logoUrl}
+          brandAccent={accent}
+          dense={dense}
+        />
 
         <PrintExtraLines lines={customLines} dense={dense} />
 
         {meta.length > 0 ? (
           <div
-            className={cn(
-              'mb-4 grid overflow-hidden rounded-lg border border-[var(--color-border)]',
-              gridColsClass(meta.length),
-            )}
-            style={{ display: 'grid', gridTemplateColumns: gridTemplateColumns(meta.length) }}
+            className={cn('print-meta-grid', gridColsClass(meta.length))}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: gridTemplateColumns(meta.length),
+              marginBottom: 16,
+              overflow: 'hidden',
+              borderRadius: 8,
+              border: `1px solid ${PRINT_SURFACE.border}`,
+            }}
           >
             {meta.map((item, i) => (
               <div
                 key={`${item.label}-${i}`}
-                className={cn('bg-[var(--color-bg)] px-3 py-2', i < meta.length - 1 && 'border-l border-[var(--color-border)]')}
+                className="print-meta-cell"
+                style={{
+                  padding: dense ? '6px 10px' : '8px 12px',
+                  background: PRINT_SURFACE.bg,
+                  borderInlineEnd: i < meta.length - 1 ? `1px solid ${PRINT_SURFACE.border}` : undefined,
+                }}
               >
-                <p className="mb-1 text-[9px] font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
+                <p className="print-meta-label" style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 800, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
                   {item.label}
                 </p>
                 <p
-                  className="text-[11px] font-extrabold leading-tight text-[var(--color-text)]"
-                  style={{ wordBreak: 'break-word' }}
+                  className="print-meta-value"
+                  style={{ margin: 0, fontSize: 11, fontWeight: 800, lineHeight: 1.3, wordBreak: 'break-word', color: PRINT_SURFACE.text }}
                 >
                   {item.value}
                 </p>
@@ -226,25 +207,46 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
 
         {kpiList.length > 0 ? (
           <div
-            className={cn('mb-4 grid gap-2', gridColsClass(kpiList.length))}
-            style={{ display: 'grid', gridTemplateColumns: gridTemplateColumns(kpiList.length), gap: '0.5rem' }}
+            className={cn('print-kpi-grid', gridColsClass(kpiList.length))}
+            style={{ display: 'grid', gridTemplateColumns: gridTemplateColumns(kpiList.length), gap: 8, marginBottom: 16 }}
           >
             {kpiList.map((kpi, i) => (
               <div
                 key={`${kpi.label}-${i}`}
-                className="flex min-h-[4.5rem] overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)]"
-                style={{ display: 'flex', flexDirection: 'row', minHeight: dense ? '3.75rem' : '4.5rem' }}
+                className="print-kpi-card"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  minHeight: dense ? '3.75rem' : '4.5rem',
+                  overflow: 'hidden',
+                  borderRadius: 8,
+                  border: `1px solid ${PRINT_SURFACE.border}`,
+                  background: PRINT_SURFACE.bg,
+                }}
               >
                 <div
-                  className="w-[3px] shrink-0 self-stretch"
-                  style={{ backgroundColor: kpiStripColor(kpi.tone, accent, palette.workersStrip) }}
+                  className="print-kpi-strip"
+                  style={{ width: 3, flexShrink: 0, alignSelf: 'stretch', backgroundColor: kpiStripColor(kpi.tone, accent, palette.workersStrip) }}
                 />
-                <div className="flex min-w-0 flex-1 flex-col items-center justify-center px-2 py-2.5 text-center">
-                  <div className="flex flex-wrap items-baseline justify-center gap-x-1" dir="rtl">
+                <div
+                  className="print-kpi-body"
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: dense ? '8px 8px' : '10px 8px',
+                    textAlign: 'center',
+                  }}
+                >
+                  <div dir="rtl" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'center', columnGap: 4 }}>
                     <span
-                      className="font-black tabular-nums"
                       style={{
-                        fontSize: dense ? '18px' : '20px',
+                        fontWeight: 900,
+                        fontVariantNumeric: 'tabular-nums',
+                        fontSize: dense ? 18 : 20,
                         lineHeight: 1.15,
                         color: kpiValueColor(kpi.tone, accent),
                         letterSpacing: 'normal',
@@ -253,10 +255,10 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
                       {typeof kpi.value === 'number' ? kpi.value.toLocaleString('ar-EG') : kpi.value}
                     </span>
                     {kpi.unit ? (
-                      <span className="text-[12px] font-semibold text-[var(--color-text-muted)]">{kpi.unit}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: PRINT_SURFACE.muted }}>{kpi.unit}</span>
                     ) : null}
                   </div>
-                  <p className="mt-1.5 text-[11px] font-bold leading-snug text-[var(--color-text-muted)]">{kpi.label}</p>
+                  <p style={{ margin: '6px 0 0', fontSize: 11, fontWeight: 700, lineHeight: 1.35, color: PRINT_SURFACE.muted }}>{kpi.label}</p>
                 </div>
               </div>
             ))}
@@ -267,27 +269,30 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
 
         {signatures && signatures.length > 0 ? (
           <section
-            className={cn('mt-6 grid gap-4', gridColsClass(signatures.length))}
-            style={{ display: 'grid', gridTemplateColumns: gridTemplateColumns(signatures.length) }}
+            className={cn('print-sign-grid', gridColsClass(signatures.length))}
+            style={{ display: 'grid', gridTemplateColumns: gridTemplateColumns(signatures.length), gap: 16, marginTop: 24 }}
           >
             {signatures.map((sig) => (
-              <div key={sig.title} className="flex flex-col items-center">
-                <p className="mb-8 text-[12px] font-extrabold text-[var(--color-text)]">{sig.title}</p>
-                <div className="w-full border-t border-[var(--color-border)] pt-1 text-center">
-                  <p className="text-[10px] text-[var(--color-text-muted)]">{sig.detail || 'الاسم / التوقيع'}</p>
+              <div key={sig.title} className="print-sign-slot" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <p style={{ margin: '0 0 32px', fontSize: 12, fontWeight: 800, color: PRINT_SURFACE.text }}>{sig.title}</p>
+                <div style={{ width: '100%', borderTop: `1px solid ${PRINT_SURFACE.border}`, paddingTop: 4, textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 10, color: PRINT_SURFACE.muted }}>{sig.detail || 'الاسم / التوقيع'}</p>
                 </div>
               </div>
             ))}
           </section>
         ) : null}
 
-        <footer className="mt-4 flex items-center justify-between border-t border-[var(--color-border)] pt-3">
-          <p className="text-[10px] text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
+        <footer style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: `1px solid ${PRINT_SURFACE.border}`, paddingTop: 12 }}>
+          <p style={{ margin: 0, fontSize: 10, minWidth: 0, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
             {footerTagline} — {printDate}
           </p>
           {showVersion && version ? (
-            <p className="text-[10px] font-bold" style={{ color: accent, letterSpacing: 'normal' }}>
-              Factory {version}
+            <p
+              style={{ margin: 0, fontSize: 9, fontWeight: 600, flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: '#94a3b8', letterSpacing: 'normal' }}
+              title="إصدار النظام"
+            >
+              v{version}
             </p>
           ) : null}
         </footer>
@@ -307,9 +312,9 @@ export function FactoryPrintSectionTitle({
   accent?: string
 }) {
   return (
-    <div className="mb-2 mt-1 flex items-center gap-2">
-      <div className="h-3 w-[3px] shrink-0 rounded-full" style={{ backgroundColor: accent }} />
-      <p className="text-[11px] font-extrabold text-[var(--color-text-muted)]" style={{ letterSpacing: 'normal' }}>
+    <div className="print-section-head" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
+      <div className="print-section-bar" style={{ height: 12, width: 3, flexShrink: 0, borderRadius: 999, backgroundColor: accent }} />
+      <p className="print-section-title" style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
         {title}
       </p>
     </div>

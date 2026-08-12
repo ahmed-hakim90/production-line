@@ -289,3 +289,129 @@ export const PRINT_PREVIEW_ROUTING_EXECUTION = {
   productName: 'منتج تجريبي',
   supervisorName: 'مشرف تجريبي',
 } as const;
+
+export const PRINT_PREVIEW_SPARE_PARTS_COUNT = {
+  branchName: 'مركز العاشر',
+  warehouseName: 'مخزن مركز العاشر',
+  rows: [
+    {
+      part: {
+        id: 'sp-1',
+        tenantId: 'preview',
+        branchId: 'preview-branch',
+        code: 'SP-2477',
+        name: 'قاعدة ماكينة SK-391',
+        category: 'قطع',
+        unit: 'قطعة',
+        minStock: 0,
+        materialId: 'mat-1',
+        createdAt: new Date().toISOString(),
+      },
+      quantity: 5,
+    },
+    {
+      part: {
+        id: 'sp-2',
+        tenantId: 'preview',
+        branchId: 'preview-branch',
+        code: 'SP-2478',
+        name: 'سلاح ماكينة SK-392',
+        category: 'قطع',
+        unit: 'قطعة',
+        minStock: 0,
+        materialId: 'mat-2',
+        createdAt: new Date().toISOString(),
+      },
+      quantity: 4,
+    },
+    {
+      part: {
+        id: 'sp-3',
+        tenantId: 'preview',
+        branchId: 'preview-branch',
+        code: 'SP-2479',
+        name: 'بودي كامل ميكروويف SK-438',
+        category: 'قطع',
+        unit: 'قطعة',
+        minStock: 0,
+        materialId: 'mat-3',
+        createdAt: new Date().toISOString(),
+      },
+      quantity: 3,
+    },
+  ],
+  locationByItemId: new Map([
+    ['mat-1', 'SP-7-A-1-1'],
+    ['mat-2', 'SP-7-A-1-1'],
+    ['mat-3', 'SP-7-A-1-1'],
+  ]),
+} as const;
+
+export const PRINT_PREVIEW_WAREHOUSE_COUNT = {
+  warehouseName: 'مخزن قطع الغيار المركزي',
+  warehouseRoleLabel: 'قطع غيار (مركزي)',
+  rows: [
+    { id: 'w-1', code: 'SP-2477', name: 'قاعدة ماكينة SK-391', quantity: 42, location: 'SP-1-A-1-1' },
+    { id: 'w-2', code: 'SP-2478', name: 'سلاح ماكينة SK-392', quantity: 18, location: 'SP-1-A-1-2' },
+    { id: 'w-3', code: 'RM-110', name: 'بلاستيك ABS أسود', quantity: 250, location: 'RM-2-B-1-1' },
+  ],
+} as const;
+
+export const PRINT_PREVIEW_WORK_ORDER = {
+  workOrderNumber: 'WO-DEMO-1001',
+  productName: 'راديو RX-606',
+  lineName: 'خط التجميع 1',
+  supervisorName: 'مشرف تجريبي',
+  quantity: 500,
+  producedQuantity: 320,
+  maxWorkers: 8,
+  targetDate: '2026-08-20',
+  status: 'in_progress',
+  statusLabel: 'قيد التنفيذ',
+  estimatedCost: 12500,
+  actualCost: 9800,
+  notes: 'معاينة أمر شغل من محرك الطباعة',
+  showCosts: true,
+} as const;
+
+export const PRINT_PREVIEW_WORKER_REPORT = {
+  title: 'تقرير عامل إنتاج',
+  subtitle: 'مارس 2026',
+  columns: ['العامل', 'الكمية', 'الهالك', 'الساعات'],
+  rows: [
+    { العامل: 'عامل تجريبي', الكمية: 120, الهالك: 3, الساعات: 8 },
+    { العامل: 'عامل ثانٍ', الكمية: 95, الهالك: 1, الساعات: 7.5 },
+  ],
+} as const;
+
+export const PRINT_PREVIEW_CATALOG_PRODUCT = {
+  productId: 'prod-demo',
+  productName: 'راديو RX-606',
+  productCode: 'FG-RX606',
+  category: 'إلكترونيات',
+  periodLabel: 'مارس 2026',
+  kpis: [
+    { label: 'إجمالي الكمية', value: 1200, unit: 'وحدة' },
+    { label: 'الهالك', value: 24, unit: 'وحدة' },
+  ],
+  rows: [
+    {
+      date: '2026-03-10',
+      line: 'خط 1',
+      employee: 'مشرف أ',
+      quantity: 400,
+      waste: 8,
+      workers: 6,
+      hours: 8,
+    },
+    {
+      date: '2026-03-11',
+      line: 'خط 1',
+      employee: 'مشرف أ',
+      quantity: 380,
+      waste: 6,
+      workers: 6,
+      hours: 8,
+    },
+  ],
+} as const;

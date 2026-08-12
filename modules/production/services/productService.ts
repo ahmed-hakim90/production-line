@@ -28,8 +28,7 @@ import {
   seedMaxProductCodes,
   clampPadding,
 } from '../../shared/services/entityCodeSequenceService';
-import { buildSearchPrefixes } from '@/lib/firestoreSearch';
-import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
+import { buildSearchPrefixes, resolveFirestoreSearchKey } from '@/lib/firestoreSearch';
 
 const COLLECTION = 'products';
 const BARCODE_CLAIMS_COLLECTION = 'product_barcode_claims';
@@ -61,7 +60,7 @@ export const productService = {
     if (!isConfigured) return { items: [], nextCursor: null, hasNext: false };
     const pageSize = params.pageSize === 50 ? 50 : 20;
     const constraints: any[] = [];
-    const search = normalizeFirestoreSearch(params.search);
+    const search = resolveFirestoreSearchKey(params.search);
     if (search.length >= 2) constraints.push(where('searchPrefixes', 'array-contains', search));
     if (params.categoryId) constraints.push(where('categoryId', '==', params.categoryId));
     if (params.isManufactured !== undefined) constraints.push(where('isManufactured', '==', params.isManufactured));
@@ -182,7 +181,7 @@ export const productService = {
           transaction.set(ref, {
             ...basePayload,
             code: upper,
-            searchPrefixes: buildSearchPrefixes([data.name, upper, data.barcode]),
+            searchPrefixes: buildSearchPrefixes([upper, data.barcode, data.name]),
           });
         });
         return ref.id;
@@ -209,7 +208,7 @@ export const productService = {
         transaction.set(newRef, {
           ...basePayload,
           code,
-          searchPrefixes: buildSearchPrefixes([data.name, code, data.barcode]),
+          searchPrefixes: buildSearchPrefixes([code, data.barcode, data.name]),
         });
         return newRef.id;
       });
@@ -258,7 +257,7 @@ export const productService = {
             ...fields,
             barcode: String(data.barcode || '').trim(),
             barcodeNormalized: normalized,
-            searchPrefixes: buildSearchPrefixes([merged.name, merged.code, merged.barcode]),
+            searchPrefixes: buildSearchPrefixes([merged.code, merged.barcode, merged.name]),
           }));
         });
       } else {
@@ -266,7 +265,7 @@ export const productService = {
         if (searchableChanged) {
           const current = await getDoc(doc(db, COLLECTION, id));
           const merged = { ...(current.data() || {}), ...fields };
-          (fields as Record<string, unknown>).searchPrefixes = buildSearchPrefixes([merged.name, merged.code, merged.barcode]);
+          (fields as Record<string, unknown>).searchPrefixes = buildSearchPrefixes([merged.code, merged.barcode, merged.name]);
         }
         await updateDoc(doc(db, COLLECTION, id), stripUndefined(fields as Record<string, unknown>));
       }

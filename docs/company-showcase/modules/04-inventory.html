@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>04 — المخازن | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>MOD / 04</small></div>
+    <nav>
+      <a href="../index.html">النظرة العامة</a>
+      <a class="active" href="04-inventory.html">المخازن</a>
+      <a href="05-repair.html">التالي: الصيانة</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <div class="page-head">
+      <div>
+        <span class="badge">Stock truth</span>
+        <h1>موديول المخازن</h1>
+        <p>مالك الأرصدة والحركات: مخازن، مواقع أرفف، صرف للإنتاج، تحويلات بموافقات، تموين مراكز الصيانة، وجرد.</p>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="grid-3">
+        <div class="card"><h3>ماذا يفعل؟</h3><p>يحفظ مصدر الحقيقة للمخزون: وارد/صادر/تحويل/تسوية، صرف إنتاج، تموين قطع للمراكز، سحب من المراكز، وتحليل استهلاك.</p></div>
+        <div class="card"><h3>قيمة للأعمال</h3><p>يمنع الصرف العشوائي، يربط الإنتاج والصيانة بحركات موثّقة، ويظهر التنبيهات قبل نفاد المستلزمات.</p></div>
+        <div class="card"><h3>من يستخدمه؟</h3><p>مخزن مستلزمات، مخزن قطع مركزي، إدارة مخازن، ومراقبون يعتمدون التحويلات.</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>لماذا المخازن «قوية» هنا؟</h2>
+      <ul class="list-tight">
+        <li>حركات المخزون الحساسة تتم عبر Cloud Functions / خدمات تملكها المخازن — ليس من واجهة أخرى.</li>
+        <li>مسار صرف الإنتاج: طلب → تجهيز حسب الموقع → اعتماد → صرف → طباعة.</li>
+        <li>تموين المراكز: طلب من المركز → اعتماد مركزي → تجهيز → استلام في المركز فقط يضيف الرصيد.</li>
+        <li>مساحات واضحة: مستلزمات إنتاج، صالة إنتاج، قطع غيار، أرصدة مراكز.</li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2>صور فعلية</h2>
+      <div class="shot-grid">
+        <figure class="shot"><img src="../../handover/_screenshots/30-inventory.png" alt="لوحة المخازن" /><figcaption>لوحة المخازن</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/31-warehouses.png" alt="المخازن" /><figcaption>كل المخازن ومساحاتها</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/32-balances.png" alt="الأرصدة" /><figcaption>أرصدة كل المخازن</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/33-transactions.png" alt="الحركات" /><figcaption>سجل الحركات</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/34-transfer-approvals.png" alt="اعتماد التحويلات" /><figcaption>اعتماد تحويلات المخازن</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/35-quick-transfer.png" alt="تحويل سريع" /><figcaption>تحويل سريع متعدد الأسطر</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/36-movements.png" alt="إدخال حركة" /><figcaption>إدخال حركة مخزون</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/37-counts.png" alt="الجرد" /><figcaption>جلسات الجرد والاعتماد</figcaption></figure>
+        <figure class="shot wide"><img src="../../handover/_screenshots/38-settings-routing.png" alt="توجيه المخزون" /><figcaption>إعدادات توجيه المخزون — قواعد التحويل التلقائي بين المساحات</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>البيانات والتحمل هنا</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>مصدر الحقيقة للرصيد</h3>
+          <p>كل وارد/صادر/تحويل/تسوية يُسجَّل كحركة. الشاشات تعرض أرصدة مشتقة — والتغيير الحساس يمر بمسار مخوّل (غالبًا Cloud Functions للإنتاج).</p>
+        </div>
+        <div class="card">
+          <h3>تحت الضغط اليومي</h3>
+          <p>فهارس مركّبة على الحركات + موافقات للتحويلات + شارات للمعلّق. مناسب لشغل يومي كثيف داخل غلاف ~100 مستخدم وكتالوج آلاف الأصناف.</p>
+        </div>
+      </div>
+      <p style="margin-top:12px"><a href="../data-and-scale.html">اقرأ غلاف السعة الكامل للمنصة ←</a></p>
+    </section>
+
+    <footer class="footer">
+      <a href="03-catalog.html">← الكتالوج</a>
+      <a href="05-repair.html">التالي: الصيانة →</a>
+    </footer>
+  </main>
+</body>
+</html>

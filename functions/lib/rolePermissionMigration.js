@@ -44,6 +44,7 @@ const BUILTIN_ROLE_PERMISSION_GRANTS = {
         'sparePartsReplenishment.reject',
         'sparePartsReplenishment.cancel',
         'productionDashboard.view',
+        'repair.parts.stockAdjust',
     ],
     hall_supervisor: [
         'reports.create',
@@ -85,6 +86,10 @@ const BUILTIN_ROLE_PERMISSION_GRANTS = {
         'sparePartsReplenishment.responsibleApprove',
         'sparePartsReplenishment.reject',
         'sparePartsReplenishment.cancel',
+        'repair.parts.view',
+        'repair.parts.manage',
+        'repair.parts.stockAdjust',
+        'inventory.counts.manage',
     ],
     maintenance_center_warehouse: [
         'dashboard.view',

@@ -21,6 +21,7 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useManagedPrint } from '../../../utils/printManager';
 import { StockTransferPrint, type StockTransferPrintData } from '../components/StockTransferPrint';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { toast } from '../../../components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -901,9 +902,9 @@ export const TransferApprovals: React.FC = () => {
         )}
       </OpsDashPanel>
 
-      <div className="hidden">
+      <PrintOffscreenHost>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
-      </div>
+      </PrintOffscreenHost>
 
     </ModuleOpsPageShell>
   );

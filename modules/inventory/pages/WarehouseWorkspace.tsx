@@ -45,6 +45,9 @@ import type { StockCountCatalogMaterial } from '../lib/stockCountSheet';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors';
+import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
+import { WarehousePartInquiry } from '../components/WarehousePartInquiry';
+import { loadWarehouseCountLocationLabels, resolveWarehouseItemLocation } from '../lib/warehouseCountSheet';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -76,7 +79,7 @@ function roleActions(
         {
           label: 'الأرصدة',
           path: `/inventory/balances?warehouseId=${encodeURIComponent(warehouseId)}`,
-          description: 'أرصدة مخزن قطع الغيار المركزي',
+          description: 'أرصدة ومواقع أصناف المخزن المركزي',
         },
         {
           label: 'كارت الصنف',
@@ -226,6 +229,7 @@ export const WarehouseWorkspace: React.FC = () => {
     || can('sparePartsReplenishment.view')
     || can('inventory.view');
   const canCreateRecall = can('sparePartsRecall.create');
+  const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
@@ -258,6 +262,7 @@ export const WarehouseWorkspace: React.FC = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [addPartOpen, setAddPartOpen] = useState(false);
   const [countImportOpen, setCountImportOpen] = useState(false);
+  const [locationByKey, setLocationByKey] = useState<Map<string, string>>(() => new Map());
 
   const load = useCallback(async () => {
     const id = String(warehouseId || '').trim();
@@ -275,6 +280,7 @@ export const WarehouseWorkspace: React.FC = () => {
         setWarehouse(null);
         setLinkedBranch(null);
         setBranchParts([]);
+        setLocationByKey(new Map());
         setError('المخزن غير موجود.');
         return;
       }
@@ -285,6 +291,7 @@ export const WarehouseWorkspace: React.FC = () => {
         setWarehouse(null);
         setLinkedBranch(null);
         setBranchParts([]);
+        setLocationByKey(new Map());
         setAccessDenied(true);
         setError('ليس لديك صلاحية عرض هذا المخزن.');
         return;
@@ -303,6 +310,7 @@ export const WarehouseWorkspace: React.FC = () => {
           setWarehouse(null);
           setLinkedBranch(null);
           setBranchParts([]);
+          setLocationByKey(new Map());
           setAccessDenied(true);
           setError('هذا المخزن غير مرتبط بفرعك.');
           return;
@@ -313,7 +321,7 @@ export const WarehouseWorkspace: React.FC = () => {
       setWarehouse(wh);
       setLinkedBranch(branch);
 
-      const [bal, tx, transfers, spr, parts, materials] = await Promise.all([
+      const [bal, tx, transfers, spr, parts, materials, locations] = await Promise.all([
         stockService.getBalances(id).catch(() => [] as StockItemBalance[]),
         stockService.getTransactions(id).catch(() => [] as StockTransaction[]),
         canViewInventory
@@ -326,9 +334,11 @@ export const WarehouseWorkspace: React.FC = () => {
         isCenter || isCentralSpareParts
           ? materialService.getAll().catch(() => [])
           : Promise.resolve([]),
+        loadWarehouseCountLocationLabels(id).catch(() => new Map<string, string>()),
       ]);
       setCountBalances(bal);
       setBalances(bal.slice(0, 30));
+      setLocationByKey(locations);
       setBranchParts(parts);
       setCatalogMaterials(
         (materials || [])
@@ -522,6 +532,12 @@ export const WarehouseWorkspace: React.FC = () => {
     >
       <p className="text-lg font-bold text-[var(--color-text)] -mt-2 mb-2">{warehouse.name}</p>
 
+      <WarehousePartInquiry
+        balances={countBalances}
+        locationByKey={locationByKey}
+        catalogItems={catalogMaterials}
+      />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <OpsDashPanel title="أصناف لها رصيد" accent="inventory">
           <div className="text-2xl font-black">{totalSkus}</div>
@@ -580,7 +596,7 @@ export const WarehouseWorkspace: React.FC = () => {
         )}
       </div>
 
-      {(showAddPart || showCountImport || isCentralSparePartsWarehouse) ? (
+      {(showAddPart || showCountImport || isCentralSparePartsWarehouse || countBalances.length > 0) ? (
         <OpsDashPanel title="تحكم المخزن" accent="inventory">
           <p className="text-xs text-[var(--color-text-muted)] mb-3">
             {isCentralSparePartsWarehouse
@@ -642,6 +658,23 @@ export const WarehouseWorkspace: React.FC = () => {
                 {isCentralSparePartsWarehouse || canCenterCreateFromCount
                   ? 'رفع أرصدة أول المدة'
                   : 'رفع جرد Excel'}
+              </Button>
+            ) : null}
+            {warehouse.id && countBalances.length > 0 ? (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={printing}
+                onClick={() => {
+                  void printWarehouseCount({
+                    warehouseId: String(warehouse.id),
+                    warehouseName: warehouse.name,
+                    warehouseRole: warehouse.warehouseRole,
+                    balances: countBalances,
+                  });
+                }}
+              >
+                {printing ? 'جاري تجهيز الجرد…' : 'طباعة الجرد'}
               </Button>
             ) : null}
           </div>
@@ -750,6 +783,7 @@ export const WarehouseWorkspace: React.FC = () => {
                   <tr className="text-[var(--color-text-muted)]">
                     <th className="text-start py-1">الصنف</th>
                     <th className="text-start py-1">الكمية</th>
+                    <th className="text-start py-1">الموقع</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -757,6 +791,7 @@ export const WarehouseWorkspace: React.FC = () => {
                     <tr key={`${b.itemType}-${b.itemId}`} className="border-t border-[var(--color-border)]/40">
                       <td className="py-1">{b.itemName}</td>
                       <td className="py-1">{fmt(b.quantity)}</td>
+                      <td className="py-1 font-mono">{resolveWarehouseItemLocation(locationByKey, b)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -835,6 +870,7 @@ export const WarehouseWorkspace: React.FC = () => {
           onCreated={(sessionId) => void openCreatedCountSession(sessionId)}
         />
       ) : null}
+      {countSheetHost}
     </ModuleOpsPageShell>
   );
 };

@@ -3554,6 +3554,48 @@ input[type="radio"] {
   letter-spacing: -0.01em;
 }
 
+/* Form / list pages without KPI hero — dense title + actions, no empty strips */
+.ops-dash-board--compact-head {
+  gap: 0.55rem;
+}
+
+.ops-dash-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+  padding: 0 0.1rem 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 75%, transparent);
+}
+
+.ops-dash-page-head__title {
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.ops-dash-page-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+}
+
+.ops-dash-page-subtitle {
+  margin: 0.2rem 0 0;
+  max-width: min(40rem, 100%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
+
+.ops-dash-page-head__actions {
+  flex: 0 1 auto;
+}
+
 .ops-dash-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -3633,6 +3675,11 @@ input[type="radio"] {
   gap: 0.35rem;
   min-width: 0;
   width: 100%;
+}
+
+.ops-dash-toolbar__meta .ops-dash-toolbar__actions {
+  width: auto;
+  flex: 0 1 auto;
 }
 
 /* Keep page wrappers as flex groups — do not flatten with display:contents
@@ -4025,6 +4072,37 @@ input[type="radio"] {
 @media (min-width: 1280px) {
   .ops-dash-kpi-grid--dense {
     grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+/* Stock balances — denser KPI strip so the list stays above the fold */
+.stock-balances-ops .ops-dash-kpi-card {
+  min-height: 78px;
+  padding: 0.7rem 0.85rem;
+}
+
+.stock-balances-ops .ops-dash-kpi-card__value {
+  font-size: 1.35rem;
+  line-height: 1.15;
+}
+
+@media (max-width: 767px) {
+  .stock-balances-ops .ops-dash-kpi-grid--dense {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .stock-balances-ops .ops-dash-kpi-card {
+    min-height: 64px;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .stock-balances-ops .ops-dash-kpi-card__label {
+    font-size: 0.65rem;
+  }
+
+  .stock-balances-ops .ops-dash-kpi-card__value {
+    font-size: 1.1rem;
   }
 }
 
@@ -4451,6 +4529,12 @@ input[type="radio"] {
   [data-sonner-toaster] { display: none !important; }
   table { font-size: 11px; }
   table th, table td { padding: 5px 8px !important; }
+  .print-root table th,
+  .print-root table td,
+  .print-report table th,
+  .print-report table td {
+    padding: 8px !important;
+  }
   @page { size: A4; margin: 10mm; }
   .min-h-screen > aside,
   .min-h-screen > .flex-1 > header,

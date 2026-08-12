@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>02 — الإنتاج | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>MOD / 02</small></div>
+    <nav>
+      <a href="../index.html">النظرة العامة</a>
+      <a class="active" href="02-production.html">الإنتاج</a>
+      <a href="03-catalog.html">التالي: الكتالوج</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <div class="page-head">
+      <div>
+        <span class="badge">Manufacturing floor</span>
+        <h1>موديول الإنتاج</h1>
+        <p>قلب التشغيل في المصنع: من الخطة إلى أمر الشغل إلى التقرير اليومي، مع خطوط ومسارات وتغليف وحضور عمالة.</p>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="grid-3">
+        <div class="card"><h3>ماذا يفعل؟</h3><p>يدير دورة الإنتاج اليومية: خطط، طلبات صرف، إدخال سريع، تقارير، أوامر شغل، مسارات زمنية، وتحكم تغليف.</p></div>
+        <div class="card"><h3>قيمة للأعمال</h3><p>رقم إنتاج يومي موثوق، تقليل الاعتماد على الدفاتر، وربط تلقائي مع المخزون عند الصرف والتقرير.</p></div>
+        <div class="card"><h3>من يستخدمه؟</h3><p>مدير مصنع، مشرف خط، عمال إنتاج (حسب الصلاحية)، ومسؤولو التغليف.</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>التدفق اليومي</h2>
+      <div class="card">
+        <div class="flow">
+          <span class="step">خطة إنتاج</span><span class="arrow">←</span>
+          <span class="step">طلب صرف</span><span class="arrow">←</span>
+          <span class="step">تنفيذ على الخط</span><span class="arrow">←</span>
+          <span class="step">تقرير / إدخال سريع</span><span class="arrow">←</span>
+          <span class="step">تغليف / تسليم</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>الشاشات الرئيسية</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>الشاشة</th><th>المسار</th><th>الغرض</th></tr></thead>
+          <tbody>
+            <tr><td>لوحة الإنتاج</td><td><code>/production</code></td><td>KPIs ورسوم للإنتاج</td></tr>
+            <tr><td>إدخال سريع</td><td><code>/quick-action</code></td><td>تقرير يومي في ثوانٍ</td></tr>
+            <tr><td>التقارير</td><td><code>/reports</code></td><td>عرض / تعديل / استيراد / طباعة</td></tr>
+            <tr><td>خطط الإنتاج</td><td><code>/production-plans</code></td><td>تخطيط ومتابعة واحتياجات مواد</td></tr>
+            <tr><td>أوامر الشغل</td><td><code>/work-orders</code></td><td>تتبع التنفيذ والمسح</td></tr>
+            <tr><td>خطوط الإنتاج</td><td><code>/lines</code></td><td>تعريف الخطوط والحالة</td></tr>
+            <tr><td>مسارات الإنتاج</td><td><code>/production/routing</code></td><td>خطوات زمنية للمنتج + تحليلات</td></tr>
+            <tr><td>تحكم التغليف</td><td><code>/production/packaging/control</code></td><td>استلام وانحرافات التغليف</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>صور فعلية من الشاشات</h2>
+      <div class="shot-grid">
+        <figure class="shot"><img src="../../handover/_screenshots/10-quick-action.png" alt="إدخال سريع" /><figcaption>إدخال سريع — أقصر طريق لتسجيل إنتاج اليوم</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/11-reports.png" alt="التقارير" /><figcaption>تقارير الإنتاج — قائمة كثيفة قابلة للفلترة والتصدير</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/12-production-plans.png" alt="الخطط" /><figcaption>خطط الإنتاج — الربط مع احتياجات المواد</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/13-work-orders.png" alt="أوامر الشغل" /><figcaption>أوامر الشغل — تتبع الحالة والتنفيذ</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/14-lines.png" alt="الخطوط" /><figcaption>خطوط الإنتاج</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/15-routing.png" alt="المسارات" /><figcaption>مسارات الإنتاج (Routing)</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="callout">
+        عند حفظ تقرير الإنتاج يتحرك المخزون عبر مسار صرف/تحويلات يملكه موديول المخازن — الإنتاج لا «يلفّق» أرصدة من الواجهة.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>البيانات تحت الحمل</h2>
+      <ul class="list-tight">
+        <li>قوائم التقارير محدودة بصفحات (ليست مسحًا لا نهائيًا في المتصفح).</li>
+        <li>الرقم اليومي يُحفظ كمستند تشغيلي يمكن طباعته ومشاركته ومراجعته لاحقًا.</li>
+        <li>مع نمو الخطط/الأوامر، الفلترة بالتاريخ والحالة تبقي الشاشة قابلة للاستخدام.</li>
+        <li>للتفاصيل عن السعة الكلية للمنصة: <a href="../data-and-scale.html">البيانات والتحمل</a>.</li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      <a href="01-dashboards.html">← اللوحات</a>
+      <a href="03-catalog.html">التالي: الكتالوج →</a>
+    </footer>
+  </main>
+</body>
+</html>

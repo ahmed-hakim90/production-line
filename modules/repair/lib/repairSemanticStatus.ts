@@ -85,6 +85,21 @@ export function repairReplacementStatusChipType(status: string): RepairSemanticS
   return 'muted';
 }
 
+/** أذونات الدفع/التحصيل — لون الشارة حسب الحالة التشغيلية. */
+export function repairPaymentAuthChipType(
+  status: string,
+  options?: { invalidPricing?: boolean; warrantySettlement?: boolean },
+): RepairSemanticStatusType {
+  if (options?.invalidPricing) return 'danger';
+  if (options?.warrantySettlement && status === 'paid') return 'success';
+  if (status === 'paid') return 'success';
+  if (status === 'approved') return 'info';
+  if (status === 'partial') return 'warning';
+  if (status === 'pending_approval') return 'warning';
+  if (status === 'void') return 'muted';
+  return 'muted';
+}
+
 /** مدة بقاء العهدة: تنبيه تشغيلي للأرصدة المتأخرة. */
 export function repairCustodyAgeChipType(ageDays: number): RepairSemanticStatusType {
   if (ageDays >= 14) return 'danger';

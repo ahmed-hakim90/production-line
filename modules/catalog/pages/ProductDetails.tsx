@@ -56,6 +56,7 @@ import {
   SURFACE_CARD,
 } from "@/src/components/erp/DetailPageChrome";
 import { CatalogProductDetailPrint } from "../components/CatalogProductDetailPrint";
+import { PrintOffscreenHost } from "@/src/components/erp/PrintOffscreenHost";
 
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   borderRadius: 8,
@@ -1141,7 +1142,7 @@ export const ProductDetails: React.FC = () => {
       </>
       )}
 
-      <div className="hidden" aria-hidden>
+      <PrintOffscreenHost>
         {data ? (
           <CatalogProductDetailPrint
             ref={printRef}
@@ -1155,7 +1156,7 @@ export const ProductDetails: React.FC = () => {
             printSettings={printTemplate}
           />
         ) : null}
-      </div>
+      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

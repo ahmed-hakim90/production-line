@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>07 — الموارد البشرية | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>MOD / 07</small></div>
+    <nav>
+      <a href="../index.html">النظرة العامة</a>
+      <a class="active" href="07-hr.html">HR</a>
+      <a href="08-accounting.html">التالي: الحسابات</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <div class="page-head">
+      <div>
+        <span class="badge">People ops</span>
+        <h1>الموارد البشرية</h1>
+        <p>موظفين، هيكل تنظيمي، حضور، إجازات، سلف، موافقات، رواتب، وتقييم — مربوط بتشغيل المصنع وليس HR منفصل عن الواقع.</p>
+      </div>
+    </div>
+    <section class="section">
+      <div class="grid-3">
+        <div class="card"><h3>ماذا يفعل؟</h3><p>إدارة الموظفين والحضور (بما في مزامنة أجهزة)، طلبات الإجازة والسلف، مركز موافقات، وكشوف الرواتب.</p></div>
+        <div class="card"><h3>قيمة للأعمال</h3><p>يقلل التأخير في الموافقات ويربط الحضور والرواتب بنفس هوية الموظف المستخدمة في الإنتاج.</p></div>
+        <div class="card"><h3>من يستخدمه؟</h3><p>HR، المدراء المعتمدون، والموظف عبر الخدمة الذاتية.</p></div>
+      </div>
+    </section>
+    <section class="section">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>الشاشة</th><th>المسار</th><th>الغرض</th></tr></thead>
+          <tbody>
+            <tr><td>لوحة HR</td><td><code>/hr/dashboard</code></td><td>نظرة مؤشرات</td></tr>
+            <tr><td>الموظفين</td><td><code>/hr/employees</code></td><td>الملفات والبيانات</td></tr>
+            <tr><td>الإجازات / السلف</td><td><code>/hr/leave-requests</code> · <code>/hr/loan-requests</code></td><td>طلبات مع شارات معلّقة</td></tr>
+            <tr><td>مركز الموافقات</td><td><code>/hr/approval-center</code></td><td>اعتماد موحّد</td></tr>
+            <tr><td>الحضور</td><td><code>/hr/attendance/*</code></td><td>يومي + سجلات + مزامنة</td></tr>
+            <tr><td>الرواتب</td><td><code>/hr/payroll</code></td><td>مسودات وصرف وتحليل مالي</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="section">
+      <h2>صور فعلية</h2>
+      <div class="shot-grid">
+        <figure class="shot" data-src="../../handover/_screenshots/modules/70-hr-dashboard.png" data-fallback="لوحة HR · /hr/dashboard"></figure>
+        <figure class="shot" data-src="../../handover/_screenshots/modules/71-hr-employees.png" data-fallback="الموظفين · /hr/employees"></figure>
+        <figure class="shot wide" data-src="../../handover/_screenshots/modules/72-hr-payroll.png" data-fallback="كشف الرواتب · /hr/payroll"></figure>
+      </div>
+    </section>
+    <footer class="footer">
+      <a href="06-customers.html">← العملاء</a>
+      <a href="08-accounting.html">التالي: الحسابات →</a>
+    </footer>
+  </main>
+  <script src="../assets/shot-fallback.js"></script>
+</body>
+</html>

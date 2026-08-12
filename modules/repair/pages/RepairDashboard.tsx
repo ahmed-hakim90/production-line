@@ -45,6 +45,9 @@ import { getTodayDateString } from '@/utils/calculations';
 import { REPAIR_JOB_DASHBOARD_LIMIT } from '../services/repairJobService';
 import { StatusBadge } from '../components/StatusBadge';
 import { RepairAdminDashboard } from './RepairAdminDashboard';
+import { custodyAgeDays } from '../lib/repairCustomerOpsLabels';
+import { summarizeCustodyAging } from '../lib/repairCustomerCustody';
+import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 
 const num = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const shortDay = (isoDate: string) =>
@@ -83,6 +86,10 @@ const RepairOperationalDashboard: React.FC = () => {
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [custodyAging, setCustodyAging] = useState(() =>
+    summarizeCustodyAging([], custodyAgeDays),
+  );
+  const canViewCustody = can('repair.custody.view') || can('repair.custody.handover');
   const userBranchIds = useMemo(
     () =>
       resolveAccessibleRepairBranchIds({
@@ -98,6 +105,32 @@ const RepairOperationalDashboard: React.FC = () => {
     void repairBranchService.list().then(setBranches);
   }, []);
 
+  const userBranchKey = userBranchIds.join('|');
+
+  useEffect(() => {
+    if (!canViewCustody) {
+      setCustodyAging(summarizeCustodyAging([], custodyAgeDays));
+      return;
+    }
+    if (!repairCtx.canViewAllBranches && userBranchIds.length === 0) {
+      setCustodyAging(summarizeCustodyAging([], custodyAgeDays));
+      return;
+    }
+    let cancelled = false;
+    void repairCustomerOperationsService
+      .listCustody(repairCtx.canViewAllBranches ? [] : userBranchIds)
+      .then((rows) => {
+        if (!cancelled) setCustodyAging(summarizeCustodyAging(rows, custodyAgeDays));
+      })
+      .catch(() => {
+        if (!cancelled) setCustodyAging(summarizeCustodyAging([], custodyAgeDays));
+      });
+    return () => {
+      cancelled = true;
+    };
+    // userBranchKey stabilizes array identity for branch-scoped operators.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional key
+  }, [canViewCustody, repairCtx.canViewAllBranches, userBranchKey]);
   const { rawJobs: jobs, refetch: refetchJobs } = useRepairJobs({
     branchId: userBranchIds[0],
     branchIds: userBranchIds,
@@ -254,7 +287,13 @@ const RepairOperationalDashboard: React.FC = () => {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    void Promise.resolve(refetchJobs()).finally(() => setRefreshing(false));
+    const custodyReload = canViewCustody
+      ? repairCustomerOperationsService
+          .listCustody(repairCtx.canViewAllBranches ? [] : userBranchIds)
+          .then((rows) => setCustodyAging(summarizeCustodyAging(rows, custodyAgeDays)))
+          .catch(() => setCustodyAging(summarizeCustodyAging([], custodyAgeDays)))
+      : Promise.resolve();
+    void Promise.all([Promise.resolve(refetchJobs()), custodyReload]).finally(() => setRefreshing(false));
   };
 
   const hero = [
@@ -263,23 +302,44 @@ const RepairOperationalDashboard: React.FC = () => {
       label: 'طلبات مفتوحة',
       value: num(kpis.openJobs),
       accent: true as const,
+      onClick: () => navigate(withTenantPath(tenantSlug, '/repair/jobs?focus=open')),
     },
     {
       key: 'delayed',
       label: 'متأخرة',
       value: num(delayedCount),
       toneClassName: delayedCount > 0 ? 'ops-dash-kpi-card--warn' : undefined,
+      onClick: () => navigate(withTenantPath(tenantSlug, '/repair/jobs?focus=overdue')),
     },
     {
       key: 'ready',
-      label: 'جاهز للدفع/التسليم',
+      label: 'جاهز ولم يُسلَّم',
       value: num(kpis.pendingDelivery),
+      onClick: () => navigate(withTenantPath(tenantSlug, '/repair/payments')),
     },
     {
       key: 'success',
       label: 'نسبة النجاح',
       value: `${kpis.successRate.toFixed(1)}%`,
     },
+    ...(canViewCustody
+      ? [
+          {
+            key: 'custody7',
+            label: 'عهدة +7 أيام',
+            value: num(custodyAging.aging7Rows),
+            toneClassName: custodyAging.aging7Rows > 0 ? 'ops-dash-kpi-card--warn' : undefined,
+            onClick: () => navigate(withTenantPath(tenantSlug, '/repair/custody-stock?age=7')),
+          },
+          {
+            key: 'custody14',
+            label: 'عهدة +14 يوم',
+            value: num(custodyAging.aging14Rows),
+            toneClassName: custodyAging.aging14Rows > 0 ? 'ops-dash-kpi-card--warn' : undefined,
+            onClick: () => navigate(withTenantPath(tenantSlug, '/repair/custody-stock?age=14')),
+          },
+        ]
+      : []),
     {
       key: 'unassigned',
       label: 'غير مسند',

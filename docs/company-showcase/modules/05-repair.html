@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>05 — الصيانة | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>MOD / 05</small></div>
+    <nav>
+      <a href="../index.html">النظرة العامة</a>
+      <a class="active" href="05-repair.html">الصيانة</a>
+      <a href="06-customers.html">التالي: العملاء</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <div class="page-head">
+      <div>
+        <span class="badge">Service centers</span>
+        <h1>موديول الصيانة (Repair)</h1>
+        <p>مسار أعمال كامل للمراكز: استلام جهاز → تشخيص → تقدير → موافقة → إصلاح/قطع → تحصيل → تسليم — مع خزينة وتموين وضمان شركة.</p>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="grid-3">
+        <div class="card"><h3>ماذا يفعل؟</h3><p>إدارة طلبات الصيانة، مساحة عمل الفني، قطع غيار المراكز، سندات الصرف، التحصيل، الخزينة، الاستبدال، وعهدة أجهزة العملاء.</p></div>
+        <div class="card"><h3>قيمة للأعمال</h3><p>يغلق الفجوة بين الورشة والمخزن والخزنة: كل طلب له حالة، مسؤول، قطع، ومبلغ — قابل للتتبع والطباعة والمشاركة.</p></div>
+        <div class="card"><h3>من يستخدمه؟</h3><p>استقبال، فني، مدير مركز، مدير صيانة، مخزن قطع مركزي (تموين)، وعميل عبر البوابة.</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>دورة حياة الطلب</h2>
+      <div class="card">
+        <div class="flow">
+          <span class="step">استلام</span><span class="arrow">←</span>
+          <span class="step">إسناد / QR</span><span class="arrow">←</span>
+          <span class="step">تشخيص</span><span class="arrow">←</span>
+          <span class="step">تقدير</span><span class="arrow">←</span>
+          <span class="step">موافقة عميل</span><span class="arrow">←</span>
+          <span class="step">إصلاح</span><span class="arrow">←</span>
+          <span class="step">تحصيل</span><span class="arrow">←</span>
+          <span class="step">تسليم</span>
+        </div>
+        <p style="margin:14px 0 0;color:var(--muted);font-size:14px;">
+          الضمان: خطوط تحت ضمان الشركة قد تُغلق بمسار <code>WAR-…</code> بدون تحصيل؛ الخطوط خارج الضمان تُفوتر فقط.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>الشاشات الأساسية</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>الشاشة</th><th>المسار</th><th>الغرض</th></tr></thead>
+          <tbody>
+            <tr><td>لوحة الصيانة</td><td><code>/repair</code></td><td>KPIs تشغيل / إدارة حسب الصلاحية</td></tr>
+            <tr><td>طلب جديد</td><td><code>/repair/jobs/new</code></td><td>استلام جهاز وبيانات العميل</td></tr>
+            <tr><td>طلبات الصيانة</td><td><code>/repair/jobs</code></td><td>قائمة ومتابعة الحالات</td></tr>
+            <tr><td>مساحة عمل الفني</td><td><code>/repair/jobs/:id/workspace</code></td><td>تشخيص → قطع → إنهاء</td></tr>
+            <tr><td>التحصيل والتسليم</td><td><code>/repair/payments</code></td><td>إغلاق مالي وتسليم</td></tr>
+            <tr><td>قطع غيار المراكز</td><td><code>/repair/parts</code></td><td>رصيد المركز + طلب تموين</td></tr>
+            <tr><td>سندات صرف القطع</td><td><code>/repair/spare-issues</code></td><td>صرف قطع على الطلب</td></tr>
+            <tr><td>الخزينة</td><td><code>/repair/treasury</code></td><td>إيراد/مصروف وإغلاق شهري</td></tr>
+            <tr><td>بوابة العميل</td><td><code>/portal/:tenantSlug</code></td><td>متابعة الطلبات بـ PIN</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>صور فعلية</h2>
+      <p class="sub">تُحدَّث عبر <code>npm run showcase:screens</code>. إن وُجدت اللقطات تظهر مباشرة؛ وإلا يظهر إطار يوضح الشاشة المستهدفة.</p>
+      <div class="shot-grid" id="shots">
+        <figure class="shot" data-src="../../handover/_screenshots/modules/60-repair-dashboard.png" data-fallback="لوحة الصيانة · /repair"></figure>
+        <figure class="shot" data-src="../../handover/_screenshots/modules/61-repair-jobs.png" data-fallback="طلبات الصيانة · /repair/jobs"></figure>
+        <figure class="shot" data-src="../../handover/_screenshots/modules/62-repair-payments.png" data-fallback="التحصيل والتسليم · /repair/payments"></figure>
+        <figure class="shot" data-src="../../handover/_screenshots/modules/63-repair-parts.png" data-fallback="قطع غيار المراكز · /repair/parts"></figure>
+        <figure class="shot wide" data-src="../../handover/_screenshots/modules/64-repair-treasury.png" data-fallback="الخزينة · /repair/treasury"></figure>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="callout blue">
+        أدلة تشغيل مطبوعة جاهزة للأدوار: فني، مسؤول مركز، مدير صيانة، ومخزن قطع مركزي — داخل <code>docs/handover/</code>.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>البيانات بين المراكز والمخزن</h2>
+      <ul class="list-tight">
+        <li>كل طلب صيانة حالة + فرع + فني + قطع + مبالغ — قابل للتدقيق.</li>
+        <li>رصيد قطع المركز لا يزيد إلا عند <strong>استلام التموين</strong> (مش عند إنشاء الطلب).</li>
+        <li>لوحة الأدمن تجمع فروع متعددة (KPIs + طوابير تأخير + مقارنة مراكز).</li>
+        <li>مناسب لشبكة مراكز مع ~100 مستخدم وآلاف العملاء — التفاصيل في <a href="../data-and-scale.html">البيانات والتحمل</a>.</li>
+      </ul>
+    </section>
+
+    <footer class="footer">
+      <a href="04-inventory.html">← المخازن</a>
+      <a href="06-customers.html">التالي: العملاء →</a>
+    </footer>
+  </main>
+  <script src="../assets/shot-fallback.js"></script>
+</body>
+</html>

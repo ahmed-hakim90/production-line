@@ -46,6 +46,7 @@ import {
   reportWasEnteredByActor,
   sortWorkOrdersByTodayReportState,
 } from '@/modules/dashboards/lib/supervisorReportingAccess';
+import { resolveWorkOrderReportType } from '@/modules/production/utils/reportTypes';
 import {
   resolveProductCategoryFilterKey,
   resolveProductCategoryLeafName,
@@ -53,11 +54,14 @@ import {
 
 const ACTIVE_WO_FILTERS_STORAGE_PREFIX = 'supervisor.activeWoFilters.v1';
 
+type WorkOrderTypeFilter = 'finished_product' | 'component_injection' | 'all';
+
 type ActiveWoPersistedFilters = {
   supervisorId?: string;
   lineId?: string;
   status?: string;
   categoryKey?: string;
+  workOrderType?: WorkOrderTypeFilter;
 };
 
 function activeWoFiltersStorageKey(tenantSlug: string | undefined, uid: string | null | undefined): string | null {
@@ -239,6 +243,8 @@ export const SupervisorDashboard: React.FC = () => {
   const [workOrderLineFilter, setWorkOrderLineFilter] = useState('all');
   const [workOrderStatusFilter, setWorkOrderStatusFilter] = useState('all');
   const [workOrderCategoryFilter, setWorkOrderCategoryFilter] = useState('all');
+  /** Hall board defaults to finished-product work orders only. */
+  const [workOrderTypeFilter, setWorkOrderTypeFilter] = useState<WorkOrderTypeFilter>('finished_product');
   const [woFiltersHydrated, setWoFiltersHydrated] = useState(false);
   const [workOrdersPage, setWorkOrdersPage] = useState(1);
   const [componentLabelOptions, setComponentLabelOptions] = useState<InjectionComponentOption[]>([]);
@@ -255,6 +261,9 @@ export const SupervisorDashboard: React.FC = () => {
     if (saved.lineId) setWorkOrderLineFilter(saved.lineId);
     if (saved.status) setWorkOrderStatusFilter(saved.status);
     if (saved.categoryKey) setWorkOrderCategoryFilter(saved.categoryKey);
+    if (saved.workOrderType === 'component_injection' || saved.workOrderType === 'all') {
+      setWorkOrderTypeFilter(saved.workOrderType);
+    }
     setWoFiltersHydrated(true);
   }, [woFiltersStorageKey]);
 
@@ -265,6 +274,7 @@ export const SupervisorDashboard: React.FC = () => {
       lineId: workOrderLineFilter,
       status: workOrderStatusFilter,
       categoryKey: workOrderCategoryFilter,
+      workOrderType: workOrderTypeFilter,
     });
   }, [
     woFiltersHydrated,
@@ -273,6 +283,7 @@ export const SupervisorDashboard: React.FC = () => {
     workOrderLineFilter,
     workOrderStatusFilter,
     workOrderCategoryFilter,
+    workOrderTypeFilter,
   ]);
 
   useEffect(() => {
@@ -390,6 +401,12 @@ export const SupervisorDashboard: React.FC = () => {
   const myActiveWorkOrders = useMemo(() => {
     return filterActiveWorkOrdersForReporter(workOrders, employee, canCreateForAnySupervisor);
   }, [employee, workOrders, canCreateForAnySupervisor]);
+  const typeScopedActiveWorkOrders = useMemo(() => {
+    if (!canCreateForAnySupervisor || workOrderTypeFilter === 'all') return myActiveWorkOrders;
+    return myActiveWorkOrders.filter(
+      (wo) => resolveWorkOrderReportType(wo.workOrderType) === workOrderTypeFilter,
+    );
+  }, [myActiveWorkOrders, canCreateForAnySupervisor, workOrderTypeFilter]);
   const todayReportStateByWorkOrder = useMemo(
     () => indexTodayReportStateByWorkOrder(todayReports),
     [todayReports],
@@ -397,7 +414,7 @@ export const SupervisorDashboard: React.FC = () => {
 
   const workOrderCategoryOptions = useMemo(() => {
     const byKey = new Map<string, string>();
-    for (const wo of myActiveWorkOrders) {
+    for (const wo of typeScopedActiveWorkOrders) {
       const product = _rawProducts.find((row) => row.id === wo.productId);
       if (!product) continue;
       const key = resolveProductCategoryFilterKey(product);
@@ -408,11 +425,11 @@ export const SupervisorDashboard: React.FC = () => {
     return [...byKey.entries()]
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
-  }, [myActiveWorkOrders, _rawProducts, _productCategories]);
+  }, [typeScopedActiveWorkOrders, _rawProducts, _productCategories]);
 
   const filteredWorkOrders = useMemo(() => {
     const query = workOrderSearch.trim().toLocaleLowerCase('ar');
-    const matching = myActiveWorkOrders.filter((wo) => {
+    const matching = typeScopedActiveWorkOrders.filter((wo) => {
       if (workOrderSupervisorFilter !== 'all' && wo.supervisorId !== workOrderSupervisorFilter) return false;
       if (workOrderLineFilter !== 'all' && wo.lineId !== workOrderLineFilter) return false;
       if (workOrderStatusFilter !== 'all' && wo.status !== workOrderStatusFilter) return false;
@@ -429,7 +446,7 @@ export const SupervisorDashboard: React.FC = () => {
     });
     return sortWorkOrdersByTodayReportState(matching, todayReportStateByWorkOrder);
   }, [
-    myActiveWorkOrders,
+    typeScopedActiveWorkOrders,
     workOrderLineFilter,
     workOrderSearch,
     workOrderStatusFilter,
@@ -449,6 +466,7 @@ export const SupervisorDashboard: React.FC = () => {
     workOrderLineFilter,
     workOrderStatusFilter,
     workOrderCategoryFilter,
+    workOrderTypeFilter,
   ]);
 
   const kpis = useMemo(() => {
@@ -500,7 +518,9 @@ export const SupervisorDashboard: React.FC = () => {
       avgPerDay,
       uniqueDays,
       assignedLinesCount: assignedLineIds.size,
-      activeWorkOrdersCount: myActiveWorkOrders.length,
+      activeWorkOrdersCount: canCreateForAnySupervisor
+        ? typeScopedActiveWorkOrders.length
+        : myActiveWorkOrders.length,
     };
   }, [
     periodReports,
@@ -508,7 +528,9 @@ export const SupervisorDashboard: React.FC = () => {
     planReports,
     todayReports,
     assignedLineIds,
-    myActiveWorkOrders.length,
+    myActiveWorkOrders,
+    typeScopedActiveWorkOrders,
+    canCreateForAnySupervisor,
   ]);
 
   const activePlan = useMemo((): {
@@ -794,7 +816,7 @@ export const SupervisorDashboard: React.FC = () => {
         )}
       >
         {canCreateForAnySupervisor ? (
-          <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="mb-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
             <input
               type="search"
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
@@ -804,12 +826,22 @@ export const SupervisorDashboard: React.FC = () => {
             />
             <select
               className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
+              value={workOrderTypeFilter}
+              onChange={(event) => setWorkOrderTypeFilter(event.target.value as WorkOrderTypeFilter)}
+              aria-label="فئة أمر الشغل"
+            >
+              <option value="finished_product">منتج</option>
+              <option value="component_injection">مكون حقن</option>
+              <option value="all">الكل</option>
+            </select>
+            <select
+              className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm outline-none focus:border-primary"
               value={workOrderSupervisorFilter}
               onChange={(event) => setWorkOrderSupervisorFilter(event.target.value)}
             >
               <option value="all">كل المشرفين</option>
               {_rawEmployees
-                .filter((row) => row.id && row.isActive !== false && myActiveWorkOrders.some((wo) => wo.supervisorId === row.id))
+                .filter((row) => row.id && row.isActive !== false && typeScopedActiveWorkOrders.some((wo) => wo.supervisorId === row.id))
                 .map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
             </select>
             <select
@@ -819,7 +851,7 @@ export const SupervisorDashboard: React.FC = () => {
             >
               <option value="all">كل الخطوط</option>
               {_rawLines
-                .filter((row) => row.id && myActiveWorkOrders.some((wo) => wo.lineId === row.id))
+                .filter((row) => row.id && typeScopedActiveWorkOrders.some((wo) => wo.lineId === row.id))
                 .map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
             </select>
             <select

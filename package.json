@@ -44,7 +44,8 @@
     "handover:pdf:content": "HANDOVER_CONTENT_ONLY=1 node scripts/handover/generate-handover.mjs",
     "handover:readiness": "node scripts/handover/check-tenant-readiness.mjs",
     "test:categories": "npx --yes tsx tests/category-tree.test.ts && npx --yes tsx tests/category-migration.test.ts",
-    "test:operations": "npx --yes tsx tests/tenant-readiness.test.ts && npx --yes tsx tests/inventory-analytics.test.ts && npx --yes tsx tests/cost-health-snapshot.test.ts && npx --yes tsx tests/asset-depreciation.test.ts && npx --yes tsx tests/line-efficiency.test.ts"
+    "test:operations": "npx --yes tsx tests/tenant-readiness.test.ts && npx --yes tsx tests/inventory-analytics.test.ts && npx --yes tsx tests/cost-health-snapshot.test.ts && npx --yes tsx tests/asset-depreciation.test.ts && npx --yes tsx tests/line-efficiency.test.ts",
+    "showcase:screens": "HANDOVER_BASE_URL=http://localhost:3000 node scripts/handover/capture-showcase-screens.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

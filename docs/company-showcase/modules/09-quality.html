@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>09 — الجودة | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>MOD / 09</small></div>
+    <nav>
+      <a href="../index.html">النظرة العامة</a>
+      <a class="active" href="09-quality.html">الجودة</a>
+      <a href="10-system.html">التالي: النظام</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <div class="page-head">
+      <div>
+        <span class="badge">Quality ops</span>
+        <h1>موديول الجودة</h1>
+        <p>فحص نهائي، IPQC، إعادة تشغيل، CAPA، وتقارير جودة — مرتبط بخط الإنتاج وليس وثائق منفصلة.</p>
+      </div>
+    </div>
+    <section class="section">
+      <div class="grid-3">
+        <div class="card"><h3>ماذا يفعل؟</h3><p>يسجّل نتائج الفحص، العيوب، إعادة التشغيل، وإجراءات CAPA مع تقارير قابلة للطباعة.</p></div>
+        <div class="card"><h3>قيمة للأعمال</h3><p>يربط جودة المنتج بالإنتاج اليومي ويوثّق الإجراءات التصحيحية.</p></div>
+        <div class="card"><h3>من يستخدمه؟</h3><p>عمال/مفتشو الجودة ومدير الجودة.</p></div>
+      </div>
+    </section>
+    <section class="section">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>الشاشة</th><th>المسار</th><th>الغرض</th></tr></thead>
+          <tbody>
+            <tr><td>عمال الجودة</td><td><code>/quality/workers</code></td><td>فريق الجودة</td></tr>
+            <tr><td>الفحص النهائي</td><td><code>/quality/final-inspection</code></td><td>قبول/رفض نهائي</td></tr>
+            <tr><td>IPQC</td><td><code>/quality/ipqc</code></td><td>فحص أثناء العملية</td></tr>
+            <tr><td>إعادة التشغيل</td><td><code>/quality/rework</code></td><td>متابعة إعادة العمل</td></tr>
+            <tr><td>CAPA</td><td><code>/quality/capa</code></td><td>إجراءات تصحيحية/وقائية</td></tr>
+            <tr><td>تقارير الجودة</td><td><code>/quality/reports</code></td><td>لوحة وتقارير</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="section">
+      <h2>صور فعلية</h2>
+      <div class="shot-grid">
+        <figure class="shot" data-src="../../handover/_screenshots/modules/90-quality-reports.png" data-fallback="تقارير الجودة · /quality/reports"></figure>
+        <figure class="shot" data-src="../../handover/_screenshots/modules/91-quality-final.png" data-fallback="الفحص النهائي · /quality/final-inspection"></figure>
+      </div>
+    </section>
+    <footer class="footer">
+      <a href="08-accounting.html">← الحسابات</a>
+      <a href="10-system.html">التالي: النظام →</a>
+    </footer>
+  </main>
+  <script src="../assets/shot-fallback.js"></script>
+</body>
+</html>

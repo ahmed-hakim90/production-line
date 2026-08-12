@@ -186,7 +186,7 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
       });
       toast.success(
         parsed.changedRows > 0
-          ? `تم إنشاء جلسة الجرد · ${parsed.changedRows} فرق للمراجعة والاعتماد.`
+          ? `تم إنشاء جلسة الجرد · ${parsed.changedRows} فرق — افتح «جرد ومطابقة» واختر هذا المخزن ثم اعتمد.`
           : 'تم إنشاء جلسة الجرد بدون فروق.',
       );
       reset();

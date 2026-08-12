@@ -1357,6 +1357,8 @@ export type PrintDocumentTypeId =
   | "suppliesReceipt"
   | "repairPayment"
   | "repairSpareIssue"
+  | "repairSparePartsCount"
+  | "warehouseStockCount"
   | "repairTreasuryMonthly"
   | "routingExecution"
   | "productionWorkerReport"
@@ -1366,7 +1368,8 @@ export type PrintDocumentTypeId =
   | "repairJobReceipt"
   | "repairJobCard"
   | "repairDeliveryReceipt"
-  | "catalogProductDetail";
+  | "catalogProductDetail"
+  | "workOrder";
 
 export type PrintCustomLine = {
   id: string;

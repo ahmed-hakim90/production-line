@@ -9,6 +9,10 @@ import {
   FactoryPrintShell,
   type FactoryPrintKpi,
 } from '@/src/components/erp/FactoryPrintShell';
+import {
+  FactoryPrintTable,
+  FactoryPrintTableAccentValue,
+} from '@/src/components/erp/FactoryPrintTable';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 export type CatalogProductDetailPrintRow = {
@@ -94,40 +98,33 @@ export const CatalogProductDetailPrint = React.forwardRef<HTMLDivElement, Catalo
                 لا توجد بيانات بعد الفلترة
               </div>
             ) : (
-              <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
-                <thead>
-                  <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
-                    <th className="border border-slate-200 px-2 py-2">التاريخ</th>
-                    <th className="border border-slate-200 px-2 py-2">خط الإنتاج</th>
-                    <th className="border border-slate-200 px-2 py-2">المشرف</th>
-                    <th className="border border-slate-200 px-2 py-2 text-center">الكمية</th>
-                    <th className="border border-slate-200 px-2 py-2 text-center">الهالك</th>
-                    <th className="border border-slate-200 px-2 py-2 text-center">عمال</th>
-                    <th className="border border-slate-200 px-2 py-2 text-center">ساعات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((row, index) => (
-                    <tr key={`${row.date}-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="border border-slate-200 px-2 py-2 text-[12px] font-bold">{row.date}</td>
-                      <td className="border border-slate-200 px-2 py-2 text-[12px] font-bold">{row.line}</td>
-                      <td className="border border-slate-200 px-2 py-2 text-[12px] font-bold">{row.employee}</td>
-                      <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-black tabular-nums">
-                        {arNumber(row.quantity)}
-                      </td>
-                      <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-black tabular-nums">
-                        {arNumber(row.waste)}
-                      </td>
-                      <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-black tabular-nums">
-                        {arNumber(row.workers)}
-                      </td>
-                      <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-black tabular-nums">
-                        {arNumber(row.hours)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <FactoryPrintTable
+                brandAccent={accent}
+                printSettings={ps}
+                columns={[
+                  { key: 'date', header: 'التاريخ' },
+                  { key: 'line', header: 'خط الإنتاج' },
+                  { key: 'employee', header: 'المشرف' },
+                  { key: 'quantity', header: 'الكمية', align: 'center' },
+                  { key: 'waste', header: 'الهالك', align: 'center' },
+                  { key: 'workers', header: 'عمال', align: 'center' },
+                  { key: 'hours', header: 'ساعات', align: 'center' },
+                ]}
+                rows={rows.map((row, index) => ({
+                  key: `${row.date}-${index}`,
+                  cells: {
+                    date: row.date,
+                    line: row.line,
+                    employee: row.employee,
+                    quantity: (
+                      <FactoryPrintTableAccentValue accent={accent}>{arNumber(row.quantity)}</FactoryPrintTableAccentValue>
+                    ),
+                    waste: arNumber(row.waste),
+                    workers: arNumber(row.workers),
+                    hours: arNumber(row.hours),
+                  },
+                }))}
+              />
             )}
           </section>
         ) : null}

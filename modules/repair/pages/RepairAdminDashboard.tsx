@@ -58,6 +58,9 @@ import {
 import { normalizeTreasuryMonth } from '../lib/repairTreasuryMonthlyClose';
 import { summarizeRepairUnrepairableReasons } from '../lib/repairUnrepairableAnalytics';
 import { sumManufacturerWarrantyPartsCost } from '../lib/repairManufacturerWarranty';
+import { custodyAgeDays } from '../lib/repairCustomerOpsLabels';
+import { summarizeCustodyAging, type CustodyAgingSummary } from '../lib/repairCustomerCustody';
+import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 
 const CHART_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' };
 const GRID_STROKE = 'color-mix(in srgb, var(--color-border) 80%, transparent)';
@@ -132,6 +135,10 @@ export const RepairAdminDashboard: React.FC = () => {
   const [treasurySessions, setTreasurySessions] = useState<RepairTreasurySession[]>([]);
   const [financials, setFinancials] = useState<RepairJobFinancial[]>([]);
   const [paymentAuthorizations, setPaymentAuthorizations] = useState<RepairPaymentAuthorization[]>([]);
+  const [custodyAging, setCustodyAging] = useState<CustodyAgingSummary>(() =>
+    summarizeCustodyAging([], custodyAgeDays),
+  );
+  const [pendingReplacementCount, setPendingReplacementCount] = useState(0);
   const [period, setPeriod] = useState<'today' | 'week' | 'month'>('month');
   const [refreshing, setRefreshing] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
@@ -330,6 +337,61 @@ export const RepairAdminDashboard: React.FC = () => {
       cancelled = true;
     };
   }, [branchesLoaded, allowedBranchKey, warehouseIdByBranchId, currentMonth, reloadToken]);
+
+  useEffect(() => {
+    const canLoadCustody = can('repair.custody.view') || can('repair.custody.handover');
+    const canLoadReplacements =
+      can('repair.replacements.view')
+      || can('repair.replacements.create')
+      || can('repair.replacements.approve')
+      || can('repair.replacements.deliver');
+    if (!branchesLoaded || allowedBranchIds.length === 0) {
+      setCustodyAging(summarizeCustodyAging([], custodyAgeDays));
+      setPendingReplacementCount(0);
+      return;
+    }
+    let cancelled = false;
+    const branchFilter = repairCtx.adminSeesAllBranches ? [] : allowedBranchIds;
+    const tasks: Promise<void>[] = [];
+    if (canLoadCustody) {
+      tasks.push(
+        repairCustomerOperationsService
+          .listCustody(branchFilter)
+          .then((rows) => {
+            if (!cancelled) setCustodyAging(summarizeCustodyAging(rows, custodyAgeDays));
+          })
+          .catch(() => {
+            if (!cancelled) setCustodyAging(summarizeCustodyAging([], custodyAgeDays));
+          }),
+      );
+    } else {
+      setCustodyAging(summarizeCustodyAging([], custodyAgeDays));
+    }
+    if (canLoadReplacements) {
+      tasks.push(
+        repairCustomerOperationsService
+          .listReplacements(branchFilter)
+          .then((rows) => {
+            if (!cancelled) {
+              setPendingReplacementCount(
+                rows.filter((row) => row.status === 'pending_approval').length,
+              );
+            }
+          })
+          .catch(() => {
+            if (!cancelled) setPendingReplacementCount(0);
+          }),
+      );
+    } else {
+      setPendingReplacementCount(0);
+    }
+    void Promise.all(tasks);
+    return () => {
+      cancelled = true;
+    };
+    // Permission helpers are stable enough via can(); reloadToken refreshes after manual refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchesLoaded, allowedBranchKey, repairCtx.adminSeesAllBranches, reloadToken]);
 
   useEffect(() => {
     if (!can('repair.finance.view') || allowedBranchIds.length === 0) {
@@ -1093,6 +1155,47 @@ export const RepairAdminDashboard: React.FC = () => {
                 <p className="text-xs text-muted-foreground">
                   توزيع طلبات البورتال، متابعة عهدة الأجهزة، ومخزن غير القابل، واعتماد الاستبدال.
                 </p>
+                {(canViewCustody || canViewReplacements) ? (
+                  <div
+                    className="ops-module-charts__qty-row"
+                    style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}
+                  >
+                    {canViewCustody ? (
+                      <>
+                        <div className="ops-module-charts__qty">
+                          <p className="ops-module-charts__qty-label">وحدات العهدة</p>
+                          <p className="ops-module-charts__qty-value">{fmt(custodyAging.custodyUnits)}</p>
+                        </div>
+                        <div className="ops-module-charts__qty">
+                          <p className="ops-module-charts__qty-label">غير القابل (وحدات)</p>
+                          <p className="ops-module-charts__qty-value text-[rgb(var(--color-danger))]">
+                            {fmt(custodyAging.unrepairableUnits)}
+                          </p>
+                        </div>
+                        <div className="ops-module-charts__qty">
+                          <p className="ops-module-charts__qty-label">عهدة +7 أيام</p>
+                          <p className={`ops-module-charts__qty-value ${custodyAging.aging7Rows > 0 ? 'text-[rgb(var(--color-warning))]' : ''}`}>
+                            {fmt(custodyAging.aging7Rows)}
+                          </p>
+                        </div>
+                        <div className="ops-module-charts__qty">
+                          <p className="ops-module-charts__qty-label">عهدة +14 يوم</p>
+                          <p className={`ops-module-charts__qty-value ${custodyAging.aging14Rows > 0 ? 'text-[rgb(var(--color-danger))]' : ''}`}>
+                            {fmt(custodyAging.aging14Rows)}
+                          </p>
+                        </div>
+                      </>
+                    ) : null}
+                    {canViewReplacements ? (
+                      <div className="ops-module-charts__qty">
+                        <p className="ops-module-charts__qty-label">استبدال معلّق</p>
+                        <p className={`ops-module-charts__qty-value ${pendingReplacementCount > 0 ? 'text-[rgb(var(--color-warning))]' : ''}`}>
+                          {fmt(pendingReplacementCount)}
+                        </p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   {canViewCustomerRequests && (
                     <Link to={path('/repair/customer-requests')}>
@@ -1103,6 +1206,12 @@ export const RepairAdminDashboard: React.FC = () => {
                     <>
                       <Link to={path('/repair/custody-stock')}>
                         <Button size="sm" variant="outline">العهدة</Button>
+                      </Link>
+                      <Link to={path('/repair/custody-stock?age=7')}>
+                        <Button size="sm" variant="outline">عهدة +7</Button>
+                      </Link>
+                      <Link to={path('/repair/custody-stock?age=14')}>
+                        <Button size="sm" variant="outline">عهدة +14</Button>
                       </Link>
                       <Link to={path('/repair/custody-stock?stockType=unrepairable')}>
                         <Button size="sm" variant="outline">غير القابل</Button>

@@ -14,6 +14,8 @@ export type DomainHomeHeroKpi = {
   meta?: React.ReactNode;
   accent?: boolean;
   toneClassName?: string;
+  onClick?: () => void;
+  active?: boolean;
 };
 
 type Props = {
@@ -72,22 +74,42 @@ export const DomainHomeShell: React.FC<Props> = ({
       {eyebrow ? <p className="ops-dash-eyebrow">{eyebrow}</p> : null}
 
       <div className={cn('ops-dash-kpi-grid', denseHero && 'ops-dash-kpi-grid--dense')}>
-        {hero.map((card) => (
-          <div
-            key={card.key}
-            className={cn(
-              'ops-dash-kpi-card',
-              card.accent && 'ops-dash-kpi-card--accent',
-              card.toneClassName,
-            )}
-          >
-            <p className="ops-dash-kpi-card__label">{card.label}</p>
-            <p className="ops-dash-kpi-card__value">{card.value}</p>
-            {card.meta != null && card.meta !== false ? (
-              <p className="ops-dash-kpi-card__meta">{card.meta}</p>
-            ) : null}
-          </div>
-        ))}
+        {hero.map((card) => {
+          const cardClassName = cn(
+            'ops-dash-kpi-card',
+            card.accent && 'ops-dash-kpi-card--accent',
+            card.toneClassName,
+            card.onClick && 'cursor-pointer transition-opacity hover:opacity-90',
+            card.active && 'ring-2 ring-primary/40',
+          );
+          const cardBody = (
+            <>
+              <p className="ops-dash-kpi-card__label">{card.label}</p>
+              <p className="ops-dash-kpi-card__value">{card.value}</p>
+              {card.meta != null && card.meta !== false ? (
+                <p className="ops-dash-kpi-card__meta">{card.meta}</p>
+              ) : null}
+            </>
+          );
+          if (card.onClick) {
+            return (
+              <button
+                key={card.key}
+                type="button"
+                className={cardClassName}
+                onClick={card.onClick}
+                aria-pressed={Boolean(card.active)}
+              >
+                {cardBody}
+              </button>
+            );
+          }
+          return (
+            <div key={card.key} className={cardClassName}>
+              {cardBody}
+            </div>
+          );
+        })}
       </div>
 
       {showToolbar ? (

@@ -739,61 +739,92 @@ export interface WorkOrderPrintProps {
 
 export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintProps>(
   ({ data, printSettings }, ref) => {
-    if (!data) return <div ref={ref} />;
+    const lastDataRef = React.useRef<WorkOrderPrintData | null>(null);
+    if (data) lastDataRef.current = data;
+    const resolved = data ?? lastDataRef.current;
+    if (!resolved) return <div ref={ref} className="print-root print-report" />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const doc = resolvePrintDocumentConfig(ps, 'workOrder');
+    const font = resolvePrintFont(ps);
     const dp = ps.decimalPlaces;
     const now = new Date().toLocaleString('ar-EG');
-    const progress = data.quantity > 0 ? Math.min((data.producedQuantity / data.quantity) * 100, 100) : 0;
-    const remaining = Math.max(0, Number(data.quantity || 0) - Number(data.producedQuantity || 0));
-    const showCosts = !!data.showCosts;
+    const progress = resolved.quantity > 0 ? Math.min((resolved.producedQuantity / resolved.quantity) * 100, 100) : 0;
+    const remaining = Math.max(0, Number(resolved.quantity || 0) - Number(resolved.producedQuantity || 0));
+    const showCosts = !!resolved.showCosts && doc.isFieldVisible('costs');
+    const showNotes = doc.isFieldVisible('notes');
 
     return (
       <PrintReportLayout
         ref={ref}
-        companyName={ps.headerText || 'مؤسسة المغربي للإستيراد'}
+        companyName={doc.headerText || 'مؤسسة المغربي للإستيراد'}
         reportType="أمر شغل"
         printDate={now}
         logoUrl={ps.logoUrl}
         brandAccent={resolvePrintAccentHex(ps.primaryColor)}
-        footerTagline={ps.footerText?.trim() || undefined}
+        footerTagline={doc.footerText?.trim() || undefined}
+        extraLines={doc.customLines}
         paperSize={ps.paperSize}
         orientation={ps.orientation}
+        paperWidth={ps.paperSize === 'a5' ? '148mm' : '210mm'}
+        minHeight={ps.paperSize === 'a5' ? '210mm' : '297mm'}
+        padding={ps.paperSize === 'a5' ? '8mm 9mm' : '10mm 12mm'}
+        fontFamily={font.fontFamily}
+        fontSize={font.fontSize}
         meta={{
-          reportNumber: data.workOrderNumber || '—',
-          reportDate: data.targetDate || '—',
-          lineName: data.lineName || '—',
-          supervisorName: data.supervisorName || '—',
+          reportNumber: resolved.workOrderNumber || '—',
+          reportDate: resolved.targetDate || '—',
+          lineName: resolved.lineName || '—',
+          supervisorName: resolved.supervisorName || '—',
         }}
-        kpis={[
-          { label: 'الكمية المنتجة', value: Number(data.quantity || 0), unit: 'وحدة', color: 'indigo' },
-          { label: 'الكمية المنتجة', value: Number(data.producedQuantity || 0), unit: 'وحدة', color: 'green' },
-          { label: 'المتبقي', value: remaining, unit: 'وحدة', color: remaining > 0 ? 'red' : 'default' },
-          { label: 'نسبة الإنجاز', value: progress.toFixed(dp), unit: '%', color: progress >= 100 ? 'green' : 'default' },
-        ]}
+        metaCards={
+          doc.isFieldVisible('meta')
+            ? [
+                { label: 'رقم أمر الشغل', value: resolved.workOrderNumber || '—' },
+                { label: 'تاريخ الاستهداف', value: resolved.targetDate || '—' },
+                { label: 'خط الإنتاج', value: resolved.lineName || '—' },
+                { label: 'إشراف', value: resolved.supervisorName || '—' },
+              ]
+            : []
+        }
+        kpis={
+          doc.isFieldVisible('kpis')
+            ? [
+                { label: 'الكمية المخططة', value: Number(resolved.quantity || 0), unit: 'وحدة', color: 'indigo' },
+                { label: 'الكمية المنتجة', value: Number(resolved.producedQuantity || 0), unit: 'وحدة', color: 'green' },
+                { label: 'المتبقي', value: remaining, unit: 'وحدة', color: remaining > 0 ? 'red' : 'default' },
+                { label: 'نسبة الإنجاز', value: progress.toFixed(dp), unit: '%', color: progress >= 100 ? 'green' : 'default' },
+              ]
+            : []
+        }
         sections={[
           {
             title: 'المنتج وأمر الشغل',
             rows: [
-              { label: 'المنتج', value: data.productName || '—', highlight: true },
-              { label: 'الحالة', value: data.statusLabel || data.status || '—' },
+              { label: 'المنتج', value: resolved.productName || '—', highlight: true },
+              { label: 'الحالة', value: resolved.statusLabel || resolved.status || '—' },
             ],
             progress: { label: 'تقدم أمر الشغل', value: Math.round(Math.max(0, Math.min(100, progress))) },
           },
           {
             title: 'تفاصيل التنفيذ',
             rows: [
-              { label: 'الحد الأقصى للعمالة', value: `${data.maxWorkers || 0} عامل` },
-              ...(showCosts && data.estimatedCost != null
-                ? [{ label: 'التكلفة التقديرية', value: `${fmtNum(data.estimatedCost, 2)} ج.م` }]
+              { label: 'الحد الأقصى للعمالة', value: `${resolved.maxWorkers || 0} عامل` },
+              ...(showCosts && resolved.estimatedCost != null
+                ? [{ label: 'التكلفة التقديرية', value: `${fmtNum(resolved.estimatedCost, 2)} ج.م` }]
                 : []),
-              ...(showCosts && data.actualCost != null && data.actualCost > 0
-                ? [{ label: 'التكلفة الفعلية', value: `${fmtNum(data.actualCost, 2)} ج.م` }]
+              ...(showCosts && resolved.actualCost != null && resolved.actualCost > 0
+                ? [{ label: 'التكلفة الفعلية', value: `${fmtNum(resolved.actualCost, 2)} ج.م` }]
                 : []),
-              ...(data.notes ? [{ label: 'ملاحظات', value: data.notes }] : []),
+              ...(showNotes && resolved.notes ? [{ label: 'ملاحظات', value: resolved.notes }] : []),
             ],
           },
         ]}
+        signatures={
+          doc.isFieldVisible('signatures')
+            ? [{ title: 'المشرف' }, { title: 'اعتماد الإدارة' }]
+            : undefined
+        }
       />
     );
   },

@@ -65,12 +65,16 @@ export const createInventoryCountSessionHandler = async (request: CallableReques
         countedQty: requestedLine.countedQty,
       };
     });
+    const changedRows = lines.filter((line) => Math.abs(line.countedQty - line.expectedQty) > 0.0001).length;
+    // Sheet / opening-balance imports already carry counted qty diffs → land in matching queue.
+    // Manual "start count" (countedQty === expectedQty) stays open for floor counting.
+    const status = changedRows > 0 ? 'counted' : 'open';
     tx.create(countRef, {
       tenantId, warehouseId, warehouseName: String(warehouseSnap.data()?.name || data.warehouseName || warehouseId),
-      status: 'open', note: String(data.note || '').trim(), lines,
+      status, note: String(data.note || '').trim(), lines,
       previewConfirmed: true, previewConfirmedAt: at, createdBy: String(user?.displayName || user?.name || user?.email || uid), createdAt: at,
     });
-    return { importedRows: lines.length, changedRows: lines.filter((line) => Math.abs(line.countedQty - line.expectedQty) > 0.0001).length };
+    return { importedRows: lines.length, changedRows };
   });
   return { ok: true as const, id: countRef.id, ...result };
 };

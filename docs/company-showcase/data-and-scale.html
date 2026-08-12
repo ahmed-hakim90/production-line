@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>هندسة البيانات والتحمل | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>بيانات · تحمل · حدود</small></div>
+    <nav>
+      <a href="index.html">نظرة عامة</a>
+      <a class="active" href="data-and-scale.html">البيانات والتحمل</a>
+      <a href="modules/04-inventory.html">المخازن</a>
+      <a href="modules/05-repair.html">الصيانة</a>
+      <button type="button" onclick="window.print()">طباعة / PDF</button>
+    </nav>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="eyebrow">Data architecture · Capacity envelope</div>
+      <h1>كيف النظام بيتعامل مع الداتا… ويتحمّل لحد فين؟</h1>
+      <p class="lead">
+        الإجابة المختصرة: منصة Firebase تتحمل الحجم المستهدف بسهولة.
+        اللي يفرق فعليًا هو <strong>طريقة القراءة والكتابة</strong>، وعزل الشركات، ومين يملك العملية الحساسة (السيرفر ولا الواجهة).
+      </p>
+      <div class="hero-meta">
+        <span>~7,000 صنف</span>
+        <span>~8,000 عميل</span>
+        <span>~100 مستخدم نشط</span>
+        <span>شغل يومي كثيف</span>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="grid-4">
+        <div class="card kpi"><strong>✅ كافية</strong><span>سعة Firebase الخام للحجم أعلاه</span></div>
+        <div class="card kpi"><strong>⚠️ مش السقف</strong><span>عنق الزجاجة = نمط التحميل لا عدد الصفوف</span></div>
+        <div class="card kpi"><strong>عزل Tenant</strong><span>كل شركة بيانات منفصلة تحت <code>/t/{slug}</code></span></div>
+        <div class="card kpi"><strong>Server-owned</strong><span>حركات مخزون حساسة عبر Cloud Functions</span></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>1) هندسة البيانات — من يملك الحقيقة؟</h2>
+      <p class="sub">النظام مش «ملفات على جهاز». كل عملية تشغيلية ترجع لمصدر بيانات واحد مع حدود واضحة بين الموديولات.</p>
+      <div class="grid-2">
+        <div class="card">
+          <h3>الطبقات</h3>
+          <ul class="list-tight">
+            <li><strong>الواجهة (React)</strong> — تعرض، تجمع إدخال، وتظهر حالات التحميل/الخطأ.</li>
+            <li><strong>الخدمات / الـ Store</strong> — تنسّق القراءة والكتابة للموديول.</li>
+            <li><strong>Firestore</strong> — مستندات بعزل <code>tenantId</code> + فهارس مركّبة للفلاتر.</li>
+            <li><strong>Cloud Functions</strong> — ترحيل مخزون حساس، عمليات لا يجب الوثوق فيها من المتصفح.</li>
+            <li><strong>Rules + Permissions</strong> — القواعد على السيرفر هي حد الأمان؛ صلاحيات الواجهة للـ UX فقط.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>قواعد ملكية الدومين</h3>
+          <ul class="list-tight">
+            <li>الإنتاج يملك الخطط والتقارير — لا يغيّر الأرصدة مباشرة.</li>
+            <li>المخازن تملك الحركات والأرصدة — أي صرف/تحويل يمر من مسارها.</li>
+            <li>الصيانة تملك الطلب والحالة والتشخيص — طلب القطع يتحول لإذن مخزون.</li>
+            <li>العملاء سجل ماستر — الطلبات تشير بـ <code>customerId</code> بدل تكرار الاسم.</li>
+            <li>التكاليف/الحسابات تقرأ كميات التشغيل وتحسب — لا تعيد اختراع الإنتاج.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout blue" style="margin-top:14px">
+        مثال تدفّق آمن: تقرير إنتاج → طلب صرف → اعتماد/تجهيز → حركة مخزون على Functions → طباعة.
+        الواجهة لا «تخترع» رصيدًا؛ السيرفر يثبت الحركة.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>2) كيف بتتعامل المنصة مع الداتا يوميًا؟</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>نوع الداتا</th><th>طريقة التعامل</th><th>ليش مهم للشركة؟</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>بيانات رئيسية (منتجات، مواد، عملاء، موظفين)</td>
+              <td>مستندات Firestore لكل كيان + صلاحيات عرض/تعديل</td>
+              <td>مصدر واحد بدل نسخ Excel متعددة</td>
+            </tr>
+            <tr>
+              <td>تشغيل يومي (تقارير، طلبات صيانة، تحويلات)</td>
+              <td>قوائم مفلترة + حدود صفحات + شارات معلّقة</td>
+              <td>الشاشة تفضل سريعة حتى مع تراكم الشهور</td>
+            </tr>
+            <tr>
+              <td>حركات مالية/مخزنية حساسة</td>
+              <td>Cloud Functions + تحقق tenant + صلاحية سيرفر</td>
+              <td>يمنع التلاعب من المتصفح وتضارب الرصيد</td>
+            </tr>
+            <tr>
+              <td>حضور وبصمة</td>
+              <td>سجلات خام + ملخصات؛ استيراد على دفعات (~400)</td>
+              <td>يستوعب سحب يومي/شهري بدون قفل النظام</td>
+            </tr>
+            <tr>
+              <td>تقارير وتكلفة شهرية</td>
+              <td>تجميعات/ملخصات بدل مسح كل التاريخ في المتصفح</td>
+              <td>تكلفة قراءة أقل وقرار أسرع لنهاية الشهر</td>
+            </tr>
+            <tr>
+              <td>ملفات وطباعة</td>
+              <td>Storage بمسارات <code>company/{tenantId}/...</code> + قوالب طباعة</td>
+              <td>عزل ملفات الشركة ومشاركة واتساب/PDF آمنة نسبيًا</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>3) يستحمل لحد فين؟ — غلاف السعة</h2>
+      <p class="sub">الأرقام التالية هي الحجم التشغيلي المستهدف الذي تم تقييمه على البنية الحالية (Firestore + Auth + Functions). ليست «سقف Firebase»، بل ما نوصي بالاعتماد عليه بثقة مع ممارسات القراءة الصحيحة.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>البند</th><th>الحجم المستهدف</th><th>تقييم السعة</th><th>ملاحظة عملية</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>أصناف / منتجات</td>
+              <td><strong>~7,000</strong></td>
+              <td><span class="badge ok">مريح لـ Firebase</span></td>
+              <td>المهم: عدم تحميل الكتالوج كاملًا في كل جلسة دخول</td>
+            </tr>
+            <tr>
+              <td>عملاء</td>
+              <td><strong>~8,000</strong></td>
+              <td><span class="badge ok">مريح لـ Firebase</span></td>
+              <td>موديول العملاء موجود؛ البحث والتصفح بالصفحات أهم من العدد</td>
+            </tr>
+            <tr>
+              <td>مستخدمون نشطون معًا</td>
+              <td><strong>~100</strong></td>
+              <td><span class="badge ok">مريح جدًا</span></td>
+              <td>مناسب لمصنع + عدة مراكز صيانة في نفس الشركة</td>
+            </tr>
+            <tr>
+              <td>موظفين (HR)</td>
+              <td><strong>مئات–آلاف</strong></td>
+              <td><span class="badge ok">مناسب</span></td>
+              <td>بيئة حالية تظهر مئات السجلات مع فلاتر وبحث</td>
+            </tr>
+            <tr>
+              <td>شغل يومي (قراءة/كتابة مستمرة)</td>
+              <td><strong>كثيف</strong></td>
+              <td><span class="badge warn">ممكن بشرط modeling</span></td>
+              <td>فهارس + حدود قوائم + ملخصات KPI</td>
+            </tr>
+            <tr>
+              <td>فواتير / تحصيل صيانة</td>
+              <td><strong>متوسط–عالٍ داخل مسار الإصلاح</strong></td>
+              <td><span class="badge warn">يعمل بحذر</span></td>
+              <td>المسارات المالية الأفضل تظل server-owned عند التزامن العالي</td>
+            </tr>
+            <tr>
+              <td>تقارير تحليلية ثقيلة جدًا</td>
+              <td><strong>شهور طويلة / كل التاريخ</strong></td>
+              <td><span class="badge warn">ليس عبر مسح كامل من الواجهة</span></td>
+              <td>الملخصات أو تصدير BI — مش فتح مليون صف في المتصفح</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>4) إجابة مباشرة للإدارة</h2>
+      <div class="grid-2">
+        <div class="card">
+          <h3>نعم — تعتمد على المنصة لهذا الحجم</h3>
+          <ul class="list-tight">
+            <li>7 آلاف صنف + 8 آلاف عميل + 100 يوزر = حجم صغير نسبيًا على Firestore.</li>
+            <li>تصنيع + مخازن + صيانة + HR + جودة تعمل كمسارات يومية حقيقية.</li>
+            <li>عزل الشركات يسمح بنفس المنصة لأكثر من مستأجر بدون خلط بيانات.</li>
+            <li>الحركات الحساسة للمخزون جزء كبير منها محصّن على السيرفر.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>لكن — الحدود ليست «عدد الصفوف»</h3>
+          <ul class="list-tight">
+            <li>تحميل بيانات رئيسية كاملة عند كل Login يرفع التكلفة ويبطئ الإقلاع.</li>
+            <li>التقارير الثقيلة بدون ملخصات ترفع فاتورة القراءات.</li>
+            <li>الكتابات المالية المتزامنة الكثيفة تحتاج عدّادات/مسارات سيرفر محكمة.</li>
+            <li>سحب بصمة ضخم يجب أن يمر من مسار واحد مضبوط (دفعات + dedupe + tenant).</li>
+          </ul>
+        </div>
+      </div>
+      <div class="callout" style="margin-top:14px">
+        <strong>الخلاصة للإدارة:</strong>
+        النظام يستوعب تشغيل مصنع + شبكة مراكز بالحجم أعلاه.
+        التوسّع الأكبر (آلاف المستخدمين المتزامنين، فوترة بيع عامة كثيفة جدًا، تحليلات تاريخية ضخمة)
+        يحتاج نفس المنصة مع تحسينات قراءة كسولة وملخصات وتشديد مسارات السيرفر — مش تغيير المنتج من الصفر.
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>5) ماذا يحدث تحت الضغط؟ (سيناريوهات)</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>السيناريو</th><th>السلوك المتوقع</th><th>الحد العملي</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>100 مشرف/موظف يفتحون النظام صباحًا</td>
+              <td>كل جلسة تقرأ صلاحياتها وبيانات دورها</td>
+              <td>مريح إذا لم نُعد تحميل كتالوج 7k كامل لكل شخص بلا حاجة</td>
+            </tr>
+            <tr>
+              <td>ذروة صرف مخزون / تموين مراكز</td>
+              <td>موافقات + حركات موثّقة + شارات معلّقة</td>
+              <td>آمن طالما المسار الحساس على Functions وبنفس tenant</td>
+            </tr>
+            <tr>
+              <td>ذروة استقبال صيانة في عدة فروع</td>
+              <td>طلبات معزولة بالفرع + إسناد فنيين</td>
+              <td>مناسب لعشرات/مئات الطلبات اليومية حسب تنظيم الفرع</td>
+            </tr>
+            <tr>
+              <td>إغلاق رواتب / تكلفة شهرية</td>
+              <td>تجميع من بيانات التشغيل والحضور</td>
+              <td>أفضل كعملية مجدولة/محكومة — ليس مسح عشوائي من كل العملاء معًا</td>
+            </tr>
+            <tr>
+              <td>تصدير Excel كبير</td>
+              <td>عملية صريحة من الشاشة المصرح بها</td>
+              <td>مقبولة كشغل ثقيل منفصل عن الشاشة التفاعلية</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>6) حماية واتساق — مش بس سرعة</h2>
+      <div class="grid-3">
+        <div class="card">
+          <h3>عزل الشركات</h3>
+          <p>المسار <code>/t/{slug}</code> + <code>tenantId</code> على المستندات. مستخدم شركة لا يدخل بيانات شركة أخرى.</p>
+        </div>
+        <div class="card">
+          <h3>صلاحيات دقيقة</h3>
+          <p>مصفوفة عرض/إضافة/تعديل/حذف لكل مورد. الواجهة تُخفي؛ السيرفر يمنع.</p>
+        </div>
+        <div class="card">
+          <h3>سجل وموافقات</h3>
+          <p>عمليات حرجة تمر بموافقة (تحويلات، صرف، سلف، مدفوعات) مع إمكانية التدقيق.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>7) خارطة نمو موصى بها (باختصار)</h2>
+      <div class="card">
+        <div class="flow">
+          <span class="step">اليوم: تشغيل مصنع + مراكز</span><span class="arrow">←</span>
+          <span class="step">تحسين قراءة كسولة + صفحات</span><span class="arrow">←</span>
+          <span class="step">ملخصات KPI جاهزة</span><span class="arrow">←</span>
+          <span class="step">كل المالي/المخزني الحساس على السيرفر</span><span class="arrow">←</span>
+          <span class="step">طبقة تقارير/BI للتحليل الثقيل</span>
+        </div>
+        <p style="margin:14px 0 0;color:var(--muted);font-size:14px;">
+          هذا المسار يرفع السقف التشغيلي دون إعادة بناء الموديولات — نفس ForgeOps، نفس لغة العمل.
+        </p>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="callout blue">
+        مرجع تقني داخلي للتفاصيل والأولويات: <code>docs/FIREBASE_SCALE_READINESS_REPORT_AR.md</code>
+        و<code>docs/PERFORMANCE_NOTES.md</code>. هذه الصفحة ملخّص إداري للشركة بنفس الحقائق.
+      </div>
+    </section>
+
+    <footer class="footer">
+      <a href="index.html">← العودة للنظرة العامة</a>
+      <a href="modules/01-dashboards.html">ابدأ بجولة الموديولات →</a>
+    </footer>
+  </main>
+</body>
+</html>

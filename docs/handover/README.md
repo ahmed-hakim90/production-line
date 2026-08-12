@@ -1,5 +1,13 @@
 # مستندات التسليم والتشغيل
 
+## عرض الشركة (HTML بالموديولات + صور)
+
+عرض إداري يشرح قوة ForgeOps لكل موديول بالصور الفعلية:
+
+- **[../company-showcase/index.html](../company-showcase/index.html)** — نظرة عامة + خريطة الموديولات
+- صفحات `../company-showcase/modules/01-…10-…html` — شرح تفصيلي لكل موديول
+- تحديث لقطات إضافية: `npm run showcase:screens`
+
 ## الملفات الرئيسية
 
 | الملف | الغرض |

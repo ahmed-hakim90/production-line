@@ -437,8 +437,9 @@ export function SmartFilterBar({
         <Button
           type="button"
           variant="ghost"
+          size="filter"
           className={cn(
-            'flex h-[var(--control-height)] flex-shrink-0 items-center gap-1 rounded-[var(--border-radius-base)] border-0 px-2.5 text-sm shadow-none hover:bg-[rgb(var(--color-primary)/0.06)]',
+            'flex h-full min-h-0 flex-shrink-0 items-center gap-1 rounded-[var(--border-radius-base)] border-0 px-2 shadow-none hover:bg-[rgb(var(--color-primary)/0.06)]',
             activeCount > 0 ? 'text-[rgb(var(--color-primary))]' : 'text-[var(--color-text-muted)]',
           )}
           aria-label={t('erpComponents.smartFilterBar.filters')}
@@ -645,7 +646,7 @@ export function SmartFilterBar({
   const renderFacetChip = (filter: FilterDef) => {
     const value = getValue(filter.key);
     const chipClass =
-      'inline-flex max-w-[200px] items-center gap-1 truncate rounded-none border-0 bg-transparent px-2 py-0.5 text-start text-[12px] text-[rgb(var(--color-primary))] shadow-none hover:bg-[rgb(var(--color-primary)/0.08)] focus:ring-0 h-auto';
+      'inline-flex h-[var(--control-height-sm)] max-w-[220px] items-center gap-1 truncate rounded-none border-0 bg-transparent px-2.5 text-start text-[var(--font-size-xs)] text-[rgb(var(--color-primary))] shadow-none hover:bg-[rgb(var(--color-primary)/0.08)] focus:ring-0';
 
     const clearButton = (
       <button
@@ -655,7 +656,7 @@ export function SmartFilterBar({
           event.stopPropagation();
           handleClearFilter(filter.key);
         }}
-        className="flex h-full items-center border-s border-[rgb(var(--color-primary)/0.2)] px-1.5 py-0.5 text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.12)]"
+        className="flex h-[var(--control-height-sm)] items-center border-s border-[rgb(var(--color-primary)/0.2)] px-1.5 text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.12)]"
         aria-label={t('erpComponents.smartFilterBar.clearFilter')}
       >
         <X className="h-3 w-3" />
@@ -663,7 +664,7 @@ export function SmartFilterBar({
     );
 
     const chipShellClass =
-      'inline-flex max-w-full items-center overflow-hidden rounded-[var(--border-radius-base)] bg-[rgb(var(--color-primary)/0.1)] text-[12px] text-[rgb(var(--color-primary))]';
+      'inline-flex h-[var(--control-height-sm)] max-w-full items-center overflow-hidden rounded-[var(--border-radius-base)] border border-[rgb(var(--color-primary)/0.18)] bg-[rgb(var(--color-primary)/0.08)] text-[var(--font-size-xs)] text-[rgb(var(--color-primary))]';
 
     // Dates: open native picker directly from the chip (no intermediate box).
     if (filter.type === 'date' || filter.type === 'month') {
@@ -731,69 +732,81 @@ export function SmartFilterBar({
     );
   };
 
-  const showSearchRow = onSearchChange != null || showFilterMenu || activeFacets.length > 0;
+  const showSearchControl = onSearchChange != null || showFilterMenu;
+  const hasTrailingActions = Boolean((periods && periods.length > 0) || extra || onApply != null);
 
   return (
-    <div dir={dir} className={cn('erp-smart-filter mb-4', className)}>
-      {/* Single surface — no nested card around the search field */}
-      <div className="flex flex-wrap items-center gap-[var(--filter-bar-gap)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--filter-bar-pad-x)] py-[var(--filter-bar-pad-y)]">
-        {showSearchRow && (
-          <div className="flex min-h-[var(--control-height)] min-w-[220px] max-w-3xl flex-1 flex-wrap items-center gap-1.5">
-            <Search className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-text-muted)]" aria-hidden />
+    <div dir={dir} className="erp-smart-filter">
+      {/*
+        Primary row: search + filter menu | period seg | actions
+        Active facets render on a second row so heights/radii stay aligned.
+      */}
+      <div
+        className={cn(
+          'flex flex-col gap-[var(--filter-bar-gap)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--filter-bar-pad-x)] py-[var(--filter-bar-pad-y)] mb-4',
+          className,
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-[var(--filter-bar-gap)]">
+          {showSearchControl && (
+            <div className="erp-search-input erp-search-input--table min-h-[var(--control-height)]">
+              <Search className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-text-muted)]" aria-hidden />
+              {onSearchChange != null ? (
+                <input
+                  type="text"
+                  value={searchValue}
+                  onChange={(event) => onSearchChange(event.target.value)}
+                  placeholder={resolvedSearchPlaceholder}
+                  className="min-w-[120px] flex-1"
+                />
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-sm text-[var(--color-text-muted)]">
+                  {t('erpComponents.smartFilterBar.filters')}
+                </span>
+              )}
+              {showFilterMenu ? filterMenu : null}
+            </div>
+          )}
+
+          {hasTrailingActions && (
+            <div className="flex flex-shrink-0 flex-wrap items-center gap-[var(--filter-bar-gap)] ms-auto">
+              {periods && periods.length > 0 && (
+                <div className="erp-date-seg" role="group">
+                  {periods.map((period) => (
+                    <button
+                      key={period.value}
+                      type="button"
+                      onClick={() => onPeriodChange?.(period.value)}
+                      className={cn('erp-date-seg-btn', activePeriod === period.value && 'active')}
+                      aria-pressed={activePeriod === period.value}
+                    >
+                      {period.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {extra}
+
+              {onApply != null && (
+                <Button
+                  type="button"
+                  onClick={onApply}
+                  bare
+                  size="filter"
+                  className="flex-shrink-0 bg-[rgb(var(--color-primary))] px-4 text-white hover:bg-[rgb(var(--color-primary-hover))]"
+                >
+                  {resolvedApplyLabel}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {activeFacets.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
             {activeFacets.map((filter) => renderFacetChip(filter))}
-            {onSearchChange != null ? (
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(event) => onSearchChange(event.target.value)}
-                placeholder={activeFacets.length > 0 ? '' : resolvedSearchPlaceholder}
-                className="h-8 min-w-[120px] flex-1 border-0 bg-transparent px-0.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] shadow-none outline-none focus:outline-none focus:ring-0"
-              />
-            ) : activeFacets.length === 0 ? (
-              <span className="px-0.5 text-sm text-[var(--color-text-muted)]">
-                {t('erpComponents.smartFilterBar.filters')}
-              </span>
-            ) : null}
-            {showFilterMenu ? (
-              <div className="ms-auto flex flex-shrink-0 items-center self-stretch">
-                {filterMenu}
-              </div>
-            ) : null}
           </div>
-        )}
-
-        {periods && periods.length > 0 && (
-          <div className="flex flex-shrink-0 overflow-hidden rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-            {periods.map((period) => (
-              <button
-                key={period.value}
-                type="button"
-                onClick={() => onPeriodChange?.(period.value)}
-                className={cn(
-                  'h-[var(--control-height)] whitespace-nowrap border-none px-3 text-xs transition-colors',
-                  activePeriod === period.value
-                    ? 'bg-[rgb(var(--color-primary))] font-medium text-white'
-                    : 'bg-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]',
-                )}
-              >
-                {period.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {extra}
-
-        {onApply != null && (
-          <Button
-            type="button"
-            onClick={onApply}
-            bare
-            className="ms-auto flex h-[var(--control-height)] flex-shrink-0 items-center gap-1.5 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-primary))] px-4 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-primary-hover))]"
-          >
-            <Search className="h-3.5 w-3.5" />
-            {resolvedApplyLabel}
-          </Button>
         )}
       </div>
     </div>

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>10 — النظام | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>MOD / 10</small></div>
+    <nav>
+      <a href="../index.html">النظرة العامة</a>
+      <a class="active" href="10-system.html">النظام</a>
+      <a href="../index.html">العودة للخريطة</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <div class="page-head">
+      <div>
+        <span class="badge">Platform control</span>
+        <h1>موديول النظام</h1>
+        <p>المستخدمون، الأدوار ومصفوفة الصلاحيات، الإعدادات، سجل النشاط، وجاهزية المستأجر — حوكمة المنصة.</p>
+      </div>
+    </div>
+    <section class="section">
+      <div class="grid-3">
+        <div class="card"><h3>ماذا يفعل؟</h3><p>يضبط من يرى ماذا، ثيم الواجهة مقابل قوالب الطباعة، واستعداد الشركة للتشغيل.</p></div>
+        <div class="card"><h3>قيمة للأعمال</h3><p>أقل مخاطر تسريب صلاحيات، وتتبع «من عدّل ماذا ومتى».</p></div>
+        <div class="card"><h3>من يستخدمه؟</h3><p>مدير النظام / أدمن المستأجر فقط.</p></div>
+      </div>
+    </section>
+    <section class="section">
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>الشاشة</th><th>المسار</th><th>الغرض</th></tr></thead>
+          <tbody>
+            <tr><td>المستخدمون</td><td><code>/system/users</code></td><td>حسابات الدخول والأدوار</td></tr>
+            <tr><td>الأدوار والصلاحيات</td><td><code>/roles</code></td><td>مصفوفة عرض/إضافة/تعديل/حذف</td></tr>
+            <tr><td>سجل النشاط</td><td><code>/activity-log</code></td><td>تدقيق العمليات</td></tr>
+            <tr><td>الإعدادات</td><td><code>/settings</code></td><td>ثيم، طباعة، توجيه مخزون…</td></tr>
+            <tr><td>جاهزية المستأجر</td><td><code>/system/readiness</code></td><td>قائمة تحقق قبل الإطلاق</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="section">
+      <h2>صور فعلية</h2>
+      <div class="shot-grid">
+        <figure class="shot wide">
+          <img src="../../handover/_screenshots/50-roles.png" alt="الأدوار" />
+          <figcaption>الأدوار والصلاحيات — مصفوفة دقيقة لكل مورد</figcaption>
+        </figure>
+        <figure class="shot wide">
+          <img src="../../handover/_screenshots/38-settings-routing.png" alt="الإعدادات" />
+          <figcaption>الإعدادات — توجيه المخزون وغيره</figcaption>
+        </figure>
+      </div>
+    </section>
+    <section class="section">
+      <div class="callout">
+        الواجهة تُخفي الأزرار حسب الصلاحية لراحة المستخدم فقط — الحماية الحقيقية على Firestore Rules وCloud Functions.
+      </div>
+    </section>
+    <footer class="footer">
+      <a href="09-quality.html">← الجودة</a>
+      <a href="../index.html">العودة لخريطة الموديولات →</a>
+    </footer>
+  </main>
+</body>
+</html>

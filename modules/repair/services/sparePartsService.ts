@@ -33,6 +33,21 @@ const nowIso = () => new Date().toISOString();
 const stockId = (branchId: string, partId: string, warehouseId?: string) =>
   warehouseId ? `${branchId}__${warehouseId}__${partId}` : `${branchId}__${partId}`;
 
+const nextSparePartCode = (parts: RepairSparePart[]) => {
+  const maxSerial = parts.reduce((max, part) => {
+    const match = String(part.code || '').trim().toUpperCase().match(/^SP-(\d{3})$/);
+    if (!match) return max;
+    const current = Number(match[1] || 0);
+    return Number.isFinite(current) ? Math.max(max, current) : max;
+  }, 0);
+  return `SP-${String(maxSerial + 1).padStart(3, '0')}`;
+};
+
+const partLinkedToMaterial = (part: RepairSparePart, materialId: string) => {
+  const linked = String(part.materialId || part.rawMaterialId || '').trim();
+  return linked === materialId;
+};
+
 export const sparePartsService = {
   async listParts(branchId: string): Promise<RepairSparePart[]> {
     if (!isConfigured || !branchId) return [];
@@ -351,7 +366,74 @@ export const sparePartsService = {
   },
 
   /**
+   * Ensure a branch catalog part exists for a materials-master id (create if missing).
+   * Used after stock-count approve and opening-balance sync so مركز inventory UI is not empty.
+   */
+  async ensurePartForMaterial(input: {
+    branchId: string;
+    materialId: string;
+    fallbackName?: string;
+    fallbackCode?: string;
+    fallbackCategory?: string;
+    fallbackUnit?: string;
+    minStock?: number;
+    existingParts?: RepairSparePart[];
+  }): Promise<RepairSparePart | null> {
+    if (!isConfigured) return null;
+    const branchId = String(input.branchId || '').trim();
+    const materialId = String(input.materialId || '').trim();
+    if (!branchId || !materialId) return null;
+
+    const parts = input.existingParts ?? await this.listParts(branchId);
+    const existing = parts.find((row) => partLinkedToMaterial(row, materialId));
+    if (existing?.id) return existing;
+
+    const { materialService } = await import('../../manufacturing/services/materialService');
+    const {
+      isMaterialAvailableForSpareParts,
+    } = await import('../../manufacturing/utils/isMaterialAvailableForSpareParts');
+    const material = await materialService.getById(materialId).catch(() => null);
+    if (material && !isMaterialAvailableForSpareParts(material)) {
+      return null;
+    }
+
+    const name = String(material?.name || input.fallbackName || materialId).trim() || materialId;
+    const code = String(input.fallbackCode || material?.code || '').trim() || nextSparePartCode(parts);
+    const unitRaw = String(material?.baseUnit || input.fallbackUnit || 'piece').trim() || 'piece';
+    const unit = unitRaw === 'piece' ? 'قطعة' : unitRaw;
+    const category = String(material?.categoryName || input.fallbackCategory || 'قطع غيار').trim() || 'قطع غيار';
+    const minStock = Number.isFinite(Number(input.minStock))
+      ? Number(input.minStock)
+      : Number(material?.minStock || 0);
+
+    const partId = await this.createPart({
+      branchId,
+      name,
+      code,
+      category,
+      unit,
+      minStock,
+      materialId,
+    });
+    if (!partId) return null;
+
+    return {
+      id: partId,
+      tenantId: getCurrentTenantId(),
+      branchId,
+      name,
+      code,
+      category,
+      unit,
+      minStock,
+      materialId,
+      createdAt: nowIso(),
+    };
+  },
+
+  /**
    * Set warehouse-scoped repair ledger qty to an absolute value (used after inventory count approve).
+   * When createIfMissing is true, creates the branch catalog row from materials master first.
    */
   async setWarehouseStockAbsolute(input: {
     branchId: string;
@@ -361,6 +443,11 @@ export const sparePartsService = {
     quantity: number;
     createdBy: string;
     notes?: string;
+    createIfMissing?: boolean;
+    fallbackName?: string;
+    fallbackCode?: string;
+    fallbackUnit?: string;
+    existingParts?: RepairSparePart[];
   }): Promise<boolean> {
     if (!isConfigured) return false;
     const branchId = String(input.branchId || '').trim();
@@ -369,11 +456,19 @@ export const sparePartsService = {
     const target = Number(input.quantity);
     if (!branchId || !warehouseId || !materialId || !Number.isFinite(target) || target < 0) return false;
 
-    const parts = await this.listParts(branchId);
-    const part = parts.find((row) => {
-      const linked = String(row.materialId || row.rawMaterialId || '').trim();
-      return linked === materialId;
-    });
+    let parts = input.existingParts ?? await this.listParts(branchId);
+    let part = parts.find((row) => partLinkedToMaterial(row, materialId)) || null;
+    if (!part?.id && input.createIfMissing !== false) {
+      part = await this.ensurePartForMaterial({
+        branchId,
+        materialId,
+        fallbackName: input.fallbackName,
+        fallbackCode: input.fallbackCode,
+        fallbackUnit: input.fallbackUnit,
+        existingParts: parts,
+      });
+      if (part) parts = [...parts, part];
+    }
     if (!part?.id) return false;
 
     const stockRows = await this.listStock(branchId, warehouseId);
@@ -392,6 +487,45 @@ export const sparePartsService = {
       notes: input.notes || 'مزامنة من اعتماد جرد المخزن',
     });
     return true;
+  },
+
+  /**
+   * Pull inventory SoT balances into the branch spare-parts catalog + ledger via Cloud Function.
+   * Center managers may run this (mirror SoT) — free-hand +/- stays on stockAdjust only.
+   */
+  async syncBranchCatalogFromWarehouseBalances(input: {
+    branchId: string;
+    warehouseId: string;
+    warehouseName?: string;
+    createdBy: string;
+  }): Promise<{ createdParts: number; synced: number; failed: number }> {
+    if (!isConfigured) {
+      return { createdParts: 0, synced: 0, failed: 0 };
+    }
+    const branchId = String(input.branchId || '').trim();
+    const warehouseId = String(input.warehouseId || '').trim();
+    if (!branchId || !warehouseId) {
+      throw new Error('بيانات الفرع/المخزن غير مكتملة للمزامنة.');
+    }
+
+    const { httpsCallable } = await import('firebase/functions');
+    const { functionsClient } = await import('../../auth/services/firebase');
+    if (!functionsClient) throw new Error('خدمات السحابة غير متاحة.');
+    const callable = httpsCallable<
+      { branchId: string; warehouseId: string; warehouseName?: string },
+      { ok: boolean; createdParts: number; synced: number; failed: number }
+    >(functionsClient, 'syncRepairCenterCatalogFromInventory');
+    const result = await callable({
+      branchId,
+      warehouseId,
+      warehouseName: input.warehouseName,
+    });
+    const data = result.data || { createdParts: 0, synced: 0, failed: 0 };
+    return {
+      createdParts: Number(data.createdParts || 0),
+      synced: Number(data.synced || 0),
+      failed: Number(data.failed || 0),
+    };
   },
 
   async deductPart(

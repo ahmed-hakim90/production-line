@@ -25,6 +25,7 @@ import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import { ImportItemLocationsModal } from '../components/ImportItemLocationsModal';
 
 type ShelfMode = 'single' | 'numeric_range' | 'alpha_range';
 type LocationModal = null | 'rack' | 'editRack' | 'shelves' | 'import';
@@ -101,6 +102,7 @@ export const WarehouseLocations: React.FC = () => {
   const [defaultItemKey, setDefaultItemKey] = useState('');
   const [defaultLocationId, setDefaultLocationId] = useState('');
   const [modal, setModal] = useState<LocationModal>(null);
+  const [itemLocationImportOpen, setItemLocationImportOpen] = useState(false);
   const [modalSaving, setModalSaving] = useState(false);
   const modalSavingRef = useRef(false);
   const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null);
@@ -666,6 +668,15 @@ export const WarehouseLocations: React.FC = () => {
             حفظ الافتراضي
           </Button>
         </div>
+        <div className="flex flex-wrap gap-2 px-4 pb-4">
+          <Button
+            variant="secondary"
+            disabled={!canManage || !warehouseId}
+            onClick={() => setItemLocationImportOpen(true)}
+          >
+            رفع كود المادة واللوكيشن
+          </Button>
+        </div>
       </OpsDashPanel>
 
       <OpsDashPanel title="المخزن ← الراك ← الأرفف" accent="inventory" bodyClassName="p-0 overflow-hidden">
@@ -900,6 +911,16 @@ export const WarehouseLocations: React.FC = () => {
         </div>
         </ManagedModalPortal>
       )}
+      <ImportItemLocationsModal
+        open={itemLocationImportOpen}
+        onClose={() => setItemLocationImportOpen(false)}
+        warehouses={warehouses}
+        balances={[]}
+        initialWarehouseId={warehouseId}
+        warehouseSelectLocked={warehouseSelectLocked}
+        canMoveStock={can('inventory.transactions.create')}
+        onApplied={() => void load()}
+      />
     </ModuleOpsPageShell>
   );
 };

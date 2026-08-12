@@ -16,6 +16,7 @@ import { createRequest, getPendingApprovals, type ApprovalEmployeeInfo, type Fir
 import { formatPenaltyRequestSummary } from '../approval/penaltyApproval';
 import { getEmployeeLockedPayslip } from '../payroll';
 import { PayslipPrint } from '../components/PayslipPrint';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import type { PayslipData } from '../utils/payslipGenerator';
 import type { FirestorePayrollRecord } from '../payroll';
 import type {
@@ -1046,9 +1047,9 @@ export const EmployeeSelfService: React.FC = () => {
         </OpsDashPanel>
       )}
       </OpsDashPanel>
-      <div className="hidden" aria-hidden>
+      <PrintOffscreenHost>
         <PayslipPrint ref={printRef} data={payslipPrintData} printSettings={printTemplate} />
-      </div>
+      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

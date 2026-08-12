@@ -355,6 +355,21 @@
         );
     }
 
+    /** Manual center stock qty change / delete — inventory & multi-center admins, not branch-only managers. */
+    function pl_canAdjustRepairCenterStock() {
+      let p = pl_currentRoleDoc().data.permissions;
+      return pl_isSuperAdmin()
+        || (
+          pl_rolePermMapOk()
+          && (
+            pl_rolePermTrue(p, 'repair.parts.stockAdjust')
+            || pl_rolePermTrue(p, 'inventory.counts.manage')
+            || pl_rolePermTrue(p, 'repair.adminDashboard.view')
+            || pl_rolePermTrue(p, 'repair.branches.manage')
+          )
+        );
+    }
+
     function pl_canReadWarehouseIdField() {
       return pl_sameTenantOrLegacyRead()
         && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
@@ -1260,18 +1275,31 @@
       allow create, update: if pl_hasErpPermission('repair.parts.manage')
         && pl_canCreateRepairBranchScoped()
         && pl_repairSparePartMaterialLinkOk();
-      allow delete: if pl_hasErpPermission('repair.parts.manage') && pl_canReadRepairBranchScoped();
+      allow delete: if pl_canAdjustRepairCenterStock() && pl_canReadRepairBranchScoped();
     }
 
     match /repair_spare_parts_stock/{id} {
       allow read: if pl_hasErpPermission('repair.parts.view') && pl_canReadRepairBranchScoped();
-      allow create, update: if pl_hasErpPermission('repair.parts.manage') && pl_canCreateRepairBranchScoped();
-      allow delete: if pl_hasErpPermission('repair.parts.manage') && pl_canReadRepairBranchScoped();
+      // Center managers may seed qty=0 when adding a catalog part; qty changes need stockAdjust (or elevated).
+      allow create: if pl_canCreateRepairBranchScoped()
+        && (
+          pl_canAdjustRepairCenterStock()
+          || (
+            pl_hasErpPermission('repair.parts.manage')
+            && request.resource.data.get('quantity', 0) == 0
+          )
+        );
+      allow update: if pl_canAdjustRepairCenterStock() && pl_canCreateRepairBranchScoped();
+      allow delete: if pl_canAdjustRepairCenterStock() && pl_canReadRepairBranchScoped();
     }
 
     match /repair_parts_transactions/{id} {
       allow read: if pl_hasErpPermission('repair.parts.view') && pl_canReadRepairBranchScoped();
-      allow create: if pl_hasErpPermission('repair.parts.manage') && pl_canCreateRepairBranchScoped();
+      allow create: if pl_canCreateRepairBranchScoped()
+        && (
+          pl_canAdjustRepairCenterStock()
+          || pl_hasErpPermission('repair.parts.manage')
+        );
       allow update, delete: if false;
     }
 

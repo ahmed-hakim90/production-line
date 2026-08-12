@@ -1,0 +1,237 @@
+import React, { forwardRef } from 'react';
+import type { PrintDocumentTypeId, PrintTemplateSettings } from '../../../../types';
+import { SingleReportPrint, WorkOrderPrint } from '../../../production/components/ProductionReportPrint';
+import type { ReportPrintRow } from '../../../production/components/ProductionReportPrint';
+import { ProductionWorkerReportPrint } from '../../../production/components/ProductionWorkerReportPrint';
+import { RoutingExecutionPrint } from '../../../production/routing/components/RoutingExecutionPrint';
+import { RepairSalesInvoicePrint } from '../../../repair/components/RepairSalesInvoicePrint';
+import { RepairPaymentPrint } from '../../../repair/components/RepairPaymentPrint';
+import { RepairSpareIssuePrint } from '../../../repair/components/RepairSpareIssuePrint';
+import { RepairTreasuryMonthlyPrint } from '../../../repair/components/RepairTreasuryMonthlyPrint';
+import { SparePartsInventoryCountPrint } from '../../../repair/components/SparePartsInventoryCountPrint';
+import { WarehouseCountSheetPrint } from '../../../inventory/components/WarehouseCountSheetPrint';
+import { StockTransferPrint } from '../../../inventory/components/StockTransferPrint';
+import { ItemCardPrint } from '../../../inventory/components/ItemCardPrint';
+import { SuppliesReceiptPrint } from '../../../inventory/components/SuppliesReceiptPrint';
+import { AccountingReportPrint } from '../../../accounting/components/AccountingReportPrint';
+import { QualityReportPrint } from '../../../quality/components/QualityReportPrint';
+import { PayslipPrint } from '../../../hr/components/PayslipPrint';
+import { CatalogProductDetailPrint } from '../../../catalog/components/CatalogProductDetailPrint';
+import { FactoryPrintShell } from '@/src/components/erp/FactoryPrintShell';
+import { resolvePrintAccentHex } from '@/utils/printTheme';
+import { getPrintDocumentEntry } from '../../../../utils/print/printDocumentRegistry';
+import { DEFAULT_PRINT_TEMPLATE } from '../../../../utils/dashboardConfig';
+import {
+  PRINT_PREVIEW_ACCOUNTING,
+  PRINT_PREVIEW_BRANCH_NAME,
+  PRINT_PREVIEW_CATALOG_PRODUCT,
+  PRINT_PREVIEW_ITEM_CARD,
+  PRINT_PREVIEW_PAYSLIP,
+  PRINT_PREVIEW_QUALITY,
+  PRINT_PREVIEW_REPAIR_INVOICE,
+  PRINT_PREVIEW_REPAIR_PAYMENT_AUTH,
+  PRINT_PREVIEW_REPAIR_SPARE_ISSUE,
+  PRINT_PREVIEW_REPAIR_TREASURY,
+  PRINT_PREVIEW_ROUTING_EXECUTION,
+  PRINT_PREVIEW_SAMPLE_ROW,
+  PRINT_PREVIEW_SPARE_PARTS_COUNT,
+  PRINT_PREVIEW_SUPPLIES_RECEIPT,
+  PRINT_PREVIEW_TRANSFER,
+  PRINT_PREVIEW_WAREHOUSE_COUNT,
+  PRINT_PREVIEW_WORK_ORDER,
+  PRINT_PREVIEW_WORKER_REPORT,
+} from '../../lib/printPreviewSamples';
+
+type Props = {
+  docType: PrintDocumentTypeId;
+  printSettings: PrintTemplateSettings;
+  sampleRow?: ReportPrintRow;
+};
+
+/** Generic shell preview for document types that still use a custom layout outside the shared table engine. */
+const GenericShellPreview = forwardRef<
+  HTMLDivElement,
+  { docType: PrintDocumentTypeId; printSettings: PrintTemplateSettings }
+>(function GenericShellPreview({ docType, printSettings }, ref) {
+  const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+  const entry = getPrintDocumentEntry(docType);
+  const printedAt = new Date().toLocaleString('ar-EG');
+  return (
+    <FactoryPrintShell
+      ref={ref}
+      companyName={ps.headerText || 'مؤسسة المغربي'}
+      documentType={entry.labelAr}
+      printDate={printedAt}
+      logoUrl={ps.logoUrl}
+      brandAccent={resolvePrintAccentHex(ps.primaryColor)}
+      footerTagline={ps.footerText?.trim() || undefined}
+      paperWidth="210mm"
+      minHeight="120mm"
+      padding="10mm 12mm"
+      metaCards={[
+        { label: 'نوع المستند', value: entry.labelAr },
+        { label: 'المعاينة', value: 'محرك الطباعة' },
+        { label: 'التاريخ', value: printedAt },
+        { label: 'الحالة', value: 'عينة' },
+      ]}
+      kpis={[
+        { label: 'بنود تجريبية', value: 3, tone: 'default' },
+        { label: 'إجمالي', value: '1,250', tone: 'indigo' },
+      ]}
+      signatures={[{ title: 'المسؤول' }, { title: 'الاعتماد' }]}
+    >
+      <p className="text-[12px] font-bold text-slate-600 leading-relaxed">
+        هذه معاينة لهوية الطباعة الموحدة (الشعار + اسم الشركة + الجدول). المستند التشغيلي الكامل يُطبع من صفحته بنفس المحرك.
+      </p>
+    </FactoryPrintShell>
+  );
+});
+
+/**
+ * Single switch that renders the real print component for every registry document type.
+ * Used by the print engine settings page (inline + modal preview).
+ */
+export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
+  function PrintEngineDocumentPreview({ docType, printSettings, sampleRow }, ref) {
+    const previewRow = sampleRow ?? PRINT_PREVIEW_SAMPLE_ROW;
+
+    switch (docType) {
+      case 'productionReport':
+        return <SingleReportPrint ref={ref} report={previewRow} printSettings={printSettings} />;
+      case 'workOrder':
+        return <WorkOrderPrint ref={ref} data={PRINT_PREVIEW_WORK_ORDER} printSettings={printSettings} />;
+      case 'repairSalesInvoice':
+        return (
+          <RepairSalesInvoicePrint
+            ref={ref}
+            invoice={PRINT_PREVIEW_REPAIR_INVOICE}
+            branchName={PRINT_PREVIEW_BRANCH_NAME}
+            printSettings={printSettings}
+          />
+        );
+      case 'stockTransfer':
+        return <StockTransferPrint ref={ref} data={PRINT_PREVIEW_TRANSFER} printSettings={printSettings} />;
+      case 'itemCard':
+        return <ItemCardPrint ref={ref} card={PRINT_PREVIEW_ITEM_CARD} printSettings={printSettings} />;
+      case 'accountingReport':
+        return (
+          <AccountingReportPrint
+            ref={ref}
+            title={PRINT_PREVIEW_ACCOUNTING.title}
+            subtitle={PRINT_PREVIEW_ACCOUNTING.subtitle}
+            columns={[...PRINT_PREVIEW_ACCOUNTING.columns]}
+            rows={[...PRINT_PREVIEW_ACCOUNTING.rows]}
+            printSettings={printSettings}
+          />
+        );
+      case 'qualityReport':
+        return (
+          <QualityReportPrint
+            ref={ref}
+            title={PRINT_PREVIEW_QUALITY.title}
+            subtitle={PRINT_PREVIEW_QUALITY.subtitle}
+            workOrderNumber={PRINT_PREVIEW_QUALITY.workOrderNumber}
+            summary={PRINT_PREVIEW_QUALITY.summary}
+            topDefects={[...PRINT_PREVIEW_QUALITY.topDefects]}
+            printSettings={printSettings}
+          />
+        );
+      case 'payslip':
+        return <PayslipPrint ref={ref} data={PRINT_PREVIEW_PAYSLIP as any} printSettings={printSettings} />;
+      case 'suppliesReceipt':
+        return (
+          <SuppliesReceiptPrint
+            ref={ref}
+            order={PRINT_PREVIEW_SUPPLIES_RECEIPT as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'repairPayment':
+        return (
+          <RepairPaymentPrint
+            ref={ref}
+            authorization={PRINT_PREVIEW_REPAIR_PAYMENT_AUTH as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'repairSpareIssue':
+        return (
+          <RepairSpareIssuePrint
+            ref={ref}
+            issue={PRINT_PREVIEW_REPAIR_SPARE_ISSUE as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'repairSparePartsCount':
+        return (
+          <SparePartsInventoryCountPrint
+            ref={ref}
+            rows={PRINT_PREVIEW_SPARE_PARTS_COUNT.rows as any}
+            branchName={PRINT_PREVIEW_SPARE_PARTS_COUNT.branchName}
+            warehouseName={PRINT_PREVIEW_SPARE_PARTS_COUNT.warehouseName}
+            locationByItemId={PRINT_PREVIEW_SPARE_PARTS_COUNT.locationByItemId}
+            printSettings={printSettings}
+          />
+        );
+      case 'warehouseStockCount':
+        return (
+          <WarehouseCountSheetPrint
+            ref={ref}
+            rows={[...PRINT_PREVIEW_WAREHOUSE_COUNT.rows]}
+            warehouseName={PRINT_PREVIEW_WAREHOUSE_COUNT.warehouseName}
+            warehouseRoleLabel={PRINT_PREVIEW_WAREHOUSE_COUNT.warehouseRoleLabel}
+            printSettings={printSettings}
+          />
+        );
+      case 'repairTreasuryMonthly':
+        return (
+          <RepairTreasuryMonthlyPrint
+            ref={ref}
+            report={PRINT_PREVIEW_REPAIR_TREASURY as any}
+            branchLabel={PRINT_PREVIEW_BRANCH_NAME}
+            printSettings={printSettings}
+          />
+        );
+      case 'routingExecution':
+        return (
+          <RoutingExecutionPrint
+            ref={ref}
+            execution={PRINT_PREVIEW_ROUTING_EXECUTION.execution as any}
+            steps={PRINT_PREVIEW_ROUTING_EXECUTION.steps as any}
+            productName={PRINT_PREVIEW_ROUTING_EXECUTION.productName}
+            supervisorName={PRINT_PREVIEW_ROUTING_EXECUTION.supervisorName}
+            printSettings={printSettings}
+          />
+        );
+      case 'productionWorkerReport':
+        return (
+          <ProductionWorkerReportPrint
+            ref={ref}
+            title={PRINT_PREVIEW_WORKER_REPORT.title}
+            subtitle={PRINT_PREVIEW_WORKER_REPORT.subtitle}
+            columns={[...PRINT_PREVIEW_WORKER_REPORT.columns]}
+            rows={[...PRINT_PREVIEW_WORKER_REPORT.rows]}
+            printSettings={printSettings}
+          />
+        );
+      case 'catalogProductDetail':
+        return (
+          <CatalogProductDetailPrint
+            ref={ref}
+            productId={PRINT_PREVIEW_CATALOG_PRODUCT.productId}
+            productName={PRINT_PREVIEW_CATALOG_PRODUCT.productName}
+            productCode={PRINT_PREVIEW_CATALOG_PRODUCT.productCode}
+            category={PRINT_PREVIEW_CATALOG_PRODUCT.category}
+            periodLabel={PRINT_PREVIEW_CATALOG_PRODUCT.periodLabel}
+            kpis={[...PRINT_PREVIEW_CATALOG_PRODUCT.kpis]}
+            rows={[...PRINT_PREVIEW_CATALOG_PRODUCT.rows]}
+            printSettings={printSettings}
+          />
+        );
+      default:
+        return <GenericShellPreview ref={ref} docType={docType} printSettings={printSettings} />;
+    }
+  },
+);
+
+PrintEngineDocumentPreview.displayName = 'PrintEngineDocumentPreview';

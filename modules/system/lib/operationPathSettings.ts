@@ -122,6 +122,7 @@ export const INVENTORY_STOCK_MOVE_PATHS = {
   componentReturn: 'component_return',
   componentCompensation: 'component_compensation',
   productionIssueReverse: 'production_issue_reverse',
+  itemLocationImport: 'item_location_import',
 } as const;
 
 export const INVENTORY_TRANSFER_CREATE_PATHS = {
@@ -269,6 +270,7 @@ export const OPERATION_PATH_REGISTRY: ReadonlyArray<OperationPathRegistryEntry> 
       { key: INVENTORY_STOCK_MOVE_PATHS.componentReturn, label: 'مرتجع مكون', description: 'إرجاع مكون من أرضية الإنتاج.' },
       { key: INVENTORY_STOCK_MOVE_PATHS.componentCompensation, label: 'تعويض مكون', description: 'صرف مكون تعويضي معتمد.' },
       { key: INVENTORY_STOCK_MOVE_PATHS.productionIssueReverse, label: 'عكس صرف إنتاج', description: 'عكس المخزون عند إلغاء الصرف.' },
+      { key: INVENTORY_STOCK_MOVE_PATHS.itemLocationImport, label: 'استيراد مواقع الأصناف', description: 'نقل الرصيد داخل المخزن عند رفع كود المادة واللوكيشن الجديد.' },
     ],
   },
   {

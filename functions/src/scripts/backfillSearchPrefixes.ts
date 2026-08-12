@@ -3,8 +3,8 @@ import { FieldPath, getFirestore, type DocumentData, type QueryDocumentSnapshot 
 import { buildSearchPrefixes } from '../searchPrefixes.js';
 
 const PROFILES: Record<string, string[]> = {
-  products: ['name', 'code', 'barcode', 'barcodeNormalized'],
-  materials: ['name', 'code', 'barcode'],
+  products: ['code', 'barcode', 'barcodeNormalized', 'name'],
+  materials: ['code', 'barcode', 'name'],
   customers: ['name', 'code', 'phone', 'phoneDigits'],
   employees: ['name', 'code', 'phone', 'email'],
   users: ['displayName', 'email'],

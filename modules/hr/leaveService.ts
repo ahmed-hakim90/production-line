@@ -308,6 +308,17 @@ export async function syncLeaveApprovalDecision(params: {
 
 // ─── Leave Request Service ──────────────────────────────────────────────────
 
+function normalizeLeaveRequestDoc(
+  id: string,
+  data: Record<string, unknown>,
+): FirestoreLeaveRequest {
+  return {
+    id,
+    ...data,
+    approvalChain: Array.isArray(data.approvalChain) ? data.approvalChain : [],
+  } as FirestoreLeaveRequest;
+}
+
 export const leaveRequestService = {
   async create(data: Omit<FirestoreLeaveRequest, 'id' | 'createdAt'>): Promise<string> {
     if (!isConfigured) return '';
@@ -323,7 +334,7 @@ export const leaveRequestService = {
     if (!isConfigured) return [];
     const q = query(leaveRequestsRef(), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+    return snap.docs.map((d) => normalizeLeaveRequestDoc(d.id, d.data() as Record<string, unknown>));
   },
 
   async getByEmployee(employeeId: string): Promise<FirestoreLeaveRequest[]> {
@@ -333,7 +344,7 @@ export const leaveRequestService = {
       where('employeeId', '==', employeeId),
     );
     const snap = await getDocs(q);
-    const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+    const results = snap.docs.map((d) => normalizeLeaveRequestDoc(d.id, d.data() as Record<string, unknown>));
     return results.sort((a, b) => {
       const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
       const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
@@ -345,7 +356,7 @@ export const leaveRequestService = {
     if (!isConfigured) return null;
     const snap = await getDoc(doc(db, HR_COLLECTIONS.LEAVE_REQUESTS, id));
     if (!snap.exists()) return null;
-    return { id: snap.id, ...snap.data() } as FirestoreLeaveRequest;
+    return normalizeLeaveRequestDoc(snap.id, snap.data() as Record<string, unknown>);
   },
 
   async getPending(): Promise<FirestoreLeaveRequest[]> {
@@ -355,7 +366,7 @@ export const leaveRequestService = {
       where('finalStatus', '==', 'pending'),
     );
     const snap = await getDocs(q);
-    const results = snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLeaveRequest));
+    const results = snap.docs.map((d) => normalizeLeaveRequestDoc(d.id, d.data() as Record<string, unknown>));
     return results.sort((a, b) => {
       const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
       const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;

@@ -8,6 +8,10 @@ import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
+import {
+  FactoryPrintTable,
+  FactoryPrintTableAccentValue,
+} from '@/src/components/erp/FactoryPrintTable';
 import type { SuppliesReceiptOrder } from '../types';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 
@@ -67,50 +71,45 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
         locationCode: string;
       }>,
     ) => (
-      <table className="mb-4 w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
-        <thead>
-          <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
-            <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '8%' }}>م</th>
-            <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '16%' }}>كود الصنف</th>
-            <th className="border border-slate-200 px-2 py-2" style={{ width: '36%' }}>اسم المكون</th>
-            <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '12%' }}>الوحدة</th>
-            <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '14%' }}>الكمية</th>
-            <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '14%' }}>اللوكيشن</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map((line, index) => (
-            <tr key={`${line.itemCode}-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-              <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold text-slate-500">
-                {index + 1}
-              </td>
-              <td className="border border-slate-200 px-2 py-2 text-center font-mono text-[11px] font-bold">
-                {line.itemCode || '—'}
-              </td>
-              <td className="border border-slate-200 px-2 py-2 text-[12px] font-extrabold text-slate-900">
-                {line.itemName}
-                {line.suggestedQty != null && Number(line.suggestedQty) !== Number(line.quantity) ? (
-                  <span className="mt-0.5 block text-[10px] font-bold text-slate-500">
-                    مقترح BOM: {fmtQty(Number(line.suggestedQty))}
-                  </span>
-                ) : null}
-              </td>
-              <td className="border border-slate-200 px-2 py-2 text-center text-[11px] font-bold">
-                {line.unit || '—'}
-              </td>
-              <td
-                className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums"
-                style={{ color: accent }}
-              >
-                {fmtQty(Number(line.quantity || 0))}
-              </td>
-              <td className="border border-slate-200 px-2 py-2 text-center text-[11px] font-bold">
-                {line.locationCode || '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="mb-4">
+        <FactoryPrintTable
+          brandAccent={accent}
+          printSettings={ps}
+          dense={isThermal}
+          columns={[
+            { key: 'idx', header: 'م', width: '8%', align: 'center' },
+            { key: 'code', header: 'كود الصنف', width: '16%', align: 'center' },
+            { key: 'name', header: 'اسم المكون', width: '36%' },
+            { key: 'unit', header: 'الوحدة', width: '12%', align: 'center' },
+            { key: 'qty', header: 'الكمية', width: '14%', align: 'center' },
+            { key: 'location', header: 'اللوكيشن', width: '14%', align: 'center' },
+          ]}
+          rows={lines.map((line, index) => ({
+            key: `${line.itemCode}-${index}`,
+            cells: {
+              idx: index + 1,
+              code: <span className="font-mono text-[11px] font-bold">{line.itemCode || '—'}</span>,
+              name: (
+                <>
+                  {line.itemName}
+                  {line.suggestedQty != null && Number(line.suggestedQty) !== Number(line.quantity) ? (
+                    <span className="mt-0.5 block text-[10px] font-bold text-slate-500">
+                      مقترح BOM: {fmtQty(Number(line.suggestedQty))}
+                    </span>
+                  ) : null}
+                </>
+              ),
+              unit: line.unit || '—',
+              qty: (
+                <FactoryPrintTableAccentValue accent={accent} className="text-[13px]">
+                  {fmtQty(Number(line.quantity || 0))}
+                </FactoryPrintTableAccentValue>
+              ),
+              location: line.locationCode || '—',
+            },
+          }))}
+        />
+      </div>
     );
 
     return (

@@ -1377,6 +1377,7 @@ export const stockService = {
     });
 
     // Keep repair center UI ledger aligned when this warehouse is a maintenance center.
+    // Create missing catalog rows — otherwise جدول المخزون stays empty after opening-balance approve.
     try {
       const { repairBranchService } = await import('../../repair/services/repairBranchService');
       const { sparePartsService } = await import('../../repair/services/sparePartsService');
@@ -1385,17 +1386,33 @@ export const stockService = {
         (row) => String(row.warehouseId || '').trim() === String(session.warehouseId || '').trim(),
       );
       if (branch?.id) {
+        let parts = await sparePartsService.listParts(String(branch.id)).catch(() => []);
         for (const line of session.lines) {
           if (String(line.itemType || '') !== 'material') continue;
-          await sparePartsService.setWarehouseStockAbsolute({
+          const materialId = String(line.itemId || '').trim();
+          if (!materialId) continue;
+          const ok = await sparePartsService.setWarehouseStockAbsolute({
             branchId: String(branch.id),
             warehouseId: session.warehouseId,
             warehouseName: session.warehouseName,
-            materialId: String(line.itemId || '').trim(),
+            materialId,
             quantity: Number(line.countedQty || 0),
             createdBy: approvedBy,
             notes: `مزامنة اعتماد جرد ${session.id}`,
+            createIfMissing: true,
+            fallbackName: line.itemName,
+            fallbackCode: line.itemCode,
+            existingParts: parts,
           }).catch(() => false);
+          if (ok) {
+            const linked = parts.find((row) => {
+              const id = String(row.materialId || row.rawMaterialId || '').trim();
+              return id === materialId;
+            });
+            if (!linked) {
+              parts = await sparePartsService.listParts(String(branch.id)).catch(() => parts);
+            }
+          }
         }
       }
     } catch {

@@ -21,6 +21,7 @@ import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge'
 import { defaultTenantSlug, withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
+import { StatusBadge } from '../components/StatusBadge';
 import {
   custodyAgeDays,
   formatRepairOpsDateShort,
@@ -32,7 +33,9 @@ import { computeCustomerDeviceBalances } from '../lib/repairCustomerCustody';
 import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
+import { mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
 import {
+  REPAIR_JOB_STATUS_LABELS,
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairCustodyRecord,
@@ -40,9 +43,31 @@ import {
 
 const PAGE_SIZE = 20;
 
+/** Common job statuses for custody follow-up filters (canonical ids). */
+const CUSTODY_STATUS_FILTER_IDS = [
+  'received',
+  'diagnosing',
+  'diagnosed',
+  'estimate_ready',
+  'waiting_approval',
+  'waiting_parts',
+  'repairing',
+  'testing',
+  'ready',
+  'delivered',
+  'cancelled',
+  'unrepairable',
+] as const;
+
 type CustodyRow = RepairCustodyRecord & { remaining: number; ageDays: number };
 
 type CustodyStockType = 'custody' | 'unrepairable';
+type CustodyAgeFilter = 'all' | '7' | '14';
+
+function parseAgeFilterParam(raw: string | null): CustodyAgeFilter {
+  if (raw === '7' || raw === '14') return raw;
+  return 'all';
+}
 
 export const RepairCustodyStock: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
@@ -67,7 +92,10 @@ export const RepairCustodyStock: React.FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
-  const [ageFilter, setAgeFilter] = useState<'all' | '7' | '14'>('all');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [ageFilter, setAgeFilter] = useState<CustodyAgeFilter>(() =>
+    parseAgeFilterParam(searchParams.get('age')),
+  );
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<CustodyRow | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -140,10 +168,28 @@ export const RepairCustodyStock: React.FC = () => {
   useEffect(() => {
     setSearch('');
     setBranchFilter('');
-    setAgeFilter('all');
+    setStatusFilter('');
+    setAgeFilter(parseAgeFilterParam(searchParams.get('age')));
     setPage(1);
     setSelected(null);
   }, [unrepairableMode]);
+
+  // Deep-link age filter from dashboards: ?age=7|14
+  useEffect(() => {
+    const fromUrl = parseAgeFilterParam(searchParams.get('age'));
+    setAgeFilter((prev) => (prev === fromUrl ? prev : fromUrl));
+  }, [searchParams]);
+
+  const setAgeFilterAndUrl = useCallback(
+    (next: CustodyAgeFilter) => {
+      setAgeFilter(next);
+      const params = new URLSearchParams(searchParams);
+      if (next === 'all') params.delete('age');
+      else params.set('age', next);
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   const branchName = useCallback(
     (branchId?: string) => branches.find((b) => b.id === branchId)?.name || branchId || '—',
@@ -166,11 +212,25 @@ export const RepairCustodyStock: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const statusCanon = statusFilter ? mapLegacyRepairStatus(statusFilter) : '';
     return visible.filter((row) => {
       if (branchFilter && row.branchId !== branchFilter) return false;
       if (ageFilter === '7' && row.ageDays < 7) return false;
       if (ageFilter === '14' && row.ageDays < 14) return false;
+      if (statusCanon) {
+        const rowStatus = row.jobStatus
+          ? mapLegacyRepairStatus(row.jobStatus)
+          : unrepairableMode
+            ? 'unrepairable'
+            : '';
+        if (rowStatus !== statusCanon) return false;
+      }
       if (!q) return true;
+      const statusLabel = row.jobStatus
+        ? REPAIR_JOB_STATUS_LABELS[row.jobStatus] || row.jobStatus
+        : unrepairableMode
+          ? REPAIR_JOB_STATUS_LABELS.unrepairable
+          : '';
       const hay = [
         row.productName,
         row.productCode,
@@ -178,13 +238,16 @@ export const RepairCustodyStock: React.FC = () => {
         row.customerName,
         row.receiptNo,
         branchName(row.branchId),
+        statusLabel,
+        row.unrepairableReasonLabel,
+        row.unrepairableReasonCode,
       ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [visible, search, branchFilter, ageFilter, branchName]);
+  }, [visible, search, branchFilter, ageFilter, statusFilter, branchName, unrepairableMode]);
 
   const totalUnits = filtered.reduce((sum, row) => sum + row.remaining, 0);
   const aging7 = visible.filter((row) => row.ageDays >= 7).length;
@@ -193,10 +256,11 @@ export const RepairCustodyStock: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const tableColSpan = unrepairableMode ? 9 : 8;
 
   useEffect(() => {
     setPage(1);
-  }, [search, branchFilter, ageFilter]);
+  }, [search, branchFilter, ageFilter, statusFilter]);
 
   const openHandover = (row: CustodyRow) => {
     setSelected(row);
@@ -338,10 +402,10 @@ export const RepairCustodyStock: React.FC = () => {
       eyebrow={unrepairableMode ? 'غير القابل للإصلاح' : 'عهدة أجهزة العملاء'}
       dir="rtl"
       hero={[
-        { key: 'units', label: 'إجمالي الوحدات', value: totalUnits, onClick: () => setAgeFilter('all'), active: ageFilter === 'all' },
+        { key: 'units', label: 'إجمالي الوحدات', value: totalUnits, onClick: () => setAgeFilterAndUrl('all'), active: ageFilter === 'all' },
         { key: 'rows', label: 'السجلات الظاهرة', value: filtered.length },
-        { key: 'age7', label: 'أقدم من 7 أيام', value: aging7, onClick: () => setAgeFilter('7'), active: ageFilter === '7' },
-        { key: 'age14', label: 'أقدم من 14 يومًا', value: aging14, onClick: () => setAgeFilter('14'), active: ageFilter === '14', toneClassName: aging14 > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined },
+        { key: 'age7', label: 'أقدم من 7 أيام', value: aging7, onClick: () => setAgeFilterAndUrl('7'), active: ageFilter === '7' },
+        { key: 'age14', label: 'أقدم من 14 يومًا', value: aging14, onClick: () => setAgeFilterAndUrl('14'), active: ageFilter === '14', toneClassName: aging14 > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined },
       ]}
       onRefresh={() => void load()}
       refreshing={loading}
@@ -398,7 +462,11 @@ export const RepairCustodyStock: React.FC = () => {
       >
         <SmartFilterBar
           pageId={unrepairableMode ? 'repair-unrepairable-stock-list' : 'repair-custody-stock-list'}
-          searchPlaceholder="بحث بالمنتج، العميل، رقم الإيصال، المركز..."
+          searchPlaceholder={
+            unrepairableMode
+              ? 'بحث بالمنتج، العميل، الإيصال، المركز، الحالة، السبب...'
+              : 'بحث بالمنتج، العميل، رقم الإيصال، المركز، الحالة...'
+          }
           searchValue={search}
           onSearchChange={setSearch}
           filters={[
@@ -412,6 +480,18 @@ export const RepairCustodyStock: React.FC = () => {
               ],
             },
             {
+              key: 'status',
+              label: 'الحالة',
+              defaultVisible: true,
+              options: [
+                { value: '', label: 'كل الحالات' },
+                ...CUSTODY_STATUS_FILTER_IDS.map((id) => ({
+                  value: id,
+                  label: REPAIR_JOB_STATUS_LABELS[id] || id,
+                })),
+              ],
+            },
+            {
               key: 'age',
               label: 'مدة البقاء',
               defaultVisible: true,
@@ -422,21 +502,24 @@ export const RepairCustodyStock: React.FC = () => {
               ],
             },
           ]}
-          filterValues={{ branchId: branchFilter, age: ageFilter }}
+          filterValues={{ branchId: branchFilter, status: statusFilter, age: ageFilter }}
           onFilterChange={(key, value) => {
             if (key === 'branchId') setBranchFilter(value);
-            if (key === 'age') setAgeFilter((value as 'all' | '7' | '14') || 'all');
+            if (key === 'status') setStatusFilter(value);
+            if (key === 'age') setAgeFilterAndUrl((value as CustodyAgeFilter) || 'all');
           }}
           className="mb-0 border-0 rounded-none"
         />
 
         <div className="erp-table-wrap overflow-x-auto border-t">
-          <table className="erp-table w-full min-w-[720px] text-right">
+          <table className={`erp-table w-full text-right ${unrepairableMode ? 'min-w-[920px]' : 'min-w-[820px]'}`}>
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">المنتج</th>
                 <th className="erp-th">العميل / الإيصال</th>
                 <th className="erp-th">المركز</th>
+                <th className="erp-th">الحالة</th>
+                {unrepairableMode ? <th className="erp-th">سبب عدم الإصلاح</th> : null}
                 <th className="erp-th">الرصيد</th>
                 <th className="erp-th">مدة البقاء</th>
                 <th className="erp-th">الدخول</th>
@@ -446,13 +529,13 @@ export const RepairCustodyStock: React.FC = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={tableColSpan} className="px-3 py-10 text-center text-muted-foreground">
                     جاري التحميل...
                   </td>
                 </tr>
               ) : paged.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={tableColSpan} className="px-3 py-10 text-center text-muted-foreground">
                     {unrepairableMode ? 'لا توجد أرصدة في مخزن غير القابل للإصلاح.' : 'لا توجد أرصدة عهدة حالية.'}
                   </td>
                 </tr>
@@ -477,6 +560,20 @@ export const RepairCustodyStock: React.FC = () => {
                       </Link>
                     </td>
                     <td className="px-3 py-2 text-sm">{branchName(row.branchId)}</td>
+                    <td className="px-3 py-2">
+                      {row.jobStatus ? (
+                        <StatusBadge status={row.jobStatus} />
+                      ) : unrepairableMode ? (
+                        <StatusBadge status="unrepairable" />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    {unrepairableMode ? (
+                      <td className="px-3 py-2 text-sm text-muted-foreground">
+                        {row.unrepairableReasonLabel || row.unrepairableReasonCode || '—'}
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2 text-sm tabular-nums font-medium">{row.remaining}</td>
                     <td className="px-3 py-2">
                       <ErpStatusBadge

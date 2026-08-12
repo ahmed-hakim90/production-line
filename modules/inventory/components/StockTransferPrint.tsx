@@ -6,7 +6,12 @@ import {
   Factory_TRANSFER_FOOTER_TAGLINE,
   resolveImageExportPalette,
 } from '@/utils/imageExportTheme';
+import { PrintBrandHeader } from '@/src/components/erp/PrintBrandHeader';
 import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
+import {
+  FactoryPrintTable,
+  FactoryPrintTableAccentValue,
+} from '@/src/components/erp/FactoryPrintTable';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
@@ -78,6 +83,7 @@ function formatQty(value: number): string {
 type PermitLayoutModel = {
   companyName: string;
   accent: string;
+  logoUrl?: string;
   printedAt: string;
   movementDate: string;
   transferItems: TransferItem[];
@@ -99,6 +105,7 @@ type PermitLayoutModel = {
   toWarehouseName: string;
   transferNo: string;
   createdBy: string;
+  printSettings?: PrintTemplateSettings;
 };
 
 function buildPermitModel(
@@ -106,6 +113,7 @@ function buildPermitModel(
   options: {
     companyName: string;
     accent: string;
+    logoUrl?: string;
     footerTagline: string;
     version?: string;
     showVersion?: boolean;
@@ -116,12 +124,14 @@ function buildPermitModel(
     extraLines?: string[];
     fontFamily?: string;
     fontSize?: string;
+    printSettings?: PrintTemplateSettings;
   },
 ): PermitLayoutModel {
   const transferItems = resolveTransferItems(data);
   return {
     companyName: options.companyName,
     accent: options.accent,
+    logoUrl: options.logoUrl,
     printedAt: new Date().toLocaleString('ar-EG'),
     movementDate: formatArDate(data.createdAt),
     transferItems,
@@ -145,6 +155,7 @@ function buildPermitModel(
     toWarehouseName: data.toWarehouseName || '—',
     transferNo: data.transferNo,
     createdBy: data.createdBy || '—',
+    printSettings: options.printSettings,
   };
 }
 
@@ -197,28 +208,13 @@ const StockTransferPermitDocument: React.FC<{
         color: '#0f172a',
       }}
     >
-      <header
-        className="flex items-start justify-between gap-4 border-b-2 pb-3 mb-4"
-        style={{ borderBottomColor: accent }}
-      >
-        <div className="min-w-0">
-          <h1 className="text-[18px] font-extrabold text-slate-900 leading-tight">
-            {model.companyName}
-          </h1>
-          <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accent }}>
-            ForgeOps
-          </p>
-        </div>
-        <div className="shrink-0 text-left">
-          <span
-            className="inline-flex items-center justify-center rounded-md px-2.5 py-1 text-[13px] font-extrabold"
-            style={{ background: palette.badgeBg, color: palette.badgeText }}
-          >
-            إذن تحويل مخزون
-          </span>
-          <p className="mt-1 text-[11px] text-slate-500">{model.printedAt}</p>
-        </div>
-      </header>
+      <PrintBrandHeader
+        companyName={model.companyName}
+        documentType="إذن تحويل مخزون"
+        printDate={model.printedAt}
+        logoUrl={model.logoUrl}
+        brandAccent={accent}
+      />
 
       <PrintExtraLines lines={model.extraLines ?? []} />
 
@@ -306,47 +302,49 @@ const StockTransferPermitDocument: React.FC<{
             لا توجد أصناف في هذه التحويلة.
           </div>
         ) : (
-          <table className="w-full border-collapse overflow-hidden rounded-lg text-right" style={{ tableLayout: 'fixed' }}>
-            <thead>
-              <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '9%', letterSpacing: 'normal', textTransform: 'none' }}>#</th>
-                <th className="border border-slate-200 px-2 py-2" style={{ width: model.showQuantityPieces === false ? '59%' : '41%', letterSpacing: 'normal', textTransform: 'none' }}>الصنف</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '14%', letterSpacing: 'normal', textTransform: 'none' }}>الوحدة</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '18%', letterSpacing: 'normal', textTransform: 'none' }}>الكمية</th>
-                {model.showQuantityPieces !== false ? (
-                  <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '18%', letterSpacing: 'normal', textTransform: 'none' }}>قطع</th>
-                ) : null}
-              </tr>
-            </thead>
-            <tbody>
-              {model.transferItems.map((item, idx) => (
-                <tr key={`${item.itemCode}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                  <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold text-slate-500">
-                    {idx + 1}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2">
-                    <p className="text-[12px] font-extrabold leading-snug text-slate-900">{item.itemName}</p>
+          <FactoryPrintTable
+            brandAccent={accent}
+            printSettings={model.printSettings}
+            columns={[
+              { key: 'idx', header: '#', width: '9%', align: 'center' },
+              {
+                key: 'item',
+                header: 'الصنف',
+                width: model.showQuantityPieces === false ? '59%' : '41%',
+              },
+              { key: 'unit', header: 'الوحدة', width: '14%', align: 'center' },
+              { key: 'qty', header: 'الكمية', width: '18%', align: 'center' },
+              ...(model.showQuantityPieces !== false
+                ? [{ key: 'pieces', header: 'قطع', width: '18%', align: 'center' as const }]
+                : []),
+            ]}
+            rows={model.transferItems.map((item, idx) => ({
+              key: `${item.itemCode}-${idx}`,
+              cells: {
+                idx: idx + 1,
+                item: (
+                  <>
+                    <p className="text-[12px] font-extrabold leading-snug">{item.itemName}</p>
                     {model.showItemCode !== false ? (
-                      <p className="mt-0.5 font-mono text-[11px] font-bold text-slate-600">{item.itemCode || '—'}</p>
+                      <p className="mt-0.5 font-mono text-[11px] font-bold text-slate-600">
+                        {item.itemCode || '—'}
+                      </p>
                     ) : null}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 text-center text-[11px] font-bold text-slate-700">
-                    {model.showUnitsPerCarton !== false && item.unitsPerCarton
-                      ? `${item.unitLabel} (${item.unitsPerCarton})`
-                      : item.unitLabel}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums" style={{ color: accent }}>
+                  </>
+                ),
+                unit:
+                  model.showUnitsPerCarton !== false && item.unitsPerCarton
+                    ? `${item.unitLabel} (${item.unitsPerCarton})`
+                    : item.unitLabel,
+                qty: (
+                  <FactoryPrintTableAccentValue accent={accent} className="text-[13px]">
                     {formatQty(Number(item.quantity || 0))}
-                  </td>
-                  {model.showQuantityPieces !== false ? (
-                    <td className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums text-slate-900">
-                      {formatQty(Number(item.quantityPieces || 0))}
-                    </td>
-                  ) : null}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </FactoryPrintTableAccentValue>
+                ),
+                pieces: formatQty(Number(item.quantityPieces || 0)),
+              },
+            }))}
+          />
         )}
       </section>
 
@@ -370,13 +368,13 @@ const StockTransferPermitDocument: React.FC<{
         </section>
       ) : null}
 
-      <footer className="mt-2 flex items-center justify-between border-t border-slate-200 pt-3">
-        <p className="text-[10px] text-slate-400">
+      <footer className="mt-2 flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
+        <p className="text-[10px] text-slate-400 min-w-0">
           {model.footerTagline} — طباعة: {model.printedAt}
         </p>
         {model.showVersion !== false && model.version ? (
-          <p className="text-[10px] font-bold" style={{ color: accent }}>
-            Factory {model.version}
+          <p className="text-[9px] font-semibold shrink-0 tabular-nums" style={{ color: '#94a3b8' }}>
+            v{model.version}
           </p>
         ) : null}
       </footer>
@@ -459,6 +457,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
     const model = buildPermitModel(data, {
       companyName: doc.headerText || 'Sokany-eg',
       accent: resolvePrintAccentHex(ps.primaryColor),
+      logoUrl: ps.logoUrl,
       footerTagline: doc.footerText || Factory_TRANSFER_FOOTER_TAGLINE,
       version: __APP_VERSION__,
       showVersion: doc.isFieldVisible('version'),
@@ -469,6 +468,7 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
       extraLines: doc.customLines,
       fontFamily: font.fontFamily,
       fontSize: font.fontSize,
+      printSettings: ps,
     });
 
     return (
@@ -514,6 +514,7 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
     const model = buildPermitModel(data, {
       companyName: companyName || doc.headerText || 'مؤسسة المغربي للإستيراد',
       accent: resolvePrintAccentHex(ps.primaryColor),
+      logoUrl: ps.logoUrl,
       footerTagline: doc.footerText || Factory_DEFAULT_FOOTER_TAGLINE,
       version,
       showVersion: doc.isFieldVisible('version'),
@@ -524,6 +525,7 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
       extraLines: doc.customLines,
       fontFamily: font.fontFamily,
       fontSize: font.fontSize,
+      printSettings: ps,
     });
 
     return (

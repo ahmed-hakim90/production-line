@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { Card, Button } from '../components/UI';
+import { Button, SearchableSelect } from '../components/UI';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -97,7 +97,6 @@ export const ItemCard: React.FC = () => {
   );
   const [itemId, setItemId] = useState(() => searchParams.get('itemId') || '');
   const [warehouseId, setWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
-  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [bomLines, setBomLines] = useState<ItemCardBomLine[]>([]);
@@ -154,16 +153,15 @@ export const ItemCard: React.FC = () => {
       .filter((m) => m.id);
   }, [itemType, products, materials]);
 
-  const filteredOptions = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return catalogOptions.slice(0, 80);
-    return catalogOptions
-      .filter((opt) =>
-        opt.name.toLowerCase().includes(q)
-        || opt.code.toLowerCase().includes(q),
-      )
-      .slice(0, 80);
-  }, [catalogOptions, search]);
+  const itemSelectOptions = useMemo(
+    () =>
+      catalogOptions.map((opt) => ({
+        value: opt.id,
+        label: opt.code ? `${opt.name} (${opt.code})` : opt.name,
+        hint: opt.category || undefined,
+      })),
+    [catalogOptions],
+  );
 
   const selected = useMemo(
     () => catalogOptions.find((opt) => opt.id === itemId) || null,
@@ -480,7 +478,6 @@ export const ItemCard: React.FC = () => {
                 const next = e.target.value as InventoryItemType;
                 setItemType(next === 'material' ? 'material' : 'finished_good');
                 setItemId('');
-                setSearch('');
               }}
             >
               <option value="finished_good">{itemTypeLabel('finished_good')}</option>
@@ -490,11 +487,11 @@ export const ItemCard: React.FC = () => {
 
           <label className="text-sm font-semibold space-y-1 md:col-span-2">
             <span>بحث بالاسم أو الكود</span>
-            <input
-              className="w-full border rounded-lg px-3 py-2 bg-[var(--color-card)]"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="اكتب للتصفية…"
+            <SearchableSelect
+              options={itemSelectOptions}
+              value={itemId}
+              onChange={setItemId}
+              placeholder="ابحث بالاسم أو الكود…"
             />
           </label>
 
@@ -511,34 +508,6 @@ export const ItemCard: React.FC = () => {
               ))}
             </select>
           </label>
-        </div>
-
-        <div className="mt-3 max-h-56 overflow-auto rounded-lg border border-[var(--color-border)]">
-          {filteredOptions.length === 0 ? (
-            <p className="p-4 text-sm text-[var(--color-text-muted)]">لا توجد أصناف مطابقة.</p>
-          ) : (
-            <ul className="divide-y divide-[var(--color-border)]">
-              {filteredOptions.map((opt) => {
-                const active = opt.id === itemId;
-                return (
-                  <li key={opt.id}>
-                    <button
-                      type="button"
-                      className={`w-full text-right px-3 py-2 text-sm hover:bg-[var(--color-bg)] ${
-                        active ? 'bg-primary/10 font-bold' : ''
-                      }`}
-                      onClick={() => setItemId(opt.id)}
-                    >
-                      <span className="block">{opt.name}</span>
-                      <span className="block text-xs text-[var(--color-text-muted)] font-mono">
-                        {opt.code || '—'}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
         </div>
       </OpsDashPanel>
 

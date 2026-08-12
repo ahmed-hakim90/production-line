@@ -1957,6 +1957,7 @@ export const createRepairBranchProvisioned = onCall({
 export const mutateRepairServiceCatalog = onCall({ region: 'us-central1', memory: '256MiB' }, mutateRepairServiceCatalogHandler);
 export const updateRepairPartsPricing = onCall({ region: 'us-central1', memory: '512MiB' }, updateRepairPartsPricingHandler);
 export const createInventoryCountSession = onCall({ region: 'us-central1', memory: '512MiB' }, createInventoryCountSessionHandler);
+export { syncRepairCenterCatalogFromInventory } from './repairCenterCatalogSync.js';
 export const customerPortalLogin = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, customerPortalLoginHandler);
 export const getCustomerPortalHome = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, getCustomerPortalHomeHandler);
 export const lookupPortalProduct = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, lookupPortalProductHandler);

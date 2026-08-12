@@ -2,6 +2,7 @@ import type {
   CustomerServiceRequestStatus,
   RepairReplacementStatus,
 } from '../types';
+import { mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
 
 export const CUSTOMER_REQUEST_STATUS_LABELS: Record<CustomerServiceRequestStatus, string> = {
   submitted: 'غير موزع',
@@ -35,6 +36,30 @@ export function formatRepairOpsDateShort(value?: string | null): string {
 export function custodyAgeDays(createdAt?: string, updatedAt?: string): number {
   const ms = Date.parse(createdAt || updatedAt || '');
   if (!Number.isFinite(ms)) return 0;
+  return Math.max(0, Math.floor((Date.now() - ms) / 86_400_000));
+}
+
+/** Days since a job entered a canonical status (from statusHistory, else updatedAt). */
+export function daysSinceJobStatus(
+  job: {
+    status?: string;
+    updatedAt?: string;
+    statusHistory?: Array<{ status?: string; at?: string }>;
+  },
+  targetStatus: string,
+): number | null {
+  const current = mapLegacyRepairStatus(String(job.status || ''));
+  const target = mapLegacyRepairStatus(String(targetStatus || ''));
+  if (!current || !target || current !== target) return null;
+  const history = Array.isArray(job.statusHistory) ? job.statusHistory : [];
+  let lastAt = '';
+  for (const entry of history) {
+    if (mapLegacyRepairStatus(String(entry?.status || '')) === target) {
+      lastAt = String(entry?.at || '');
+    }
+  }
+  const ms = Date.parse(lastAt || job.updatedAt || '');
+  if (!Number.isFinite(ms)) return null;
   return Math.max(0, Math.floor((Date.now() - ms) / 86_400_000));
 }
 

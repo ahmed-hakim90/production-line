@@ -252,7 +252,8 @@
     padding: 0 !important;
   }
 
-  /* Fill printable area — fixed preview widths (640px / 148mm / 210mm) must not stay centered. */
+  /* Fill printable area — fixed preview widths must not stay centered.
+     Keep component padding so brand header / logo are not clipped at page edge. */
   .print-root,
   .print-report,
   .arabic-export-root {
@@ -264,22 +265,19 @@
     box-sizing: border-box !important;
   }
 
-  /* Nested wrappers inside print roots (receipt / card sheets) must also expand. */
-  .print-root > div,
-  .print-report > div,
-  .arabic-export-root > div {
-    width: 100% !important;
-    max-width: none !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
-    box-sizing: border-box !important;
-  }
-
   .print-report {
-    padding: 0 !important;
     font-size: 12px !important;
     border: none !important;
     border-radius: 0 !important;
+  }
+
+  /* Expand only top-level body sections — never force width on brand header flex children. */
+  .print-root > section,
+  .print-report > section,
+  .arabic-export-root > section {
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
   }
 
   .no-print {

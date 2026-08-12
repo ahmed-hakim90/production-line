@@ -3,6 +3,7 @@ import {
   CUSTOMER_REQUEST_STATUS_LABELS,
   REPLACEMENT_STATUS_LABELS,
   custodyAgeDays,
+  daysSinceJobStatus,
   toRepairOpsUserError,
 } from '../modules/repair/lib/repairCustomerOpsLabels';
 import {
@@ -21,6 +22,23 @@ assert.equal(repairCustodyAgeChipType(20), 'danger');
 
 const now = Date.now();
 assert.equal(custodyAgeDays(new Date(now - 3 * 86_400_000).toISOString()), 3);
+
+{
+  const readyAt = new Date(now - 2 * 86_400_000).toISOString();
+  const days = daysSinceJobStatus(
+    {
+      status: 'ready',
+      updatedAt: new Date(now - 10 * 86_400_000).toISOString(),
+      statusHistory: [
+        { status: 'repairing', at: new Date(now - 5 * 86_400_000).toISOString() },
+        { status: 'ready', at: readyAt },
+      ],
+    },
+    'ready',
+  );
+  assert.equal(days, 2);
+  assert.equal(daysSinceJobStatus({ status: 'repairing' }, 'ready'), null);
+}
 
 assert.equal(
   toRepairOpsUserError({ code: 'permission-denied' }, 'fallback'),

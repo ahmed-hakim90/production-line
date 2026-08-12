@@ -2545,6 +2545,8 @@ export const createInventoryCountSession = onCall(
   createInventoryCountSessionHandler,
 );
 
+export { syncRepairCenterCatalogFromInventory } from './repairCenterCatalogSync.js';
+
 export const customerPortalLogin = onCall(
   { region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] },
   customerPortalLoginHandler,

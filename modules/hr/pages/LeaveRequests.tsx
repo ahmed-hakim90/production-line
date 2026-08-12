@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { Button, Badge, SearchableSelect } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
@@ -37,6 +38,76 @@ type LeaveRequestsPageData = {
   formEmployeeId: string;
   formLeaveType: LeaveType;
 };
+
+/** Prevents page-load hangs: backfill runs after UI paints, capped per visit. */
+const LEAVE_APPROVAL_BACKFILL_BATCH = 8;
+const leaveApprovalBackfillKeys = new Set<string>();
+
+function leaveApprovalChain(req: Pick<FirestoreLeaveRequest, 'approvalChain'>) {
+  return Array.isArray(req.approvalChain) ? req.approvalChain : [];
+}
+
+async function backfillMissingLeaveApprovals(params: {
+  cacheKey: string;
+  requests: FirestoreLeaveRequest[];
+  callerEmployeeId: string;
+  callerName: string;
+  createdBy: string;
+  permissions: Record<string, boolean>;
+}): Promise<void> {
+  if (leaveApprovalBackfillKeys.has(params.cacheKey)) return;
+  leaveApprovalBackfillKeys.add(params.cacheKey);
+
+  const pending = params.requests.filter((req) => req.id && req.finalStatus === 'pending');
+  if (pending.length === 0) return;
+
+  const [existingApprovalRequests, employeesForApprovalRaw] = await Promise.all([
+    getRequestsByType('leave').catch(() => []),
+    employeeService.getAll(),
+  ]);
+  const linkedSourceIds = new Set(
+    existingApprovalRequests
+      .map((req) => String(req.sourceRequestId || '').trim())
+      .filter(Boolean),
+  );
+  const missing = pending
+    .filter((req) => !linkedSourceIds.has(String(req.id)))
+    .slice(0, LEAVE_APPROVAL_BACKFILL_BATCH);
+  if (missing.length === 0) return;
+
+  const approvalEmployees = employeesForApprovalRaw
+    .filter((e): e is FirestoreEmployee => Boolean(e.id))
+    .map((e) => toApprovalEmployeeInfo(e));
+
+  for (const req of missing) {
+    try {
+      await createRequest(
+        {
+          requestType: 'leave',
+          employeeId: req.employeeId,
+          requestData: {
+            leaveType: req.leaveType,
+            leaveTypeLabel: req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType,
+            startDate: req.startDate,
+            endDate: req.endDate,
+            totalDays: req.totalDays,
+            reason: req.reason || '—',
+          },
+          sourceRequestId: req.id,
+          createdBy: req.createdBy || params.createdBy,
+        },
+        {
+          employeeId: params.callerEmployeeId,
+          employeeName: params.callerName,
+          permissions: params.permissions,
+        },
+        approvalEmployees,
+      );
+    } catch (err) {
+      console.error('Leave approval backfill skipped:', req.id, err);
+    }
+  }
+}
 
 // ─── Status helpers ─────────────────────────────────────────────────────────
 
@@ -108,7 +179,7 @@ export const LeaveRequests: React.FC = () => {
   const canExportFromPage = can('export') && pageControl.exportEnabled;
   const employeeId = currentEmployee?.id || uid || '';
   const viewerEmployeeId = currentEmployee?.id || '';
-  const LEAVE_CACHE_KEY = `hr:leave-requests:${isHR ? 'hr' : 'self'}:${employeeId || 'anon'}`;
+  const LEAVE_CACHE_KEY = `hr:leave-requests:v2:${isHR ? 'hr' : 'self'}:${employeeId || 'anon'}`;
   const initialLeaveCache = peekPageDataCache<LeaveRequestsPageData>(LEAVE_CACHE_KEY);
 
   const [requests, setRequests] = useState<FirestoreLeaveRequest[]>(initialLeaveCache?.requests ?? []);
@@ -116,6 +187,7 @@ export const LeaveRequests: React.FC = () => {
   const [balance, setBalance] = useState<FirestoreLeaveBalance | null>(initialLeaveCache?.balance ?? null);
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>(initialLeaveCache?.leaveTypes ?? []);
   const [loading, setLoading] = useState(() => initialLeaveCache == null);
+  const [loadError, setLoadError] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [filterEmployee, setFilterEmployee] = useState('');
   const [filterStatus, setFilterStatus] = useState<ApprovalStatus | ''>('');
@@ -141,7 +213,7 @@ export const LeaveRequests: React.FC = () => {
 
   const getEmpName = useCallback((id: string) => empNameMap.get(id) || id, [empNameMap]);
   const getPendingChainSummary = useCallback((req: FirestoreLeaveRequest) => {
-    const pendingSteps = req.approvalChain.filter((step) => step.status === 'pending');
+    const pendingSteps = leaveApprovalChain(req).filter((step) => step.status === 'pending');
     if (pendingSteps.length === 0) {
       return {
         currentApprover: '—',
@@ -228,6 +300,7 @@ export const LeaveRequests: React.FC = () => {
     const cached = peekPageDataCache<LeaveRequestsPageData>(LEAVE_CACHE_KEY);
     if (cached) {
       applyLeaveData(cached);
+      setLoadError(false);
       setLoading(false);
     } else {
       setLoading(true);
@@ -260,53 +333,6 @@ export const LeaveRequests: React.FC = () => {
             ? await leaveBalanceService.getOrCreate(selectedEmployeeId)
             : null;
 
-          // One-time silent backfill for old pending leave requests that were created
-          // before approval-center linking was enforced.
-          const pendingWithoutChain = allRequests.filter((req) => req.id && req.finalStatus === 'pending');
-          if (pendingWithoutChain.length > 0) {
-            const [existingApprovalRequests, employeesForApprovalRaw] = await Promise.all([
-              getRequestsByType('leave').catch(() => []),
-              employeeService.getAll(),
-            ]);
-            const linkedSourceIds = new Set(
-              existingApprovalRequests
-                .map((req) => String(req.sourceRequestId || '').trim())
-                .filter(Boolean),
-            );
-            const missing = pendingWithoutChain.filter((req) => !linkedSourceIds.has(String(req.id)));
-            if (missing.length > 0) {
-              const approvalEmployees = employeesForApprovalRaw
-                .filter((e): e is FirestoreEmployee => Boolean(e.id))
-                .map((e) => toApprovalEmployeeInfo(e));
-              const callerEmployeeId = currentEmployee?.id || employeeId;
-              const callerName = currentEmployee?.name || userDisplayName || employeeId || '—';
-              for (const req of missing) {
-                await createRequest(
-                  {
-                    requestType: 'leave',
-                    employeeId: req.employeeId,
-                    requestData: {
-                      leaveType: req.leaveType,
-                      leaveTypeLabel: req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType,
-                      startDate: req.startDate,
-                      endDate: req.endDate,
-                      totalDays: req.totalDays,
-                      reason: req.reason || '—',
-                    },
-                    sourceRequestId: req.id,
-                    createdBy: req.createdBy || uid || '',
-                  },
-                  {
-                    employeeId: callerEmployeeId,
-                    employeeName: callerName,
-                    permissions,
-                  },
-                  approvalEmployees,
-                );
-              }
-            }
-          }
-
           return {
             requests: allRequests,
             balance: bal,
@@ -319,8 +345,23 @@ export const LeaveRequests: React.FC = () => {
         { force: opts?.force === true, maxAgeMs: 45_000 },
       );
       applyLeaveData(data);
+      setLoadError(false);
+
+      // Never block the page on approval-center linking for legacy pending leaves.
+      void backfillMissingLeaveApprovals({
+        cacheKey: LEAVE_CACHE_KEY,
+        requests: data.requests,
+        callerEmployeeId: currentEmployee?.id || employeeId,
+        callerName: currentEmployee?.name || userDisplayName || employeeId || '—',
+        createdBy: uid || '',
+        permissions,
+      }).catch((err) => {
+        console.error('Leave approval backfill failed:', err);
+      });
     } catch (err) {
       console.error('Error loading leave data:', err);
+      setLoadError(true);
+      toast.error('تعذر تحميل طلبات الإجازة');
     } finally {
       setLoading(false);
     }
@@ -460,6 +501,30 @@ export const LeaveRequests: React.FC = () => {
 
   if (loading && requests.length === 0) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
+
+  if (loadError && requests.length === 0) {
+    return (
+      <ModuleOpsPageShell
+        eyebrow="إدارة الإجازات"
+        rangeLabel="تعذر تحميل البيانات"
+        actions={
+          <Button variant="primary" onClick={() => { void reload(); }}>
+            <span className="material-icons-round text-sm">refresh</span>
+            إعادة المحاولة
+          </Button>
+        }
+      >
+        <OpsDashPanel title="طلبات الإجازة" accent="hr">
+          <div className="text-center py-12">
+            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">
+              cloud_off
+            </span>
+            <p className="text-sm font-bold text-[var(--color-text-muted)]">تعذر تحميل طلبات الإجازة</p>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
+    );
   }
 
   return (
@@ -784,10 +849,10 @@ export const LeaveRequests: React.FC = () => {
                         </td>
                         <td className="py-3 px-3">
                           <div className="flex items-center gap-1">
-                            {req.approvalChain.length === 0 ? (
+                            {leaveApprovalChain(req).length === 0 ? (
                               <span className="text-xs text-[var(--color-text-muted)]">—</span>
                             ) : (
-                              req.approvalChain.map((step, i) => {
+                              leaveApprovalChain(req).map((step, i) => {
                                 const stepCfg = STATUS_CONFIG[step.status];
                                 return (
                                   <span

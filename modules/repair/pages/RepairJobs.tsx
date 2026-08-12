@@ -25,14 +25,21 @@ import { canManageRepairWorkshopWork } from '../lib/repairJobIntake';
 import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
-import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
 import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
+import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { custodyAgeDays } from '../lib/repairCustomerOpsLabels';
+import { repairCustodyAgeChipType } from '../lib/repairSemanticStatus';
+import { isCancelledStatus, isDeliveredStatus, isUnrepairableStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
 
 type JobsFocusFilter = 'all' | 'open' | 'diagnosing' | 'diagnosed' | 'ready' | 'delivered' | 'overdue' | 'today';
+
+function isOpenRepairJobStatus(status: string): boolean {
+  return !isDeliveredStatus(status) && !isCancelledStatus(status) && !isUnrepairableStatus(status);
+}
 
 function RepairJobKanbanCardBody({
   job,
@@ -51,6 +58,8 @@ function RepairJobKanbanCardBody({
   const workshopPath = withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`);
   const techLabel = technicianName
     || (job.technicianId ? `فني (${String(job.technicianId).slice(0, 8)}…)` : 'غير مسند');
+  const open = isOpenRepairJobStatus(mapLegacyRepairStatus(job.status));
+  const ageDays = open ? custodyAgeDays(job.createdAt, job.updatedAt) : null;
 
   return (
     <>
@@ -79,6 +88,11 @@ function RepairJobKanbanCardBody({
           <span className="ms-0.5 text-[10px] font-medium text-muted-foreground">ج.م</span>
         </span>
       </div>
+      {ageDays != null ? (
+        <div className="mt-1.5">
+          <ErpStatusBadge label={`عمر ${ageDays} يوم`} type={repairCustodyAgeChipType(ageDays)} />
+        </div>
+      ) : null}
       <div className="mt-2">
         {showWorkshopLink ? (
           <Link
@@ -483,9 +497,13 @@ export const RepairJobs: React.FC = () => {
               ) : (
                 visibleJobs.map((job) => {
                   const cost = computeRepairJobCost(job);
+                  const jobStatus = mapLegacyRepairStatus(job.status);
                   const overdue = job.dueAt
                     && Date.parse(String(job.dueAt)) < Date.now()
-                    && openStatusSet.has(mapLegacyRepairStatus(job.status));
+                    && openStatusSet.has(jobStatus);
+                  const ageDays = isOpenRepairJobStatus(jobStatus)
+                    ? custodyAgeDays(job.createdAt, job.updatedAt)
+                    : null;
                   return (
                     <div
                       key={`m-${job.id}`}
@@ -520,7 +538,12 @@ export const RepairJobs: React.FC = () => {
                               || (job.technicianId ? `فني (${String(job.technicianId).slice(0, 8)}…)` : 'غير مسند')}
                           </p>
                         </div>
-                        <StatusBadge status={job.status} />
+                        <div className="flex flex-col items-end gap-1">
+                          <StatusBadge status={job.status} />
+                          {ageDays != null ? (
+                            <ErpStatusBadge label={`عمر ${ageDays} يوم`} type={repairCustodyAgeChipType(ageDays)} />
+                          ) : null}
+                        </div>
                       </div>
                       <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
                         <div>
@@ -572,6 +595,7 @@ export const RepairJobs: React.FC = () => {
                     <th className="erp-th text-right">الفني</th>
                     <th className="erp-th text-right">الفرع</th>
                     <th className="erp-th text-right">الحالة</th>
+                    <th className="erp-th text-right">العمر</th>
                     <th className="erp-th text-right">التكلفة</th>
                     <th className="erp-th text-right">الاستحقاق</th>
                     <th className="erp-th text-right">إجراء</th>
@@ -580,17 +604,21 @@ export const RepairJobs: React.FC = () => {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="p-3" colSpan={9}>
+                      <td className="p-3" colSpan={10}>
                         <span role="status" aria-live="polite">جاري التحميل...</span>
                       </td>
                     </tr>
                   ) : visibleJobs.map((job) => {
                     const cost = computeRepairJobCost(job);
+                    const jobStatus = mapLegacyRepairStatus(job.status);
                     const overdue = job.dueAt
                       && Date.parse(String(job.dueAt)) < Date.now()
-                      && openStatusSet.has(mapLegacyRepairStatus(job.status));
+                      && openStatusSet.has(jobStatus);
                     const techName = resolveTechnicianName(job.technicianId)
                       || (job.technicianId ? `فني (${String(job.technicianId).slice(0, 8)}…)` : 'غير مسند');
+                    const ageDays = isOpenRepairJobStatus(jobStatus)
+                      ? custodyAgeDays(job.createdAt, job.updatedAt)
+                      : null;
                     return (
                       <tr
                         key={job.id}
@@ -614,6 +642,13 @@ export const RepairJobs: React.FC = () => {
                         <td className="p-2.5">{techName}</td>
                         <td className="p-2.5">{branchNameById.get(String(job.branchId || '')) || '—'}</td>
                         <td className="p-2.5"><StatusBadge status={job.status} /></td>
+                        <td className="p-2.5">
+                          {ageDays != null ? (
+                            <ErpStatusBadge label={`${ageDays} يوم`} type={repairCustodyAgeChipType(ageDays)} />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
                         <td className="p-2.5 font-semibold tabular-nums">
                           {cost.finalCost.toLocaleString('ar-EG')}
                           <span className="ms-1 text-xs font-medium text-muted-foreground">ج.م</span>
@@ -645,7 +680,7 @@ export const RepairJobs: React.FC = () => {
                   })}
                   {!loading && visibleJobs.length === 0 && (
                     <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={9}>
+                      <td className="p-4 text-center text-muted-foreground" colSpan={10}>
                         لا توجد طلبات مطابقة للفلاتر الحالية.
                       </td>
                     </tr>

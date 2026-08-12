@@ -5,6 +5,7 @@ import {
   repairInvoiceActiveChipType,
   repairMonthCloseChipType,
   repairOpenClosedChipType,
+  repairPaymentAuthChipType,
   repairSpareIssueStatusChipType,
   repairStockLevelChipType,
   repairTreasuryEntryTypeChip,
@@ -33,6 +34,14 @@ describe('repairSemanticStatus', () => {
     assert.equal(repairSpareIssueStatusChipType('submitted'), 'warning');
     assert.equal(repairSpareIssueStatusChipType('issued'), 'success');
     assert.equal(repairSpareIssueStatusChipType('rejected'), 'danger');
+  });
+
+  it('maps payment authorization chips', () => {
+    assert.equal(repairPaymentAuthChipType('paid'), 'success');
+    assert.equal(repairPaymentAuthChipType('approved'), 'info');
+    assert.equal(repairPaymentAuthChipType('partial'), 'warning');
+    assert.equal(repairPaymentAuthChipType('void'), 'muted');
+    assert.equal(repairPaymentAuthChipType('approved', { invalidPricing: true }), 'danger');
   });
 
   it('maps treasury entry types', () => {

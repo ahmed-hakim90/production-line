@@ -3,8 +3,9 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../production/components/ProductionReportPrint';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
-import { useManagedPrint } from '@/utils/printManager';
+import { commitAndPrint, useManagedPrint } from '@/utils/printManager';
 import { ShiftLifecyclePanel } from '../../../components/EmployeeDashboardWidget';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
@@ -172,7 +173,11 @@ export const EmployeeDashboard: React.FC = () => {
   const [woPrintData, setWoPrintData] = useState<WorkOrderPrintData | null>(null);
   const [componentLabelOptions, setComponentLabelOptions] = useState<InjectionComponentOption[]>([]);
   const woPrintRef = useRef<HTMLDivElement>(null);
-  const handleWoPrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
+  const handleWoPrint = useManagedPrint({
+    contentRef: woPrintRef,
+    printSettings: printTemplate,
+    documentTitle: 'أمر شغل',
+  });
 
   const routingShortcutsVisible = can('routing.view') || can('routing.execute');
   const {
@@ -216,25 +221,24 @@ export const EmployeeDashboard: React.FC = () => {
     const line = _rawLines.find((l) => l.id === wo.lineId);
     const supervisor = _rawEmployees.find((e) => e.id === wo.supervisorId);
     const producedNow = resolveWorkOrderProducedNow(wo);
-    setWoPrintData({
-      workOrderNumber: wo.workOrderNumber,
-      productName,
-      lineName: line?.name ?? '—',
-      supervisorName: supervisor?.name ?? '—',
-      quantity: wo.quantity,
-      producedQuantity: producedNow,
-      maxWorkers: wo.maxWorkers,
-      targetDate: wo.targetDate,
-      status: wo.status,
-      statusLabel: STATUS_LABELS[wo.status] || wo.status,
-      estimatedCost: wo.estimatedCost,
-      actualCost: wo.actualCost,
-      notes: wo.notes,
-      showCosts: can('workOrders.viewCost'),
-    });
-    await new Promise((r) => setTimeout(r, 300));
-    handleWoPrint();
-    setTimeout(() => setWoPrintData(null), 1000);
+    commitAndPrint(() => {
+      setWoPrintData({
+        workOrderNumber: wo.workOrderNumber,
+        productName,
+        lineName: line?.name ?? '—',
+        supervisorName: supervisor?.name ?? '—',
+        quantity: wo.quantity,
+        producedQuantity: producedNow,
+        maxWorkers: wo.maxWorkers,
+        targetDate: wo.targetDate,
+        status: wo.status,
+        statusLabel: STATUS_LABELS[wo.status] || wo.status,
+        estimatedCost: wo.estimatedCost,
+        actualCost: wo.actualCost,
+        notes: wo.notes,
+        showCosts: can('workOrders.viewCost'),
+      });
+    }, handleWoPrint);
   }, [_rawProducts, _rawLines, _rawEmployees, can, componentLabelOptions, handleWoPrint, resolveWorkOrderProducedNow]);
 
   const employee = useMemo(
@@ -1285,9 +1289,9 @@ export const EmployeeDashboard: React.FC = () => {
       </>
 
       {/* Hidden print component */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
+      <PrintOffscreenHost>
         <WorkOrderPrint ref={woPrintRef} data={woPrintData} printSettings={printTemplate} />
-      </div>
+      </PrintOffscreenHost>
     </DomainHomeShell>
   );
 };

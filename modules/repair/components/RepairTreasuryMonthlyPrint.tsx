@@ -8,6 +8,10 @@ import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
+import {
+  FactoryPrintTable,
+  FactoryPrintTableAccentValue,
+} from '@/src/components/erp/FactoryPrintTable';
 import type { RepairTreasuryMonthlyReportData } from '../types';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 
@@ -94,93 +98,78 @@ export const RepairTreasuryMonthlyPrint = React.forwardRef<HTMLDivElement, Repai
               لا توجد بيانات للفترة المحددة.
             </div>
           ) : (
-            <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
-              <thead>
-                <tr className="bg-slate-100 text-[10px] font-extrabold text-slate-600">
-                  <th className="border border-slate-200 px-1.5 py-2" style={{ width: '22%' }}>الفرع</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '10%' }}>جلسات</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '14%' }}>افتتاح</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '14%' }}>دخل</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '14%' }}>صرف</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '13%' }}>صافي</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '13%' }}>إقفال</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summaries.map((row, index) => (
-                  <tr key={row.branchId || index} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="border border-slate-200 px-1.5 py-2 text-[11px] font-extrabold text-slate-900">
-                      {row.branchName || '—'}
-                    </td>
-                    <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-bold tabular-nums">
-                      {fmt(row.sessionsCount)}
-                    </td>
-                    <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-bold tabular-nums">
-                      {fmt(row.totalOpening)}
-                    </td>
-                    <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-bold tabular-nums text-emerald-700">
-                      {fmt(row.totalIncome)}
-                    </td>
-                    <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-bold tabular-nums text-rose-700">
-                      {fmt(row.totalExpense)}
-                    </td>
-                    <td
-                      className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-black tabular-nums"
-                      style={{ color: Number(row.netMovement || 0) < 0 ? '#b91c1c' : accent }}
+            <FactoryPrintTable
+              brandAccent={accent}
+              printSettings={ps}
+              columns={[
+                { key: 'branch', header: 'الفرع', width: '22%' },
+                { key: 'sessions', header: 'جلسات', width: '10%', align: 'center' },
+                { key: 'opening', header: 'افتتاح', width: '14%', align: 'center' },
+                { key: 'income', header: 'دخل', width: '14%', align: 'center' },
+                { key: 'expense', header: 'صرف', width: '14%', align: 'center' },
+                { key: 'net', header: 'صافي', width: '13%', align: 'center' },
+                { key: 'closing', header: 'إقفال', width: '13%', align: 'center' },
+              ]}
+              rows={summaries.map((row, index) => ({
+                key: row.branchId || String(index),
+                cells: {
+                  branch: row.branchName || '—',
+                  sessions: fmt(row.sessionsCount),
+                  opening: fmt(row.totalOpening),
+                  income: <span className="text-emerald-700 font-bold tabular-nums">{fmt(row.totalIncome)}</span>,
+                  expense: <span className="text-rose-700 font-bold tabular-nums">{fmt(row.totalExpense)}</span>,
+                  net: (
+                    <FactoryPrintTableAccentValue
+                      accent={Number(row.netMovement || 0) < 0 ? '#b91c1c' : accent}
                     >
                       {fmt(row.netMovement)}
-                    </td>
-                    <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-black tabular-nums">
-                      {fmt(row.totalClosing)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </FactoryPrintTableAccentValue>
+                  ),
+                  closing: fmt(row.totalClosing),
+                },
+              }))}
+            />
           )}
         </section>
 
         {(report.paymentMethodSummaries || []).length > 0 ? (
           <section className="mb-2">
             <FactoryPrintSectionTitle title="ملخص وسائل الدفع" accent={accent} />
-            <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
-              <thead>
-                <tr className="bg-slate-100 text-[10px] font-extrabold text-slate-600">
-                  <th className="border border-slate-200 px-1.5 py-2" style={{ width: '28%' }}>الفرع</th>
-                  <th className="border border-slate-200 px-1.5 py-2" style={{ width: '22%' }}>الوسيلة</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '16%' }}>دخل</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '16%' }}>صرف</th>
-                  <th className="border border-slate-200 px-1.5 py-2 text-center" style={{ width: '18%' }}>صافي</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.paymentMethodSummaries.map((row, index) => {
-                  const methodLabel =
-                    row.paymentMethod === 'cash'
-                      ? 'نقدي'
-                      : row.paymentMethod === 'card'
-                        ? 'بطاقة'
-                        : row.paymentMethod === 'bank_transfer'
-                          ? 'تحويل'
-                          : 'غير محدد';
-                  return (
-                    <tr key={`${row.branchId}-${row.paymentMethod}-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                      <td className="border border-slate-200 px-1.5 py-2 text-[11px] font-extrabold">{row.branchName}</td>
-                      <td className="border border-slate-200 px-1.5 py-2 text-[11px] font-bold">{methodLabel}</td>
-                      <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-bold tabular-nums">
-                        {fmt(row.income)}
-                      </td>
-                      <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-bold tabular-nums">
-                        {fmt(row.expense)}
-                      </td>
-                      <td className="border border-slate-200 px-1.5 py-2 text-center text-[11px] font-black tabular-nums">
+            <FactoryPrintTable
+              brandAccent={accent}
+              printSettings={ps}
+              columns={[
+                { key: 'branch', header: 'الفرع', width: '28%' },
+                { key: 'method', header: 'الوسيلة', width: '22%' },
+                { key: 'income', header: 'دخل', width: '16%', align: 'center' },
+                { key: 'expense', header: 'صرف', width: '16%', align: 'center' },
+                { key: 'net', header: 'صافي', width: '18%', align: 'center' },
+              ]}
+              rows={report.paymentMethodSummaries.map((row, index) => {
+                const methodLabel =
+                  row.paymentMethod === 'cash'
+                    ? 'نقدي'
+                    : row.paymentMethod === 'card'
+                      ? 'بطاقة'
+                      : row.paymentMethod === 'bank_transfer'
+                        ? 'تحويل'
+                        : 'غير محدد';
+                return {
+                  key: `${row.branchId}-${row.paymentMethod}-${index}`,
+                  cells: {
+                    branch: row.branchName,
+                    method: methodLabel,
+                    income: fmt(row.income),
+                    expense: fmt(row.expense),
+                    net: (
+                      <FactoryPrintTableAccentValue accent={accent}>
                         {fmt(row.net)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </FactoryPrintTableAccentValue>
+                    ),
+                  },
+                };
+              })}
+            />
           </section>
         ) : null}
       </FactoryPrintShell>

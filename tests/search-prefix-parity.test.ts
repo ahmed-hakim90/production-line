@@ -6,6 +6,7 @@ const samples = [
   ['شركة النور الحديثة', 'CUS-١٢٣', '٠١٠٠ ٥٥٥'],
   ['أحمد مُحمد', 'EMP-42'],
   ['Injection Pump', 'PRD-۰۰۷'],
+  ['SK-7033A كبه سوكانى', '050436'],
 ];
 for (const sample of samples) assert.deepEqual(serverBuild(sample), clientBuild(sample));
 

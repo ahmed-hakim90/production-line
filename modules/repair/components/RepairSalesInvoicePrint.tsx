@@ -6,6 +6,10 @@ import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
+import {
+  FactoryPrintTable,
+  FactoryPrintTableAccentValue,
+} from '@/src/components/erp/FactoryPrintTable';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import type { RepairSalesInvoice } from '../types';
@@ -114,46 +118,41 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
 
         <section className="mb-4">
           <FactoryPrintSectionTitle title="بنود الفاتورة" accent={accent} />
-          <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
-            <thead>
-              <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '8%' }}>م</th>
-                <th className="border border-slate-200 px-2 py-2" style={{ width: '40%' }}>القطعة</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '14%' }}>الكمية</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '19%' }}>سعر الوحدة</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '19%' }}>الإجمالي</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line, index) => (
-                <tr key={`${line.partId}-${index}`} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                  <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold text-slate-500">
-                    {index + 1}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 text-[12px] font-extrabold text-slate-900">
-                    <p className="leading-snug">{line.partName}</p>
+          <FactoryPrintTable
+            brandAccent={accent}
+            printSettings={ps}
+            dense={isThermal}
+            columns={[
+              { key: 'idx', header: 'م', width: '8%', align: 'center' },
+              { key: 'part', header: 'القطعة', width: '40%' },
+              { key: 'qty', header: 'الكمية', width: '14%', align: 'center' },
+              { key: 'unitPrice', header: 'سعر الوحدة', width: '19%', align: 'center' },
+              { key: 'lineTotal', header: 'الإجمالي', width: '19%', align: 'center' },
+            ]}
+            rows={lines.map((line, index) => ({
+              key: `${line.partId}-${index}`,
+              cells: {
+                idx: index + 1,
+                part: (
+                  <>
+                    <p className="leading-snug font-extrabold">{line.partName}</p>
                     {showLineSku ? (
                       <p className="mt-0.5 font-mono text-[10px] font-bold text-slate-500">
                         {line.materialId || line.partId || '—'}
                       </p>
                     ) : null}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold tabular-nums">
-                    {fmt(line.quantity)}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold tabular-nums">
-                    {fmt(line.unitPrice)}
-                  </td>
-                  <td
-                    className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums"
-                    style={{ color: accent }}
-                  >
+                  </>
+                ),
+                qty: fmt(line.quantity),
+                unitPrice: fmt(line.unitPrice),
+                lineTotal: (
+                  <FactoryPrintTableAccentValue accent={accent} className="text-[13px]">
                     {fmt(line.lineTotal)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </FactoryPrintTableAccentValue>
+                ),
+              },
+            }))}
+          />
         </section>
 
         <div className="mb-4 flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">

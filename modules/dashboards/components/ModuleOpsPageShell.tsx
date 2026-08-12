@@ -32,6 +32,9 @@ type Props = {
 /**
  * List / ops pages — same ops-dash chrome as DomainHomeShell
  * without forcing a full home-board secondary panel.
+ *
+ * When there are no hero KPIs, renders a compact page head (title + subtitle +
+ * actions) instead of empty dashboard toolbar strips.
  */
 export const ModuleOpsPageShell: React.FC<Props> = ({
   eyebrow,
@@ -50,24 +53,40 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
   className,
   dir,
 }) => {
-  const showContextToolbar = Boolean(
-    periods?.length || onRefresh || periodExtra || rangeLabel,
-  );
-  const showActionsToolbar = Boolean(actions);
+  const hasHero = Boolean(hero && hero.length > 0);
+  const hasPeriodTools = Boolean(periods?.length || onRefresh || periodExtra);
+  /** Dashboard chrome: period chips / refresh keep rangeLabel in the toolbar. */
+  const showContextToolbar = hasHero
+    ? Boolean(hasPeriodTools || rangeLabel)
+    : hasPeriodTools;
+  const showActionsToolbar = hasHero && Boolean(actions);
 
   return (
     <div
       className={cn(
         'erp-ds-clean erp-dashboard-theme ops-dash-board ops-dash-board--data-first w-full min-w-0 p-3 sm:p-4 md:p-6',
+        !hasHero && 'ops-dash-board--compact-head',
         className,
       )}
       dir={dir}
     >
-      <p className="ops-dash-eyebrow">{eyebrow}</p>
+      {hasHero ? (
+        <p className="ops-dash-eyebrow">{eyebrow}</p>
+      ) : (
+        <header className="ops-dash-page-head">
+          <div className="ops-dash-page-head__title">
+            <h1 className="ops-dash-page-title">{eyebrow}</h1>
+            {rangeLabel ? <p className="ops-dash-page-subtitle">{rangeLabel}</p> : null}
+          </div>
+          {actions ? (
+            <div className="ops-dash-page-head__actions ops-dash-toolbar__actions">{actions}</div>
+          ) : null}
+        </header>
+      )}
 
-      {hero && hero.length > 0 ? (
+      {hasHero ? (
         <div className={cn('ops-dash-kpi-grid', denseHero && 'ops-dash-kpi-grid--dense')}>
-          {hero.map((card) => {
+          {hero!.map((card) => {
             const cardClassName = cn(
               'ops-dash-kpi-card',
               card.accent && 'ops-dash-kpi-card--accent',
@@ -107,7 +126,12 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
       ) : null}
 
       {showContextToolbar ? (
-        <div className="ops-dash-toolbar">
+        <div
+          className="ops-dash-toolbar"
+          {...(showActionsToolbar
+            ? { role: 'toolbar' as const, 'aria-label': 'إجراءات الصفحة' }
+            : {})}
+        >
           <div className="ops-dash-toolbar__periods">
             {(periods || []).map((opt) => (
               <button
@@ -122,7 +146,9 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
             {periodExtra}
           </div>
           <div className="ops-dash-toolbar__meta">
-            {rangeLabel ? <span className="ops-dash-toolbar__range">{rangeLabel}</span> : null}
+            {hasHero && rangeLabel ? (
+              <span className="ops-dash-toolbar__range">{rangeLabel}</span>
+            ) : null}
             {onRefresh ? (
               <div className="ops-dash-refresh">
                 <button
@@ -136,11 +162,14 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
                 </button>
               </div>
             ) : null}
+            {showActionsToolbar ? (
+              <div className="ops-dash-toolbar__actions">{actions}</div>
+            ) : null}
           </div>
         </div>
       ) : null}
 
-      {showActionsToolbar ? (
+      {showActionsToolbar && !showContextToolbar ? (
         <div className="ops-dash-toolbar ops-dash-toolbar--actions" role="toolbar" aria-label="إجراءات الصفحة">
           <div className="ops-dash-toolbar__actions">{actions}</div>
         </div>

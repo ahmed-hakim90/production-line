@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>03 — الكتالوج والمواد | ForgeOps</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../assets/showcase.css" />
+</head>
+<body>
+  <header class="toolbar">
+    <div class="brand">ForgeOps <small>MOD / 03</small></div>
+    <nav>
+      <a href="../index.html">النظرة العامة</a>
+      <a class="active" href="03-catalog.html">الكتالوج</a>
+      <a href="04-inventory.html">التالي: المخازن</a>
+      <button type="button" onclick="window.print()">طباعة</button>
+    </nav>
+  </header>
+  <main class="shell">
+    <div class="page-head">
+      <div>
+        <span class="badge">Master data</span>
+        <h1>الكتالوج والمواد التصنيعية</h1>
+        <p>تعريف المنتجات المصنّعة والمواد وBOM — الأساس الذي تعتمد عليه الخطط والصرف والتكلفة.</p>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="grid-3">
+        <div class="card"><h3>ماذا يفعل؟</h3><p>إدارة المنتجات والفئات والمواد التصنيعية وقائمة المواد (BOM) وتخطيط الاحتياجات وفجوة الشراء.</p></div>
+        <div class="card"><h3>قيمة للأعمال</h3><p>بدون BOM صحيح لا يوجد صرف دقيق ولا تكلفة موثوقة — هذا الموديول يمنع «التخمين» في الصالة.</p></div>
+        <div class="card"><h3>من يستخدمه؟</h3><p>هندسة صناعية / تخطيط مواد / مدير مصنع — وليس استقبال الصيانة.</p></div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>الشاشات</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>الشاشة</th><th>المسار</th><th>الغرض</th></tr></thead>
+          <tbody>
+            <tr><td>لوحة الكتالوج</td><td><code>/catalog</code></td><td>جاهزية الكتالوج وKPIs</td></tr>
+            <tr><td>المنتجات</td><td><code>/products</code></td><td>كتالوج المنتجات المصنّعة + BOM</td></tr>
+            <tr><td>الفئات</td><td><code>/catalog/categories</code></td><td>تصنيف المنتجات</td></tr>
+            <tr><td>المواد التصنيعية</td><td><code>/manufacturing/materials</code></td><td>مواد خام/مكونات</td></tr>
+            <tr><td>تخطيط الاحتياجات</td><td><code>/manufacturing/planning-run</code></td><td>من الخطة إلى احتياج مواد</td></tr>
+            <tr><td>فجوة الشراء</td><td><code>/manufacturing/purchase-gap</code></td><td>ماذا ينقص للشراء</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>صور فعلية</h2>
+      <div class="shot-grid">
+        <figure class="shot"><img src="../../handover/_screenshots/16-products.png" alt="المنتجات" /><figcaption>كتالوج المنتجات</figcaption></figure>
+        <figure class="shot"><img src="../../handover/_screenshots/20-materials.png" alt="المواد" /><figcaption>المواد التصنيعية</figcaption></figure>
+        <figure class="shot wide"><img src="../../handover/_screenshots/21-planning-run.png" alt="تخطيط" /><figcaption>تخطيط احتياجات المواد من خطط الإنتاج</figcaption></figure>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <a href="02-production.html">← الإنتاج</a>
+      <a href="04-inventory.html">التالي: المخازن →</a>
+    </footer>
+  </main>
+</body>
+</html>

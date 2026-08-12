@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
@@ -446,8 +447,16 @@ export const ProductionIssueRequests: React.FC = () => {
           const suppliesWh = warehouses.find((w) => w.id === suppliesId);
           const [issueRows, capacityRows, compensationRows] = await Promise.all([
             productionIssueService.getAll(),
-            suppliesId ? assemblableCapacityService.getForWarehouse(suppliesId) : Promise.resolve([]),
-            componentCompensationService.getAll(),
+            suppliesId
+              ? assemblableCapacityService.getForWarehouse(suppliesId).catch((err) => {
+                  console.error('assemblableCapacityService.getForWarehouse error:', err);
+                  return [] as Awaited<ReturnType<typeof assemblableCapacityService.getForWarehouse>>;
+                })
+              : Promise.resolve([]),
+            componentCompensationService.getAll().catch((err) => {
+              console.error('componentCompensationService.getAll error:', err);
+              return [] as Awaited<ReturnType<typeof componentCompensationService.getAll>>;
+            }),
           ]);
           return {
             issueRows,
@@ -471,6 +480,9 @@ export const ProductionIssueRequests: React.FC = () => {
       setCapacity(data.capacityRows);
       setCompensations(data.compensationRows);
       setSuppliesWarehouseName(data.suppliesWarehouseName);
+    } catch (err) {
+      console.error('ProductionIssueRequests load error:', err);
+      toast.error('تعذر تحميل طلبات صرف الإنتاج');
     } finally {
       setLoading(false);
     }

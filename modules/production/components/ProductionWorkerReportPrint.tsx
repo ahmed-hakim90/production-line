@@ -9,6 +9,7 @@ import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
+import { FactoryPrintTable } from '@/src/components/erp/FactoryPrintTable';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 type Props = {
@@ -65,35 +66,21 @@ export const ProductionWorkerReportPrint = React.forwardRef<HTMLDivElement, Prop
               لا توجد بيانات
             </div>
           ) : (
-            <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
-              <thead>
-                <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
-                  {columns.map((col) => (
-                    <th key={col} className="border border-slate-200 px-2 py-2 text-right">
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, idx) => (
-                  <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    {columns.map((col) => {
-                      const val = row[col];
-                      const display = typeof val === 'number' ? formatNumber(val) : String(val ?? '—');
-                      return (
-                        <td
-                          key={col}
-                          className="border border-slate-200 px-2 py-2 text-right text-[12px] font-bold tabular-nums"
-                        >
-                          {display}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <FactoryPrintTable
+              brandAccent={accent}
+              printSettings={ps}
+              columns={columns.map((col) => ({ key: col, header: col }))}
+              rows={rows.map((row, idx) => ({
+                key: String(idx),
+                cells: Object.fromEntries(
+                  columns.map((col) => {
+                    const val = row[col];
+                    const display = typeof val === 'number' ? formatNumber(val) : String(val ?? '—');
+                    return [col, display];
+                  }),
+                ),
+              }))}
+            />
           )}
         </section>
       </FactoryPrintShell>

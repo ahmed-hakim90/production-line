@@ -4,12 +4,42 @@ import {
   canCorrectUnrepairableQuantity,
   computeCustomerDeviceBalances,
   mergePortalScannedLine,
+  summarizeCustodyAging,
 } from '../modules/repair/lib/repairCustomerCustody.ts';
+import { custodyAgeDays } from '../modules/repair/lib/repairCustomerOpsLabels.ts';
 
 {
   const balance = computeCustomerDeviceBalances({ receivedQuantity: 10, unrepairableQuantity: 3,
     custodyHandedOverQuantity: 2, unrepairableHandedOverQuantity: 1 });
   assert.deepEqual(balance, { custody: 5, unrepairableStock: 2, valid: true });
+}
+
+{
+  const old = new Date(Date.now() - 10 * 86_400_000).toISOString();
+  const summary = summarizeCustodyAging(
+    [
+      {
+        receivedQuantity: 2,
+        unrepairableQuantity: 0,
+        custodyHandedOverQuantity: 0,
+        unrepairableHandedOverQuantity: 0,
+        createdAt: old,
+      },
+      {
+        receivedQuantity: 3,
+        unrepairableQuantity: 1,
+        custodyHandedOverQuantity: 0,
+        unrepairableHandedOverQuantity: 0,
+        createdAt: old,
+      },
+    ],
+    custodyAgeDays,
+  );
+  assert.equal(summary.custodyUnits, 4);
+  assert.equal(summary.custodyRows, 2);
+  assert.equal(summary.aging7Rows, 2);
+  assert.equal(summary.unrepairableUnits, 1);
+  assert.equal(summary.unrepairableRows, 1);
 }
 
 {
@@ -43,6 +73,8 @@ import {
   );
   assert.match(custodyPage, /طلب استبدال/);
   assert.match(custodyPage, /row\.productCode !== row\.productId/);
+  assert.match(custodyPage, /سبب عدم الإصلاح/);
+  assert.match(custodyPage, /statusFilter/);
   assert.match(
     custodyPage,
     /resolveAccessibleRepairBranchIds/,

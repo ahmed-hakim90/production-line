@@ -97,7 +97,7 @@ export type Permission =
   | 'repair.dashboard.view'
   | 'repair.adminDashboard.view'
   | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete' | 'repair.jobs.technician' | 'repair.jobs.reception'
-  | 'repair.parts.view' | 'repair.parts.manage' | 'repair.parts.request'
+  | 'repair.parts.view' | 'repair.parts.manage' | 'repair.parts.request' | 'repair.parts.stockAdjust'
   | 'repair.pricing.manage'
   | 'repair.finance.view' | 'repair.payments.view' | 'repair.payments.collect' | 'repair.payments.reverse'
   | 'repair.discounts.request' | 'repair.discounts.approve'
@@ -360,6 +360,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repair.jobs.reception', label: 'استقبال الصيانة والتسليم' },
       { key: 'repair.parts.view', label: 'عرض قطع الغيار' },
       { key: 'repair.parts.manage', label: 'إدارة قطع الغيار' },
+      { key: 'repair.parts.stockAdjust', label: 'جرد يدوي لقطع المركز (+/− / حذف) — ليس لمسؤول المركز' },
       { key: 'repair.parts.request', label: 'طلب قطعة من الورشة بدون أسعار' },
       { key: 'repair.pricing.manage', label: 'تسعير قطع الغيار وخدمات الصيانة' },
       { key: 'repair.finance.view', label: 'عرض ماليات طلبات الصيانة' },
@@ -650,6 +651,15 @@ export function checkPermission(
       permissions['sparePartsRecall.create'] === true
       || permissions['sparePartsReplenishment.approve'] === true
       || permissions['inventory.transfers.approve'] === true
+    );
+  }
+  if (permission === 'repair.parts.stockAdjust') {
+    // Manual +/- / delete on center stock — not for typical center managers who only have parts.manage.
+    return (
+      permissions['repair.parts.stockAdjust'] === true
+      || permissions['inventory.counts.manage'] === true
+      || permissions['repair.adminDashboard.view'] === true
+      || permissions['repair.branches.manage'] === true
     );
   }
   if (permission === 'repairSpareIssues.view') {

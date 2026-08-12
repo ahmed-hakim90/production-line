@@ -8,6 +8,10 @@ import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
+import {
+  FactoryPrintTable,
+  FactoryPrintTableAccentValue,
+} from '@/src/components/erp/FactoryPrintTable';
 import { REPAIR_SPARE_ISSUE_STATUS_LABELS } from '../lib/repairSpareIssue';
 import { normalizeRepairSpareIssueAllocations } from '../lib/repairSpareIssueAllocation';
 import type { RepairSpareIssue } from '../types';
@@ -93,54 +97,42 @@ export const RepairSpareIssuePrint = React.forwardRef<HTMLDivElement, Props>(
       >
         <section className="mb-4">
           <FactoryPrintSectionTitle title="تفاصيل الصرف" accent={accent} />
-          <table className="w-full border-collapse text-right" style={{ tableLayout: 'fixed' }}>
-            <thead>
-              <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
-                <th className="border border-slate-200 px-2 py-2" style={{ width: '28%' }}>اللوكيشن</th>
-                <th className="border border-slate-200 px-2 py-2" style={{ width: '36%' }}>القطعة</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '16%' }}>الكمية</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '20%' }}>الوحدة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(issue.lines || []).map((line, index) => {
-                const allocations = normalizeRepairSpareIssueAllocations(line);
-                const locationLabel =
-                  allocations.length > 0
-                    ? allocations
-                        .map((a) => {
-                          const rackShelf = [a.rack, a.shelf].filter(Boolean).join(' / ');
-                          return `${a.locationCode}${rackShelf ? ` (${rackShelf})` : ''}: ${formatQty(a.quantity)}`;
-                        })
-                        .join('، ')
-                    : '—';
-                return (
-                  <tr
-                    key={line.lineId || `${line.itemId}-${line.locationId || ''}`}
-                    className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}
-                    style={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}
-                  >
-                    <td className="border border-slate-200 px-2 py-2 text-[10px] font-semibold text-slate-700 break-words">
-                      {locationLabel}
-                    </td>
-                    <td className="border border-slate-200 px-2 py-2 text-[12px] font-extrabold text-slate-900 break-words">
-                      {line.itemName}
-                      {line.itemCode ? ` (${line.itemCode})` : ''}
-                    </td>
-                    <td
-                      className="border border-slate-200 px-2 py-2 text-center text-[13px] font-black tabular-nums"
-                      style={{ color: accent }}
-                    >
+          <FactoryPrintTable
+            brandAccent={accent}
+            printSettings={ps}
+            dense={isA5}
+            columns={[
+              { key: 'location', header: 'اللوكيشن', width: '28%' },
+              { key: 'part', header: 'القطعة', width: '36%' },
+              { key: 'qty', header: 'الكمية', width: '16%', align: 'center' },
+              { key: 'unit', header: 'الوحدة', width: '20%', align: 'center' },
+            ]}
+            rows={(issue.lines || []).map((line, index) => {
+              const allocations = normalizeRepairSpareIssueAllocations(line);
+              const locationLabel =
+                allocations.length > 0
+                  ? allocations
+                      .map((a) => {
+                        const rackShelf = [a.rack, a.shelf].filter(Boolean).join(' / ');
+                        return `${a.locationCode}${rackShelf ? ` (${rackShelf})` : ''}: ${formatQty(a.quantity)}`;
+                      })
+                      .join('، ')
+                  : '—';
+              return {
+                key: line.lineId || `${line.itemId}-${line.locationId || index}`,
+                cells: {
+                  location: locationLabel,
+                  part: `${line.itemName}${line.itemCode ? ` (${line.itemCode})` : ''}`,
+                  qty: (
+                    <FactoryPrintTableAccentValue accent={accent} className="text-[13px]">
                       {formatQty(line.quantity)}
-                    </td>
-                    <td className="border border-slate-200 px-2 py-2 text-center text-[11px] font-bold text-slate-700">
-                      {line.unit || 'piece'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </FactoryPrintTableAccentValue>
+                  ),
+                  unit: line.unit || 'piece',
+                },
+              };
+            })}
+          />
         </section>
 
         {issue.note?.trim() ? (

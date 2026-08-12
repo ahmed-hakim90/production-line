@@ -96,6 +96,14 @@ type PlanSortField = '' | 'product' | 'line' | 'priority' | 'plannedQuantity' | 
 type SortDirection = 'asc' | 'desc';
 type DateQuickFilter = 'all' | 'today' | 'this_month' | 'custom';
 type GroupByField = 'none' | 'line' | 'product' | 'status' | 'priority';
+/** List filter: default stays on finished product; `all` shows both kinds. */
+type PlanTypeFilter = 'finished_product' | 'component_injection' | 'all';
+
+const resolvePlanType = (
+  plan: Pick<ProductionPlan, 'planType'>,
+): 'finished_product' | 'component_injection' => (
+  plan.planType === 'component_injection' ? 'component_injection' : 'finished_product'
+);
 type EnrichedPlan = ProductionPlan & {
   storedStatus: PlanStatus;
   effectiveStatus: PlanStatus;
@@ -201,6 +209,11 @@ export const ProductionPlans: React.FC = () => {
   // â”€â”€ View / Filter state â”€â”€
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [filterStatus, setFilterStatus] = useState<string>(() => String(searchParams.get('status') || ''));
+  const [filterPlanType, setFilterPlanType] = useState<PlanTypeFilter>(() => {
+    const fromUrl = String(searchParams.get('planType') || '').trim();
+    if (fromUrl === 'component_injection' || fromUrl === 'all') return fromUrl;
+    return 'finished_product';
+  });
   const [filterLine, setFilterLine] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
@@ -479,6 +492,7 @@ export const ProductionPlans: React.FC = () => {
           return false;
         }
       }
+      if (filterPlanType !== 'all' && resolvePlanType(p) !== filterPlanType) return false;
       if (filterStatus && p.effectiveStatus !== filterStatus) return false;
       if (filterLine && p.lineId !== filterLine) return false;
       if (filterProduct && p.productId !== filterProduct) return false;
@@ -487,7 +501,7 @@ export const ProductionPlans: React.FC = () => {
       if (filterDateTo && (p.plannedStartDate || p.startDate) > filterDateTo) return false;
       return true;
     });
-  }, [enrichedPlans, filterSearch, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo, planItemNameById, planItemCodeById, _rawLines]);
+  }, [enrichedPlans, filterSearch, filterPlanType, filterStatus, filterLine, filterProduct, filterPriority, filterDateFrom, filterDateTo, planItemNameById, planItemCodeById, _rawLines]);
 
   const sortedPlans = useMemo(() => {
     const priorityRank: Record<PlanPriority, number> = {
@@ -691,20 +705,23 @@ export const ProductionPlans: React.FC = () => {
     setSelectedPlanIds(ids);
   };
 
-  // â”€â”€ KPIs â”€â”€
+  // â”€â”€ KPIs (scoped to current plan-type filter so hero matches the list) â”€â”€
   const kpis = useMemo(() => {
-    const active = enrichedPlans.filter((p) =>
+    const scoped = filterPlanType === 'all'
+      ? enrichedPlans
+      : enrichedPlans.filter((p) => resolvePlanType(p) === filterPlanType);
+    const active = scoped.filter((p) =>
       p.effectiveStatus === 'in_progress'
       || p.effectiveStatus === 'planned'
       || p.effectiveStatus === 'paused',
     );
-    const delayed = enrichedPlans.filter((p) => p.effectiveStatus === 'paused');
+    const delayed = scoped.filter((p) => p.effectiveStatus === 'paused');
     const totalRemaining = active.reduce((s, p) => s + p.remaining, 0);
     const avgCompletion = active.length > 0
       ? Number((active.reduce((s, p) => s + Math.min(p.progressRatio, 100), 0) / active.length).toFixed(1))
       : 0;
     return { activeCount: active.length, delayedCount: delayed.length, totalRemaining, avgCompletion };
-  }, [enrichedPlans]);
+  }, [enrichedPlans, filterPlanType]);
 
   // â”€â”€ Handlers â”€â”€
 
@@ -825,7 +842,17 @@ export const ProductionPlans: React.FC = () => {
     setDeletePlanId(null);
   };
 
-  const hasActiveFilters = filterSearch || filterStatus || filterLine || filterProduct || filterPriority || filterDateFrom || filterDateTo || groupBy !== 'none';
+  const hasActiveFilters = filterSearch
+    || filterPlanType !== 'finished_product'
+    || filterStatus
+    || filterLine
+    || filterProduct
+    || filterPriority
+    || filterDateFrom
+    || filterDateTo
+    || groupBy !== 'none';
+  /** True when filters (including default plan-type = منتج) hide rows that exist. */
+  const emptyDueToFilters = filteredPlans.length === 0 && enrichedPlans.length > 0;
 
   const applyDateQuickFilter = (quick: DateQuickFilter) => {
     setDateQuick(quick);
@@ -1182,6 +1209,15 @@ export const ProductionPlans: React.FC = () => {
         onPeriodChange={(value) => applyDateQuickFilter(value as DateQuickFilter)}
         quickFilters={[
           {
+            key: 'planType',
+            placeholder: 'منتج',
+            options: [
+              { value: 'component_injection', label: 'مكون حقن' },
+              { value: 'every', label: 'الكل' },
+            ],
+            width: 'w-[140px]',
+          },
+          {
             key: 'status',
             placeholder: 'كل الحالات',
             options: (Object.entries(STATUS_CONFIG) as [PlanStatus, typeof STATUS_CONFIG[PlanStatus]][]).map(([key, config]) => ({
@@ -1191,8 +1227,23 @@ export const ProductionPlans: React.FC = () => {
             width: 'w-[140px]',
           },
         ]}
-        quickFilterValues={{ status: filterStatus || 'all' }}
-        onQuickFilterChange={(_, value) => setFilterStatus(value === 'all' ? '' : value)}
+        quickFilterValues={{
+          planType: filterPlanType === 'finished_product'
+            ? 'all'
+            : filterPlanType === 'all'
+              ? 'every'
+              : filterPlanType,
+          status: filterStatus || 'all',
+        }}
+        onQuickFilterChange={(key, value) => {
+          if (key === 'planType') {
+            if (value === 'all') setFilterPlanType('finished_product');
+            else if (value === 'every') setFilterPlanType('all');
+            else if (value === 'component_injection') setFilterPlanType('component_injection');
+            return;
+          }
+          if (key === 'status') setFilterStatus(value === 'all' ? '' : value);
+        }}
         advancedFilters={[
           {
             key: 'line',
@@ -1203,8 +1254,8 @@ export const ProductionPlans: React.FC = () => {
           },
           {
             key: 'product',
-            label: 'المنتج',
-            placeholder: 'كل المنتجات',
+            label: 'المنتج / المكون',
+            placeholder: 'الكل',
             options: [
               ..._rawProducts.map((product) => ({ value: product.id || '', label: product.name })),
               ...injectionComponents
@@ -1685,8 +1736,8 @@ export const ProductionPlans: React.FC = () => {
         {totalPlans === 0 ? (
           <div className="p-12 text-center text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">event_note</span>
-            <p className="font-bold text-base">{hasActiveFilters ? 'لا توجد خطط تطابق التصفية' : 'لا توجد خطط إنتاج بعد'}</p>
-            <p className="text-sm mt-1">{hasActiveFilters ? 'جرب تغيير معايير التصفية' : 'ابدأ بإنشاء خطة جديدة لتتبع الإنتاج'}</p>
+            <p className="font-bold text-base">{emptyDueToFilters || hasActiveFilters ? 'لا توجد خطط تطابق التصفية' : 'لا توجد خطط إنتاج بعد'}</p>
+            <p className="text-sm mt-1">{emptyDueToFilters || hasActiveFilters ? 'جرب تغيير فئة الخطة أو معايير التصفية' : 'ابدأ بإنشاء خطة جديدة لتتبع الإنتاج'}</p>
           </div>
         ) : (
           <div className="space-y-4">

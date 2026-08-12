@@ -9,6 +9,10 @@ import {
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
 import {
+  FactoryPrintTable,
+  FactoryPrintTableAccentValue,
+} from '@/src/components/erp/FactoryPrintTable';
+import {
   manufacturerWarrantyLineLabel,
   manufacturerWarrantyScopeLabel,
 } from '../lib/repairManufacturerWarranty';
@@ -137,40 +141,36 @@ export const RepairPaymentPrint = React.forwardRef<
       {doc.isFieldVisible('products') && productRows.length > 0 ? (
         <section className="mb-4">
           <FactoryPrintSectionTitle title="تفصيل المنتجات" accent={accent} />
-          <table className="w-full border-collapse overflow-hidden rounded-lg text-right" style={{ tableLayout: 'fixed' }}>
-            <thead>
-              <tr className="bg-slate-100 text-[11px] font-extrabold text-slate-600">
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '10%' }}>م</th>
-                <th className="border border-slate-200 px-2 py-2" style={{ width: '40%' }}>المنتج</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '25%' }}>الضمان</th>
-                <th className="border border-slate-200 px-2 py-2 text-center" style={{ width: '25%' }}>التكلفة</th>
-              </tr>
-            </thead>
-            <tbody>
-              {productRows.map((item, index) => {
-                const lineCost = Number(item.finalCost || item.estimatedCost || 0);
-                return (
-                  <tr key={item.itemId || index} className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                    <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold text-slate-500">
-                      {index + 1}
-                    </td>
-                    <td className="border border-slate-200 px-2 py-2 text-[12px] font-extrabold text-slate-900">
-                      {item.productName || '—'}
-                    </td>
-                    <td
-                      className="border border-slate-200 px-2 py-2 text-center text-[12px] font-bold"
-                      style={{ color: item.inWarranty ? '#047857' : '#0f172a' }}
-                    >
+          <FactoryPrintTable
+            brandAccent={accent}
+            printSettings={ps}
+            columns={[
+              { key: 'idx', header: 'م', width: '10%', align: 'center' },
+              { key: 'product', header: 'المنتج', width: '40%' },
+              { key: 'warranty', header: 'الضمان', width: '25%', align: 'center' },
+              { key: 'cost', header: 'التكلفة', width: '25%', align: 'center' },
+            ]}
+            rows={productRows.map((item, index) => {
+              const lineCost = Number(item.finalCost || item.estimatedCost || 0);
+              return {
+                key: item.itemId || String(index),
+                cells: {
+                  idx: index + 1,
+                  product: item.productName || '—',
+                  warranty: (
+                    <span style={{ color: item.inWarranty ? '#047857' : '#0f172a', fontWeight: 700 }}>
                       {manufacturerWarrantyLineLabel(item.inWarranty)}
-                    </td>
-                    <td className="border border-slate-200 px-2 py-2 text-center text-[12px] font-black tabular-nums">
-                      {item.inWarranty ? 'مجاني' : money(lineCost)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </span>
+                  ),
+                  cost: item.inWarranty ? (
+                    'مجاني'
+                  ) : (
+                    <FactoryPrintTableAccentValue accent={accent}>{money(lineCost)}</FactoryPrintTableAccentValue>
+                  ),
+                },
+              };
+            })}
+          />
         </section>
       ) : null}
 

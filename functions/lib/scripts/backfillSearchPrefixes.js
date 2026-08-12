@@ -2,8 +2,8 @@ import { initializeApp, getApps } from 'firebase-admin/app';
 import { FieldPath, getFirestore } from 'firebase-admin/firestore';
 import { buildSearchPrefixes } from '../searchPrefixes.js';
 const PROFILES = {
-    products: ['name', 'code', 'barcode', 'barcodeNormalized'],
-    materials: ['name', 'code', 'barcode'],
+    products: ['code', 'barcode', 'barcodeNormalized', 'name'],
+    materials: ['code', 'barcode', 'name'],
     customers: ['name', 'code', 'phone', 'phoneDigits'],
     employees: ['name', 'code', 'phone', 'email'],
     users: ['displayName', 'email'],

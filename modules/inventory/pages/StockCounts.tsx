@@ -23,6 +23,7 @@ import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseS
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { downloadStockCountErrors, downloadStockCountTemplate, parseStockCountSheet, type StockCountSheetResult } from '../lib/stockCountSheet';
+import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
 
 const STOCK_COUNTS_CACHE_KEY = 'inventory:stock-counts';
 
@@ -31,6 +32,18 @@ type StockCountsPageData = {
   warehouses: Warehouse[];
   balances: StockItemBalance[];
 };
+
+/** Open sheet imports already have diffs but may still be status=open (pre-fix sessions). */
+function sessionHasMatchDiffs(session: StockCountSession): boolean {
+  return (session.lines || []).some(
+    (line) => Math.abs(Number(line.countedQty || 0) - Number(line.expectedQty || 0)) > 0.00001,
+  );
+}
+
+function isReadyForMatching(session: StockCountSession): boolean {
+  return session.status === 'counted'
+    || (session.status === 'open' && sessionHasMatchDiffs(session));
+}
 
 export const StockCounts: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -49,6 +62,7 @@ export const StockCounts: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
+  const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
 
   const {
     data,
@@ -73,8 +87,9 @@ export const StockCounts: React.FC = () => {
   const sessions = data?.sessions ?? [];
   const warehouses = data?.warehouses ?? [];
   const balances = data?.balances ?? [];
+
   const awaitingApprovalCount = useMemo(
-    () => sessions.filter((s) => s.status === 'counted').length,
+    () => sessions.filter((s) => isReadyForMatching(s)).length,
     [sessions],
   );
 
@@ -262,6 +277,22 @@ export const StockCounts: React.FC = () => {
           </Button>
           <Button
             variant="outline"
+            onClick={() => {
+              const warehouse = warehouses.find((row) => row.id === warehouseId);
+              void printWarehouseCount({
+                warehouseId,
+                warehouseName: selectedWarehouseName,
+                warehouseRole: warehouse?.warehouseRole,
+                balances: selectedBalances,
+              });
+            }}
+            disabled={!warehouseId || selectedBalances.length === 0 || printing}
+          >
+            <span className="material-icons-round text-sm">print</span>
+            {printing ? 'جاري تجهيز الجرد…' : 'طباعة الجرد'}
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => fileInputRef.current?.click()}
             disabled={!warehouseId || importing || !can('inventory.counts.manage')}
           >
@@ -320,8 +351,17 @@ export const StockCounts: React.FC = () => {
       )}
 
       <OpsDashPanel title="جلسات الجرد والمطابقة" accent="inventory">
+        {warehouseId ? (
+          <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+            القائمة مفلترة على المخزن المحدد. لو مش لاقي جلسة العاشر: اختر «اختر المخزن» لعرض كل الجلسات، أو اختر مخزن العاشر صراحة.
+          </p>
+        ) : null}
         {visibleSessions.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">لا توجد جلسات جرد حتى الآن.</p>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            {warehouseId
+              ? 'لا توجد جلسات لهذا المخزن. تأكد أن الرفع اكتمل بتأكيد الجلسة، أو اختر مخزنًا آخر / امسح الفلتر.'
+              : 'لا توجد جلسات جرد حتى الآن.'}
+          </p>
         ) : (
           <div className="space-y-3">
             {visibleSessions.map((session) => (
@@ -332,16 +372,16 @@ export const StockCounts: React.FC = () => {
                     <p className="text-xs text-[var(--color-text-muted)]">{new Date(session.createdAt).toLocaleString('ar-EG')}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge variant={session.status === 'approved' ? 'success' : session.status === 'counted' ? 'warning' : 'info'}>
+                    <Badge variant={session.status === 'approved' ? 'success' : isReadyForMatching(session) ? 'warning' : 'info'}>
                       {session.status === 'approved'
                         ? 'مطابق ومعتمد'
-                        : session.status === 'counted'
+                        : isReadyForMatching(session)
                           ? 'جاهز للمطابقة'
                           : 'مفتوح للعد'}
                     </Badge>
                     <Button variant="outline" onClick={() => viewCountSession(session)}>
                       <span className="material-icons-round text-sm">visibility</span>
-                      {session.status === 'approved' ? 'عرض' : 'عدّ ومطابقة'}
+                      {session.status === 'approved' ? 'عرض' : isReadyForMatching(session) ? 'مطابقة واعتماد' : 'عدّ ومطابقة'}
                     </Button>
                   </div>
                 </div>
@@ -350,6 +390,7 @@ export const StockCounts: React.FC = () => {
           </div>
         )}
       </OpsDashPanel>
+      {countSheetHost}
     </ModuleOpsPageShell>
   );
 };

@@ -11,6 +11,7 @@ import {
   resolvePrintFont,
 } from '../utils/print/printFont.ts';
 import { PRINT_DOCUMENT_TYPE_IDS } from '../utils/print/printDocumentRegistry.ts';
+import { PRINT_ENGINE_IFRAME_CSS } from '../utils/print/printSurface.ts';
 import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSettings.ts';
 
 {
@@ -125,6 +126,8 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('repairDeliveryReceipt'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('catalogProductDetail'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('productBomCountCard'), true);
+  assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('workOrder'), true);
+  assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('warehouseStockCount'), true);
   const payslipResolved = resolvePrintDocumentConfig(
     {
       ...DEFAULT_PRINT_TEMPLATE,
@@ -155,6 +158,13 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   );
   assert.equal(repairReceipt.isFieldVisible('costs'), false);
   assert.equal(repairReceipt.isFieldVisible('qrCode'), true);
+}
+
+{
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /print-brand-header/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /print-kpi-card/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /print-kv-row/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /print-sign-grid/);
 }
 
 console.log('print-document-config.test.ts: ok');

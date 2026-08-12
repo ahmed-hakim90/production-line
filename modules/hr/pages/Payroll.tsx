@@ -20,6 +20,7 @@ import {
 } from '../payroll';
 import type { PayslipData } from '../utils/payslipGenerator';
 import { PayslipPrint } from '../components/PayslipPrint';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { CombinedPayslipsPrint } from '../components/CombinedPayslipsPrint';
 import { getDocs, query, where } from 'firebase/firestore';
 import { departmentsRef, payrollDistributionsRef } from '../collections';
@@ -1054,14 +1055,14 @@ export const Payroll: React.FC = () => {
         onPrint={handlePrintSinglePayslip}
       />
 
-      <div className="hidden" aria-hidden>
+      <PrintOffscreenHost>
         <PayslipPrint ref={printRef} data={singlePayslip} printSettings={printTemplate} />
         <CombinedPayslipsPrint
           ref={combinedPrintRef}
           items={combinedPayslips}
           printSettings={printTemplate}
         />
-      </div>
+      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

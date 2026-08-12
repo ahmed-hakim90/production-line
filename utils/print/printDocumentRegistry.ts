@@ -25,6 +25,8 @@ export const PRINT_DOCUMENT_TYPE_IDS: readonly PrintDocumentTypeId[] = [
   'suppliesReceipt',
   'repairPayment',
   'repairSpareIssue',
+  'repairSparePartsCount',
+  'warehouseStockCount',
   'repairTreasuryMonthly',
   'routingExecution',
   'productionWorkerReport',
@@ -35,6 +37,7 @@ export const PRINT_DOCUMENT_TYPE_IDS: readonly PrintDocumentTypeId[] = [
   'repairJobCard',
   'repairDeliveryReceipt',
   'catalogProductDetail',
+  'workOrder',
 ] as const;
 
 export const PRINT_CUSTOM_LINES_MAX = 5;
@@ -164,6 +167,16 @@ export const PRINT_DOCUMENT_REGISTRY: PrintDocumentRegistryEntry[] = [
     fields: [COMMON_META, COMMON_KPIS, COMMON_SIGNATURES],
   },
   {
+    id: 'repairSparePartsCount',
+    labelAr: 'ورقة جرد قطع غيار',
+    fields: [COMMON_META, COMMON_KPIS, COMMON_SIGNATURES],
+  },
+  {
+    id: 'warehouseStockCount',
+    labelAr: 'ورقة جرد مخزن',
+    fields: [COMMON_META, COMMON_KPIS, COMMON_SIGNATURES],
+  },
+  {
     id: 'repairTreasuryMonthly',
     labelAr: 'تقرير خزائن شهري',
     fields: [COMMON_META, COMMON_KPIS, COMMON_SIGNATURES],
@@ -254,6 +267,17 @@ export const PRINT_DOCUMENT_REGISTRY: PrintDocumentRegistryEntry[] = [
       COMMON_META,
       COMMON_KPIS,
       { key: 'reportsTable', labelAr: 'التقارير التفصيلية', defaultVisible: true, descriptionAr: 'جدول تقارير الإنتاج', icon: 'table_chart' },
+      COMMON_SIGNATURES,
+    ],
+  },
+  {
+    id: 'workOrder',
+    labelAr: 'أمر شغل',
+    fields: [
+      COMMON_META,
+      COMMON_KPIS,
+      { key: 'costs', labelAr: 'التكاليف', defaultVisible: true, descriptionAr: 'التكلفة التقديرية والفعلية عند توفرها', icon: 'payments' },
+      { key: 'notes', labelAr: 'الملاحظات', defaultVisible: true, descriptionAr: 'ملاحظات أمر الشغل', icon: 'notes' },
       COMMON_SIGNATURES,
     ],
   },

@@ -24,6 +24,50 @@ export function canCorrectUnrepairableQuantity(input: CustodyQuantities, nextUnr
     && next + qty(input.custodyHandedOverQuantity) <= qty(input.receivedQuantity);
 }
 
+export type CustodyAgingSummary = {
+  custodyUnits: number;
+  custodyRows: number;
+  aging7Rows: number;
+  aging14Rows: number;
+  unrepairableUnits: number;
+  unrepairableRows: number;
+};
+
+/** Dashboard/KPI snapshot from custody ledger rows (record age = createdAt). */
+export function summarizeCustodyAging(
+  rows: Array<CustodyQuantities & { createdAt?: string; updatedAt?: string }>,
+  ageDaysFn: (createdAt?: string, updatedAt?: string) => number,
+): CustodyAgingSummary {
+  let custodyUnits = 0;
+  let custodyRows = 0;
+  let aging7Rows = 0;
+  let aging14Rows = 0;
+  let unrepairableUnits = 0;
+  let unrepairableRows = 0;
+  for (const row of rows) {
+    const balances = computeCustomerDeviceBalances(row);
+    const ageDays = ageDaysFn(row.createdAt, row.updatedAt);
+    if (balances.custody > 0) {
+      custodyUnits += balances.custody;
+      custodyRows += 1;
+      if (ageDays >= 7) aging7Rows += 1;
+      if (ageDays >= 14) aging14Rows += 1;
+    }
+    if (balances.unrepairableStock > 0) {
+      unrepairableUnits += balances.unrepairableStock;
+      unrepairableRows += 1;
+    }
+  }
+  return {
+    custodyUnits,
+    custodyRows,
+    aging7Rows,
+    aging14Rows,
+    unrepairableUnits,
+    unrepairableRows,
+  };
+}
+
 export type PortalScannedLine = {
   productId: string;
   name: string;

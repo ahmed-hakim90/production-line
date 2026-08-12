@@ -54,7 +54,7 @@ import type { Product, ProductionReport } from '../../../types';
 import type { FirestoreProduct } from '../../../types';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
+import { matchesFirestoreSearch, normalizeFirestoreSearch, resolveFirestoreSearchKey } from '@/lib/firestoreSearch';
 import { usePermission } from '../../../utils/permissions';
 import { useResourcePermission } from '@/utils/useResourcePermission';
 import {
@@ -450,7 +450,7 @@ export const Products: React.FC = () => {
     }), [categoryFilter, debouncedProductSearch, manufacturedFilter]);
   const productPager = useCursorPagination<FirestoreProduct, NonNullable<Awaited<ReturnType<typeof productService.listPaged>>['nextCursor']>>({
     queryKey: JSON.stringify({
-      search: normalizeFirestoreSearch(debouncedProductSearch),
+      search: resolveFirestoreSearchKey(debouncedProductSearch),
       categoryFilter,
       manufacturedFilter,
       stockFilter,
@@ -595,11 +595,15 @@ export const Products: React.FC = () => {
   }, [_rawProducts]);
 
   const filtered = useMemo(() => {
+    const serverSearchActive = resolveFirestoreSearchKey(search).length >= 2;
     return productsForTable.filter((p) => {
+      // Server already filtered by searchPrefixes when query is ready; keep a
+      // flexible local match only for 1-char typing / stale page edge cases.
       const matchSearch =
         !search ||
-        p.name.includes(search) ||
-        p.code.toLowerCase().includes(search.toLowerCase());
+        serverSearchActive ||
+        matchesFirestoreSearch(p.name, search) ||
+        matchesFirestoreSearch(p.code, search);
       const matchCategory = (() => {
         if (!categoryFilter) return true;
         if (categoryFilter.startsWith('name:')) {
@@ -1105,15 +1109,30 @@ export const Products: React.FC = () => {
     try {
       let manufacturingMaterials: ProductImportMaterialCatalogItem[] = [];
       let materialCatalogError = false;
+      let catalogProducts: typeof _rawProducts = [];
+      let productCatalogError = false;
       try {
         manufacturingMaterials = await materialService.getAll();
       } catch {
         materialCatalogError = true;
       }
-      const result = await parseProductsExcel(file, _rawProducts, {
+      // Must use full catalog — `_rawProducts` is only the current pager page (~20).
+      try {
+        catalogProducts = await productService.getAll();
+      } catch {
+        productCatalogError = true;
+        catalogProducts = _rawProducts;
+      }
+      const result = await parseProductsExcel(file, catalogProducts, {
         manufacturingMaterials,
         validateManufacturingMaterials: true,
       });
+      if (productCatalogError) {
+        result.fileErrors = [
+          ...(result.fileErrors ?? []),
+          'تعذر تحميل كامل كتالوج المنتجات؛ المطابقة قد تقتصر على الصفحة الظاهرة حالياً.',
+        ];
+      }
       if (materialCatalogError) {
         result.fileErrors = [
           ...(result.fileErrors ?? []),
@@ -1283,12 +1302,22 @@ export const Products: React.FC = () => {
     try {
       let manufacturingMaterials: ProductImportMaterialCatalogItem[] = [];
       let materialCatalogError = false;
+      let catalogProducts: typeof _rawProducts = [];
+      let productCatalogError = false;
       let locations: Array<{ id: string; code: string; warehouseId: string; warehouseName?: string; isActive?: boolean }> = [];
       let locationsError = false;
       try {
         manufacturingMaterials = await materialService.getAll();
       } catch {
         materialCatalogError = true;
+      }
+      // Must use full catalog — `_rawProducts` is only the current pager page (~20),
+      // so codes found via search but not on the open page were falsely "غير موجود".
+      try {
+        catalogProducts = await productService.getAll();
+      } catch {
+        productCatalogError = true;
+        catalogProducts = _rawProducts;
       }
       try {
         const warehouseRows = warehouses.length > 0 ? warehouses : await warehouseService.getActiveWarehouses();
@@ -1307,10 +1336,16 @@ export const Products: React.FC = () => {
       } catch {
         locationsError = true;
       }
-      const result = await parseProductComponentsExcel(file, _rawProducts, {
+      const result = await parseProductComponentsExcel(file, catalogProducts, {
         manufacturingMaterials,
         locations,
       });
+      if (productCatalogError) {
+        result.fileErrors = [
+          ...result.fileErrors,
+          'تعذر تحميل كامل كتالوج المنتجات؛ المطابقة قد تقتصر على الصفحة الظاهرة حالياً.',
+        ];
+      }
       if (materialCatalogError) {
         result.fileErrors = [
           ...result.fileErrors,
@@ -1782,17 +1817,18 @@ export const Products: React.FC = () => {
   };
 
   const openBomExportModal = () => {
-    if (!canExportFromPage || _rawProducts.length === 0 || exportingBom) return;
+    if (!canExportFromPage || exportingBom) return;
     setBomExportCategoryFilter(categoryFilter || '');
     setShowBomExportModal(true);
   };
 
   const handleExportProductBom = async (categoryFilterValue = bomExportCategoryFilter) => {
-    if (!canExportFromPage || _rawProducts.length === 0) return;
+    if (!canExportFromPage) return;
     setExportingBom(true);
     setSaveMsg(null);
     try {
-      const [materials, locationRows, locationBalances, warehouseBalances] = await Promise.all([
+      const [allProducts, materials, locationRows, locationBalances, warehouseBalances] = await Promise.all([
+        productService.getAll(),
         materialService.getAll(),
         warehouseLocationService.getAll(),
         stockService.getLocationBalances(),
@@ -1831,7 +1867,8 @@ export const Products: React.FC = () => {
         );
       }
 
-      const productsSorted = _rawProducts
+      // Full catalog — not the pager page mirrored into `_rawProducts`.
+      const productsSorted = allProducts
         .filter((product) => productMatchesCategoryFilter({
           categoryId: product.categoryId,
           categoryName: product.categoryName,
@@ -2316,7 +2353,7 @@ export const Products: React.FC = () => {
                 label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير مكونات المنتجات (للاستيراد)',
                 icon: 'table_chart',
                 group: 'مكونات',
-                hidden: !canExportFromPage || _rawProducts.length === 0,
+                hidden: !canExportFromPage,
                 onClick: openBomExportModal,
               },
               {

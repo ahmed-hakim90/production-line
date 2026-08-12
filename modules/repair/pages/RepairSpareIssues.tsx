@@ -16,6 +16,7 @@ import { repairBranchService } from '../services/repairBranchService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
 import { CreateRepairSpareIssueModal } from '../components/CreateRepairSpareIssueModal';
 import { RepairSpareIssuePrint } from '../components/RepairSpareIssuePrint';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import {
   REPAIR_SPARE_APPROVAL_MODE_LABELS,
   REPAIR_SPARE_ISSUE_STATUS_LABELS,
@@ -537,9 +538,9 @@ export const RepairSpareIssues: React.FC = () => {
         ) : null}
       </div>
 
-      <div className="hidden">
+      <PrintOffscreenHost>
         <RepairSpareIssuePrint ref={printRef} issue={printIssue} printSettings={printTemplate} />
-      </div>
+      </PrintOffscreenHost>
 
       <CreateRepairSpareIssueModal
         open={showCreate}

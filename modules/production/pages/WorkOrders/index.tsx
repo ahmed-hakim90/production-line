@@ -20,7 +20,7 @@ import {
 } from '../../utils/workOrderReportLinking';
 import { estimateReportCost } from '../../../../utils/costCalculations';
 import { exportWorkOrders, type WorkOrderExportRow } from '../../../../utils/exportExcel';
-import { useManagedPrint } from '../../../../utils/printManager';
+import { commitAndPrint, useManagedPrint } from '../../../../utils/printManager';
 import { usePermission } from '../../../../utils/permissions';
 import { reportService } from '../../services/reportService';
 import {
@@ -30,6 +30,7 @@ import { unwrapOrThrow } from '@/shared/usecases';
 import { sumQuantityProducedForWorkOrderExcludingPackaging } from '../../utils/packagingLine';
 import { WorkOrderPrint } from '../../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../components/ProductionReportPrint';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { WorkOrderDrawer } from './WorkOrderDrawer';
 import { WorkOrderFilters } from './WorkOrderFilters';
 import { WorkOrdersTable } from './WorkOrdersTable';
@@ -42,6 +43,7 @@ import {
   loadReportsComponentLabelOptions,
   type InjectionComponentOption,
 } from '../../utils/injectionComponentOptions';
+import { resolveWorkOrderReportType } from '../../utils/reportTypes';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import {
@@ -66,6 +68,28 @@ const normalizeDateRange = (dateRange: { from: string; to: string } | null) => {
   if (!dateRange.from && !dateRange.to) return null;
   return dateRange;
 };
+
+function buildWorkOrderPrintData(
+  order: WorkOrder,
+  names: { productName: string; lineName: string; supervisorName: string },
+): WorkOrderPrintData {
+  return {
+    workOrderNumber: order.workOrderNumber,
+    productName: names.productName || '—',
+    lineName: names.lineName || '—',
+    supervisorName: names.supervisorName || '—',
+    quantity: Number(order.quantity || 0),
+    producedQuantity: Number(order.producedQuantity || 0),
+    maxWorkers: Number(order.maxWorkers || 0),
+    targetDate: String(order.targetDate || '—'),
+    status: order.status,
+    statusLabel: WORK_ORDER_STATUS_LABELS[order.status] || order.status,
+    estimatedCost: Number(order.estimatedCost || 0),
+    actualCost: Number(order.actualCost || 0),
+    notes: String(order.notes || ''),
+    showCosts: true,
+  };
+}
 
 interface WorkOrderReportMeta {
   count: number;
@@ -129,7 +153,14 @@ export const WorkOrders: React.FC = () => {
     return loggedInSupervisor.id;
   }, [userRoleName, loggedInSupervisor]);
 
-  const { filters, setFilter, clearFilters } = useWorkOrderFilters();
+  const initialWorkOrderTypeParam = String(
+    searchParams.get('workOrderType') || searchParams.get('planType') || '',
+  ).trim();
+  const { filters, setFilter, clearFilters } = useWorkOrderFilters({
+    workOrderType: initialWorkOrderTypeParam === 'component_injection' || initialWorkOrderTypeParam === 'all'
+      ? initialWorkOrderTypeParam
+      : 'finished_product',
+  });
   const debouncedWorkOrderSearch = useDebouncedValue(filters.search, 350);
   const realtimeStatus = filters.status === 'completed' || filters.status === 'cancelled'
     ? filters.status
@@ -168,7 +199,11 @@ export const WorkOrders: React.FC = () => {
   const [reportMetaByOrderId, setReportMetaByOrderId] = useState<Record<string, WorkOrderReportMeta>>({});
   const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
+  const handlePrint = useManagedPrint({
+    contentRef: woPrintRef,
+    printSettings: printTemplate,
+    documentTitle: 'أمر شغل',
+  });
   const canCreateWorkOrderPermission = can('workOrders.create') || can('workOrders.componentInjection.manage');
   const canCreateWorkOrder = canCreateWorkOrderPermission && isOperationPathEnabled(
     systemSettings,
@@ -303,16 +338,21 @@ export const WorkOrders: React.FC = () => {
   }, [orderIds, orderIdsKey, _rawLines]);
 
   const searchedOrders = useMemo(() => {
+    const byType = filters.workOrderType === 'all'
+      ? allOrders
+      : allOrders.filter(
+        (order) => resolveWorkOrderReportType(order.workOrderType) === filters.workOrderType,
+      );
     const search = filters.search.trim().toLowerCase();
-    if (!search) return allOrders;
-    return allOrders.filter((order) => {
+    if (!search) return byType;
+    return byType.filter((order) => {
       const productName = productNameMap.get(order.productId || '') || '';
       return (
         order.workOrderNumber.toLowerCase().includes(search) ||
         productName.toLowerCase().includes(search)
       );
     });
-  }, [allOrders, filters.search, productNameMap]);
+  }, [allOrders, filters.search, filters.workOrderType, productNameMap]);
 
   const rowViews = useMemo<WorkOrderRowView[]>(() => {
     return searchedOrders.map((order) => {
@@ -477,6 +517,14 @@ export const WorkOrders: React.FC = () => {
   const selectedSupervisorName = selectedOrder
     ? (supervisorNameMap.get(selectedOrder.supervisorId || '') || '—')
     : '—';
+  const livePrintData = useMemo(() => {
+    if (!selectedOrder) return printData;
+    return buildWorkOrderPrintData(selectedOrder, {
+      productName: selectedProductName,
+      lineName: selectedLineName,
+      supervisorName: selectedSupervisorName,
+    });
+  }, [printData, selectedLineName, selectedOrder, selectedProductName, selectedSupervisorName]);
 
   const counts = useMemo(() => {
     const byStatus = {
@@ -670,26 +718,14 @@ export const WorkOrders: React.FC = () => {
   );
 
   const handlePrintOrder = (order: WorkOrder) => {
-    setPrintData({
-      workOrderNumber: order.workOrderNumber,
+    const next = buildWorkOrderPrintData(order, {
       productName: productNameMap.get(order.productId || '') || '—',
       lineName: lineNameMap.get(order.lineId || '') || '—',
       supervisorName: supervisorNameMap.get(order.supervisorId || '') || '—',
-      quantity: Number(order.quantity || 0),
-      producedQuantity: Number(order.producedQuantity || 0),
-      maxWorkers: Number(order.maxWorkers || 0),
-      targetDate: String(order.targetDate || '—'),
-      status: order.status,
-      statusLabel: WORK_ORDER_STATUS_LABELS[order.status] || order.status,
-      estimatedCost: Number(order.estimatedCost || 0),
-      actualCost: Number(order.actualCost || 0),
-      notes: String(order.notes || ''),
-      showCosts: true,
     });
-    setTimeout(() => {
-      handlePrint();
-      setTimeout(() => setPrintData(null), 600);
-    }, 220);
+    commitAndPrint(() => {
+      setPrintData(next);
+    }, handlePrint);
   };
 
   const handleExport = () => {
@@ -838,9 +874,9 @@ export const WorkOrders: React.FC = () => {
         onReconcileReports={workOrderReconcileEnabled && (can('workOrders.edit') || can('reports.edit')) ? handleReconcileLinkedReports : undefined}
         reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
       />
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <WorkOrderPrint ref={woPrintRef} data={printData} printSettings={printTemplate} />
-      </div>
+      <PrintOffscreenHost>
+        <WorkOrderPrint ref={woPrintRef} data={livePrintData} printSettings={printTemplate} />
+      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

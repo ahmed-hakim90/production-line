@@ -1,18 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { SingleReportPrint } from '../../../production/components/ProductionReportPrint';
 import { ProductionReportShareCard } from '../../../production/components/ProductionReportShareCard';
-import { RepairSalesInvoicePrint } from '../../../repair/components/RepairSalesInvoicePrint';
-import { RepairPaymentPrint } from '../../../repair/components/RepairPaymentPrint';
-import { RepairSpareIssuePrint } from '../../../repair/components/RepairSpareIssuePrint';
-import { RepairTreasuryMonthlyPrint } from '../../../repair/components/RepairTreasuryMonthlyPrint';
-import { StockTransferPrint } from '../../../inventory/components/StockTransferPrint';
-import { ItemCardPrint } from '../../../inventory/components/ItemCardPrint';
-import { SuppliesReceiptPrint } from '../../../inventory/components/SuppliesReceiptPrint';
-import { AccountingReportPrint } from '../../../accounting/components/AccountingReportPrint';
-import { QualityReportPrint } from '../../../quality/components/QualityReportPrint';
-import { PayslipPrint } from '../../../hr/components/PayslipPrint';
-import { RoutingExecutionPrint } from '../../../production/routing/components/RoutingExecutionPrint';
 import { Button } from '../UI';
 import type {
   PaperOrientation,
@@ -35,6 +23,7 @@ import { toast } from '../../../../components/Toast';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { PrintDocumentControlsPanel } from './PrintDocumentControlsPanel';
+import { PrintEngineDocumentPreview } from './PrintEngineDocumentPreview';
 import { PRINT_DOCUMENT_REGISTRY, getPrintDocumentEntry } from '../../../../utils/print/printDocumentRegistry';
 import {
   PRINT_FONT_FAMILIES,
@@ -42,21 +31,7 @@ import {
   PRINT_FONT_SIZE_MAX,
   PRINT_FONT_SIZE_MIN,
 } from '../../../../utils/print/printFont';
-import {
-  PRINT_PREVIEW_ACCOUNTING,
-  PRINT_PREVIEW_BRANCH_NAME,
-  PRINT_PREVIEW_ITEM_CARD,
-  PRINT_PREVIEW_PAYSLIP,
-  PRINT_PREVIEW_QUALITY,
-  PRINT_PREVIEW_REPAIR_INVOICE,
-  PRINT_PREVIEW_REPAIR_PAYMENT_AUTH,
-  PRINT_PREVIEW_REPAIR_SPARE_ISSUE,
-  PRINT_PREVIEW_REPAIR_TREASURY,
-  PRINT_PREVIEW_ROUTING_EXECUTION,
-  PRINT_PREVIEW_SAMPLE_ROW,
-  PRINT_PREVIEW_SUPPLIES_RECEIPT,
-  PRINT_PREVIEW_TRANSFER,
-} from '../../lib/printPreviewSamples';
+import { PRINT_PREVIEW_SAMPLE_ROW } from '../../lib/printPreviewSamples';
 
 const WHATSAPP_CARD_WIDTH = 1080;
 const WHATSAPP_PREVIEW_SCALE = 0.42;
@@ -588,6 +563,43 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
         selectedDocType={selectedDocType}
         setSelectedDocType={setSelectedDocType}
       />
+
+      {!showPreview ? (
+        <OpsDashPanel
+          title={`معاينة المحرك — ${selectedDocLabel}`}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" solid={false} onClick={() => setShowPreview(true)}>
+                تكبير المعاينة
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                solid={false}
+                disabled={!!previewBusy}
+                onClick={() => handlePreviewPrint()}
+              >
+                طباعة العينة
+              </Button>
+            </div>
+          }
+        >
+          <p className="text-xs text-[var(--color-text-muted)] mb-3">
+            نفس مكوّن الطباعة التشغيلي — يتحدث فوراً مع الشعار والألوان وحقول المستند المحدد أعلاه.
+          </p>
+          <div className="overflow-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-4 max-h-[70vh]">
+            <div className="mx-auto w-fit max-w-full shadow-lg bg-white">
+              <PrintEngineDocumentPreview
+                ref={previewRef}
+                docType={selectedDocType}
+                printSettings={localPrint}
+                sampleRow={previewRow}
+              />
+            </div>
+          </div>
+        </OpsDashPanel>
+      ) : null}
+
       <div className="flex justify-end">
         <Button onClick={onReset} variant="ghost" solid={false}>
           إعادة تعيين للقيم الافتراضية
@@ -668,102 +680,12 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
             <div className="flex-1 overflow-auto p-6 bg-[var(--color-bg)] flex justify-center">
               <div className="shadow-2xl bg-[var(--color-card)]">
-                {selectedDocType === 'productionReport' ? (
-                  <SingleReportPrint
-                    ref={previewRef}
-                    report={previewRow}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'repairSalesInvoice' ? (
-                  <RepairSalesInvoicePrint
-                    ref={previewRef}
-                    invoice={PRINT_PREVIEW_REPAIR_INVOICE}
-                    branchName={PRINT_PREVIEW_BRANCH_NAME}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'stockTransfer' ? (
-                  <StockTransferPrint
-                    ref={previewRef}
-                    data={PRINT_PREVIEW_TRANSFER}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'itemCard' ? (
-                  <ItemCardPrint
-                    ref={previewRef}
-                    card={PRINT_PREVIEW_ITEM_CARD}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'accountingReport' ? (
-                  <AccountingReportPrint
-                    ref={previewRef}
-                    title={PRINT_PREVIEW_ACCOUNTING.title}
-                    subtitle={PRINT_PREVIEW_ACCOUNTING.subtitle}
-                    columns={[...PRINT_PREVIEW_ACCOUNTING.columns]}
-                    rows={[...PRINT_PREVIEW_ACCOUNTING.rows]}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'qualityReport' ? (
-                  <QualityReportPrint
-                    ref={previewRef}
-                    title={PRINT_PREVIEW_QUALITY.title}
-                    subtitle={PRINT_PREVIEW_QUALITY.subtitle}
-                    workOrderNumber={PRINT_PREVIEW_QUALITY.workOrderNumber}
-                    summary={PRINT_PREVIEW_QUALITY.summary}
-                    topDefects={[...PRINT_PREVIEW_QUALITY.topDefects]}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'payslip' ? (
-                  <PayslipPrint
-                    ref={previewRef}
-                    data={PRINT_PREVIEW_PAYSLIP as any}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'suppliesReceipt' ? (
-                  <SuppliesReceiptPrint
-                    ref={previewRef}
-                    order={PRINT_PREVIEW_SUPPLIES_RECEIPT as any}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'repairPayment' ? (
-                  <RepairPaymentPrint
-                    ref={previewRef}
-                    authorization={PRINT_PREVIEW_REPAIR_PAYMENT_AUTH as any}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'repairSpareIssue' ? (
-                  <RepairSpareIssuePrint
-                    ref={previewRef}
-                    issue={PRINT_PREVIEW_REPAIR_SPARE_ISSUE as any}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'repairTreasuryMonthly' ? (
-                  <RepairTreasuryMonthlyPrint
-                    ref={previewRef}
-                    report={PRINT_PREVIEW_REPAIR_TREASURY as any}
-                    branchLabel={PRINT_PREVIEW_BRANCH_NAME}
-                    printSettings={localPrint}
-                  />
-                ) : null}
-                {selectedDocType === 'routingExecution' ? (
-                  <RoutingExecutionPrint
-                    ref={previewRef}
-                    execution={PRINT_PREVIEW_ROUTING_EXECUTION.execution as any}
-                    steps={PRINT_PREVIEW_ROUTING_EXECUTION.steps as any}
-                    productName={PRINT_PREVIEW_ROUTING_EXECUTION.productName}
-                    supervisorName={PRINT_PREVIEW_ROUTING_EXECUTION.supervisorName}
-                    printSettings={localPrint}
-                  />
-                ) : null}
+                <PrintEngineDocumentPreview
+                  ref={previewRef}
+                  docType={selectedDocType}
+                  printSettings={localPrint}
+                  sampleRow={previewRow}
+                />
               </div>
             </div>
           </div>

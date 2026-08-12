@@ -46,6 +46,15 @@ export function WorkOrderFilters({
       onSearchChange={(value) => onSetFilter('search', value)}
       quickFilters={[
         {
+          key: 'workOrderType',
+          placeholder: 'منتج',
+          options: [
+            { value: 'component_injection', label: 'مكون حقن' },
+            { value: 'every', label: 'الكل' },
+          ],
+          width: 'w-[140px]',
+        },
+        {
           key: 'status',
           placeholder: 'كل الحالات',
           options: STATUS_OPTIONS.filter((option) => option.key !== 'all').map((option) => ({
@@ -55,8 +64,21 @@ export function WorkOrderFilters({
           width: 'w-[140px]',
         },
       ]}
-      quickFilterValues={{ status: filters.status }}
+      quickFilterValues={{
+        workOrderType: filters.workOrderType === 'finished_product'
+          ? 'all'
+          : filters.workOrderType === 'all'
+            ? 'every'
+            : filters.workOrderType,
+        status: filters.status,
+      }}
       onQuickFilterChange={(key, value) => {
+        if (key === 'workOrderType') {
+          if (value === 'all') onSetFilter('workOrderType', 'finished_product');
+          else if (value === 'every') onSetFilter('workOrderType', 'all');
+          else if (value === 'component_injection') onSetFilter('workOrderType', 'component_injection');
+          return;
+        }
         if (key !== 'status') return;
         onSetFilter('status', value as WorkOrderStatus | 'all');
       }}
