@@ -2,12 +2,17 @@ import assert from 'node:assert/strict';
 import {
   isFactoryProductionMenuVisibleForWarehouseScope,
   isInventoryMenuItemVisibleForWarehouseScope,
+  isInventorySidebarHiddenForRoleKey,
   isRepairCenterPartsMenuVisible,
   isRepairPartsReplenishmentMenuVisible,
   isRepairSparePartsRecallMenuVisible,
   resolveAccessibleWarehouseRoles,
 } from '../modules/inventory/lib/inventoryMenuVisibility.ts';
 
+assert.equal(isInventorySidebarHiddenForRoleKey('repair_reception'), true);
+assert.equal(isInventorySidebarHiddenForRoleKey('maintenance_center_warehouse'), true);
+assert.equal(isInventorySidebarHiddenForRoleKey('spare_parts_central_warehouse'), false);
+assert.equal(isInventorySidebarHiddenForRoleKey(null), false);
 assert.deepEqual(
   resolveAccessibleWarehouseRoles({ warehouseRoles: ['decomposed'] }),
   ['decomposed'],
@@ -216,7 +221,31 @@ assert.equal(
     scoped: true,
     accessibleWarehouseRoles: ['maintenance_center'],
   }),
-  true,
+  false,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-balances',
+    scoped: true,
+    accessibleWarehouseRoles: ['maintenance_center'],
+  }),
+  false,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-dashboard',
+    scoped: true,
+    accessibleWarehouseRoles: ['maintenance_center'],
+  }),
+  false,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-counts',
+    scoped: true,
+    accessibleWarehouseRoles: ['maintenance_center'],
+  }),
+  false,
 );
 assert.equal(
   isInventoryMenuItemVisibleForWarehouseScope({
@@ -225,6 +254,30 @@ assert.equal(
     accessibleWarehouseRoles: ['maintenance_center'],
   }),
   false,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-balances',
+    scoped: true,
+    accessibleWarehouseRoles: ['repair_customer_custody'],
+  }),
+  false,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-warehouses',
+    scoped: true,
+    accessibleWarehouseRoles: ['repair_unrepairable'],
+  }),
+  false,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'repair-wh-space-center-1',
+    scoped: true,
+    accessibleWarehouseRoles: ['maintenance_center'],
+  }),
+  true,
 );
 assert.equal(
   isInventoryMenuItemVisibleForWarehouseScope({

@@ -38,11 +38,15 @@ assert.equal(
 
 assert.equal(
   resolvePortalKind({
-    can: (p) => p === 'inventory.view' || p === 'sparePartsReplenishment.receive',
+    can: (p) =>
+      p === 'repair.dashboard.view'
+      || p === 'repair.parts.view'
+      || p === 'sparePartsReplenishment.receive',
     roleKey: 'maintenance_center_warehouse',
     inventoryWarehouseId: 'wh-center',
   }),
-  'warehouse_manager',
+  'repair',
+  'center warehouse role lands on repair portal (not inventory)',
 );
 
 assert.equal(

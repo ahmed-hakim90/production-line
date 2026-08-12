@@ -37,8 +37,8 @@ function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
   const boundWarehouse = Boolean(String(checker.inventoryWarehouseId || '').trim());
   const warehouseRoleKey = checker.roleKey === 'materials_warehouse'
     || checker.roleKey === 'inventory_viewer'
-    || checker.roleKey === 'spare_parts_central_warehouse'
-    || checker.roleKey === 'maintenance_center_warehouse';
+    || checker.roleKey === 'spare_parts_central_warehouse';
+  // maintenance_center_warehouse is handled by isRepairOpsPortal above — never warehouse portal.
   if (warehouseRoleKey) return checker.can('inventory.view') || hasPrivilegedInventoryAccess(checker);
   if (!boundWarehouse) {
     return checker.can('inventory.view') && hasPrivilegedInventoryAccess(checker);
@@ -55,6 +55,8 @@ function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
 
 /** Repair ops / centers-manager home — not factory production dashboards. */
 export function isRepairOpsPortal(checker: PortalPermissionChecker): boolean {
+  // Stock-only center warehouse role still lives inside الصيانة (no inventory portal).
+  if (checker.roleKey === 'maintenance_center_warehouse') return true;
   return checker.can('repair.adminDashboard.view') || checker.can('repair.dashboard.view');
 }
 

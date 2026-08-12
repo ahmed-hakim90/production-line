@@ -70,12 +70,10 @@ const MENU_KEYS_BY_WAREHOUSE_ROLE: Record<WarehouseRole, readonly string[]> = {
     'inv-spare-parts-center-stock',
     'inv-spare-parts-recall',
   ],
-  maintenance_center: [
-    ...SCOPED_SHARED_MENU_KEYS,
-    'inv-spare-parts-recall',
-  ],
-  repair_customer_custody: [...SCOPED_SHARED_MENU_KEYS],
-  repair_unrepairable: [...SCOPED_SHARED_MENU_KEYS],
+  // Center + custody warehouses operate under الصيانة (/repair/*) — no inventory group.
+  maintenance_center: [],
+  repair_customer_custody: [],
+  repair_unrepairable: [],
   general: [...SCOPED_SHARED_MENU_KEYS],
 };
 
@@ -86,6 +84,15 @@ const SPARE_PARTS_SCOPE_ROLES: readonly WarehouseRole[] = [
   'spare_parts_central',
   'maintenance_center',
 ];
+
+/**
+ * Built-in center operators stay inside الصيانة — hide the inventory sidebar group
+ * even when they hold `inventory.view` for shared WarehouseWorkspace routes.
+ */
+export function isInventorySidebarHiddenForRoleKey(roleKey?: string | null): boolean {
+  const key = String(roleKey || '').trim();
+  return key === 'repair_reception' || key === 'maintenance_center_warehouse';
+}
 
 export function resolveAccessibleWarehouseRoles(input: {
   warehouseRoles: readonly (WarehouseRole | undefined | null)[];
