@@ -14,6 +14,7 @@ import {
 import { Layout } from './components/Layout';
 import { PageRouteFallback } from './components/PageRouteFallback';
 import { RouteErrorBoundary } from './components/RouteErrorBoundary';
+import { FirestoreNetworkRecovery } from './components/FirestoreNetworkRecovery';
 import { DynamicImportRecoveryScreen } from './components/DynamicImportRecoveryScreen';
 import { RouterRealtimeSubscriptions } from './components/RouterRealtimeSubscriptions';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -1364,6 +1365,7 @@ const App: React.FC = () => {
         {isAuthenticated && !isPendingApproval && <ModalHost />}
         <ForcedClientUpdateGate />
         <NotificationPopupOverlay />
+        <FirestoreNetworkRecovery />
         <ToastContainer />
         <div id="erp-modal-root" />
       </BrowserRouter>

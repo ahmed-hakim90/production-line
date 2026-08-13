@@ -1,5 +1,6 @@
-import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '@/components/Toast';
+import { NETWORK_RECOVERED_EVENT } from '@/lib/firestoreNetworkRecovery';
 import { useAppStore } from '@/store/useAppStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useProductionStore } from '@/store/useProductionStore';
@@ -40,6 +41,14 @@ export function AppContentRefreshProvider({ children }: { children: React.ReactN
       inFlightRef.current = false;
     }
   }, [loadAppData]);
+
+  useEffect(() => {
+    const onRecovered = () => {
+      void refreshPageContent();
+    };
+    window.addEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+    return () => window.removeEventListener(NETWORK_RECOVERED_EVENT, onRecovered);
+  }, [refreshPageContent]);
 
   const value = useMemo(
     () => ({ contentRefreshing, contentKey, refreshPageContent }),

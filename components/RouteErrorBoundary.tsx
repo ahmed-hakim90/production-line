@@ -1,4 +1,5 @@
 import React from 'react';
+import { NETWORK_RECOVERED_EVENT } from '@/lib/firestoreNetworkRecovery';
 import { tenantHomePath, tenantSlugFromPathname } from '@/lib/tenantPaths';
 import { resolvePreferredTenantHomePath } from '@/lib/navigationRecovery';
 
@@ -24,6 +25,19 @@ export class RouteErrorBoundary extends React.Component<
   state: RouteErrorBoundaryState = {
     hasError: false,
     retryKey: 0,
+  };
+
+  componentDidMount(): void {
+    window.addEventListener(NETWORK_RECOVERED_EVENT, this.handleNetworkRecovered);
+  }
+
+  componentWillUnmount(): void {
+    window.removeEventListener(NETWORK_RECOVERED_EVENT, this.handleNetworkRecovered);
+  }
+
+  private handleNetworkRecovered = (): void => {
+    if (!this.state.hasError) return;
+    this.handleRetry();
   };
 
   static getDerivedStateFromError(): Partial<RouteErrorBoundaryState> {
