@@ -293,7 +293,7 @@ export const StockMovementForm: React.FC = () => {
       STOCK_MOVE_FORM_CATALOG_CACHE_KEY,
       async () => {
         const [whs, rms, mats, peekRef, locs, racks] = await Promise.all([
-          warehouseService.getActiveWarehouses(),
+          warehouseService.getWarehousesForSparePartsFlow(),
           rawMaterialService.getAll(),
           materialService.getAll().catch(() => [] as Material[]),
           stockService.getNextInvReferenceNo(),

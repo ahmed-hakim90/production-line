@@ -104,29 +104,43 @@ export const warehouseService = {
     const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
     if (boundWarehouseId) {
       const warehouse = await this.getById(boundWarehouseId);
-      if (!warehouse) return [];
-      // Bound spare-parts central operators need destination center warehouses
-      // for replenishment / recall dropdowns (Firestore rules already allow the read).
-      if (warehouse.warehouseRole === 'spare_parts_central') {
-        try {
-          const centersSnap = await getDocs(
-            tenantQuery(db, COLLECTION, where('warehouseRole', '==', 'maintenance_center')),
-          );
-          const centers = centersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
-          return warehousesForBoundInventoryOperator(warehouse, centers) as Warehouse[];
-        } catch (error) {
-          console.warn(
-            '[warehouseService] failed loading maintenance_center destinations (needs list rules + tenantId+warehouseRole index)',
-            error,
-          );
-          throw error;
-        }
-      }
-      return [warehouse];
+      return warehouse ? [warehouse] : [];
     }
     const q = tenantQuery(db, COLLECTION, orderBy('name', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
+  },
+
+  /** Destination center warehouses for replenishment / recall / spare-part transfers. */
+  async listMaintenanceCenterWarehouses(): Promise<Warehouse[]> {
+    if (!isConfigured) return [];
+    const snap = await getDocs(
+      tenantQuery(db, COLLECTION, where('warehouseRole', '==', 'maintenance_center')),
+    );
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
+  },
+
+  /**
+   * Bound spare-parts central operators need center warehouses in destination
+   * dropdowns. Workspace / sidebar / filters must not wait on this query.
+   */
+  async getWarehousesForSparePartsFlow(): Promise<Warehouse[]> {
+    const warehouses = await this.getActiveWarehouses();
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (!boundWarehouseId) return warehouses;
+    const bound = warehouses.find((w) => w.id === boundWarehouseId) || warehouses[0];
+    if (bound?.warehouseRole !== 'spare_parts_central') return warehouses;
+    try {
+      const centers = (await this.listMaintenanceCenterWarehouses())
+        .filter((w) => w.isActive !== false);
+      return warehousesForBoundInventoryOperator(bound, centers) as Warehouse[];
+    } catch (error) {
+      console.warn(
+        '[warehouseService] failed loading maintenance_center destinations (needs list rules + tenantId+warehouseRole index)',
+        error,
+      );
+      return warehouses;
+    }
   },
 
   async getById(id: string): Promise<Warehouse | null> {

@@ -1770,10 +1770,16 @@
 
     // Inventory warehouse-scoped collections (users.inventoryWarehouseId).
     match /warehouses/{docId} {
-      allow read: if pl_isActiveUser() && (
+      // Split get/list: document-id equality cannot authorize a collection query.
+      allow get: if pl_isActiveUser() && (
         pl_canReadWarehouseDoc(docId)
         || pl_canReadMaintenanceCenterWarehouseAsCentral()
         || pl_isSuperAdmin()
+      );
+      allow list: if pl_isActiveUser() && (
+        pl_isSuperAdmin()
+        || (!pl_isInventoryWarehouseBound() && pl_sameTenantOrLegacyRead())
+        || pl_canReadMaintenanceCenterWarehouseAsCentral()
       );
       allow create: if pl_isActiveUser() && (pl_canWriteWarehouseDoc(docId) || pl_superAdminTenantScopedCreateOk());
       allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseDoc(docId) || pl_superAdminTenantScopedUpdateOk());

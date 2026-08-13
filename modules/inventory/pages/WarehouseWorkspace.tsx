@@ -291,11 +291,10 @@ export const WarehouseWorkspace: React.FC = () => {
     setError(null);
     setAccessDenied(false);
     try {
-      const [allWhs, branches] = await Promise.all([
-        warehouseService.getAllWarehouses(),
+      const [wh, branches] = await Promise.all([
+        warehouseService.getById(id).catch(() => null),
         repairBranchService.list().catch(() => [] as RepairBranch[]),
       ]);
-      const wh = allWhs.find((row) => row.id === id) || null;
       if (!wh) {
         setWarehouse(null);
         setLinkedBranch(null);

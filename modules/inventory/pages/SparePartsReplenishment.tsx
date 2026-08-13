@@ -126,7 +126,7 @@ export const SparePartsReplenishment: React.FC = () => {
     setLoading(true);
     try {
       const [whsResult, matsResult, itemsResult] = await Promise.allSettled([
-        warehouseService.getActiveWarehouses(),
+        warehouseService.getWarehousesForSparePartsFlow(),
         materialService.getAll(),
         sparePartsReplenishmentService.listRecent(200),
       ]);

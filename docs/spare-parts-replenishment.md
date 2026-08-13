@@ -122,7 +122,7 @@
 - Rules: `firestore/production-line.rules.fragment` → `npm run compose:firestore-rules`
   - قراءة: مستأجر + (`sparePartsReplenishment.view` أو `inventory.view`) + نطاق مخزن المصدر/الوجهة
   - كتابة العميل: ممنوعة
-  - المسؤول المركزي المربوط يقرأ قائمة مخازن `maintenance_center` عبر `resource.data.warehouseRole` (مش `get()` على نفس المستند)
+  - المسؤول المركزي المربوط يقرأ قائمة مخازن `maintenance_center` عبر `allow list` + `resource.data.warehouseRole` (مش `get()` على نفس المستند). مساحة المخزن تستخدم `getById` ولا تنتظر قائمة المراكز.
 - Indexes في `firestore.indexes.json` لـ:
   - `warehouses`: `tenantId + warehouseRole` (قائمة وجهات التموين للمسؤول المركزي)
   - `tenantId + createdAt`

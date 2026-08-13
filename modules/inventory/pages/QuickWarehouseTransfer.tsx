@@ -157,7 +157,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
       QUICK_TRANSFER_CATALOG_CACHE_KEY,
       async () => {
         const [whs, rms, mats, peekRef] = await Promise.all([
-          warehouseService.getActiveWarehouses(),
+          warehouseService.getWarehousesForSparePartsFlow(),
           rawMaterialService.getAll(),
           materialService.getAll().catch(() => [] as Material[]),
           stockService.getNextInvReferenceNo(),

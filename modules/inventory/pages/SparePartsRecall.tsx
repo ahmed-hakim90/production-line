@@ -91,7 +91,7 @@ export const SparePartsRecall: React.FC = () => {
     setLoading(true);
     try {
       const [whs, mats, items] = await Promise.all([
-        warehouseService.getActiveWarehouses().catch(() => [] as Warehouse[]),
+        warehouseService.getWarehousesForSparePartsFlow().catch(() => [] as Warehouse[]),
         materialService.getAll().catch(() => [] as Material[]),
         sparePartsRecallService.listRecent(150).catch(() => [] as SparePartsRecallRequest[]),
       ]);
