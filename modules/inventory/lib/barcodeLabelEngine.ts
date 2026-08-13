@@ -53,6 +53,95 @@ export function mmToDriverInches(mm: number): string {
   return (Number(mm) / 25.4).toFixed(2);
 }
 
+/** CSS px at 96dpi — used to size JsBarcode so bars match the sticker, not a fixed pixel strip. */
+export function mmToCssPx(mm: number): number {
+  return Math.max(8, (Number(mm) * 96) / 25.4);
+}
+
+/**
+ * Quiet zone each side (mm). Code128 needs a small gap; keep it tiny so the bars
+ * still read as full-sticker-width when the operator picks 60×40 / 80×50.
+ */
+export const THERMAL_BARCODE_QUIET_MM = 1;
+
+export function thermalBarcodeFaceWidthMm(labelWidthMm: number, quietMm = THERMAL_BARCODE_QUIET_MM): number {
+  return Math.max(12, Number(labelWidthMm) - quietMm * 2);
+}
+
+export type BarcodeLabelLayout = {
+  warehouseMm: number;
+  nameMm: number;
+  codeMm: number;
+  /** Fixed bar height. Hidden fields must not stretch this. */
+  barcodeHeightMm: number;
+  /** Percent of the sticker face. Hiding QR / raising this grows width, not height. */
+  barcodeWidthPct: number;
+};
+
+export const DEFAULT_BARCODE_LABEL_LAYOUT: BarcodeLabelLayout = {
+  warehouseMm: 3.2,
+  nameMm: 4.4,
+  codeMm: 3.6,
+  barcodeHeightMm: 10,
+  barcodeWidthPct: 100,
+};
+
+function clampTenths(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.round(Math.max(min, Math.min(max, value)) * 10) / 10;
+}
+
+export function resolveBarcodeLabelLayout(
+  partial?: Partial<BarcodeLabelLayout> | null,
+): BarcodeLabelLayout {
+  const fallback = DEFAULT_BARCODE_LABEL_LAYOUT;
+  return {
+    warehouseMm: clampTenths(Number(partial?.warehouseMm), 2, 8, fallback.warehouseMm),
+    nameMm: clampTenths(Number(partial?.nameMm), 2.5, 10, fallback.nameMm),
+    codeMm: clampTenths(Number(partial?.codeMm), 2, 8, fallback.codeMm),
+    barcodeHeightMm: clampTenths(Number(partial?.barcodeHeightMm), 6, 24, fallback.barcodeHeightMm),
+    barcodeWidthPct: clampTenths(Number(partial?.barcodeWidthPct), 50, 100, fallback.barcodeWidthPct),
+  };
+}
+
+/**
+ * Barcode draw box. Height follows the operator slider (capped so text still fits).
+ * Width follows the sticker face × width% and grows when QR is off.
+ */
+export function resolveThermalBarcodeBox(input: {
+  labelWidthMm: number;
+  labelHeightMm: number;
+  insetMm: number;
+  layout?: Partial<BarcodeLabelLayout> | null;
+  textBlockMm?: number;
+  showQr?: boolean;
+}): { rowWidthMm: number; widthMm: number; heightMm: number } {
+  const layout = resolveBarcodeLabelLayout(input.layout);
+  const faceWidth = thermalBarcodeFaceWidthMm(input.labelWidthMm, input.insetMm);
+  const rowWidthMm = Math.max(12, Math.round(faceWidth * (layout.barcodeWidthPct / 100) * 10) / 10);
+  const qrMm = input.showQr
+    ? Math.min(12, Math.max(6.5, Number(input.labelHeightMm) * 0.3))
+    : 0;
+  const qrGap = input.showQr ? 1.6 : 0;
+  const widthMm = Math.max(12, Math.round((rowWidthMm - qrMm - qrGap) * 10) / 10);
+  const usable = Math.max(6, Number(input.labelHeightMm) - input.insetMm * 2);
+  const leftover = Math.max(6, usable - Number(input.textBlockMm || 0) - 0.6);
+  const heightMm = Math.min(layout.barcodeHeightMm, leftover);
+  return { rowWidthMm, widthMm, heightMm };
+}
+
+/** Scale JsBarcode module width so generated bars match the sticker width. */
+export function scaleJsBarcodeModuleWidth(
+  generatedWidthPx: number,
+  targetWidthPx: number,
+  baseModuleWidth: number,
+): number {
+  if (!(generatedWidthPx > 0) || !(targetWidthPx > 0) || !(baseModuleWidth > 0)) {
+    return Math.max(0.7, baseModuleWidth || 1.4);
+  }
+  return Math.round(Math.max(0.7, Math.min(6, baseModuleWidth * (targetWidthPx / generatedWidthPx))) * 100) / 100;
+}
+
 export function formatDriverStockSize(widthMm: number, heightMm: number): string {
   return `${mmToDriverInches(widthMm)} in × ${mmToDriverInches(heightMm)} in`;
 }
@@ -229,10 +318,11 @@ export function buildBarcodeLabelPageStyle(
       .${THERMAL_BARCODE_LABEL_CLASS} svg,
       .${THERMAL_BARCODE_LABEL_CLASS} img,
       .${THERMAL_BARCODE_LABEL_CLASS} canvas {
-        max-width: 100% !important;
-        width: 100% !important;
-        height: 100% !important;
         display: block !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: none !important;
+        height: 100% !important;
       }
     }
   `;
@@ -246,6 +336,49 @@ export function expandLabelCopies<T>(labels: T[], copies: number): T[] {
     for (let i = 0; i < n; i += 1) out.push(label);
   }
   return out;
+}
+
+export function pickBarcodeLabelOptionsByIds<T extends { id: string }>(
+  options: T[],
+  selectedIds: readonly string[],
+): T[] {
+  const allow = new Set(selectedIds.map(String).filter(Boolean));
+  if (allow.size === 0) return [];
+  return options.filter((row) => allow.has(String(row.id)));
+}
+
+export function toggleSelectedBarcodeId(
+  ids: readonly string[],
+  id: string,
+  selected: boolean,
+): string[] {
+  const key = String(id || '').trim();
+  if (!key) return ids.map(String);
+  const next = new Set(ids.map(String).filter(Boolean));
+  if (selected) next.add(key);
+  else next.delete(key);
+  return Array.from(next);
+}
+
+export function mergeVisibleBarcodeIds(
+  selectedIds: readonly string[],
+  visibleIds: readonly string[],
+): string[] {
+  const next = new Set(selectedIds.map(String).filter(Boolean));
+  for (const id of visibleIds) {
+    const key = String(id || '').trim();
+    if (key) next.add(key);
+  }
+  return Array.from(next);
+}
+
+export function filterBarcodeLabelChoices(
+  options: Array<{ value: string; label: string }>,
+  query: string,
+): Array<{ value: string; label: string }> {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return options;
+  return options.filter((opt) => `${opt.label} ${opt.value}`.toLowerCase().includes(q));
 }
 
 export function buildItemBarcodeLabels(input: {
@@ -316,4 +449,55 @@ export function barcodeLabelFieldDefs(
   documentType: Extract<PrintDocumentTypeId, 'itemBarcodeLabel' | 'locationBarcodeLabel'>,
 ) {
   return getPrintDocumentEntry(documentType).fields;
+}
+
+export type StoredBarcodeLabelPrefs = {
+  sizeId: BarcodeLabelSizeId;
+  widthMm: number;
+  heightMm: number;
+  gapMm: number;
+  layout: BarcodeLabelLayout;
+  itemFields?: Record<string, boolean>;
+  locationFields?: Record<string, boolean>;
+};
+
+function sanitizeStoredFieldMap(value: unknown): Record<string, boolean> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out: Record<string, boolean> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof key !== 'string' || key.length === 0 || key.length > 40) continue;
+    if (typeof val === 'boolean') out[key] = val;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Parse device-saved barcode print prefs. Rejects unknown paper sizes and non-boolean field flags. */
+export function parseStoredBarcodeLabelPrefs(raw: unknown): StoredBarcodeLabelPrefs | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const parsed = raw as Record<string, unknown>;
+  if (!BARCODE_LABEL_SIZE_PRESETS.some((row) => row.id === parsed.sizeId)) return null;
+  return {
+    sizeId: parsed.sizeId as BarcodeLabelSizeId,
+    widthMm: clampThermalLabelMm(Number(parsed.widthMm), 40),
+    heightMm: clampThermalLabelMm(Number(parsed.heightMm), 30),
+    gapMm: clampThermalGapMm(Number(parsed.gapMm ?? DEFAULT_THERMAL_GAP_MM)),
+    layout: resolveBarcodeLabelLayout(parsed.layout as Partial<BarcodeLabelLayout> | undefined),
+    itemFields: sanitizeStoredFieldMap(parsed.itemFields),
+    locationFields: sanitizeStoredFieldMap(parsed.locationFields),
+  };
+}
+
+export function mergeBarcodeLabelFields(
+  documentType: Extract<PrintDocumentTypeId, 'itemBarcodeLabel' | 'locationBarcodeLabel'>,
+  printSettings?: PrintTemplateSettings,
+  stored?: Record<string, boolean> | null,
+): Record<string, boolean> {
+  const defaults = defaultBarcodeLabelFields(documentType, printSettings);
+  if (!stored) return defaults;
+  const allowed = new Set(barcodeLabelFieldDefs(documentType).map((field) => field.key));
+  const merged = { ...defaults };
+  for (const [key, value] of Object.entries(stored)) {
+    if (allowed.has(key) && typeof value === 'boolean') merged[key] = value;
+  }
+  return merged;
 }

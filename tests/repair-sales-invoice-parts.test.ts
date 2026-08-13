@@ -17,7 +17,7 @@ import {
       { id: 'p2', name: 'قطعة قديمة', code: 'LEG', defaultSalePrice: 5 },
     ],
     materials: [
-      { id: 'm1', name: 'مقاومة', code: 'MAT-1', defaultSalePrice: 12, isActive: true },
+      { id: 'm1', name: 'مقاومة', code: 'MAT-1', barcode: '622999', defaultSalePrice: 12, isActive: true },
       { id: 'm2', name: 'مكثف', code: 'MAT-2', defaultSalePrice: 20, isActive: true },
       { id: 'm3', name: 'معطل', code: 'MAT-3', defaultSalePrice: 1, isActive: false },
     ],
@@ -37,6 +37,9 @@ import {
   assert.equal(byValue.get('part:p2')?.availableQty, 4);
   assert.equal(byValue.get('part:p2')?.source, 'legacy_part');
   assert.equal(options.some((o) => o.materialId === 'm3'), false);
+  assert.ok((byValue.get('material:m1')?.scanKeys || []).includes('R1'));
+  assert.ok((byValue.get('material:m1')?.scanKeys || []).includes('MAT-1'));
+  assert.equal(byValue.get('material:m1')?.barcode, '622999');
 }
 
 {

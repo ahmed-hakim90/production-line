@@ -12,7 +12,18 @@ import {
   clampThermalLabelMm,
   clampThermalGapMm,
   thermalPageHeightMm,
+  thermalBarcodeFaceWidthMm,
+  scaleJsBarcodeModuleWidth,
+  resolveBarcodeLabelLayout,
+  resolveThermalBarcodeBox,
+  pickBarcodeLabelOptionsByIds,
+  toggleSelectedBarcodeId,
+  mergeVisibleBarcodeIds,
+  filterBarcodeLabelChoices,
+  parseStoredBarcodeLabelPrefs,
+  mergeBarcodeLabelFields,
   defaultBarcodeLabelFields,
+  DEFAULT_BARCODE_LABEL_LAYOUT,
   DEFAULT_BARCODE_LABEL_SIZE_ID,
   DEFAULT_THERMAL_GAP_MM,
 } from '../modules/inventory/lib/barcodeLabelEngine.ts';
@@ -109,6 +120,112 @@ import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentC
   assert.match(customCss, /32mm 25mm/);
   const customWithGapCss = buildBarcodeLabelPageStyle('custom', { widthMm: 32, heightMm: 25 }, 2);
   assert.match(customWithGapCss, /32mm 27mm/);
+}
+
+{
+  assert.equal(thermalBarcodeFaceWidthMm(40, 1), 38);
+  assert.equal(thermalBarcodeFaceWidthMm(80, 1.4), 77.2);
+  assert.equal(scaleJsBarcodeModuleWidth(200, 400, 1.4), 2.8);
+  assert.equal(scaleJsBarcodeModuleWidth(0, 400, 1.4), 1.4);
+  const wideCss = buildBarcodeLabelPageStyle('80x50');
+  assert.match(wideCss, /80mm 52mm/);
+  assert.match(wideCss, /min-width: 100%/);
+  assert.match(wideCss, /max-width: none/);
+}
+
+{
+  const layout = resolveBarcodeLabelLayout({ barcodeHeightMm: 10, barcodeWidthPct: 100 });
+  assert.equal(layout.barcodeHeightMm, 10);
+  assert.equal(resolveBarcodeLabelLayout({ nameMm: 99 }).nameMm, 10);
+  assert.deepEqual(resolveBarcodeLabelLayout(null), DEFAULT_BARCODE_LABEL_LAYOUT);
+
+  const withText = resolveThermalBarcodeBox({
+    labelWidthMm: 80,
+    labelHeightMm: 50,
+    insetMm: 1.4,
+    layout,
+    textBlockMm: 18,
+    showQr: false,
+  });
+  const hiddenText = resolveThermalBarcodeBox({
+    labelWidthMm: 80,
+    labelHeightMm: 50,
+    insetMm: 1.4,
+    layout,
+    textBlockMm: 4,
+    showQr: false,
+  });
+  assert.equal(withText.heightMm, 10);
+  assert.equal(hiddenText.heightMm, 10);
+  assert.equal(withText.widthMm, hiddenText.widthMm);
+  assert.equal(withText.rowWidthMm, hiddenText.rowWidthMm);
+
+  const withQr = resolveThermalBarcodeBox({
+    labelWidthMm: 80,
+    labelHeightMm: 50,
+    insetMm: 1.4,
+    layout,
+    textBlockMm: 4,
+    showQr: true,
+  });
+  assert.ok(hiddenText.widthMm > withQr.widthMm);
+  assert.equal(hiddenText.heightMm, withQr.heightMm);
+
+  const halfWidth = resolveThermalBarcodeBox({
+    labelWidthMm: 80,
+    labelHeightMm: 50,
+    insetMm: 1.4,
+    layout: { ...layout, barcodeWidthPct: 50 },
+    textBlockMm: 4,
+    showQr: false,
+  });
+  assert.ok(halfWidth.rowWidthMm < hiddenText.rowWidthMm);
+  assert.equal(halfWidth.heightMm, hiddenText.heightMm);
+}
+
+{
+  assert.equal(parseStoredBarcodeLabelPrefs(null), null);
+  assert.equal(parseStoredBarcodeLabelPrefs({ sizeId: 'nope' }), null);
+  const parsed = parseStoredBarcodeLabelPrefs({
+    sizeId: '80x50',
+    widthMm: 80,
+    heightMm: 50,
+    gapMm: 2,
+    layout: { nameMm: 3.6, barcodeWidthPct: 100 },
+    itemFields: { itemName: false, qrCode: false, extra: 'no' },
+  });
+  assert.equal(parsed?.sizeId, '80x50');
+  assert.equal(parsed?.layout.nameMm, 3.6);
+  assert.equal(parsed?.itemFields?.itemName, false);
+  assert.equal(parsed?.itemFields?.extra, undefined);
+
+  const merged = mergeBarcodeLabelFields('itemBarcodeLabel', undefined, {
+    itemName: false,
+    qrCode: true,
+    unknown: true,
+  });
+  assert.equal(merged.itemName, false);
+  assert.equal(merged.qrCode, true);
+  assert.equal((merged as { unknown?: boolean }).unknown, undefined);
+}
+
+{
+  const picked = pickBarcodeLabelOptionsByIds(
+    [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+    ['c', 'a', 'missing'],
+  );
+  assert.deepEqual(picked.map((row) => row.id), ['a', 'c']);
+  assert.deepEqual(pickBarcodeLabelOptionsByIds([{ id: 'a' }], []), []);
+  assert.deepEqual(toggleSelectedBarcodeId(['a'], 'b', true).sort(), ['a', 'b']);
+  assert.deepEqual(toggleSelectedBarcodeId(['a', 'b'], 'a', false), ['b']);
+  assert.deepEqual(mergeVisibleBarcodeIds(['a'], ['b', 'c']).sort(), ['a', 'b', 'c']);
+  assert.equal(
+    filterBarcodeLabelChoices(
+      [{ value: '1', label: 'ماتور مضرب' }, { value: '2', label: 'صاج' }],
+      'ماتور',
+    ).length,
+    1,
+  );
 }
 
 console.log('barcode-label-engine.test.ts: ok');

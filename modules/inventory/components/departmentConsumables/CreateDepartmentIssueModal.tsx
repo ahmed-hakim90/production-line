@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, SearchableSelect } from '../../components/UI';
+import { Button } from '../../components/UI';
+import { VoucherItemCombobox } from '../VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '../../lib/materialVoucherPicker';
 import { toast } from '../../../../components/Toast';
 import { departmentConsumableIssueService } from '../../services/departmentConsumableIssueService';
 import { stockService } from '../../services/stockService';
@@ -97,8 +99,16 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
     [locations, warehouseId],
   );
   const locationsRequired = warehouseLocations.length > 0;
-  const consumableOptions = useMemo(
-    () => consumables.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` })),
+  const consumablePicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        consumables.map((c) => ({
+          value: c.id,
+          label: `${c.name} (${c.code})`,
+          name: c.name,
+          code: c.code,
+        })),
+      ),
     [consumables],
   );
 
@@ -227,15 +237,16 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
           >
             <div className="flex-1 min-w-[160px] space-y-1">
               <p className="text-xs font-bold h-4">المستهلك</p>
-              <SearchableSelect
-                options={consumableOptions}
+              <VoucherItemCombobox
+                options={consumablePicker.options}
+                catalog={consumablePicker.catalog}
                 value={line.itemId}
                 onChange={(value) => {
                   setLines((prev) => prev.map((row, i) => (
                     i === index ? { ...row, itemId: value } : row
                   )));
                 }}
-                placeholder="اختر مستهلك"
+                placeholder="ابحث بالاسم أو امسح الكود"
               />
               <p className="text-[11px] text-[var(--color-text-muted)] h-4">
                 {line.itemId

@@ -1,11 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { buildMaterialVoucherPicker } from '../lib/materialVoucherPicker';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
 import { useLocalFormDraft } from '@/modules/shared/hooks';
+import { useCachedPageLoad } from '@/modules/shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '@/modules/shared/lib/pageDataCache';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
@@ -59,14 +63,39 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
     || can('sparePartsReplenishment.prepare')
     || can('repair.parts.manage');
 
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [rows, setRows] = useState<SparePartsPurchaseInvoiceDoc[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([emptyLine()]);
   const [supplierName, setSupplierName] = useState('');
   const [supplierInvoiceNo, setSupplierInvoiceNo] = useState('');
   const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const {
+    data: catalog,
+    loading: catalogLoading,
+  } = useCachedPageLoad<Material[]>(
+    'inventory:materials-catalog',
+    () => materialService.getAll(),
+    { maxAgeMs: 60_000 },
+  );
+
+  const {
+    data: invoiceRows,
+    loading: invoicesLoading,
+    refreshing: invoicesRefreshing,
+    reload: reloadInvoices,
+  } = useCachedPageLoad<SparePartsPurchaseInvoiceDoc[]>(
+    'inventory:spare-purchase-invoices',
+    () => sparePartsPurchaseInvoiceService.list(30),
+    { maxAgeMs: 45_000 },
+  );
+
+  const materials = catalog ?? [];
+  const rows = invoiceRows ?? [];
+
+  const load = async () => {
+    invalidatePageDataCache('inventory:spare-purchase-invoices');
+    await reloadInvoices(true);
+  };
 
   const purchaseDraftValue = useMemo<PurchaseInvoiceFormDraft>(() => ({
     supplierName,
@@ -110,32 +139,10 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
     () => materials.filter((m) => isMaterialOptedInForSpareParts(m) && m.isActive !== false),
     [materials],
   );
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const [matsResult, invoicesResult] = await Promise.allSettled([
-        materialService.getAll(),
-        sparePartsPurchaseInvoiceService.list(30),
-      ]);
-      if (matsResult.status === 'fulfilled') {
-        setMaterials(matsResult.value);
-      } else {
-        toast.error(toUserSafeFirestoreError(matsResult.reason, 'تعذر تحميل الأصناف.'));
-      }
-      if (invoicesResult.status === 'fulfilled') {
-        setRows(invoicesResult.value);
-      } else {
-        toast.error(toUserSafeFirestoreError(invoicesResult.reason, 'تعذر تحميل فواتير الشراء.'));
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, []);
+  const sparePicker = useMemo(
+    () => buildMaterialVoucherPicker(spareMaterials),
+    [spareMaterials],
+  );
 
   const draftTotal = useMemo(
     () => lines.reduce((sum, line) => {
@@ -188,12 +195,17 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
       dir={dir}
       hero={[
         { key: 'draft', label: 'إجمالي المسودة', value: money(draftTotal) },
-        { key: 'posted', label: 'فواتير مرحّلة', value: rows.length },
+        { key: 'posted', label: 'فواتير مرحّلة', value: invoicesLoading && rows.length === 0 ? '…' : rows.length },
       ]}
       onRefresh={() => void load()}
-      refreshing={loading}
+      refreshing={invoicesRefreshing}
     >
-      <OpsDashPanel title="فاتورة شراء قطع / مستهلكات (مخزن مركزي)" accent="inventory">
+      <OpsDashPanel
+        title="فاتورة شراء قطع / مستهلكات (مخزن مركزي)"
+        accent="inventory"
+        loading={catalogLoading}
+        loadingLabel="جاري تحميل الأصناف…"
+      >
         <p className="mb-3 text-xs text-muted-foreground">
           يُرحَّل الوارد لمخزن قطع الغيار المركزي ويُحدَّث المتوسط المتحرك للتكلفة على الرصيد والصنف.
         </p>
@@ -217,12 +229,12 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
             <div key={line.key} className="grid gap-2 rounded-lg border p-3 sm:grid-cols-12">
               <div className="sm:col-span-5">
                 <Label>الصنف</Label>
-                <select
-                  className="mt-1.5 flex h-10 w-full rounded-md border bg-background px-3 text-sm"
+                <VoucherItemCombobox
+                  options={sparePicker.options}
+                  catalog={sparePicker.catalog}
                   value={line.materialId}
-                  disabled={!canPost || busy}
-                  onChange={(e) => {
-                    const materialId = e.target.value;
+                  disabled={!canPost || busy || catalogLoading}
+                  onChange={(materialId) => {
                     const mat = spareMaterials.find((m) => m.id === materialId);
                     setLines((prev) => prev.map((row, i) => (
                       i === index
@@ -234,14 +246,8 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
                         : row
                     )));
                   }}
-                >
-                  <option value="">اختر صنفًا</option>
-                  {spareMaterials.map((mat) => (
-                    <option key={mat.id} value={String(mat.id || '')}>
-                      {mat.name}{mat.code ? ` (${mat.code})` : ''}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={catalogLoading ? 'جاري تحميل الأصناف…' : 'ابحث بالاسم أو امسح الباركود'}
+                />
               </div>
               <div className="sm:col-span-2">
                 <Label>الكمية</Label>
@@ -300,8 +306,13 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
         ) : null}
       </OpsDashPanel>
 
-      <OpsDashPanel title="آخر الفواتير المرحّلة" accent="inventory">
-        {loading ? (
+      <OpsDashPanel
+        title="آخر الفواتير المرحّلة"
+        accent="inventory"
+        loading={invoicesLoading || invoicesRefreshing}
+        loadingLabel={invoicesLoading ? 'جاري تحميل الفواتير…' : 'جاري التحديث…'}
+      >
+        {invoicesLoading && rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">جاري التحميل…</p>
         ) : rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">لا توجد فواتير بعد.</p>

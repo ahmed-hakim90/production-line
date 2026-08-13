@@ -50,6 +50,8 @@ const COUNTS_COLLECTION = 'stock_counts';
 const TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
 const DELETE_BATCH = 500;
 const MAX_PAGE_SIZE = 100;
+/** Warehouse-scoped bulk reads; fewer round-trips than MAX_PAGE_SIZE for large catalogs. */
+const BULK_PAGE_SIZE = 500;
 const KPI_MAX_PAGES = 200;
 
 export type InventoryKpiSummary = {
@@ -170,7 +172,7 @@ export const stockService = {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
     const scope = await resolveInventoryWarehouseReadScope(params?.warehouseId);
     if (scope.denied) return { items: [], nextCursor: null, hasMore: false };
-    const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), MAX_PAGE_SIZE));
+    const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), BULK_PAGE_SIZE));
     const constraints: any[] = [orderBy('updatedAt', 'desc'), orderBy(documentId()), limit(pageSize + 1)];
     if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
@@ -277,10 +279,6 @@ export const stockService = {
   },
 
   /**
-   * Loads balances in pages of up to `MAX_PAGE_SIZE` each, at most 10 pages (1000 rows max per tenant scope).
-   * Heavy for very large catalogs; callers that only need KPIs should use `getBalancesPaged` instead.
-   */
-  /**
    * Scans all balance pages for tenant-wide KPIs (not capped at dashboard sample size).
    */
   async getInventoryKpiSummary(warehouseId?: string): Promise<InventoryKpiSummary> {
@@ -316,10 +314,11 @@ export const stockService = {
     if (!isConfigured) return [];
     const rows: StockItemBalance[] = [];
     let cursor: FirestoreCursor = null;
-    // Match KPI scan depth so balances pages aren't silently truncated after large imports.
+    // Warehouse scope uses larger pages so a 2–3k SKU catalog is ~5 round-trips, not ~30.
+    const pageSize = warehouseId ? BULK_PAGE_SIZE : MAX_PAGE_SIZE;
     const maxPages = KPI_MAX_PAGES;
     for (let page = 0; page < maxPages; page += 1) {
-      const res = await this.getBalancesPaged({ warehouseId, limit: MAX_PAGE_SIZE, cursor });
+      const res = await this.getBalancesPaged({ warehouseId, limit: pageSize, cursor });
       rows.push(...res.items);
       if (!res.hasMore || !res.nextCursor) break;
       cursor = res.nextCursor;

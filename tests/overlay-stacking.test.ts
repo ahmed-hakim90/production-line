@@ -37,6 +37,8 @@ assert.match(sheet, /isRadixFloatingTarget/);
 assert.match(select, /FLOATING_MENU_Z_CLASS/);
 assert.match(popover, /FLOATING_MENU_Z_CLASS/);
 assert.match(dropdown, /FLOATING_MENU_Z_CLASS/);
+assert.match(read('modules/customers/components/CustomerPicker.tsx'), /createPortal/);
+assert.match(read('modules/customers/components/CustomerPicker.tsx'), /FLOATING_MENU_Z_CLASS/);
 assert.match(portal, /erp-managed-modal-layer/);
 assert.match(css, /--z-modal:\s*10050/);
 assert.match(css, /--z-floating:\s*10100/);
@@ -49,7 +51,8 @@ assert.doesNotMatch(popover, /z-\[70\]/);
 /** SearchableSelect must not pin PopoverContent under modal shells (z-[500] regression). */
 const searchableSelect = read('components/UI.tsx');
 assert.match(searchableSelect, /export const SearchableSelect/);
-assert.match(searchableSelect, /ArrowDown/);
+assert.match(searchableSelect, /isListboxOpenKey/);
+assert.match(searchableSelect, /isListboxNavKey/);
 assert.match(searchableSelect, /\bloop\b/);
 assert.doesNotMatch(searchableSelect, /PopoverContent[\s\S]{0,200}z-\[(?:50|70|100|200|300|500)\]/);
 

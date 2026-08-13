@@ -113,6 +113,8 @@ export function OpsDashPanel({
   bodyClassName,
   tone = 'default',
   accent,
+  loading = false,
+  loadingLabel = 'جاري التحميل…',
 }: {
   title?: string;
   action?: React.ReactNode;
@@ -122,6 +124,9 @@ export function OpsDashPanel({
   tone?: 'default' | 'primary';
   /** Soft module accent for the title marker (inventory, costs, …). */
   accent?: 'production' | 'inventory' | 'costs' | 'hr' | 'quality' | 'repair' | 'customers' | 'plans';
+  /** Section-only status — never blanks the rest of the page. */
+  loading?: boolean;
+  loadingLabel?: string;
 }) {
   return (
     <section
@@ -132,10 +137,17 @@ export function OpsDashPanel({
         className,
       )}
     >
-      {(title || action) && (
+      {(title || action || loading) && (
         <div className="ops-dash-panel__head">
           {title ? <h3 className="ops-dash-panel__title">{title}</h3> : <span />}
-          {action}
+          <div className="flex min-w-0 items-center gap-2">
+            {loading ? (
+              <span className="text-xs font-medium text-[var(--color-text-muted)]" role="status">
+                {loadingLabel}
+              </span>
+            ) : null}
+            {action}
+          </div>
         </div>
       )}
       <div className={cn('ops-dash-panel__body', bodyClassName)}>{children}</div>

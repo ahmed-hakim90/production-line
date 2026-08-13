@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Printer, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { Button, SearchableSelect } from './UI';
+import { Button } from './UI';
 import type { PrintTemplateSettings } from '../../../types';
 import { useManagedPrint } from '../../../utils/printManager';
 import { ItemBarcodeLabelPrint } from './ItemBarcodeLabelPrint';
 import { LocationBarcodeLabelPrint } from './LocationBarcodeLabelPrint';
 import {
   BARCODE_LABEL_SIZE_PRESETS,
+  DEFAULT_BARCODE_LABEL_LAYOUT,
   DEFAULT_BARCODE_LABEL_SIZE_ID,
   DEFAULT_THERMAL_GAP_MM,
   barcodeLabelFieldDefs,
@@ -18,49 +19,147 @@ import {
   clampThermalLabelMm,
   defaultBarcodeLabelFields,
   expandLabelCopies,
+  filterBarcodeLabelChoices,
   formatDriverStockSize,
+  mergeBarcodeLabelFields,
+  mergeVisibleBarcodeIds,
+  parseStoredBarcodeLabelPrefs,
+  pickBarcodeLabelOptionsByIds,
+  resolveBarcodeLabelLayout,
   resolveBarcodeLabelSize,
+  toggleSelectedBarcodeId,
   withBarcodeLabelFieldOverrides,
   type BarcodeLabelEngineMode,
   type BarcodeLabelItemOption,
+  type BarcodeLabelLayout,
   type BarcodeLabelLocationOption,
   type BarcodeLabelSizeId,
+  type StoredBarcodeLabelPrefs,
 } from '../lib/barcodeLabelEngine';
 
 const PREVIEW_CAP = 24;
 const SIZE_STORAGE_KEY = 'forgeops.barcodeLabel.printSize';
 
-type StoredLabelSize = {
-  sizeId: BarcodeLabelSizeId;
-  widthMm: number;
-  heightMm: number;
-  gapMm?: number;
-};
-
-function readStoredLabelSize(): StoredLabelSize | null {
+function readStoredLabelSize(): StoredBarcodeLabelPrefs | null {
   try {
     const raw = localStorage.getItem(SIZE_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as StoredLabelSize;
-    if (!parsed?.sizeId) return null;
-    if (!BARCODE_LABEL_SIZE_PRESETS.some((row) => row.id === parsed.sizeId)) return null;
-    return {
-      sizeId: parsed.sizeId,
-      widthMm: clampThermalLabelMm(Number(parsed.widthMm), 40),
-      heightMm: clampThermalLabelMm(Number(parsed.heightMm), 30),
-      gapMm: clampThermalGapMm(parsed.gapMm ?? DEFAULT_THERMAL_GAP_MM),
-    };
+    return parseStoredBarcodeLabelPrefs(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
-function writeStoredLabelSize(value: StoredLabelSize): void {
+function writeStoredLabelSize(value: StoredBarcodeLabelPrefs): void {
   try {
     localStorage.setItem(SIZE_STORAGE_KEY, JSON.stringify(value));
   } catch {
     // ignore quota / private mode
   }
+}
+
+function SelectablePrintList({
+  options,
+  selectedIds,
+  onChange,
+  searchPlaceholder,
+  emptyLabel,
+}: {
+  options: Array<{ value: string; label: string }>;
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  searchPlaceholder: string;
+  emptyLabel: string;
+}) {
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(() => filterBarcodeLabelChoices(options, query), [options, query]);
+  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  return (
+    <div className="space-y-2">
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={searchPlaceholder}
+        aria-label={searchPlaceholder}
+        className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
+      />
+      <div className="flex items-center justify-between gap-2 text-[11px] font-semibold">
+        <span className="text-[var(--color-text-muted)]">
+          محدد {selectedIds.length} من {options.length}
+        </span>
+        <span className="flex gap-2">
+          <button
+            type="button"
+            className="text-[rgb(var(--color-primary))]"
+            onClick={() => onChange(mergeVisibleBarcodeIds(selectedIds, filtered.map((row) => row.value)))}
+          >
+            تحديد الظاهر
+          </button>
+          <button
+            type="button"
+            className="text-[var(--color-text-muted)]"
+            onClick={() => onChange([])}
+          >
+            مسح
+          </button>
+        </span>
+      </div>
+      <div className="max-h-48 space-y-1 overflow-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-2">
+        {filtered.length === 0 ? (
+          <p className="px-1 py-3 text-center text-xs font-semibold text-[var(--color-text-muted)]">{emptyLabel}</p>
+        ) : (
+          filtered.map((opt) => (
+            <label key={opt.value} className="flex min-h-9 items-center gap-2 rounded-[var(--border-radius-sm)] px-1 text-sm">
+              <input
+                type="checkbox"
+                checked={selected.has(opt.value)}
+                onChange={(event) => onChange(toggleSelectedBarcodeId(selectedIds, opt.value, event.target.checked))}
+              />
+              <span className="min-w-0 truncate">{opt.label}</span>
+            </label>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LabelSizeSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="block space-y-1 text-xs font-semibold">
+      <span className="flex items-center justify-between gap-2">
+        <span>{label}</span>
+        <span className="tabular-nums text-[var(--color-text-muted)]">{value}{unit}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="w-full accent-[rgb(var(--color-primary))]"
+      />
+    </label>
+  );
 }
 
 export type BarcodeLabelPrintEngineModalProps = {
@@ -92,8 +191,8 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
   initialCopies = 1,
 }) => {
   const [mode, setMode] = useState<BarcodeLabelEngineMode>(initialMode);
-  const [itemId, setItemId] = useState(initialItemId);
-  const [locationId, setLocationId] = useState(initialLocationId);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>(initialItemId ? [initialItemId] : []);
+  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>(initialLocationId ? [initialLocationId] : []);
   const [printAllItems, setPrintAllItems] = useState(false);
   const [printAllLocations, setPrintAllLocations] = useState(false);
   const [copies, setCopies] = useState(Math.max(1, initialCopies));
@@ -101,6 +200,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
   const [customWidthMm, setCustomWidthMm] = useState(40);
   const [customHeightMm, setCustomHeightMm] = useState(30);
   const [gapMm, setGapMm] = useState(DEFAULT_THERMAL_GAP_MM);
+  const [labelLayout, setLabelLayout] = useState<BarcodeLabelLayout>(DEFAULT_BARCODE_LABEL_LAYOUT);
   const [itemFields, setItemFields] = useState(() => defaultBarcodeLabelFields('itemBarcodeLabel', printSettings));
   const [locationFields, setLocationFields] = useState(() =>
     defaultBarcodeLabelFields('locationBarcodeLabel', printSettings),
@@ -120,6 +220,24 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
     () => buildBarcodeLabelPageStyle(labelSizeId, labelCustomMm, gapMm),
     [gapMm, labelCustomMm, labelSizeId],
   );
+  const persistPrefs = (patch: Partial<StoredBarcodeLabelPrefs>) => {
+    writeStoredLabelSize({
+      sizeId: labelSizeId,
+      widthMm: labelSize.widthMm,
+      heightMm: labelSize.heightMm,
+      gapMm,
+      layout: labelLayout,
+      itemFields,
+      locationFields,
+      ...patch,
+    });
+  };
+
+  const updateLayout = (patch: Partial<BarcodeLabelLayout>) => {
+    const next = resolveBarcodeLabelLayout({ ...labelLayout, ...patch });
+    setLabelLayout(next);
+    persistPrefs({ layout: next });
+  };
   const driverStock = formatDriverStockSize(labelSize.widthMm, labelSize.heightMm);
 
   const effectiveItemSettings = useMemo(
@@ -149,19 +267,20 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
   useEffect(() => {
     if (!open) return;
     setMode(initialMode);
-    setItemId(initialItemId);
-    setLocationId(initialLocationId);
+    setSelectedItemIds(initialItemId ? [String(initialItemId)] : []);
+    setSelectedLocationIds(initialLocationId ? [String(initialLocationId)] : []);
     setCopies(Math.max(1, Math.min(200, Number(initialCopies) || 1)));
     const stored = readStoredLabelSize();
     setLabelSizeId(stored?.sizeId || DEFAULT_BARCODE_LABEL_SIZE_ID);
     setCustomWidthMm(stored?.widthMm || 40);
     setCustomHeightMm(stored?.heightMm || 30);
     setGapMm(stored?.gapMm ?? DEFAULT_THERMAL_GAP_MM);
+    setLabelLayout(resolveBarcodeLabelLayout(stored?.layout));
     setPrintAllItems(!initialItemId && initialMode === 'items');
     const scopedLocs = Array.isArray(initialLocationIds) && initialLocationIds.length > 0;
     setPrintAllLocations(scopedLocs || (!initialLocationId && initialMode === 'locations'));
-    setItemFields(defaultBarcodeLabelFields('itemBarcodeLabel', printSettings));
-    setLocationFields(defaultBarcodeLabelFields('locationBarcodeLabel', printSettings));
+    setItemFields(mergeBarcodeLabelFields('itemBarcodeLabel', printSettings, stored?.itemFields));
+    setLocationFields(mergeBarcodeLabelFields('locationBarcodeLabel', printSettings, stored?.locationFields));
   }, [open, initialMode, initialItemId, initialLocationId, initialLocationIds, initialCopies, printSettings]);
 
   const effectiveLocations = useMemo(() => {
@@ -190,15 +309,13 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
 
   const selectedItems = useMemo(() => {
     if (printAllItems) return items;
-    const one = items.find((row) => row.id === itemId);
-    return one ? [one] : [];
-  }, [items, itemId, printAllItems]);
+    return pickBarcodeLabelOptionsByIds(items, selectedItemIds);
+  }, [items, printAllItems, selectedItemIds]);
 
   const selectedLocations = useMemo(() => {
     if (printAllLocations) return effectiveLocations;
-    const one = effectiveLocations.find((row) => row.id === locationId);
-    return one ? [one] : [];
-  }, [effectiveLocations, locationId, printAllLocations]);
+    return pickBarcodeLabelOptionsByIds(effectiveLocations, selectedLocationIds);
+  }, [effectiveLocations, printAllLocations, selectedLocationIds]);
 
   const itemLabels = useMemo(
     () =>
@@ -313,21 +430,24 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                     checked={printAllItems}
                     onChange={(event) => {
                       setPrintAllItems(event.target.checked);
-                      if (event.target.checked) setItemId('');
+                      if (event.target.checked) {
+                        setSelectedItemIds([]);
+                      }
                     }}
                   />
                   كل الأصناف في القائمة ({items.length})
                 </label>
                 {!printAllItems ? (
-                  <label className="block space-y-1 text-sm font-semibold">
-                    <span>اختر الصنف</span>
-                    <SearchableSelect
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">حدّد أصناف للطباعة</p>
+                    <SelectablePrintList
                       options={itemOptions}
-                      value={itemId}
-                      onChange={setItemId}
-                      placeholder="ابحث بالاسم أو الكود…"
+                      selectedIds={selectedItemIds}
+                      onChange={setSelectedItemIds}
+                      searchPlaceholder="ابحث بالاسم أو الكود…"
+                      emptyLabel="لا توجد أصناف مطابقة."
                     />
-                  </label>
+                  </div>
                 ) : null}
               </div>
             ) : (
@@ -338,21 +458,24 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                     checked={printAllLocations}
                     onChange={(event) => {
                       setPrintAllLocations(event.target.checked);
-                      if (event.target.checked) setLocationId('');
+                      if (event.target.checked) {
+                        setSelectedLocationIds([]);
+                      }
                     }}
                   />
                   كل اللوكيشنات ({effectiveLocations.length})
                 </label>
                 {!printAllLocations ? (
-                  <label className="block space-y-1 text-sm font-semibold">
-                    <span>اختر اللوكيشن</span>
-                    <SearchableSelect
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">حدّد لوكيشنات للطباعة</p>
+                    <SelectablePrintList
                       options={locationOptions}
-                      value={locationId}
-                      onChange={setLocationId}
-                      placeholder="ابحث بكود اللوكيشن…"
+                      selectedIds={selectedLocationIds}
+                      onChange={setSelectedLocationIds}
+                      searchPlaceholder="ابحث بكود اللوكيشن…"
+                      emptyLabel="لا توجد لوكيشنات مطابقة."
                     />
-                  </label>
+                  </div>
                 ) : null}
               </div>
             )}
@@ -366,11 +489,10 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                     const next = event.target.value as BarcodeLabelSizeId;
                     setLabelSizeId(next);
                     const preset = resolveBarcodeLabelSize(next, labelCustomMm);
-                    writeStoredLabelSize({
+                    persistPrefs({
                       sizeId: next,
                       widthMm: preset.widthMm,
                       heightMm: preset.heightMm,
-                      gapMm,
                     });
                   }}
                   className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
@@ -394,7 +516,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                       onChange={(event) => {
                         const widthMm = clampThermalLabelMm(Number(event.target.value), 40);
                         setCustomWidthMm(widthMm);
-                        writeStoredLabelSize({ sizeId: 'custom', widthMm, heightMm: customHeightMm, gapMm });
+                        persistPrefs({ sizeId: 'custom', widthMm, heightMm: customHeightMm });
                       }}
                       className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm tabular-nums"
                     />
@@ -409,7 +531,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                       onChange={(event) => {
                         const heightMm = clampThermalLabelMm(Number(event.target.value), 30);
                         setCustomHeightMm(heightMm);
-                        writeStoredLabelSize({ sizeId: 'custom', widthMm: customWidthMm, heightMm, gapMm });
+                        persistPrefs({ sizeId: 'custom', widthMm: customWidthMm, heightMm });
                       }}
                       className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm tabular-nums"
                     />
@@ -428,12 +550,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                     onChange={(event) => {
                       const nextGap = clampThermalGapMm(Number(event.target.value));
                       setGapMm(nextGap);
-                      writeStoredLabelSize({
-                        sizeId: labelSizeId,
-                        widthMm: labelSize.widthMm,
-                        heightMm: labelSize.heightMm,
-                        gapMm: nextGap,
-                      });
+                      persistPrefs({ gapMm: nextGap });
                     }}
                     className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm tabular-nums"
                   />
@@ -493,10 +610,12 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                       type="checkbox"
                       checked={fieldState[field.key] !== false}
                       onChange={(event) => {
-                        setFieldState((prev) => ({
-                          ...prev,
+                        const next = {
+                          ...fieldState,
                           [field.key]: event.target.checked,
-                        }));
+                        };
+                        setFieldState(next);
+                        persistPrefs(mode === 'items' ? { itemFields: next } : { locationFields: next });
                       }}
                     />
                     <span>{field.labelAr}</span>
@@ -504,9 +623,74 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                 ))}
               </div>
               <p className="text-[11px] text-[var(--color-text-muted)]">
-                التحكم هنا للجلسة الحالية فقط. الإعدادات العامة تبقى من إعدادات الطباعة.
+                آخر إعدادات بتتحفظ على هذا الجهاز وتظهر تلقائي لما تفتح الطباعة تاني.
               </p>
             </div>
+
+            {labelSize.thermal ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-[var(--color-text)]">حجم العناصر</p>
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold text-[rgb(var(--color-primary))]"
+                    onClick={() => updateLayout(DEFAULT_BARCODE_LABEL_LAYOUT)}
+                  >
+                    إعادة ضبط
+                  </button>
+                </div>
+                <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                  <LabelSizeSlider
+                    label="اسم المخزن"
+                    value={labelLayout.warehouseMm}
+                    min={2}
+                    max={7}
+                    step={0.2}
+                    unit="مم"
+                    onChange={(warehouseMm) => updateLayout({ warehouseMm })}
+                  />
+                  <LabelSizeSlider
+                    label="اسم القطعة"
+                    value={labelLayout.nameMm}
+                    min={2.5}
+                    max={9}
+                    step={0.2}
+                    unit="مم"
+                    onChange={(nameMm) => updateLayout({ nameMm })}
+                  />
+                  <LabelSizeSlider
+                    label="الكود"
+                    value={labelLayout.codeMm}
+                    min={2}
+                    max={7}
+                    step={0.2}
+                    unit="مم"
+                    onChange={(codeMm) => updateLayout({ codeMm })}
+                  />
+                  <LabelSizeSlider
+                    label="ارتفاع الباركود"
+                    value={labelLayout.barcodeHeightMm}
+                    min={6}
+                    max={22}
+                    step={0.5}
+                    unit="مم"
+                    onChange={(barcodeHeightMm) => updateLayout({ barcodeHeightMm })}
+                  />
+                  <LabelSizeSlider
+                    label="عرض الباركود"
+                    value={labelLayout.barcodeWidthPct}
+                    min={50}
+                    max={100}
+                    step={5}
+                    unit="%"
+                    onChange={(barcodeWidthPct) => updateLayout({ barcodeWidthPct })}
+                  />
+                </div>
+                <p className="text-[11px] text-[var(--color-text-muted)]">
+                  إخفاء حقل يسيب فراغ على الاستيكر — الباركود ما يطولش. العرض من الشريط فوق، وبيزيد لو قفلت رمز QR.
+                </p>
+              </div>
+            ) : null}
           </aside>
 
           <div className="min-h-0 overflow-auto p-3 sm:p-5" style={{ background: 'var(--color-bg)' }}>
@@ -522,7 +706,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
             {mode === 'items' ? (
               itemLabels.length === 0 ? (
                 <div className="py-16 text-center text-sm font-bold text-[var(--color-text-muted)]">
-                  اختر صنفاً لعرض المعاينة.
+                  اختر صنفاً أو أكثر لعرض المعاينة.
                 </div>
               ) : (
                 <div className="mx-auto w-fit origin-top scale-[1.45] sm:scale-[1.7]">
@@ -532,12 +716,13 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                     labelSizeId={labelSizeId}
                     labelCustomMm={labelCustomMm}
                     gapMm={gapMm}
+                    layout={labelLayout}
                   />
                 </div>
               )
             ) : locationLabels.length === 0 ? (
               <div className="py-16 text-center text-sm font-bold text-[var(--color-text-muted)]">
-                اختر لوكيشن لعرض المعاينة.
+                اختر لوكيشن أو أكثر لعرض المعاينة.
               </div>
             ) : (
               <div className="mx-auto w-fit origin-top scale-[1.45] sm:scale-[1.7]">
@@ -547,6 +732,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                   labelSizeId={labelSizeId}
                   labelCustomMm={labelCustomMm}
                   gapMm={gapMm}
+                  layout={labelLayout}
                 />
               </div>
             )}
@@ -559,6 +745,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                 labelSizeId={labelSizeId}
                 labelCustomMm={labelCustomMm}
                 gapMm={gapMm}
+                layout={labelLayout}
               />
               <LocationBarcodeLabelPrint
                 ref={locationPrintRef}
@@ -567,6 +754,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                 labelSizeId={labelSizeId}
                 labelCustomMm={labelCustomMm}
                 gapMm={gapMm}
+                layout={labelLayout}
               />
             </div>
           </div>

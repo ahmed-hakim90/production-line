@@ -395,9 +395,11 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
               setQuery('');
             }}
             onChange={(e) => {
-              setQuery(e.target.value);
+              const next = e.target.value;
+              setQuery(next);
               setOpen(true);
               if (value) onChange('');
+              if (next.trim()) tryExactCode(next);
             }}
             onKeyDown={handleKeyDown}
           />

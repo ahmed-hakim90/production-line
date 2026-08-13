@@ -9,6 +9,8 @@ import { toast } from '../../../components/Toast';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { sparePartsRecallService } from '../services/sparePartsRecallService';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import type { MaintenanceCenterSpareBalanceRow } from '../types';
 
 const PAGE_SIZE = 20;
@@ -24,34 +26,36 @@ export const SparePartsCenterStock: React.FC = () => {
   const canView = can('sparePartsRecall.view') || can('sparePartsReplenishment.view') || can('inventory.view');
   const canCreateRecall = can('sparePartsRecall.create');
 
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<MaintenanceCenterSpareBalanceRow[]>([]);
-  const [centers, setCenters] = useState<Array<{ id: string; name: string }>>([]);
   const [warehouseFilter, setWarehouseFilter] = useState(searchParams.get('warehouseId') || '');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [page, setPage] = useState(1);
 
+  const {
+    data,
+    loading,
+    refreshing,
+    reload,
+    error: loadError,
+  } = useCachedPageLoad<{ rows: MaintenanceCenterSpareBalanceRow[]; centers: Array<{ id: string; name: string }> }>(
+    canView ? `inventory:spare-center-stock:${warehouseFilter || 'all'}` : null,
+    () => sparePartsRecallService.listCenterBalances({
+      warehouseId: warehouseFilter || undefined,
+    }),
+    { maxAgeMs: 45_000 },
+  );
+
+  const rows = data?.rows ?? [];
+  const centers = data?.centers ?? [];
+
   const load = useCallback(async () => {
-    if (!canView) return;
-    setLoading(true);
-    try {
-      const result = await sparePartsRecallService.listCenterBalances({
-        warehouseId: warehouseFilter || undefined,
-      });
-      setRows(result.rows);
-      setCenters(result.centers);
-    } catch (error: unknown) {
-      setRows([]);
-      toast.error(error instanceof Error ? error.message : 'تعذر تحميل أرصدة المراكز.');
-    } finally {
-      setLoading(false);
-    }
-  }, [canView, warehouseFilter]);
+    invalidatePageDataCache(`inventory:spare-center-stock:${warehouseFilter || 'all'}`);
+    await reload(true);
+  }, [reload, warehouseFilter]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (loadError) toast.error('تعذر تحميل أرصدة المراكز.');
+  }, [loadError]);
 
   useEffect(() => {
     setPage(1);
@@ -152,7 +156,13 @@ export const SparePartsCenterStock: React.FC = () => {
         </div>
       )}
     >
-      <OpsDashPanel title="أرصدة المراكز" accent="inventory" bodyClassName="p-0">
+      <OpsDashPanel
+        title="أرصدة المراكز"
+        accent="inventory"
+        bodyClassName="p-0"
+        loading={loading || refreshing}
+        loadingLabel={loading ? 'جاري تحميل الأرصدة…' : 'جاري التحديث…'}
+      >
         <SmartFilterBar
           pageId="spare-parts-center-stock"
           searchPlaceholder="اسم أو كود الصنف أو اسم المركز…"
@@ -197,7 +207,7 @@ export const SparePartsCenterStock: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {loading && rows.length === 0 ? (
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={`sk-${i}`}>
                     <td className="py-3 px-2" colSpan={canCreateRecall ? 5 : 4}>

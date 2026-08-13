@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Pencil, Trash2, XCircle } from 'lucide-react';
-import { SearchableSelect } from '@/components/UI';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { repairInvoiceActiveChipType } from '../lib/repairSemanticStatus';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
@@ -303,8 +304,19 @@ export const RepairSalesInvoicePage: React.FC = () => {
     [parts, materials, selectedCustomerType, warehouseQtyByMaterialId, stockByPartId],
   );
 
-  const partOptions = useMemo(
-    () => partOptionsList.map((opt) => ({ value: opt.value, label: opt.label })),
+  const partPicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        partOptionsList.map((opt) => ({
+          value: opt.value,
+          label: opt.label,
+          name: opt.partName,
+          code: opt.code,
+          barcode: opt.barcode,
+          scanKeys: opt.scanKeys,
+          stockItemType: 'material' as const,
+        })),
+      ),
     [partOptionsList],
   );
 
@@ -1066,14 +1078,15 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 <div className="md:col-span-5">
                   <Label>القطعة</Label>
                   <div className="mt-2">
-                    <SearchableSelect
-                      options={partOptions}
+                    <VoucherItemCombobox
+                      options={partPicker.options}
+                      catalog={partPicker.catalog}
                       value={selectedOptionValue}
                       onChange={selectPart}
-                      placeholder="ابحث واختر قطعة من التسعير/المخزون"
+                      placeholder="ابحث بالاسم أو امسح الباركود"
                     />
                   </div>
-                  {!loading && partOptions.length === 0 && (
+                  {!loading && partPicker.options.length === 0 && (
                     <p className="mt-1.5 text-xs text-muted-foreground">
                       لا توجد مواد أو قطع مسعّرة في الماستر/كتالوج الفرع. سعّر المكوّنات من المواد التصنيعية أو أضفها لمخزون المركز.
                     </p>

@@ -19,6 +19,27 @@ export function otherMainBranchIds(
 export const repairMaintenanceWarehouseName = (branchName: string): string =>
   `مخزن صيانة - ${String(branchName || '').trim() || 'فرع'}`;
 
+/** Legacy sales-style names that should follow the repair-center pattern. */
+export const isLegacyRepairWarehouseName = (name: string): boolean =>
+  /^مخزن\s*فرع(?:\s|$)/u.test(String(name || '').trim());
+
+/**
+ * Rename linked center warehouses from «مخزن فرع …» to «مخزن صيانة - {اسم الفرع}».
+ * Leaves already-correct and custom names untouched.
+ */
+export function plannedRepairCenterWarehouseRename(input: {
+  warehouseName?: string | null;
+  branchName: string;
+}): string | null {
+  const branchName = String(input.branchName || '').trim();
+  if (!branchName) return null;
+  const target = repairMaintenanceWarehouseName(branchName);
+  const current = String(input.warehouseName || '').trim();
+  if (current === target) return null;
+  if (!current || isLegacyRepairWarehouseName(current)) return target;
+  return null;
+}
+
 /** Center / legacy RWH warehouse eligible to link to a repair branch. */
 export const isRepairCenterWarehouse = (warehouse: {
   warehouseRole?: string | null;

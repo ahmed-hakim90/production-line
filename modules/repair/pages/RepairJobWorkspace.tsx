@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { SearchableSelect } from '@/components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildMaterialVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -329,30 +330,15 @@ export const RepairJobWorkspace: React.FC = () => {
   });
   const canEditWorkshop = canEditThisJob && canManageWorkshopWork;
   const canIssueParts = can('repair.parts.manage') || can('repairSpareIssues.issue');
-  const materialOptions = useMemo(() => {
-    return materials.map((material) => {
+  const materialPicker = useMemo(() => {
+    return buildMaterialVoucherPicker(materials, (material) => {
       const id = String(material.id || '');
       const centerQty = Number(centerBalances.get(id) || 0);
       const centralQty = Number(centralBalances.get(id) || 0);
       const availability = resolvePartAvailabilityBadge(centerQty, centralQty);
       const code = material.code ? ` (${material.code})` : '';
-      const extraKeys = Array.isArray((material as Material & { scanKeys?: string[] }).scanKeys)
-        ? (material as Material & { scanKeys?: string[] }).scanKeys || []
-        : [];
-      const scanKeys = Array.from(new Set(
-        [material.barcode, material.code, ...extraKeys]
-          .map((key) => String(key || '').trim())
-          .filter(Boolean),
-      ));
-      return {
-        value: id,
-        label: `${material.name}${code}`,
-        hint: formatPartAvailabilityPickerHint(availability, centerQty, centralQty),
-        hintType: repairPartAvailabilityChipType(availability),
-        keywords: scanKeys.join(' '),
-        scanKeys,
-        availability,
-      };
+      const hint = formatPartAvailabilityPickerHint(availability, centerQty, centralQty);
+      return hint ? `${material.name}${code} — ${hint}` : `${material.name}${code}`;
     });
   }, [materials, centerBalances, centralBalances]);
 
@@ -959,20 +945,12 @@ export const RepairJobWorkspace: React.FC = () => {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_5.5rem_auto] sm:items-end">
                 <div className="min-w-0 space-y-1">
                   <Label>القطعة</Label>
-                  <SearchableSelect
-                    options={materialOptions.map((opt) => ({
-                      value: opt.value,
-                      label: opt.label,
-                      hint: opt.hint,
-                      hintType: opt.hintType,
-                      keywords: opt.keywords,
-                      scanKeys: opt.scanKeys,
-                    }))}
+                  <VoucherItemCombobox
+                    options={materialPicker.options}
+                    catalog={materialPicker.catalog}
                     value={selectedMaterialId}
                     onChange={setSelectedMaterialId}
-                    placeholder="ابحث أو امسح الباركود"
-                    searchPlaceholder="ابحث أو امسح الباركود"
-                    openOnFocus
+                    placeholder="ابحث بالاسم أو امسح الباركود"
                     disabled={!canEditWorkshop || !actionState?.canUseParts || !hasBranchWarehouse}
                   />
                 </div>

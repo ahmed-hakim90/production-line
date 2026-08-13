@@ -8,8 +8,10 @@ import { resolvePrintFont } from '@/utils/print/printFont';
 import { Code128Barcode } from './Code128Barcode';
 import { ThermalBarcodeLabelCard } from './ThermalBarcodeLabelCard';
 import {
+  resolveBarcodeLabelLayout,
   resolveBarcodeLabelSize,
   type BarcodeLabelCustomMm,
+  type BarcodeLabelLayout,
   type BarcodeLabelSizeId,
 } from '../lib/barcodeLabelEngine';
 
@@ -29,10 +31,11 @@ type Props = {
   labelSizeId?: BarcodeLabelSizeId | string;
   labelCustomMm?: BarcodeLabelCustomMm;
   gapMm?: number;
+  layout?: Partial<BarcodeLabelLayout> | null;
 };
 
 export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
-  ({ labels, printSettings, printedAt, labelSizeId, labelCustomMm, gapMm }, ref) => {
+  ({ labels, printSettings, printedAt, labelSizeId, labelCustomMm, gapMm, layout }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
     const doc = resolvePrintDocumentConfig(ps, 'itemBarcodeLabel');
     const font = resolvePrintFont(ps);
@@ -40,6 +43,7 @@ export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
     const when = printedAt || new Date().toLocaleString('ar-EG');
     const size = resolveBarcodeLabelSize(labelSizeId, labelCustomMm);
     const thermal = size.layout === 'thermal';
+    const labelLayout = resolveBarcodeLabelLayout(layout);
     const showName = doc.isFieldVisible('itemName');
     const showCode = doc.isFieldVisible('itemCode');
     const showWarehouse = doc.isFieldVisible('warehouse');
@@ -63,6 +67,7 @@ export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
                 showLinear={showLinear}
                 isLast={index === labels.length - 1}
                 gapMm={gapMm}
+                layout={labelLayout}
               />
             );
           })}
@@ -121,7 +126,7 @@ export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
                     </div>
                   ) : null}
                   {showName ? (
-                    <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 2, lineHeight: 1.2, color: '#000' }}>
+                    <div style={{ fontWeight: 900, fontSize: 14, marginBottom: 2, lineHeight: 1.2, color: '#000' }}>
                       {label.itemName || '—'}
                     </div>
                   ) : null}

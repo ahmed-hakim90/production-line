@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { buildMaterialVoucherPicker } from '../lib/materialVoucherPicker';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -10,6 +12,8 @@ import { toast } from '../../../components/Toast';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { warehouseService } from '../services/warehouseService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { sparePartsRecallService } from '../services/sparePartsRecallService';
@@ -23,6 +27,8 @@ import type { SparePartsRecallRequest, SparePartsRecallStatus, Warehouse } from 
 import type { Material } from '../../manufacturing/types';
 
 const PAGE_SIZE = 20;
+const RECALL_LIST_CACHE = 'inventory:spare-parts-recall';
+const MATERIALS_CATALOG_CACHE = 'inventory:materials-catalog';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
@@ -61,11 +67,7 @@ export const SparePartsRecall: React.FC = () => {
   }, [roles, userRoleId, userRoleName]);
   const canConfirm = canConfirmPerm && !isCentralWarehouseOperator;
 
-  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [rows, setRows] = useState<SparePartsRecallRequest[]>([]);
   const [showCreate, setShowCreate] = useState(Boolean(searchParams.get('fromWarehouseId')));
   const [listTab, setListTab] = useState<'pending' | 'all'>('pending');
   const [statusFilter, setStatusFilter] = useState('');
@@ -77,6 +79,36 @@ export const SparePartsRecall: React.FC = () => {
   const [note, setNote] = useState('');
   const [draftLines, setDraftLines] = useState<DraftLine[]>([{ itemId: '', quantity: '1' }]);
 
+  const {
+    data: listData,
+    loading: listLoading,
+    refreshing: listRefreshing,
+    reload: reloadList,
+  } = useCachedPageLoad<{ warehouses: Warehouse[]; rows: SparePartsRecallRequest[] }>(
+    canView ? RECALL_LIST_CACHE : null,
+    async () => {
+      const [whs, items] = await Promise.all([
+        warehouseService.getWarehousesForSparePartsFlow().catch(() => [] as Warehouse[]),
+        sparePartsRecallService.listRecent(150).catch(() => [] as SparePartsRecallRequest[]),
+      ]);
+      return { warehouses: whs, rows: items };
+    },
+    { maxAgeMs: 45_000 },
+  );
+
+  const {
+    data: catalog,
+    loading: catalogLoading,
+  } = useCachedPageLoad<Material[]>(
+    canView ? MATERIALS_CATALOG_CACHE : null,
+    () => materialService.getAll(),
+    { maxAgeMs: 60_000 },
+  );
+
+  const warehouses = listData?.warehouses ?? [];
+  const rows = listData?.rows ?? [];
+  const materials = catalog ?? [];
+
   const centerWarehouses = useMemo(
     () => warehouses.filter((w) => w.warehouseRole === 'maintenance_center'),
     [warehouses],
@@ -85,29 +117,15 @@ export const SparePartsRecall: React.FC = () => {
     () => materials.filter((m) => m.isActive !== false),
     [materials],
   );
+  const materialPicker = useMemo(
+    () => buildMaterialVoucherPicker(activeMaterials),
+    [activeMaterials],
+  );
 
   const load = useCallback(async () => {
-    if (!canView) return;
-    setLoading(true);
-    try {
-      const [whs, mats, items] = await Promise.all([
-        warehouseService.getWarehousesForSparePartsFlow().catch(() => [] as Warehouse[]),
-        materialService.getAll().catch(() => [] as Material[]),
-        sparePartsRecallService.listRecent(150).catch(() => [] as SparePartsRecallRequest[]),
-      ]);
-      setWarehouses(whs);
-      setMaterials(mats);
-      setRows(items);
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : 'تعذر التحميل.');
-    } finally {
-      setLoading(false);
-    }
-  }, [canView]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    invalidatePageDataCache(RECALL_LIST_CACHE);
+    await reloadList(true);
+  }, [reloadList]);
 
   useEffect(() => {
     const linesParam = searchParams.get('lines') || '';
@@ -222,8 +240,8 @@ export const SparePartsRecall: React.FC = () => {
   }
 
   const hero = [
-    { key: 'pending', label: 'بانتظار تأكيد المركز', value: pendingCount, accent: pendingCount > 0 },
-    { key: 'all', label: 'كل الطلبات المحمّلة', value: rows.length },
+    { key: 'pending', label: 'بانتظار تأكيد المركز', value: listLoading && rows.length === 0 ? '…' : pendingCount, accent: pendingCount > 0 },
+    { key: 'all', label: 'كل الطلبات المحمّلة', value: listLoading && rows.length === 0 ? '…' : rows.length },
   ];
 
   return (
@@ -236,7 +254,7 @@ export const SparePartsRecall: React.FC = () => {
       }
       hero={hero}
       onRefresh={() => void load()}
-      refreshing={loading}
+      refreshing={listRefreshing}
       actions={(
         <div className="flex flex-wrap gap-2">
           {canCreate ? (
@@ -253,7 +271,7 @@ export const SparePartsRecall: React.FC = () => {
       )}
     >
       {showCreate && canCreate ? (
-        <OpsDashPanel title="طلب سحب إلى المخزن الرئيسي" accent="repair">
+        <OpsDashPanel title="طلب سحب إلى المخزن الرئيسي" accent="repair" loading={catalogLoading} loadingLabel="جاري تحميل الأصناف…">
           <p className="mb-3 text-xs text-[var(--color-text-muted)]">
             الأسهل: اختر الأصناف من «أرصدة المراكز» ثم اضغط سحب المحدد — أو أنشئ يدوياً هنا.
           </p>
@@ -285,23 +303,18 @@ export const SparePartsRecall: React.FC = () => {
           <div className="mt-3 space-y-2">
             {draftLines.map((line, idx) => (
               <div key={idx} className="grid gap-2 md:grid-cols-[1fr_140px_auto]">
-                <select
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                <VoucherItemCombobox
+                  options={materialPicker.options}
+                  catalog={materialPicker.catalog}
                   value={line.itemId}
-                  onChange={(e) => {
-                    const value = e.target.value;
+                  onChange={(value) => {
                     setDraftLines((prev) => prev.map((row, i) => (
                       i === idx ? { ...row, itemId: value } : row
                     )));
                   }}
-                >
-                  <option value="">اختر مكوّناً…</option>
-                  {activeMaterials.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.code || '—'})
-                    </option>
-                  ))}
-                </select>
+                  placeholder={catalogLoading ? 'جاري تحميل الأصناف…' : 'ابحث بالاسم أو امسح الباركود'}
+                  disabled={catalogLoading}
+                />
                 <input
                   type="number"
                   min={0}
@@ -342,7 +355,13 @@ export const SparePartsRecall: React.FC = () => {
         </OpsDashPanel>
       ) : null}
 
-      <OpsDashPanel title="طلبات السحب" accent="repair" bodyClassName="p-0">
+      <OpsDashPanel
+        title="طلبات السحب"
+        accent="repair"
+        bodyClassName="p-0"
+        loading={listLoading || listRefreshing}
+        loadingLabel={listLoading ? 'جاري تحميل الطلبات…' : 'جاري التحديث…'}
+      >
         <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] px-3 pt-3">
           {([
             ['pending', `معلّق (${pendingCount})`],
@@ -405,7 +424,7 @@ export const SparePartsRecall: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {loading ? (
+              {listLoading && rows.length === 0 ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={`sk-${i}`}>
                     <td className="py-3 px-2" colSpan={5}>
@@ -498,7 +517,7 @@ export const SparePartsRecall: React.FC = () => {
           </table>
         </div>
 
-        {!loading && filtered.length > 0 ? (
+        {filtered.length > 0 ? (
           <DataPaginationFooter
             page={safePage}
             totalPages={totalPages}

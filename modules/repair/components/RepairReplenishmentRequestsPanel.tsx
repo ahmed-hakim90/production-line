@@ -3,8 +3,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Input } from '@/components/ui/input';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
 import { Label } from '@/components/ui/label';
 import { toast } from '../../../components/Toast';
+import { materialScanKeys } from '../../manufacturing/lib/materialScanKeys';
+import type { TransferItemOption } from '../../inventory/utils/transferFormShared';
 import { sparePartsReplenishmentService } from '../../inventory/services/sparePartsReplenishmentService';
 import type { SparePartsReplenishmentRequest } from '../../inventory/types';
 import {
@@ -47,19 +50,29 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
     { key: '1', itemId: '', quantity: '1' },
   ]);
 
-  const linkedPartOptions = useMemo(() => {
+  const linkedPicker = useMemo(() => {
     const seen = new Set<string>();
-    const out: Array<{ itemId: string; label: string }> = [];
+    const catalog: TransferItemOption[] = [];
+    const options: Array<{ value: string; label: string; searchText?: string }> = [];
     for (const part of parts) {
       const itemId = String(part.materialId || part.rawMaterialId || '').trim();
       if (!itemId || seen.has(itemId)) continue;
       seen.add(itemId);
-      out.push({
-        itemId,
+      const scanKeys = materialScanKeys({ code: part.code });
+      catalog.push({
+        id: itemId,
+        name: part.name,
+        code: part.code || '',
+        minStock: 0,
+        stockItemType: 'material',
+      });
+      options.push({
+        value: itemId,
         label: `${part.name}${part.code ? ` (${part.code})` : ''}`,
+        searchText: scanKeys.join(' '),
       });
     }
-    return out;
+    return { catalog, options };
   }, [parts]);
 
   const load = async () => {
@@ -180,7 +193,7 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
                 placeholder="اختياري"
               />
             </div>
-            {linkedPartOptions.length === 0 ? (
+            {linkedPicker.options.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 لا توجد قطع مربوطة بماستر داتا في كتالوج الفرع. اربط القطع أولًا ثم أنشئ الطلب.
               </p>
@@ -189,21 +202,17 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
                 <div key={line.key} className="flex flex-wrap gap-2 items-end">
                   <div className="flex-1 min-w-[180px]">
                     <Label>القطعة</Label>
-                    <select
-                      className="w-full h-10 rounded-md border px-3 text-sm"
+                    <VoucherItemCombobox
+                      options={linkedPicker.options}
+                      catalog={linkedPicker.catalog}
                       value={line.itemId}
-                      onChange={(e) => {
-                        const itemId = e.target.value;
+                      onChange={(itemId) => {
                         setDraftLines((prev) =>
                           prev.map((row, i) => (i === index ? { ...row, itemId } : row)),
                         );
                       }}
-                    >
-                      <option value="">اختر…</option>
-                      {linkedPartOptions.map((opt) => (
-                        <option key={opt.itemId} value={opt.itemId}>{opt.label}</option>
-                      ))}
-                    </select>
+                      placeholder="ابحث بالاسم أو امسح الباركود"
+                    />
                   </div>
                   <div className="w-28">
                     <Label>الكمية</Label>
@@ -248,7 +257,7 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
                     { key: String(Date.now()), itemId: '', quantity: '1' },
                   ])
                 }
-                disabled={linkedPartOptions.length === 0}
+                disabled={linkedPicker.options.length === 0}
               >
                 إضافة بند
               </Button>
@@ -256,7 +265,7 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
                 type="button"
                 size="sm"
                 onClick={() => void submitCreate()}
-                disabled={busyId === 'create' || linkedPartOptions.length === 0}
+                disabled={busyId === 'create' || linkedPicker.options.length === 0}
               >
                 {busyId === 'create' ? 'جاري الإرسال…' : 'إرسال الطلب'}
               </Button>

@@ -10,7 +10,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { SearchableSelect } from '@/components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildMaterialVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { toast } from '../../../components/Toast';
 import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
 import { useLocalFormDraft } from '@/modules/shared/hooks';
@@ -96,32 +97,26 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
       .catch(() => setMaterials([]));
   }, [open]);
 
-  const itemOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const eligibleIds = new Set(materials.map((m) => String(m.id || '').trim()).filter(Boolean));
-    const out: Array<{ value: string; label: string }> = [];
-    for (const part of parts) {
+  const materialPicker = useMemo(() => {
+    const base = buildMaterialVoucherPicker(materials);
+    const partRank = new Map<string, number>();
+    parts.forEach((part, index) => {
       const itemId = String(part.materialId || part.rawMaterialId || '').trim();
-      if (!itemId || seen.has(itemId)) continue;
-      // Hide catalog rows whose material is marked not available for spare parts.
-      if (eligibleIds.size > 0 && !eligibleIds.has(itemId)) continue;
-      seen.add(itemId);
-      out.push({
-        value: itemId,
-        label: `${part.name}${part.code ? ` (${part.code})` : ''}`,
-      });
-    }
-    for (const material of materials) {
-      const itemId = String(material.id || '').trim();
-      if (!itemId || seen.has(itemId)) continue;
-      seen.add(itemId);
-      out.push({
-        value: itemId,
-        label: `${material.name}${material.code ? ` (${material.code})` : ''}`,
-      });
-    }
-    return out;
-  }, [parts, materials]);
+      if (itemId && !partRank.has(itemId)) partRank.set(itemId, index);
+    });
+    if (partRank.size === 0) return base;
+    return {
+      catalog: base.catalog,
+      options: [...base.options].sort((a, b) => {
+        const aRank = partRank.get(a.value);
+        const bRank = partRank.get(b.value);
+        if (aRank == null && bRank == null) return 0;
+        if (aRank == null) return 1;
+        if (bRank == null) return -1;
+        return aRank - bRank;
+      }),
+    };
+  }, [materials, parts]);
 
   const reset = () => {
     clearDraft();
@@ -185,7 +180,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
 
         {!toWarehouseId ? (
           <p className="text-sm text-muted-foreground">اختر فرعًا مربوطًا بمخزن صيانة أولًا.</p>
-        ) : itemOptions.length === 0 ? (
+        ) : materialPicker.options.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             لا توجد أصناف متاحة. تأكد من وجود مواد نشطة في ماستر المكونات.
           </p>
@@ -203,15 +198,16 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
               <div key={line.key} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
                 <div className="min-w-0 flex-1 space-y-1 sm:min-w-[180px]">
                   <Label>القطعة</Label>
-                  <SearchableSelect
-                    options={itemOptions}
+                  <VoucherItemCombobox
+                    options={materialPicker.options}
+                    catalog={materialPicker.catalog}
                     value={line.itemId}
                     onChange={(itemId) => {
                       setDraftLines((prev) =>
                         prev.map((row, i) => (i === index ? { ...row, itemId } : row)),
                       );
                     }}
-                    placeholder="ابحث واختر قطعة"
+                    placeholder="ابحث بالاسم أو امسح الباركود"
                   />
                 </div>
                 <div className="w-full sm:w-28">
@@ -276,7 +272,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
             type="button"
             className="w-full sm:w-auto"
             onClick={() => void submitCreate()}
-            disabled={busy || !canCreate || !toWarehouseId || itemOptions.length === 0}
+            disabled={busy || !canCreate || !toWarehouseId || materialPicker.options.length === 0}
           >
             {busy ? 'جاري الإرسال…' : 'إرسال الطلب'}
           </Button>

@@ -19,6 +19,8 @@ const materials: Material[] = [
     isActive: true,
     createdAt: '',
     legacyRawMaterialId: 'raw-1',
+    barcode: '622111',
+    isActive: true,
   },
   {
     id: 'mat-2',
@@ -57,7 +59,7 @@ const rawMaterials: RawMaterial[] = [
 {
   const opts = buildComponentCatalogOptions(materials, rawMaterials);
   assert.equal(opts.length, 3);
-  assert.ok(opts.some((o) => o.id === 'mat-1' && o.stockItemType === 'material'));
+  assert.ok(opts.some((o) => o.id === 'mat-1' && o.stockItemType === 'material' && o.barcode === '622111'));
   assert.ok(opts.some((o) => o.id === 'mat-2' && o.stockItemType === 'material'));
   assert.ok(opts.some((o) => o.id === 'raw-only' && o.stockItemType === 'raw_material'));
   assert.ok(!opts.some((o) => o.id === 'raw-1'));

@@ -674,6 +674,8 @@ export const StockBalances: React.FC = () => {
         title="قائمة الأرصدة"
         accent="inventory"
         bodyClassName="p-0"
+        loading={loading}
+        loadingLabel="جاري تحميل الأرصدة…"
         action={(
           loading ? (
             <span className="text-xs text-[var(--color-text-muted)]">…</span>

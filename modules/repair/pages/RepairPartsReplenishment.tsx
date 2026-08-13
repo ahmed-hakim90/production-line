@@ -121,20 +121,22 @@ export const RepairPartsReplenishment: React.FC = () => {
     }
     setLoading(true);
     try {
-      const [reqRes, partRows] = await Promise.all([
-        sparePartsReplenishmentService.listPaged({
-          toWarehouseId,
-          limit: 100,
-        }),
-        selectedBranchId ? sparePartsService.listParts(selectedBranchId) : Promise.resolve([]),
-      ]);
+      const reqRes = await sparePartsReplenishmentService.listPaged({
+        toWarehouseId,
+        limit: 100,
+      });
       setRows(reqRes.items);
-      setParts(partRows);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر تحميل طلبات التموين.');
       setRows([]);
     } finally {
       setLoading(false);
+    }
+    if (selectedBranchId) {
+      const partRows = await sparePartsService.listParts(selectedBranchId).catch(() => [] as RepairSparePart[]);
+      setParts(partRows);
+    } else {
+      setParts([]);
     }
   }, [canView, toWarehouseId, selectedBranchId]);
 
@@ -423,7 +425,13 @@ export const RepairPartsReplenishment: React.FC = () => {
           </div>
 
           <div className="order-1 w-full xl:order-2 xl:w-[360px] xl:shrink-0" dir="rtl">
-            <OpsDashPanel title="قائمة الطلبات" accent="repair" bodyClassName="p-0 h-full overflow-hidden">
+            <OpsDashPanel
+              title="قائمة الطلبات"
+              accent="repair"
+              bodyClassName="p-0 h-full overflow-hidden"
+              loading={loading}
+              loadingLabel="جاري تحميل الطلبات…"
+            >
               <div className="flex flex-wrap gap-2 border-b px-3 pb-2 pt-3">
                 {([
                   ['awaiting', `بانتظار استلامي (${awaitingReceiptCount})`],
@@ -447,7 +455,7 @@ export const RepairPartsReplenishment: React.FC = () => {
                 ))}
               </div>
               <div className="max-h-[min(52vh,420px)] overflow-y-auto xl:max-h-[min(70vh,720px)]">
-                {loading ? (
+                {loading && rows.length === 0 ? (
                   <p className="px-4 py-8 text-center text-sm text-muted-foreground">جاري التحميل…</p>
                 ) : filtered.length === 0 ? (
                   <p className="px-4 py-8 text-center text-sm text-muted-foreground">

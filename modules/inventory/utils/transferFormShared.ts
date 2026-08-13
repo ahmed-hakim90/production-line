@@ -1,6 +1,7 @@
 import type { StockTransferPrintData } from '../components/StockTransferPrint';
 import type { InventoryItemType, TransferRequestLine } from '../types';
 import { getTransferDisplay, type TransferDisplayUnitMode } from './transferUnits';
+import { toEnglishDigits } from '@/lib/englishDigits';
 
 export type TransferUnit = 'piece' | 'carton';
 
@@ -19,6 +20,8 @@ export type TransferItemOption = {
   code: string;
   /** Optional product/material barcode — used for scan match only, not dropdown display. */
   barcode?: string;
+  /** Extra exact-match keys (normalized barcodes, aliases). */
+  scanKeys?: string[];
   minStock: number;
   unitsPerCarton?: number;
   /** Actual stock ledger type (e.g. manufacturing `material` vs legacy `raw_material`). */
@@ -98,12 +101,11 @@ export function findItemOptionByCode(
   options: TransferItemOption[],
   rawCode: string,
 ): TransferItemOption | undefined {
-  const code = String(rawCode || '').trim().toLowerCase();
+  const code = toEnglishDigits(String(rawCode || '')).trim().toLowerCase();
   if (!code) return undefined;
   return options.find((opt) => {
-    if (String(opt.code || '').trim().toLowerCase() === code) return true;
-    const barcode = String(opt.barcode || '').trim().toLowerCase();
-    return Boolean(barcode) && barcode === code;
+    const keys = [opt.code, opt.barcode, ...(opt.scanKeys || [])];
+    return keys.some((key) => toEnglishDigits(String(key || '')).trim().toLowerCase() === code);
   });
 }
 

@@ -1,4 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,7 +26,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { cn, getRootPortalContainer } from '@/lib/utils';
+import { FLOATING_MENU_Z_CLASS } from '@/lib/overlayStack';
 import { toEnglishDigits } from '@/lib/englishDigits';
+import { isListboxNavKey, isListboxOpenKey, listboxIndexAfterKey } from '@/lib/listboxKeyboard';
 import { customerService } from '../services/customerService';
 import { formatCustomerOptionLabel, matchCustomers } from '../lib/customerSearch';
 import {
@@ -40,6 +52,13 @@ type CustomerPickerProps = {
   actor?: { userId?: string; userName?: string };
 };
 
+type ListBoxStyle = {
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
 export const CustomerPicker: React.FC<CustomerPickerProps> = ({
   customers,
   valueId,
@@ -49,7 +68,15 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
   canCreate = true,
   actor,
 }) => {
+  const listId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef(0);
   const [query, setQuery] = useState('');
+  const [listOpen, setListOpen] = useState(false);
+  const [highlight, setHighlight] = useState(0);
+  const [listStyle, setListStyle] = useState<ListBoxStyle | null>(null);
   const [openCreate, setOpenCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({
@@ -66,15 +93,96 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
   );
 
   const matches = useMemo(() => matchCustomers(customers, query, 25), [customers, query]);
+  const showList = Boolean(!disabled && !selected && listOpen);
 
   useEffect(() => {
     if (selected) {
       setQuery(formatCustomerOptionLabel(selected));
+      setListOpen(false);
     }
   }, [selected?.id]);
 
+  const moveHighlight = useCallback((next: number) => {
+    const max = Math.max(0, matches.length - 1);
+    const clamped = Math.max(0, Math.min(next, max));
+    highlightRef.current = clamped;
+    setHighlight(clamped);
+  }, [matches.length]);
+
+  useEffect(() => {
+    highlightRef.current = 0;
+    setHighlight(0);
+  }, [query]);
+
+  useEffect(() => {
+    if (highlightRef.current > Math.max(0, matches.length - 1)) {
+      moveHighlight(Math.max(0, matches.length - 1));
+    }
+  }, [matches.length, moveHighlight]);
+
+  const updateListPosition = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const gap = 4;
+    const spaceBelow = window.innerHeight - rect.bottom - gap - 12;
+    const spaceAbove = rect.top - gap - 12;
+    const preferBelow = spaceBelow >= 160 || spaceBelow >= spaceAbove;
+    const maxHeight = Math.max(140, Math.min(280, preferBelow ? spaceBelow : spaceAbove));
+    const top = preferBelow
+      ? rect.bottom + gap
+      : Math.max(8, rect.top - gap - maxHeight);
+    setListStyle({
+      top,
+      left: rect.left,
+      width: Math.max(rect.width, 240),
+      maxHeight,
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!showList) {
+      setListStyle(null);
+      return;
+    }
+    updateListPosition();
+    const onReposition = () => updateListPosition();
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
+    return () => {
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
+    };
+  }, [showList, matches.length, updateListPosition]);
+
+  useEffect(() => {
+    if (!showList) return;
+    const el = listRef.current?.querySelector<HTMLElement>(
+      `[data-customer-opt-index="${highlight}"]`,
+    );
+    el?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, showList, matches.length]);
+
+  useEffect(() => {
+    const onDocPointer = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (listRef.current?.contains(target)) return;
+      setListOpen(false);
+    };
+    document.addEventListener('mousedown', onDocPointer);
+    return () => document.removeEventListener('mousedown', onDocPointer);
+  }, []);
+
+  const pickCustomer = (customer: Customer) => {
+    onSelect(customer);
+    setQuery(formatCustomerOptionLabel(customer));
+    setListOpen(false);
+  };
+
   const clearSelection = () => {
     setQuery('');
+    setListOpen(false);
     onSelect(null);
   };
 
@@ -110,18 +218,131 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
     }
   };
 
+  const portalTarget = getRootPortalContainer() ?? (typeof document !== 'undefined' ? document.body : null);
+  const listbox =
+    showList && listStyle && portalTarget
+      ? createPortal(
+          <div
+            ref={listRef}
+            id={listId}
+            role="listbox"
+            dir="rtl"
+            style={{
+              position: 'fixed',
+              top: listStyle.top,
+              left: listStyle.left,
+              width: listStyle.width,
+              maxHeight: listStyle.maxHeight,
+              zIndex: 10100,
+              margin: 0,
+              overflow: 'auto',
+              borderRadius: 'var(--border-radius-base, 12px)',
+              border: '1px solid var(--color-border, #e5e7eb)',
+              backgroundColor: 'var(--color-card, #ffffff)',
+              color: 'var(--color-text, #0f172a)',
+              boxShadow: 'var(--shadow-dropdown, 0 4px 12px rgba(0,0,0,0.12))',
+            }}
+            className={cn(FLOATING_MENU_Z_CLASS, 'erp-surface')}
+          >
+            {matches.length === 0 ? (
+              <div className="px-3 py-2.5 text-sm text-muted-foreground">لا توجد نتائج في الماستر.</div>
+            ) : (
+              matches.map((customer, idx) => {
+                const active = idx === highlight;
+                return (
+                  <button
+                    key={customer.id}
+                    id={`${listId}-opt-${idx}`}
+                    type="button"
+                    role="option"
+                    data-customer-opt-index={idx}
+                    aria-selected={active}
+                    className={cn(
+                      'w-full text-start px-3 py-2 text-sm border-0 border-b last:border-b-0 border-[var(--color-border)]',
+                      active ? 'bg-[rgb(var(--color-primary)/0.12)]' : 'bg-transparent hover:bg-[rgb(var(--color-primary)/0.08)]',
+                    )}
+                    onMouseEnter={() => moveHighlight(idx)}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      pickCustomer(customer);
+                    }}
+                  >
+                    <div className="font-medium">
+                      {customer.code} — {customer.name}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {CUSTOMER_TYPE_LABELS[customer.type]} · {customer.phone}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>,
+          portalTarget,
+        )
+      : null;
+
   return (
-    <div className="space-y-2">
+    <div ref={rootRef} className="space-y-2">
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex-1 min-w-[220px] space-y-1">
-          <Label>العميل (ماستر)</Label>
+          <Label htmlFor={`${listId}-input`}>العميل (ماستر)</Label>
           <Input
+            ref={inputRef}
+            id={`${listId}-input`}
+            role="combobox"
+            aria-expanded={showList}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              showList && matches[highlight] ? `${listId}-opt-${highlight}` : undefined
+            }
             value={query}
             disabled={disabled}
+            autoComplete="off"
             placeholder="بحث بالكود أو الاسم أو الموبايل…"
+            onFocus={() => {
+              if (disabled || selected) return;
+              setListOpen(true);
+            }}
             onChange={(e) => {
               setQuery(toEnglishDigits(e.target.value));
               if (selected) onSelect(null);
+              setListOpen(true);
+            }}
+            onKeyDown={(e) => {
+              if (disabled) return;
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                setListOpen(false);
+                return;
+              }
+              if (e.key === 'Tab') {
+                setListOpen(false);
+                return;
+              }
+              if (selected) return;
+              if (isListboxOpenKey(e.key) && !listOpen) {
+                e.preventDefault();
+                e.stopPropagation();
+                setListOpen(true);
+                moveHighlight(e.key === 'ArrowUp' || e.key === 'Up' ? Math.max(0, matches.length - 1) : 0);
+                return;
+              }
+              if (!listOpen) return;
+              if (isListboxNavKey(e.key)) {
+                e.preventDefault();
+                e.stopPropagation();
+                moveHighlight(listboxIndexAfterKey(e.key, highlightRef.current, matches.length));
+                return;
+              }
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                const pick = matches[Math.min(highlightRef.current, Math.max(0, matches.length - 1))];
+                if (pick) pickCustomer(pick);
+              }
             }}
           />
         </div>
@@ -161,32 +382,7 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
         </div>
       )}
 
-      {!selected && query.trim().length > 0 && (
-        <div className="max-h-48 overflow-auto rounded-md border divide-y">
-          {matches.length === 0 ? (
-            <div className="p-3 text-sm text-muted-foreground">لا توجد نتائج في الماستر.</div>
-          ) : (
-            matches.map((customer) => (
-              <button
-                key={customer.id}
-                type="button"
-                className="w-full text-start px-3 py-2 text-sm hover:bg-accent"
-                onClick={() => {
-                  onSelect(customer);
-                  setQuery(formatCustomerOptionLabel(customer));
-                }}
-              >
-                <div className="font-medium">
-                  {customer.code} — {customer.name}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {CUSTOMER_TYPE_LABELS[customer.type]} · {customer.phone}
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {listbox}
 
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent>

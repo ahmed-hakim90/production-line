@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, SearchableSelect } from '../../components/UI';
+import { Button } from '../../components/UI';
+import { VoucherItemCombobox } from '../VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '../../lib/materialVoucherPicker';
 import { toast } from '../../../../components/Toast';
 import { stockService } from '../../services/stockService';
 import type { Warehouse, WarehouseLocation } from '../../types';
@@ -47,8 +49,16 @@ export const AddConsumableStockModal: React.FC<Props> = ({
     [locations, warehouseId],
   );
   const locationsRequired = warehouseLocations.length > 0;
-  const consumableOptions = useMemo(
-    () => consumables.map((c) => ({ value: c.id, label: `${c.name} (${c.code})` })),
+  const consumablePicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        consumables.map((c) => ({
+          value: c.id,
+          label: `${c.name} (${c.code})`,
+          name: c.name,
+          code: c.code,
+        })),
+      ),
     [consumables],
   );
   const material = consumables.find((c) => c.id === itemId);
@@ -156,11 +166,12 @@ export const AddConsumableStockModal: React.FC<Props> = ({
             <Button type="button" size="sm" onClick={onDefineConsumable}>تعريف مستهلك</Button>
           </div>
         ) : (
-          <SearchableSelect
-            options={consumableOptions}
+          <VoucherItemCombobox
+            options={consumablePicker.options}
+            catalog={consumablePicker.catalog}
             value={itemId}
             onChange={setItemId}
-            placeholder="اختر مستهلك"
+            placeholder="ابحث بالاسم أو امسح الكود"
           />
         )}
       </div>

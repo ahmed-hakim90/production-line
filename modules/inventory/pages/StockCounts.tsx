@@ -27,11 +27,11 @@ import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrin
 import { WarehouseCountSheetPrintModal } from '../components/WarehouseCountSheetPrintModal';
 
 const STOCK_COUNTS_CACHE_KEY = 'inventory:stock-counts';
+const STOCK_COUNTS_BALANCES_CACHE = 'inventory:stock-counts-balances';
 
-type StockCountsPageData = {
+type StockCountsListData = {
   sessions: StockCountSession[];
   warehouses: Warehouse[];
-  balances: StockItemBalance[];
 };
 
 /** Open sheet imports already have diffs but may still be status=open (pre-fix sessions). */
@@ -66,28 +66,44 @@ export const StockCounts: React.FC = () => {
   const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
 
   const {
-    data,
-    reload: reloadCached,
-  } = useCachedPageLoad<StockCountsPageData>(
+    data: listData,
+    loading: listLoading,
+    refreshing: listRefreshing,
+    reload: reloadList,
+  } = useCachedPageLoad<StockCountsListData>(
     STOCK_COUNTS_CACHE_KEY,
     async () => {
-      const [ses, whs, bals] = await Promise.all([
+      const [ses, whs] = await Promise.all([
         stockService.getCountSessions(),
         warehouseService.getWarehousesForReportingFilters(),
-        stockService.getBalances(),
       ]);
       return {
         sessions: ses,
         warehouses: filterWarehouses(whs),
-        balances: bals,
       };
     },
     { maxAgeMs: 45_000 },
   );
 
-  const sessions = data?.sessions ?? [];
-  const warehouses = data?.warehouses ?? [];
-  const balances = data?.balances ?? [];
+  const {
+    data: balanceRows,
+    loading: balancesLoading,
+    reload: reloadBalances,
+  } = useCachedPageLoad<StockItemBalance[]>(
+    STOCK_COUNTS_BALANCES_CACHE,
+    () => stockService.getBalances(),
+    { maxAgeMs: 45_000 },
+  );
+
+  const sessions = listData?.sessions ?? [];
+  const warehouses = listData?.warehouses ?? [];
+  const balances = balanceRows ?? [];
+
+  const loadData = async () => {
+    invalidatePageDataCache(STOCK_COUNTS_CACHE_KEY);
+    invalidatePageDataCache(STOCK_COUNTS_BALANCES_CACHE);
+    await Promise.all([reloadList(true), reloadBalances(true)]);
+  };
 
   const awaitingApprovalCount = useMemo(
     () => sessions.filter((s) => isReadyForMatching(s)).length,
@@ -103,11 +119,6 @@ export const StockCounts: React.FC = () => {
   const [countPreview, setCountPreview] = useState<{ fileName: string; data: ArrayBuffer; parsed: StockCountSheetResult } | null>(null);
   const [printPickerOpen, setPrintPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const loadData = async () => {
-    invalidatePageDataCache(STOCK_COUNTS_CACHE_KEY);
-    await reloadCached(true);
-  };
 
   useEffect(() => {
     setWarehouseId((prev) =>
@@ -240,12 +251,17 @@ export const StockCounts: React.FC = () => {
 
       {(fromSupplies || scoped) && warehouseId && (
         <p className="text-sm font-medium text-[rgb(var(--color-primary))] bg-[rgb(var(--color-primary)/0.1)] border border-[rgb(var(--color-primary)/0.25)] rounded-lg px-4 py-3">
-          جرد مخزن المستلزمات: <span className="font-bold">{selectedWarehouseName}</span>.
+          جرد مخزن : <span className="font-bold">{selectedWarehouseName}</span>.
           المطابقة تعتمد فروق العد (الفعلي مقابل النظام) كتسويات مخزنية.
         </p>
       )}
 
-      <OpsDashPanel title="مسار الجرد والمطابقة" accent="inventory">
+      <OpsDashPanel
+        title="مسار الجرد والمطابقة"
+        accent="inventory"
+        loading={balancesLoading}
+        loadingLabel="جاري تحميل أرصدة المخازن…"
+      >
         <ol className="mb-4 space-y-1 text-sm text-[var(--color-text-muted)] list-decimal list-inside">
           <li>افتح جلسة جرد للمخزن المحدد.</li>
           <li>أدخل الكميات الفعلية لكل صنف.</li>
@@ -265,14 +281,14 @@ export const StockCounts: React.FC = () => {
               {warehouses.map((w) => <SelectItem key={w.id} value={w.id!}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="primary" onClick={() => void startCountSession()} disabled={!warehouseId || creating || !can('inventory.counts.manage')}>
+          <Button variant="primary" onClick={() => void startCountSession()} disabled={!warehouseId || creating || balancesLoading || !can('inventory.counts.manage')}>
             <span className="material-icons-round text-sm">playlist_add_check</span>
-            بدء الجرد
+            {balancesLoading ? 'جاري تحميل الأرصدة…' : 'بدء الجرد'}
           </Button>
           <Button
             variant="outline"
             onClick={() => downloadStockCountTemplate(selectedWarehouseName, selectedBalances)}
-            disabled={!warehouseId || selectedBalances.length === 0}
+            disabled={!warehouseId || selectedBalances.length === 0 || balancesLoading}
           >
             <span className="material-icons-round text-sm">download</span>
             تنزيل قالب الجرد
@@ -344,13 +360,20 @@ export const StockCounts: React.FC = () => {
         </OpsDashPanel>
       )}
 
-      <OpsDashPanel title="جلسات الجرد والمطابقة" accent="inventory">
+      <OpsDashPanel
+        title="جلسات الجرد والمطابقة"
+        accent="inventory"
+        loading={listLoading || listRefreshing}
+        loadingLabel={listLoading ? 'جاري تحميل الجلسات…' : 'جاري التحديث…'}
+      >
         {warehouseId ? (
           <p className="mb-3 text-xs text-[var(--color-text-muted)]">
             القائمة مفلترة على المخزن المحدد. لو مش لاقي جلسة العاشر: اختر «اختر المخزن» لعرض كل الجلسات، أو اختر مخزن العاشر صراحة.
           </p>
         ) : null}
-        {visibleSessions.length === 0 ? (
+        {listLoading && sessions.length === 0 ? (
+          <p className="text-sm text-[var(--color-text-muted)]" role="status">جاري تحميل الجلسات…</p>
+        ) : visibleSessions.length === 0 ? (
           <p className="text-sm text-[var(--color-text-muted)]">
             {warehouseId
               ? 'لا توجد جلسات لهذا المخزن. تأكد أن الرفع اكتمل بتأكيد الجلسة، أو اختر مخزنًا آخر / امسح الفلتر.'

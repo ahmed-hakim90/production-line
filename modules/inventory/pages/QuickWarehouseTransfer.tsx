@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, SearchableSelect } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
 import { useAppStore } from '../../../store/useAppStore';
 import { createTransferRequest } from '../usecases/createTransferRequest';
 import { unwrapOrThrow } from '@/shared/usecases';
@@ -238,6 +239,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
           id: p.id,
           name: p.name,
           code: p.code,
+          barcode: String(raw?.barcode || '').trim() || undefined,
           minStock: 0,
           unitsPerCarton: Number(raw?.unitsPerCarton || 0),
           stockItemType: 'finished_good',
@@ -263,6 +265,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
         id: m.id,
         name: m.name,
         code: m.code,
+        barcode: m.barcode,
         minStock: m.minStock,
         stockItemType: m.stockItemType,
       })),
@@ -303,6 +306,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
         return {
           value: opt.id,
           label: `${opt.name} (${opt.code}) — المتاح: ${available}`,
+          searchText: [opt.code, opt.barcode].filter(Boolean).join(' '),
         };
       }),
     [itemOptions, balances, warehouseId, itemType, componentById],
@@ -670,15 +674,16 @@ export const QuickWarehouseTransfer: React.FC = () => {
                       style={{ gridTemplateColumns: '1fr 160px 140px 40px' }}
                     >
                       <div className="pl-3">
-                        <SearchableSelect
+                        <VoucherItemCombobox
                           options={itemSelectOptions}
+                          catalog={itemOptions}
                           value={line.itemId}
                           onChange={(value) =>
                             setTransferItems((prev) =>
                               prev.map((x) => (x.id === line.id ? { ...x, itemId: value } : x)),
                             )
                           }
-                          placeholder="ابحث واختر الصنف"
+                          placeholder="ابحث بالاسم أو امسح الباركود"
                         />
                         {line.itemId && (
                           <p
@@ -777,15 +782,16 @@ export const QuickWarehouseTransfer: React.FC = () => {
                           <span className="material-icons-round text-sm">delete_outline</span>
                         </button>
                       </div>
-                      <SearchableSelect
+                      <VoucherItemCombobox
                         options={itemSelectOptions}
+                        catalog={itemOptions}
                         value={line.itemId}
                         onChange={(value) =>
                           setTransferItems((prev) =>
                             prev.map((x) => (x.id === line.id ? { ...x, itemId: value } : x)),
                           )
                         }
-                        placeholder="ابحث واختر الصنف"
+                        placeholder="ابحث بالاسم أو امسح الباركود"
                       />
                       {line.itemId && (
                         <p

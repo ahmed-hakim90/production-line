@@ -15,6 +15,7 @@ import { warehouseService } from '../../inventory/services/warehouseService';
 import {
   isRepairCenterWarehouse,
   otherMainBranchIds,
+  plannedRepairCenterWarehouseRename,
   repairMaintenanceWarehouseName,
 } from '../lib/repairBranchMain';
 import { normalizeRepairBranchCreateInput, type RepairBranchCreateInput } from '../lib/repairBranchProvision';
@@ -70,18 +71,29 @@ export const repairBranchService = {
   },
 
   /**
-   * Backfill: branch-linked / RWH-* warehouses → role `maintenance_center`.
+   * Backfill: branch-linked / RWH-* warehouses → role `maintenance_center`,
+   * and legacy «مخزن فرع …» names → «مخزن صيانة - {اسم الفرع}».
    */
-  async ensureMaintenanceCenterWarehouseRoles(): Promise<{ updated: number; checked: number }> {
-    if (!isConfigured) return { updated: 0, checked: 0 };
+  async ensureMaintenanceCenterWarehouseRoles(): Promise<{
+    updated: number;
+    renamed: number;
+    checked: number;
+  }> {
+    if (!isConfigured) return { updated: 0, renamed: 0, checked: 0 };
     const [branches, warehouses] = await Promise.all([
       this.list(),
       warehouseService.getAllWarehouses(),
     ]);
+    const warehouseById = new Map(
+      warehouses
+        .map((warehouse) => [String(warehouse.id || '').trim(), warehouse] as const)
+        .filter(([id]) => Boolean(id)),
+    );
     const linkedIds = new Set(
       branches.map((b) => String(b.warehouseId || '').trim()).filter(Boolean),
     );
     let updated = 0;
+    let renamed = 0;
     let checked = 0;
     for (const warehouse of warehouses) {
       const id = String(warehouse.id || '').trim();
@@ -93,9 +105,24 @@ export const repairBranchService = {
       checked += 1;
       if ((warehouse.warehouseRole || 'general') === 'maintenance_center') continue;
       await warehouseService.update(id, { warehouseRole: 'maintenance_center' });
+      warehouse.warehouseRole = 'maintenance_center';
       updated += 1;
     }
-    return { updated, checked };
+    for (const branch of branches) {
+      const warehouseId = String(branch.warehouseId || '').trim();
+      if (!warehouseId) continue;
+      const warehouse = warehouseById.get(warehouseId);
+      if (!warehouse) continue;
+      const nextName = plannedRepairCenterWarehouseRename({
+        warehouseName: warehouse.name,
+        branchName: String(branch.name || ''),
+      });
+      if (!nextName) continue;
+      await warehouseService.update(warehouseId, { name: nextName });
+      warehouse.name = nextName;
+      renamed += 1;
+    }
+    return { updated, renamed, checked };
   },
 
   async update(id: string, patch: Partial<Omit<RepairBranch, 'id' | 'tenantId'>>): Promise<void> {

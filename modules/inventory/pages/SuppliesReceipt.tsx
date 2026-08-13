@@ -5,6 +5,8 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Button, SearchableSelect } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '../lib/materialVoucherPicker';
 import { SuppliesReceiptPrint } from '../components/SuppliesReceiptPrint';
 import { suppliesReceiptService } from '../services/suppliesReceiptService';
 import { warehouseService } from '../services/warehouseService';
@@ -67,6 +69,7 @@ type ComponentOption = {
   itemType: InventoryItemType;
   name: string;
   code: string;
+  barcode?: string;
   unit: string;
 };
 
@@ -114,6 +117,7 @@ export const SuppliesReceipt: React.FC = () => {
   const { warehouseId: suppliesWarehouseId, warehouseName: suppliesWarehouseName } = useRawMaterialWarehouse();
 
   const products = useAppStore((s) => s.products);
+  const rawProducts = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
   const uid = useAppStore((s) => s.uid);
@@ -208,6 +212,7 @@ export const SuppliesReceipt: React.FC = () => {
             itemType: 'material' as const,
             name: m.name,
             code: m.code,
+            barcode: String(m.barcode || '').trim() || undefined,
             unit: m.baseUnit || 'unit',
           }));
         const rawOpts: ComponentOption[] = consumableMode
@@ -273,21 +278,36 @@ export const SuppliesReceipt: React.FC = () => {
   const warehouse = warehouses.find((w) => w.id === warehouseId);
   const locationsRequired = warehouseLocations.length > 0;
 
-  const productOptions = useMemo(
-    () =>
+  const productPicker = useMemo(() => {
+    const barcodeById = new Map(
+      rawProducts
+        .filter((p) => p.id)
+        .map((p) => [String(p.id), String(p.barcode || '').trim()] as const),
+    );
+    return buildCodeVoucherPicker(
       products.map((p) => ({
         value: p.id,
         label: `${p.name} (${p.code})`,
+        name: p.name,
+        code: p.code,
+        barcode: barcodeById.get(p.id) || undefined,
+        stockItemType: 'finished_good' as const,
       })),
-    [products],
-  );
+    );
+  }, [products, rawProducts]);
 
-  const componentSelectOptions = useMemo(
+  const componentPicker = useMemo(
     () =>
-      componentOptions.map((c) => ({
-        value: `${c.itemType}::${c.id}`,
-        label: `${c.name} (${c.code})`,
-      })),
+      buildCodeVoucherPicker(
+        componentOptions.map((c) => ({
+          value: `${c.itemType}::${c.id}`,
+          label: `${c.name} (${c.code})`,
+          name: c.name,
+          code: c.code,
+          barcode: c.barcode,
+          stockItemType: c.itemType,
+        })),
+      ),
     [componentOptions],
   );
 
@@ -554,11 +574,12 @@ export const SuppliesReceipt: React.FC = () => {
     <tr key={`${line.itemType}-${line.itemId}-${index}`} className="border-b align-top">
       <td className="p-3">
         {allowPickComponent ? (
-          <SearchableSelect
-            options={componentSelectOptions}
+          <VoucherItemCombobox
+            options={componentPicker.options}
+            catalog={componentPicker.catalog}
             value={line.itemId ? `${line.itemType}::${line.itemId}` : ''}
             onChange={(value) => onChange(setLineComponent(line, value))}
-            placeholder="اختر المكون"
+            placeholder="ابحث بالاسم أو امسح الباركود"
           />
         ) : (
           <>
@@ -683,8 +704,9 @@ export const SuppliesReceipt: React.FC = () => {
         >
           <div className="grid grid-cols-1 gap-3 border-b p-4 md:grid-cols-6">
             <div className="md:col-span-3">
-              <SearchableSelect
-                options={productOptions}
+              <VoucherItemCombobox
+                options={productPicker.options}
+                catalog={productPicker.catalog}
                 value={group.productId}
                 onChange={(value) => {
                   const product = products.find((p) => p.id === value);
@@ -699,7 +721,7 @@ export const SuppliesReceipt: React.FC = () => {
                     void fillGroupBom(group.key, { productId: value, quantity: qty });
                   }
                 }}
-                placeholder="اختر المنتج"
+                placeholder="ابحث بالاسم أو امسح الباركود"
               />
             </div>
             <input

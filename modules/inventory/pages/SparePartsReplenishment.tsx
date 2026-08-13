@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { buildMaterialVoucherPicker } from '../lib/materialVoucherPicker';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
@@ -16,6 +18,8 @@ import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
 import { sparePartsReplenishmentService } from '../services/sparePartsReplenishmentService';
 import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import {
   SPARE_PARTS_REPLENISHMENT_STATUS_LABELS,
   canApproveSparePartsRequest,
@@ -53,6 +57,8 @@ const fmtMoney = (n: number) =>
   }).format(Number(n || 0));
 
 const LIST_PAGE_SIZE = 20;
+const REPLENISHMENT_LIST_CACHE = 'inventory:spare-parts-replenishment';
+const MATERIALS_CATALOG_CACHE = 'inventory:materials-catalog';
 
 type DraftLine = { itemId: string; quantity: string };
 
@@ -81,11 +87,7 @@ export const SparePartsReplenishment: React.FC = () => {
   const canRejectPerm = can('sparePartsReplenishment.reject');
   const canUploadOpening = canUploadOpeningBalances(can);
 
-  const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [rows, setRows] = useState<SparePartsReplenishmentRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [stockoutOnly, setStockoutOnly] = useState(false);
   const [listTab, setListTab] = useState<'pending' | 'all'>('pending');
@@ -104,6 +106,51 @@ export const SparePartsReplenishment: React.FC = () => {
   const [note, setNote] = useState('');
   const [draftLines, setDraftLines] = useState<DraftLine[]>([{ itemId: '', quantity: '1' }]);
 
+  const {
+    data: listData,
+    loading: listLoading,
+    refreshing: listRefreshing,
+    reload: reloadList,
+  } = useCachedPageLoad<{ warehouses: Warehouse[]; rows: SparePartsReplenishmentRequest[] }>(
+    canView ? REPLENISHMENT_LIST_CACHE : null,
+    async () => {
+      const [whsResult, itemsResult] = await Promise.allSettled([
+        warehouseService.getWarehousesForSparePartsFlow(),
+        sparePartsReplenishmentService.listRecent(200),
+      ]);
+      if (whsResult.status === 'rejected') {
+        toast.error(
+          whsResult.reason?.message
+          || 'تعذر تحميل المخازن. تحقق من صلاحيات المخزون أو ربط المخزن بالحساب.',
+        );
+      }
+      if (itemsResult.status === 'rejected') {
+        toast.error(
+          itemsResult.reason?.message
+          || 'تعذر تحميل طلبات تموين قطع الغيار.',
+        );
+      }
+      return {
+        warehouses: whsResult.status === 'fulfilled' ? whsResult.value : [],
+        rows: itemsResult.status === 'fulfilled' ? itemsResult.value : [],
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
+
+  const {
+    data: catalog,
+    loading: catalogLoading,
+  } = useCachedPageLoad<Material[]>(
+    canView ? MATERIALS_CATALOG_CACHE : null,
+    () => materialService.getAll(),
+    { maxAgeMs: 60_000 },
+  );
+
+  const warehouses = listData?.warehouses ?? [];
+  const rows = listData?.rows ?? [];
+  const materials = catalog ?? [];
+
   const centralWarehouses = useMemo(
     () => warehouses.filter((w) => w.warehouseRole === 'spare_parts_central'),
     [warehouses],
@@ -112,6 +159,11 @@ export const SparePartsReplenishment: React.FC = () => {
     () => String(fromWarehouseId || centralWarehouses[0]?.id || '').trim(),
     [fromWarehouseId, centralWarehouses],
   );
+
+  useEffect(() => {
+    if (fromWarehouseId || !centralWarehouses[0]?.id) return;
+    setFromWarehouseId(String(centralWarehouses[0].id));
+  }, [fromWarehouseId, centralWarehouses]);
   const centerWarehouses = useMemo(
     () => warehouses.filter((w) => w.warehouseRole === 'maintenance_center'),
     [warehouses],
@@ -120,51 +172,20 @@ export const SparePartsReplenishment: React.FC = () => {
     () => materials.filter((m) => m.isActive !== false),
     [materials],
   );
+  const materialPicker = useMemo(
+    () =>
+      buildMaterialVoucherPicker(
+        activeMaterials,
+        (material) =>
+          `${material.name} (${material.code || '—'}) — تكلفة ${fmt(Number(material.purchaseCost || 0))}`,
+      ),
+    [activeMaterials],
+  );
 
   const load = useCallback(async () => {
-    if (!canView) return;
-    setLoading(true);
-    try {
-      const [whsResult, matsResult, itemsResult] = await Promise.allSettled([
-        warehouseService.getWarehousesForSparePartsFlow(),
-        materialService.getAll(),
-        sparePartsReplenishmentService.listRecent(200),
-      ]);
-
-      if (whsResult.status === 'fulfilled') {
-        const whs = whsResult.value;
-        setWarehouses(whs);
-        if (!fromWarehouseId) {
-          const central = whs.find((w) => w.warehouseRole === 'spare_parts_central');
-          if (central?.id) setFromWarehouseId(central.id);
-        }
-      } else {
-        setWarehouses([]);
-        toast.error(
-          whsResult.reason?.message
-          || 'تعذر تحميل المخازن. تحقق من صلاحيات المخزون أو ربط المخزن بالحساب.',
-        );
-      }
-
-      setMaterials(matsResult.status === 'fulfilled' ? matsResult.value : []);
-
-      if (itemsResult.status === 'fulfilled') {
-        setRows(itemsResult.value);
-      } else {
-        setRows([]);
-        toast.error(
-          itemsResult.reason?.message
-          || 'تعذر تحميل طلبات تموين قطع الغيار.',
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [canView, fromWarehouseId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    invalidatePageDataCache(REPLENISHMENT_LIST_CACHE);
+    await reloadList(true);
+  }, [reloadList]);
 
   const filtered = useMemo(() => {
     let list = rows;
@@ -372,7 +393,7 @@ export const SparePartsReplenishment: React.FC = () => {
     {
       key: 'pending',
       label: 'مطلوب ولم يُستلم',
-      value: kpis.pendingCount,
+      value: listLoading && rows.length === 0 ? '…' : kpis.pendingCount,
       accent: kpis.pendingCount > 0,
       onClick: () => {
         setListTab('pending');
@@ -383,13 +404,13 @@ export const SparePartsReplenishment: React.FC = () => {
     {
       key: 'received',
       label: 'تم التموين',
-      value: kpis.receivedCount,
+      value: listLoading && rows.length === 0 ? '…' : kpis.receivedCount,
       meta: `متوسط زمن التنفيذ: ${kpis.avgDurationLabel}`,
     },
     {
       key: 'stockout',
       label: 'قطع ناقصة',
-      value: kpis.stockoutLineCount,
+      value: listLoading && rows.length === 0 ? '…' : kpis.stockoutLineCount,
       meta: `في ${kpis.stockoutRequestCount} طلب`,
       toneClassName: kpis.stockoutLineCount > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined,
       onClick: () => {
@@ -405,7 +426,7 @@ export const SparePartsReplenishment: React.FC = () => {
       rangeLabel="طلب من المركز → اعتماد → تجهيز → موافقة المسؤول → تأكيد الاستلام (دخول الرصيد عند الاستلام فقط). التسعير من ماستر المكونات مركزياً."
       hero={hero}
       onRefresh={() => void load()}
-      refreshing={loading}
+      refreshing={listRefreshing}
       actions={
         (canUploadOpening && primaryCentralWarehouseId) || canCreate
           ? (
@@ -453,7 +474,7 @@ export const SparePartsReplenishment: React.FC = () => {
       ) : null}
 
       {showCreate && canCreate ? (
-        <OpsDashPanel title="طلب تموين من المركز" accent="repair">
+        <OpsDashPanel title="طلب تموين من المركز" accent="repair" loading={catalogLoading} loadingLabel="جاري تحميل الأصناف…">
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-sm font-semibold space-y-1">
               <span>مخزن قطع الغيار المركزي</span>
@@ -488,23 +509,18 @@ export const SparePartsReplenishment: React.FC = () => {
           <div className="mt-3 space-y-2">
             {draftLines.map((line, idx) => (
               <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_auto]">
-                <select
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                <VoucherItemCombobox
+                  options={materialPicker.options}
+                  catalog={materialPicker.catalog}
                   value={line.itemId}
-                  onChange={(e) => {
-                    const value = e.target.value;
+                  onChange={(value) => {
                     setDraftLines((prev) => prev.map((row, i) => (
                       i === idx ? { ...row, itemId: value } : row
                     )));
                   }}
-                >
-                  <option value="">اختر مكوّناً…</option>
-                  {activeMaterials.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.code || '—'}) — تكلفة {fmt(Number(m.purchaseCost || 0))}
-                    </option>
-                  ))}
-                </select>
+                  placeholder={catalogLoading ? 'جاري تحميل الأصناف…' : 'ابحث بالاسم أو امسح الباركود'}
+                  disabled={catalogLoading}
+                />
                 <input
                   type="number"
                   min={0.0001}
@@ -842,6 +858,8 @@ export const SparePartsReplenishment: React.FC = () => {
           bodyClassName="p-0"
           accent="repair"
           title="الطلبات"
+          loading={listLoading || listRefreshing}
+          loadingLabel={listLoading ? 'جاري تحميل الطلبات…' : 'جاري التحديث…'}
         >
           <div className="flex flex-wrap gap-2 px-3 pt-3">
             {([
@@ -866,7 +884,7 @@ export const SparePartsReplenishment: React.FC = () => {
             ))}
           </div>
           <div className="max-h-[min(52vh,420px)] overflow-y-auto xl:max-h-[min(70vh,720px)]">
-          {loading ? (
+          {listLoading && rows.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">جاري التحميل…</p>
           ) : filtered.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد طلبات.</p>

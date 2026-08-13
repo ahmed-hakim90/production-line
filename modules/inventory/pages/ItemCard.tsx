@@ -30,6 +30,7 @@ import { BarcodeLabelPrintEngineModal } from '../components/BarcodeLabelPrintEng
 import { ProductBomCountCardPreviewModal } from '../../production/components/ProductBomCountCardPreviewModal';
 import { buildProductBomCountCards } from '../../production/lib/buildProductBomCountCards';
 import type { ProductBomCountCard } from '../../production/components/ProductBomCountCardPrint';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 const fmt = (n: number) =>
@@ -93,14 +94,25 @@ export const ItemCard: React.FC = () => {
   const products = useAppStore((s) => s._rawProducts || []);
   const printSettings = useAppStore((s) => s.systemSettings?.printTemplate);
 
-  const [materials, setMaterials] = useState<Material[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [itemType, setItemType] = useState<InventoryItemType>(
     () => (searchParams.get('itemType') as InventoryItemType) || 'finished_good',
   );
   const [itemId, setItemId] = useState(() => searchParams.get('itemId') || '');
   const [warehouseId, setWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
   const [loading, setLoading] = useState(false);
+
+  const { data: warehouseRows, loading: warehousesLoading } = useCachedPageLoad<Warehouse[]>(
+    canView ? 'inventory:active-warehouses' : null,
+    () => warehouseService.getActiveWarehouses(),
+    { maxAgeMs: 60_000 },
+  );
+  const { data: catalog, loading: catalogLoading } = useCachedPageLoad<Material[]>(
+    canView && itemType !== 'finished_good' ? 'inventory:materials-catalog' : null,
+    () => materialService.getAll(),
+    { maxAgeMs: 60_000 },
+  );
+  const warehouses = warehouseRows ?? [];
+  const materials = catalog ?? [];
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
   const [bomLines, setBomLines] = useState<ItemCardBomLine[]>([]);
@@ -215,27 +227,6 @@ export const ItemCard: React.FC = () => {
       movements,
     };
   }, [selected, warehouseId, warehouseNameById, itemBalances, bomLines, movements]);
-
-  useEffect(() => {
-    if (!canView) return;
-    let active = true;
-    void (async () => {
-      try {
-        const [mats, whs] = await Promise.all([
-          materialService.getAll().catch(() => [] as Material[]),
-          warehouseService.getActiveWarehouses().catch(() => [] as Warehouse[]),
-        ]);
-        if (!active) return;
-        setMaterials(mats);
-        setWarehouses(whs);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'تعذر تحميل بيانات الكارت.');
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [canView]);
 
   const loadCard = useCallback(async (resetMovements = true) => {
     if (!canView || !itemId) return;
@@ -498,7 +489,12 @@ export const ItemCard: React.FC = () => {
         </div>
       )}
     >
-      <OpsDashPanel title="اختيار الصنف" accent="inventory">
+      <OpsDashPanel
+        title="اختيار الصنف"
+        accent="inventory"
+        loading={(itemType !== 'finished_good' && catalogLoading) || warehousesLoading}
+        loadingLabel={warehousesLoading ? 'جاري تحميل المخازن…' : 'جاري تحميل الأصناف…'}
+      >
         <div className="grid gap-3 md:grid-cols-4">
           <label className="text-sm font-semibold space-y-1">
             <span>نوع الصنف</span>
@@ -522,7 +518,8 @@ export const ItemCard: React.FC = () => {
               options={itemSelectOptions}
               value={itemId}
               onChange={setItemId}
-              placeholder="ابحث بالاسم أو الكود…"
+              placeholder={itemType !== 'finished_good' && catalogLoading ? 'جاري تحميل الأصناف…' : 'ابحث بالاسم أو الكود…'}
+              disabled={itemType !== 'finished_good' && catalogLoading}
             />
           </label>
 
@@ -548,13 +545,13 @@ export const ItemCard: React.FC = () => {
             اختر صنفاً من القائمة لعرض الكارت.
           </p>
         </OpsDashPanel>
-      ) : loading && !selected ? (
-        <OpsDashPanel title="جاري التحميل" accent="inventory">
-          <p className="text-sm text-[var(--color-text-muted)] py-8 text-center">جاري التحميل…</p>
+      ) : !selected ? (
+        <OpsDashPanel title="بيانات الصنف" accent="inventory" loading loadingLabel="جاري تحميل الأصناف…">
+          <p className="text-sm text-[var(--color-text-muted)] py-8 text-center">جاري مطابقة الصنف…</p>
         </OpsDashPanel>
       ) : selected ? (
         <>
-          <OpsDashPanel title="بيانات الصنف" accent="inventory">
+          <OpsDashPanel title="بيانات الصنف" accent="inventory" loading={loading} loadingLabel="جاري تحميل الكارت…">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
               <p><span className="font-bold">الاسم:</span> {selected.name}</p>
               <p><span className="font-bold">الكود:</span> <span className="font-mono">{selected.code || '—'}</span></p>
@@ -563,8 +560,10 @@ export const ItemCard: React.FC = () => {
             </div>
           </OpsDashPanel>
 
-          <OpsDashPanel title="الأرصدة حسب المخزن" accent="inventory">
-            {itemBalances.length === 0 ? (
+          <OpsDashPanel title="الأرصدة حسب المخزن" accent="inventory" loading={loading} loadingLabel="جاري تحميل الأرصدة…">
+            {loading && itemBalances.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-muted)]" role="status">جاري التحميل…</p>
+            ) : itemBalances.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)]">لا يوجد رصيد.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -665,6 +664,8 @@ export const ItemCard: React.FC = () => {
           <OpsDashPanel
             title={`كل الحركات${warehouseId ? ' (المخزن المحدد)' : ' (كل المخازن)'}`}
             accent="inventory"
+            loading={loading && movements.length === 0}
+            loadingLabel="جاري تحميل الحركات…"
             action={
               movements.length > 0 ? (
                 <span className="text-xs font-semibold text-[var(--color-text-muted)] tabular-nums">

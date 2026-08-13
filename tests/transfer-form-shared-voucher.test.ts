@@ -19,6 +19,17 @@ describe('findItemOptionByCode', () => {
     expect(findItemOptionByCode(options, '6221234567890')?.id).toBe('1');
   });
 
+  it('matches Arabic digits in a scanned barcode', () => {
+    expect(findItemOptionByCode(options, '٦٢٢١٢٣٤٥٦٧٨٩٠')?.id).toBe('1');
+  });
+
+  it('matches extra scanKeys aliases', () => {
+    const withAlias = [
+      { id: '3', name: 'صنف ج', code: 'SP-003', minStock: 0, scanKeys: ['SKU-J'] },
+    ];
+    expect(findItemOptionByCode(withAlias, 'sku-j')?.id).toBe('3');
+  });
+
   it('returns undefined when no exact match', () => {
     expect(findItemOptionByCode(options, 'صنف أ')).toBeUndefined();
   });

@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Camera, ScanBarcode, Trash2 } from 'lucide-react';
+import { Camera, Trash2 } from 'lucide-react';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
 import { RepairOpsPageShell } from '@/modules/repair/components/RepairOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { SearchableSelect } from '@/components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { useLocalFormDraft } from '@/modules/shared/hooks';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -37,7 +39,7 @@ import {
 import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
-import { findRepairProductByBarcode } from '../lib/repairProductBarcode';
+import { findRepairProductByBarcode, repairProductScanKeys } from '../lib/repairProductBarcode';
 import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { isRepairJobOpenStatus } from '../lib/repairTechnicianHomeMetrics';
 
@@ -104,16 +106,28 @@ export const NewRepairJob: React.FC = () => {
   const systemSettings = useAppStore((s) => s.systemSettings);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const products = useAppStore((s) => s._rawProducts);
+  const productsLoading = useEnsureStoreData(['products']);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [loading, setLoading] = useState(false);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
-  const productOptions = useMemo(
-    () => products
-      .filter((p) => p.id)
-      .map((product) => ({
-        value: String(product.id),
-        label: `${product.name}${product.model ? ` - ${product.model}` : ''}${product.code ? ` (${product.code})` : ''}${product.barcode ? ` · باركود ${product.barcode}` : ''}`.trim(),
-      })),
+  const productPicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        products
+          .filter((p) => p.id)
+          .map((product) => {
+            const scanKeys = repairProductScanKeys(product);
+            return {
+              value: String(product.id),
+              label: `${product.name}${product.model ? ` - ${product.model}` : ''}${product.code ? ` (${product.code})` : ''}`.trim(),
+              name: product.name,
+              code: product.code,
+              barcode: product.barcode,
+              scanKeys,
+              stockItemType: 'finished_good' as const,
+            };
+          }),
+      ),
     [products],
   );
 
@@ -127,7 +141,6 @@ export const NewRepairJob: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [jobProducts, setJobProducts] = useState<JobProductRow[]>([createEmptyProductRow()]);
-  const [barcodeInputs, setBarcodeInputs] = useState<Record<string, string>>({});
   const [scannerRowId, setScannerRowId] = useState<string | null>(null);
   const productScannerRef = useRef<any>(null);
   const [openBranchJobs, setOpenBranchJobs] = useState<RepairJob[]>([]);
@@ -188,7 +201,6 @@ export const NewRepairJob: React.FC = () => {
       customerAddress: '',
     }));
     setJobProducts([createEmptyProductRow()]);
-    setBarcodeInputs({});
   };
   const selectProductForRow = useCallback((rowId: string, productId: string) => {
     const selected = products.find((product) => String(product.id) === String(productId));
@@ -209,7 +221,6 @@ export const NewRepairJob: React.FC = () => {
       return false;
     }
     selectProductForRow(rowId, String(product.id));
-    setBarcodeInputs((current) => ({ ...current, [rowId]: String(product.barcode || rawBarcode).trim() }));
     toast.success(`تم اختيار ${product.name}.`);
     return true;
   }, [products, selectProductForRow]);
@@ -519,6 +530,9 @@ export const NewRepairJob: React.FC = () => {
                 </div>
                 <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
                   <Label>المنتجات <span className="text-[rgb(var(--color-danger))]">*</span></Label>
+                  {!productsLoading && productPicker.options.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">لا توجد منتجات في الكتالوج بعد.</p>
+                  ) : null}
                   <div className="space-y-2">
                     {jobProducts.map((row, idx) => (
                       <div key={row.itemId} className="rounded-md border p-2 space-y-2">
@@ -538,18 +552,30 @@ export const NewRepairJob: React.FC = () => {
                           </Button>
                         </div>
                         <div className="space-y-2">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                            <div className="min-w-0 flex-1 space-y-1.5">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_5.5rem] sm:items-end">
+                            <div className="min-w-0 space-y-1.5">
                               <Label className="text-xs">المنتج</Label>
-                              <SearchableSelect
-                                options={productOptions}
+                              <VoucherItemCombobox
+                                options={productPicker.options}
+                                catalog={productPicker.catalog}
                                 value={row.productId}
                                 onChange={(value) => selectProductForRow(row.itemId, value)}
-                                placeholder="ابحث بالاسم أو الكود أو الباركود"
-                                className={!row.productId ? 'border-[rgb(var(--color-danger)/0.35)]' : ''}
+                                placeholder={productsLoading ? 'جاري تحميل المنتجات…' : 'ابحث بالاسم أو امسح الباركود'}
+                                disabled={productsLoading}
                               />
                             </div>
-                            <div className="w-full shrink-0 space-y-1.5 sm:w-28">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="min-h-11 px-3"
+                              disabled={productsLoading}
+                              onClick={() => setScannerRowId((current) => current === row.itemId ? null : row.itemId)}
+                              aria-label={scannerRowId === row.itemId ? 'إغلاق كاميرا الباركود' : 'مسح باركود بالكاميرا'}
+                              title="كاميرا الموبايل"
+                            >
+                              <Camera className="size-4" />
+                            </Button>
+                            <div className="space-y-1.5">
                               <Label className="text-xs">الكمية</Label>
                               <Input
                                 type="number"
@@ -564,37 +590,11 @@ export const NewRepairJob: React.FC = () => {
                               />
                             </div>
                           </div>
-                          <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
-                            <Label className="text-xs">مسح باركود عبوة المنتج</Label>
-                            <div className="flex flex-col gap-2 sm:flex-row">
-                              <Input
-                                dir="ltr"
-                                autoComplete="off"
-                                value={barcodeInputs[row.itemId] || ''}
-                                onChange={(e) => setBarcodeInputs((current) => ({ ...current, [row.itemId]: e.target.value }))}
-                                onKeyDown={(e) => {
-                                  if (e.key !== 'Enter') return;
-                                  e.preventDefault();
-                                  applyBarcodeToRow(row.itemId, barcodeInputs[row.itemId] || '');
-                                }}
-                                placeholder="استخدم قارئ USB ثم Enter أو اكتب الباركود"
-                              />
-                              <Button type="button" variant="outline" onClick={() => applyBarcodeToRow(row.itemId, barcodeInputs[row.itemId] || '')}>
-                                <ScanBarcode className="ms-1 size-4" />
-                                اختيار
-                              </Button>
-                              <Button type="button" variant="outline" onClick={() => setScannerRowId((current) => current === row.itemId ? null : row.itemId)}>
-                                <Camera className="ms-1 size-4" />
-                                كاميرا الموبايل
-                              </Button>
+                          {scannerRowId === row.itemId ? (
+                            <div className="rounded-md bg-black p-2">
+                              <div id="repair-product-barcode-scanner" className="min-h-56" />
                             </div>
-                            {scannerRowId === row.itemId ? (
-                              <div className="rounded-md bg-black p-2">
-                                <div id="repair-product-barcode-scanner" className="min-h-56" />
-                              </div>
-                            ) : null}
-                            <p className="text-xs text-muted-foreground">قارئ USB يعمل مباشرة كلوحة مفاتيح؛ وجّه المؤشر للحقل ثم امسح الباركود.</p>
-                          </div>
+                          ) : null}
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <Input
                               placeholder="السيريال (اختياري)"

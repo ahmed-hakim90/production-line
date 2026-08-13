@@ -33,6 +33,7 @@ type Props = {
   locations: WarehouseLocation[];
   catalogItems?: WarehouseScanCatalogItem[];
   onOpenLabelEngine?: (seed: WarehouseLabelEngineSeed) => void;
+  loading?: boolean;
 };
 
 export function WarehousePartInquiry({
@@ -42,6 +43,7 @@ export function WarehousePartInquiry({
   locations,
   catalogItems = [],
   onOpenLabelEngine,
+  loading = false,
 }: Props) {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [query, setQuery] = useState('');
@@ -300,7 +302,12 @@ export function WarehousePartInquiry({
   );
 
   return (
-    <OpsDashPanel title="استعلام قطعة / لوكيشن — بحث أو مسح" accent="inventory">
+    <OpsDashPanel
+      title="استعلام قطعة / لوكيشن — بحث أو مسح"
+      accent="inventory"
+      loading={loading}
+      loadingLabel="جاري تحميل أرصدة المخزن…"
+    >
       <label className="block">
         <span className="mb-1 block text-xs font-bold text-[var(--color-text-muted)]">
           مسدس الباركود: اضغط الخانة ثم امسح. الكاميرا تقرأ QR أوضح من الباركود الخطي الصغير.
@@ -321,14 +328,16 @@ export function WarehousePartInquiry({
                 commitExact(query, true);
               }
             }}
-            placeholder="امسح الباركود أو اكتب الكود / الاسم"
+            placeholder={loading ? 'جاري تحميل أرصدة المخزن…' : 'امسح الباركود أو اكتب الكود / الاسم'}
             className="min-w-[16rem] flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
             autoComplete="off"
             autoFocus
+            disabled={loading}
           />
           <Button
             type="button"
             variant="secondary"
+            disabled={loading}
             onClick={() => {
               setCameraError(null);
               setCameraOpen((open) => !open);

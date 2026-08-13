@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { SearchableSelect } from '../../../components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { materialToVoucherCatalogItem } from '@/modules/inventory/lib/materialVoucherPicker';
+import type { TransferItemOption } from '@/modules/inventory/utils/transferFormShared';
 import { toast } from '../../../components/Toast';
 import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
 import { useLocalFormDraft } from '@/modules/shared/hooks';
@@ -11,6 +14,7 @@ import { stockService } from '../../inventory/services/stockService';
 import { warehouseLocationService } from '../../inventory/services/warehouseLocationService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
+import { materialScanKeys } from '../../manufacturing/lib/materialScanKeys';
 import { MATERIAL_UNIT_LABELS, type Material, type MaterialUnit } from '../../manufacturing/types';
 import { repairJobService } from '../services/repairJobService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
@@ -62,6 +66,8 @@ type PartOption = {
   unit?: string;
   /** Sale/usage price only — never purchase cost. */
   salePrice?: number;
+  keywords?: string;
+  scanKeys?: string[];
 };
 
 type Props = {
@@ -231,9 +237,11 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
 
   const itemOptions = useMemo((): PartOption[] => {
     const saleByMaterialId = new Map<string, { consumer: number; trader: number }>();
+    const materialsById = new Map<string, Material>();
     for (const material of materials) {
       const id = String(material.id || '').trim();
       if (!id) continue;
+      materialsById.set(id, material);
       saleByMaterialId.set(id, {
         consumer: Number(material.defaultSalePrice || 0),
         trader: Number(material.traderSalePrice || 0),
@@ -249,12 +257,15 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       if (eligibleIds.size > 0 && !eligibleIds.has(materialId)) continue;
       seen.add(materialId);
       const prices = saleByMaterialId.get(materialId);
+      const scanKeys = materialScanKeys(materialsById.get(materialId) || { code: part.code });
       linked.push({
         value: materialId,
         label: `${part.name}${part.code ? ` (${part.code})` : ''}`,
         partId: part.id,
         partName: part.name,
         unit: part.unit,
+        keywords: scanKeys.join(' '),
+        scanKeys,
         salePrice: resolveRepairSalePrice({
           customerType: jobCustomerType,
           materialSalePrice: prices?.consumer,
@@ -267,11 +278,14 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       const materialId = String(material.id || '').trim();
       if (!materialId || seen.has(materialId)) continue;
       seen.add(materialId);
+      const scanKeys = materialScanKeys(material);
       linked.push({
         value: materialId,
         label: `${material.name}${material.code ? ` (${material.code})` : ''}`,
         partName: material.name,
         unit: material.baseUnit,
+        keywords: scanKeys.join(' '),
+        scanKeys,
         salePrice: resolveRepairSalePrice({
           customerType: jobCustomerType,
           materialSalePrice: material.defaultSalePrice,
@@ -281,6 +295,36 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
     }
     return linked;
   }, [parts, materials, jobCustomerType]);
+
+  const partPicker = useMemo(() => {
+    const catalog: TransferItemOption[] = [];
+    const seen = new Set<string>();
+    for (const material of materials) {
+      const item = materialToVoucherCatalogItem(material);
+      if (!item || seen.has(item.id)) continue;
+      seen.add(item.id);
+      catalog.push(item);
+    }
+    for (const opt of itemOptions) {
+      if (seen.has(opt.value)) continue;
+      seen.add(opt.value);
+      catalog.push({
+        id: opt.value,
+        name: opt.partName || opt.label,
+        code: (opt.scanKeys || [])[0] || '',
+        minStock: 0,
+        stockItemType: 'material',
+      });
+    }
+    return {
+      catalog,
+      options: itemOptions.map((opt) => ({
+        value: opt.value,
+        label: opt.label,
+        searchText: (opt.scanKeys || []).join(' '),
+      })),
+    };
+  }, [materials, itemOptions]);
 
   const locationsRequired = locations.length > 0;
 
@@ -393,7 +437,10 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
         <label className="text-sm space-y-1">
           <span className="font-bold">فرع الصيانة *</span>
           <SearchableSelect
-            options={usableBranches.map((b) => ({ value: b.id, label: b.name }))}
+            options={usableBranches.map((branch) => ({
+              value: String(branch.id || ''),
+              label: branch.name,
+            })).filter((option) => option.value)}
             value={branchId}
             onChange={(value) => {
               setBranchId(value);
@@ -451,8 +498,9 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
           >
             <div className="min-w-0 space-y-1">
               <p className="h-4 text-xs font-bold">القطعة</p>
-              <SearchableSelect
-                options={itemOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+              <VoucherItemCombobox
+                options={partPicker.options}
+                catalog={partPicker.catalog}
                 value={line.itemId}
                 onChange={(value) => {
                   const selected = itemOptions.find((opt) => opt.value === value);
@@ -466,7 +514,7 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
                       : row
                   )));
                 }}
-                placeholder="ابحث واختر قطعة غيار"
+                placeholder="ابحث بالاسم أو امسح الباركود"
               />
               <p className="h-4 text-[11px] text-muted-foreground">
                 {line.itemId

@@ -17,6 +17,7 @@ export type RepairSalesInvoicePartOptionInput = {
     id?: string | null;
     name?: string | null;
     code?: string | null;
+    barcode?: string | null;
     baseUnit?: string | null;
     defaultSalePrice?: number | null;
     traderSalePrice?: number | null;
@@ -39,6 +40,9 @@ export type RepairSalesInvoicePartOption = {
   materialId?: string;
   partId?: string;
   partName: string;
+  code?: string;
+  barcode?: string;
+  scanKeys?: string[];
   unit?: string;
   salePrice: number;
   availableQty: number;
@@ -85,6 +89,12 @@ export function buildRepairSalesInvoicePartOptions(
     }
   }
 
+  const materialsById = new Map(
+    input.materials
+      .map((material) => [String(material.id || '').trim(), material] as const)
+      .filter(([id]) => Boolean(id)),
+  );
+
   const options: RepairSalesInvoicePartOption[] = [];
   const seenMaterials = new Set<string>();
 
@@ -95,6 +105,7 @@ export function buildRepairSalesInvoicePartOptions(
     unit: string | undefined,
     partSalePrice: number | undefined,
     partId?: string,
+    extraCodes: Array<string | null | undefined> = [],
   ) => {
     if (!materialId || seenMaterials.has(materialId)) return;
     seenMaterials.add(materialId);
@@ -106,6 +117,7 @@ export function buildRepairSalesInvoicePartOptions(
       materialTraderSalePrice: prices?.trader,
       partSalePrice,
     });
+    const barcode = String(materialsById.get(materialId)?.barcode || '').trim() || undefined;
     const codeSuffix = code ? ` (${code})` : '';
     options.push({
       value: `material:${materialId}`,
@@ -114,6 +126,9 @@ export function buildRepairSalesInvoicePartOptions(
       materialId,
       partId,
       partName: name,
+      code: code || undefined,
+      barcode,
+      scanKeys: [code, barcode, ...extraCodes].map((key) => String(key || '').trim()).filter(Boolean),
       unit,
       salePrice,
       availableQty,
@@ -131,6 +146,7 @@ export function buildRepairSalesInvoicePartOptions(
       part.unit ? String(part.unit) : undefined,
       part.defaultSalePrice != null ? Number(part.defaultSalePrice) : undefined,
       String(part.id || '').trim() || undefined,
+      [materialsById.get(materialId)?.code],
     );
   }
 
@@ -146,6 +162,7 @@ export function buildRepairSalesInvoicePartOptions(
       material.baseUnit ? String(material.baseUnit) : undefined,
       linked?.defaultSalePrice != null ? Number(linked.defaultSalePrice) : undefined,
       linked?.id ? String(linked.id) : undefined,
+      [linked?.code],
     );
   }
 
@@ -162,6 +179,8 @@ export function buildRepairSalesInvoicePartOptions(
       source: 'legacy_part',
       partId,
       partName: name,
+      code: code || undefined,
+      scanKeys: code ? [code] : [],
       unit: part.unit ? String(part.unit) : undefined,
       salePrice: resolveRepairSalePrice({
         customerType: input.customerType,

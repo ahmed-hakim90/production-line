@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -51,12 +51,38 @@ import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrin
 import { WarehousePartInquiry, type WarehouseLabelEngineSeed } from '../components/WarehousePartInquiry';
 import { BarcodeLabelPrintEngineModal } from '../components/BarcodeLabelPrintEngineModal';
 import { WarehouseCountSheetPrintModal } from '../components/WarehouseCountSheetPrintModal';
-import { loadWarehouseCountLocationLabels, resolveWarehouseItemLocation } from '../lib/warehouseCountSheet';
+import { buildWarehouseLocationLabelMap, resolveWarehouseItemLocation } from '../lib/warehouseCountSheet';
 import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
 import { warehouseLocationService } from '../services/warehouseLocationService';
+import { defaultItemLocationService } from '../services/defaultItemLocationService';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
+
+function toCountCatalogMaterials(
+  materials: Array<{
+    id?: string;
+    isActive?: boolean;
+    code?: string;
+    name?: string;
+    baseUnit?: string;
+    categoryName?: string;
+    minStock?: number;
+    barcode?: string;
+  }>,
+): StockCountCatalogMaterial[] {
+  return materials
+    .filter((row) => row.isActive !== false && row.id)
+    .map((row) => ({
+      id: String(row.id),
+      code: String(row.code || ''),
+      name: String(row.name || ''),
+      unit: String(row.baseUnit || 'piece'),
+      categoryName: String(row.categoryName || ''),
+      minStock: Number(row.minStock || 0),
+      barcode: String(row.barcode || ''),
+    }));
+}
 
 type ActionLink = {
   label: string;
@@ -243,10 +269,6 @@ export const WarehouseWorkspace: React.FC = () => {
   const printSettings = useAppStore((s) => s.systemSettings?.printTemplate);
   const [labelEngineOpen, setLabelEngineOpen] = useState(false);
   const [labelEngineSeed, setLabelEngineSeed] = useState<WarehouseLabelEngineSeed>({ mode: 'items' });
-  const openLabelEngine = useCallback((seed: WarehouseLabelEngineSeed) => {
-    setLabelEngineSeed(seed);
-    setLabelEngineOpen(true);
-  }, []);
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
@@ -266,6 +288,10 @@ export const WarehouseWorkspace: React.FC = () => {
   const isRepairRoute = location.pathname.includes('/repair/warehouses/');
 
   const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] = useState(true);
+  const paintedWarehouseIdRef = useRef('');
+  const warehouseRoleRef = useRef<WarehouseRole | undefined>(undefined);
+  const catalogPromiseRef = useRef<Promise<StockCountCatalogMaterial[]> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [warehouse, setWarehouse] = useState<Warehouse | null>(null);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
@@ -284,105 +310,141 @@ export const WarehouseWorkspace: React.FC = () => {
   const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
   const [warehouseLocations, setWarehouseLocations] = useState<WarehouseLocation[]>([]);
 
+  const resetWorkspaceLists = () => {
+    setLinkedBranch(null);
+    setBranchParts([]);
+    setLocationByKey(new Map());
+    setLocationBalances([]);
+    setWarehouseLocations([]);
+    setCountBalances([]);
+    setBalances([]);
+    setTransactions([]);
+    setPendingTransfers([]);
+    setReplenishments([]);
+    setCatalogMaterials([]);
+  };
+
+  const requestCatalogMaterials = useCallback((role: WarehouseRole | undefined) => {
+    const needsCatalog = isMaintenanceCenterWarehouseRole(role) || role === 'spare_parts_central';
+    if (!needsCatalog) {
+      return catalogPromiseRef.current || Promise.resolve([] as StockCountCatalogMaterial[]);
+    }
+    if (!catalogPromiseRef.current) {
+      catalogPromiseRef.current = materialService.getAll()
+        .then((materials) => {
+          const mapped = toCountCatalogMaterials(materials);
+          setCatalogMaterials(mapped);
+          return mapped;
+        })
+        .catch(() => {
+          catalogPromiseRef.current = null;
+          return [] as StockCountCatalogMaterial[];
+        });
+    }
+    return catalogPromiseRef.current;
+  }, []);
+
+  const openLabelEngine = useCallback((seed: WarehouseLabelEngineSeed) => {
+    setLabelEngineSeed(seed);
+    setLabelEngineOpen(true);
+    void requestCatalogMaterials(warehouseRoleRef.current);
+  }, [requestCatalogMaterials]);
+
   const load = useCallback(async () => {
     const id = String(warehouseId || '').trim();
     if (!id || (!canViewInventory && !canViewRepairParts)) return;
-    setLoading(true);
+    const switching = paintedWarehouseIdRef.current !== id;
+    if (switching) {
+      setLoading(true);
+      setWarehouse(null);
+      resetWorkspaceLists();
+      catalogPromiseRef.current = null;
+    }
+    setDetailsLoading(true);
     setError(null);
     setAccessDenied(false);
     try {
-      const [wh, branches] = await Promise.all([
-        warehouseService.getById(id).catch(() => null),
-        repairBranchService.list().catch(() => [] as RepairBranch[]),
-      ]);
+      const wh = await warehouseService.getById(id).catch(() => null);
       if (!wh) {
+        paintedWarehouseIdRef.current = '';
         setWarehouse(null);
-        setLinkedBranch(null);
-        setBranchParts([]);
-        setLocationByKey(new Map());
-        setLocationBalances([]);
-        setWarehouseLocations([]);
+        resetWorkspaceLists();
         setError('المخزن غير موجود.');
         return;
       }
 
       const isCenter = isMaintenanceCenterWarehouseRole(wh.warehouseRole);
-      const isCentralSpareParts = wh.warehouseRole === 'spare_parts_central';
       if (!canViewInventory && !(canViewRepairParts && isCenter)) {
+        paintedWarehouseIdRef.current = '';
         setWarehouse(null);
-        setLinkedBranch(null);
-        setBranchParts([]);
-        setLocationByKey(new Map());
-        setLocationBalances([]);
-        setWarehouseLocations([]);
+        resetWorkspaceLists();
         setAccessDenied(true);
         setError('ليس لديك صلاحية عرض هذا المخزن.');
         return;
       }
 
-      if (isCenter && (isRepairRoute || !canViewInventory)) {
-        const allowedIds = new Set(
-          resolveRepairCenterWarehouseIds({
-            branches,
-            canViewAllBranches: repairCtx.canViewAllBranches || repairCtx.adminSeesAllBranches,
-            userBranchIds: resolveUserRepairBranchIds(user),
-            inventoryWarehouseId: user?.inventoryWarehouseId,
-          }),
-        );
-        if (allowedIds.size > 0 && !allowedIds.has(id) && !repairCtx.canViewAllBranches) {
-          setWarehouse(null);
-          setLinkedBranch(null);
-          setBranchParts([]);
-          setLocationByKey(new Map());
-          setLocationBalances([]);
-          setWarehouseLocations([]);
-          setAccessDenied(true);
-          setError('هذا المخزن غير مرتبط بفرعك.');
-          return;
+      let branches: RepairBranch[] = [];
+      if (isCenter) {
+        branches = await repairBranchService.list().catch(() => [] as RepairBranch[]);
+        if (isRepairRoute || !canViewInventory) {
+          const allowedIds = new Set(
+            resolveRepairCenterWarehouseIds({
+              branches,
+              canViewAllBranches: repairCtx.canViewAllBranches || repairCtx.adminSeesAllBranches,
+              userBranchIds: resolveUserRepairBranchIds(user),
+              inventoryWarehouseId: user?.inventoryWarehouseId,
+            }),
+          );
+          if (allowedIds.size > 0 && !allowedIds.has(id) && !repairCtx.canViewAllBranches) {
+            paintedWarehouseIdRef.current = '';
+            setWarehouse(null);
+            resetWorkspaceLists();
+            setAccessDenied(true);
+            setError('هذا المخزن غير مرتبط بفرعك.');
+            return;
+          }
         }
       }
 
       const branch = branches.find((row) => String(row.warehouseId || '').trim() === id) || null;
       setWarehouse(wh);
       setLinkedBranch(branch);
+      paintedWarehouseIdRef.current = id;
+      warehouseRoleRef.current = wh.warehouseRole;
+      setLoading(false);
 
-      const [bal, tx, transfers, spr, parts, materials, locations, locBalances, shelves] = await Promise.all([
+      const needTransfers = canViewInventory && wh.warehouseRole === 'final_product';
+      void requestCatalogMaterials(wh.warehouseRole);
+
+      const [bal, txPage, transfers, spr, parts, locBalances, shelves, defaults] = await Promise.all([
         stockService.getBalances(id).catch(() => [] as StockItemBalance[]),
-        stockService.getTransactions(id).catch(() => [] as StockTransaction[]),
-        canViewInventory
-          ? transferApprovalService.getAll().catch(() => [] as InventoryTransferRequest[])
+        stockService.getTransactionsPaged({ warehouseId: id, limit: 20 }).catch(() => ({
+          items: [] as StockTransaction[],
+          nextCursor: null,
+          hasMore: false,
+        })),
+        needTransfers
+          ? transferApprovalService.getByStatus('pending').catch(() => [] as InventoryTransferRequest[])
           : Promise.resolve([] as InventoryTransferRequest[]),
         sparePartsReplenishmentService.listRecent(50).catch(() => [] as SparePartsReplenishmentRequest[]),
         branch?.id && isCenter
           ? sparePartsService.listParts(String(branch.id)).catch(() => [] as RepairSparePart[])
           : Promise.resolve([] as RepairSparePart[]),
-        isCenter || isCentralSpareParts
-          ? materialService.getAll().catch(() => [])
-          : Promise.resolve([]),
-        loadWarehouseCountLocationLabels(id).catch(() => new Map<string, string>()),
         stockService.getLocationBalances({ warehouseId: id }).catch(() => [] as StockLocationBalance[]),
         warehouseLocationService.getAll(id).catch(() => [] as WarehouseLocation[]),
+        defaultItemLocationService.getAll(id).catch(() => []),
       ]);
       setCountBalances(bal);
       setBalances(bal.slice(0, 30));
-      setLocationByKey(locations);
+      setLocationByKey(buildWarehouseLocationLabelMap({
+        warehouseId: id,
+        defaults,
+        locationBalances: locBalances,
+      }));
       setLocationBalances(locBalances);
       setWarehouseLocations(shelves);
       setBranchParts(parts);
-      setCatalogMaterials(
-        (materials || [])
-          .filter((row) => row.isActive !== false && row.id)
-          .map((row) => ({
-            id: String(row.id),
-            code: String(row.code || ''),
-            name: String(row.name || ''),
-            unit: String(row.baseUnit || 'piece'),
-            categoryName: String(row.categoryName || ''),
-            minStock: Number(row.minStock || 0),
-            barcode: String(row.barcode || ''),
-          })),
-      );
-      setTransactions(tx.slice(0, 20));
+      setTransactions(txPage.items);
       setPendingTransfers(
         (transfers || [])
           .filter((t) => (
@@ -416,6 +478,7 @@ export const WarehouseWorkspace: React.FC = () => {
       setError(err instanceof Error ? err.message : 'تعذر تحميل مساحة المخزن.');
     } finally {
       setLoading(false);
+      setDetailsLoading(false);
     }
   }, [
     canViewInventory,
@@ -423,6 +486,7 @@ export const WarehouseWorkspace: React.FC = () => {
     isRepairRoute,
     repairCtx.adminSeesAllBranches,
     repairCtx.canViewAllBranches,
+    requestCatalogMaterials,
     user,
     warehouseId,
   ]);
@@ -457,9 +521,7 @@ export const WarehouseWorkspace: React.FC = () => {
   const canCenterCreateFromCount = canUploadOpening
     && isCenterWarehouse
     && Boolean(linkedBranch?.id);
-  const canCatalogSeedFromCount = canUploadOpening
-    && isCentralSparePartsWarehouse
-    && catalogMaterials.length > 0;
+  const canCatalogSeedFromCount = canUploadOpening && isCentralSparePartsWarehouse;
   const showOpeningBalanceImport = canUploadOpening
     && (isCentralSparePartsWarehouse || canCenterCreateFromCount);
 
@@ -582,14 +644,15 @@ export const WarehouseWorkspace: React.FC = () => {
           itemType: 'material' as const,
         }))}
         onOpenLabelEngine={openLabelEngine}
+        loading={detailsLoading}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <OpsDashPanel title="أصناف لها رصيد" accent="inventory">
-          <div className="text-2xl font-black">{totalSkus}</div>
+        <OpsDashPanel title="أصناف لها رصيد" accent="inventory" loading={detailsLoading}>
+          <div className="text-2xl font-black">{detailsLoading ? '…' : totalSkus}</div>
         </OpsDashPanel>
-        <OpsDashPanel title="تحت الحد الأدنى" accent="inventory">
-          <div className="text-2xl font-black">{lowStock}</div>
+        <OpsDashPanel title="تحت الحد الأدنى" accent="inventory" loading={detailsLoading}>
+          <div className="text-2xl font-black">{detailsLoading ? '…' : lowStock}</div>
           {isCentralSparePartsWarehouse && warehouse.id ? (
             <Link
               className="mt-1 inline-block text-xs font-bold text-primary underline"
@@ -604,8 +667,8 @@ export const WarehouseWorkspace: React.FC = () => {
         </OpsDashPanel>
         {isCentralSparePartsWarehouse ? (
           <>
-            <OpsDashPanel title="بانتظارك (تموين)" accent="inventory">
-              <div className="text-2xl font-black text-[rgb(var(--color-warning))]">{centralWorkQueue}</div>
+            <OpsDashPanel title="بانتظارك (تموين)" accent="inventory" loading={detailsLoading}>
+              <div className="text-2xl font-black text-[rgb(var(--color-warning))]">{detailsLoading ? '…' : centralWorkQueue}</div>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 اعتماد {awaitingApprove} · تجهيز {awaitingPrepare} · موافقة {awaitingResponsible}
               </p>
@@ -618,8 +681,8 @@ export const WarehouseWorkspace: React.FC = () => {
                 </Link>
               ) : null}
             </OpsDashPanel>
-            <OpsDashPanel title="بانتظار استلام المراكز" accent="inventory">
-              <div className="text-2xl font-black">{awaitingReceipt}</div>
+            <OpsDashPanel title="بانتظار استلام المراكز" accent="inventory" loading={detailsLoading}>
+              <div className="text-2xl font-black">{detailsLoading ? '…' : awaitingReceipt}</div>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 معتمد من المسؤول — ينتظر تأكيد المركز
               </p>
@@ -627,12 +690,12 @@ export const WarehouseWorkspace: React.FC = () => {
           </>
         ) : (
           <>
-            <OpsDashPanel title="تحويلات معلّقة" accent="inventory">
-              <div className="text-2xl font-black">{pendingTransfers.length}</div>
+            <OpsDashPanel title="تحويلات معلّقة" accent="inventory" loading={detailsLoading}>
+              <div className="text-2xl font-black">{detailsLoading ? '…' : pendingTransfers.length}</div>
             </OpsDashPanel>
-            <OpsDashPanel title="طلبات تموين نشطة" accent="inventory">
+            <OpsDashPanel title="طلبات تموين نشطة" accent="inventory" loading={detailsLoading}>
               <div className="text-2xl font-black">
-                {centralWorkQueue + awaitingReceipt}
+                {detailsLoading ? '…' : centralWorkQueue + awaitingReceipt}
               </div>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 بانتظار معالجة {centralWorkQueue} · بانتظار استلام {awaitingReceipt}
@@ -690,15 +753,21 @@ export const WarehouseWorkspace: React.FC = () => {
                 type="button"
                 variant="primary"
                 onClick={() => {
-                  if (countBalances.length === 0 && !canCenterCreateFromCount && !canCatalogSeedFromCount) {
-                    toast.error(
-                      showOpeningBalanceImport && isCentralSparePartsWarehouse
-                        ? 'لا توجد مواد في الماستر لرفع أرصدة أول المدة.'
-                        : 'لا توجد أصناف في هذا المخزن لرفع الجرد.',
-                    );
-                    return;
-                  }
-                  setCountImportOpen(true);
+                  void (async () => {
+                    let catalog = catalogMaterials;
+                    if ((canCatalogSeedFromCount || canCenterCreateFromCount) && catalog.length === 0) {
+                      catalog = await requestCatalogMaterials(warehouse.warehouseRole);
+                    }
+                    if (countBalances.length === 0 && !canCenterCreateFromCount && catalog.length === 0) {
+                      toast.error(
+                        showOpeningBalanceImport && isCentralSparePartsWarehouse
+                          ? 'لا توجد مواد في الماستر لرفع أرصدة أول المدة.'
+                          : 'لا توجد أصناف في هذا المخزن لرفع الجرد.',
+                      );
+                      return;
+                    }
+                    setCountImportOpen(true);
+                  })();
                 }}
               >
                 {showOpeningBalanceImport
@@ -821,8 +890,10 @@ export const WarehouseWorkspace: React.FC = () => {
       ) : null}
 
       <div className="grid items-start gap-4 lg:grid-cols-2">
-        <OpsDashPanel title="أرصدة سريعة" accent="inventory">
-          {balances.length === 0 ? (
+        <OpsDashPanel title="أرصدة سريعة" accent="inventory" loading={detailsLoading} loadingLabel="جاري تحميل الأرصدة…">
+          {detailsLoading ? (
+            <p className="text-sm text-[var(--color-text-muted)]" role="status">جاري التحميل…</p>
+          ) : balances.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)]">لا أرصدة بعد.</p>
           ) : (
             <div className="overflow-x-auto max-h-80">
@@ -847,8 +918,10 @@ export const WarehouseWorkspace: React.FC = () => {
             </div>
           )}
         </OpsDashPanel>
-        <OpsDashPanel title="أحدث الحركات" accent="inventory">
-          {transactions.length === 0 ? (
+        <OpsDashPanel title="أحدث الحركات" accent="inventory" loading={detailsLoading} loadingLabel="جاري تحميل الحركات…">
+          {detailsLoading ? (
+            <p className="text-sm text-[var(--color-text-muted)]" role="status">جاري التحميل…</p>
+          ) : transactions.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)]">لا حركات بعد.</p>
           ) : (
             <div className="overflow-x-auto max-h-80">
@@ -910,7 +983,7 @@ export const WarehouseWorkspace: React.FC = () => {
               : undefined
           }
           catalogSeed={
-            canCatalogSeedFromCount && !canCenterCreateFromCount
+            canCatalogSeedFromCount && !canCenterCreateFromCount && catalogMaterials.length > 0
               ? { catalogMaterials }
               : undefined
           }

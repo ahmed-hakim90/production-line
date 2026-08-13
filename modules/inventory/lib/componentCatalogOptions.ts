@@ -5,6 +5,7 @@ export type ComponentCatalogOption = {
   id: string;
   name: string;
   code: string;
+  barcode?: string;
   minStock: number;
   unitsPerCarton: number;
   /** Primary identity used for new IN postings. */
@@ -40,6 +41,7 @@ export function buildComponentCatalogOptions(
         id,
         name: m.name,
         code: m.code,
+        barcode: String(m.barcode || '').trim() || undefined,
         minStock: Number(m.minStock || 0),
         unitsPerCarton: 0,
         stockItemType: 'material' as const,

@@ -170,8 +170,13 @@ export const RepairBranches: React.FC = () => {
     let cancelled = false;
     void repairBranchService.ensureMaintenanceCenterWarehouseRoles()
       .then((result) => {
-        if (cancelled || result.updated <= 0) return;
-        toast.success(`تم تحديث دور ${result.updated} مخزن فرع إلى «مخزن مركز صيانة».`);
+        if (cancelled || (result.updated <= 0 && result.renamed <= 0)) return;
+        if (result.updated > 0) {
+          toast.success(`تم تحديث دور ${result.updated} مخزن فرع إلى «مخزن مركز صيانة».`);
+        }
+        if (result.renamed > 0) {
+          toast.success(`تم توحيد اسم ${result.renamed} مخزن إلى صيغة «مخزن صيانة - …».`);
+        }
       })
       .catch(() => undefined);
     return () => {

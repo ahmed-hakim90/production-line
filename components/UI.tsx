@@ -32,6 +32,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LegacyLoadingSkeleton } from '@/src/shared/ui/skeletons';
 import { cn } from '@/lib/utils';
 import { matchSelectOptionByScan, searchableSelectFilter } from '@/lib/searchableSelectFilter';
+import { isListboxNavKey, isListboxOpenKey } from '@/lib/listboxKeyboard';
 import { tableIconActionToneClass } from '@/src/components/erp/TableIconAction';
 import { resolveButtonLook } from './buttonLook';
 
@@ -311,6 +312,7 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
     const { t } = useTranslation();
     const resolvedPlaceholder = placeholder ?? t('shared.selectPlaceholder');
     const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState('');
     const [cmdValue, setCmdValue] = useState('');
     const pointerOpenedRef = useRef(false);
 
@@ -319,14 +321,14 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
       [options, value],
     );
 
-    const selectedCommandValue = useMemo(() => {
-      const opt = options.find((o) => o.value === value);
-      if (!opt) return '';
-      return optionCommandValue(opt);
-    }, [options, value]);
+    const filteredOptions = useMemo(
+      () => options.filter((opt) => searchableSelectFilter(optionCommandValue(opt), search) > 0),
+      [options, search],
+    );
 
     const handleSelect = (val: string) => {
       onChange(val);
+      setSearch('');
       setOpen(false);
     };
 
@@ -344,26 +346,25 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
 
     const openMenu = () => {
       if (disabled) return;
+      setSearch('');
+      setCmdValue(value || '');
       setOpen(true);
-      setCmdValue(selectedCommandValue);
     };
 
     const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
       onKeyDown?.(e);
       if (e.defaultPrevented || disabled) return;
 
-      if (
-        e.key === 'ArrowDown'
-        || e.key === 'ArrowUp'
-        || e.key === 'Down'
-        || e.key === 'Up'
-        || e.key === 'Enter'
-        || e.key === ' '
-      ) {
+      if (isListboxOpenKey(e.key) || e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         e.stopPropagation();
         openMenu();
       }
+    };
+
+    const focusCommandInput = (root: HTMLElement | null) => {
+      const input = root?.querySelector<HTMLInputElement>('[cmdk-input]');
+      input?.focus({ preventScroll: true });
     };
 
     return (
@@ -373,7 +374,12 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
         onOpenChange={(next) => {
           if (disabled) return;
           setOpen(next);
-          if (next) setCmdValue(selectedCommandValue);
+          if (next) {
+            setSearch('');
+            setCmdValue(value || '');
+          } else {
+            setSearch('');
+          }
         }}
       >
         <PopoverTrigger asChild>
@@ -440,11 +446,16 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
           align="start"
           collisionPadding={16}
           onOpenAutoFocus={(e) => {
-            // Keep focus inside the panel so soft keyboard open does not dismiss on tablet.
+            // Keep focus in the search field so arrow keys move the list, not the page.
             e.preventDefault();
             const root = e.currentTarget as HTMLElement | null;
-            const input = root?.querySelector<HTMLInputElement>('[cmdk-input]');
-            window.setTimeout(() => input?.focus({ preventScroll: true }), 0);
+            focusCommandInput(root);
+            window.setTimeout(() => focusCommandInput(root), 0);
+          }}
+          onKeyDown={(e) => {
+            if (isListboxNavKey(e.key) || e.key === 'Enter') {
+              e.stopPropagation();
+            }
           }}
           onCloseAutoFocus={(e) => e.preventDefault()}
           onFocusOutside={(e) => {
@@ -457,25 +468,25 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
         >
           <Command
             loop
-            filter={searchableSelectFilter}
-            shouldFilter
+            shouldFilter={false}
             value={cmdValue}
             onValueChange={setCmdValue}
           >
             <CommandInput
+              value={search}
               placeholder={searchPlaceholder || resolvedPlaceholder || t('shared.searchPlaceholder')}
-              onInput={(event) => {
-                selectByScan((event.target as HTMLInputElement).value);
+              onValueChange={(next) => {
+                setSearch(next);
+                selectByScan(next);
               }}
             />
             <CommandList className="max-h-[min(50dvh,18rem)] overscroll-contain">
               <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
               <CommandGroup>
-                {options.map((opt, idx) => (
+                {filteredOptions.map((opt, idx) => (
                   <CommandItem
                     key={opt.value || `opt-${idx}`}
-                    // cmdk filters by `value`; include id so items stay unique when labels repeat (e.g. product names).
-                    value={optionCommandValue(opt)}
+                    value={opt.value || `opt-${idx}`}
                     onSelect={() => handleSelect(opt.value)}
                     className="min-h-11 touch-manipulation"
                   >

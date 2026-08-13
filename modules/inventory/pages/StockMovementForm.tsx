@@ -444,6 +444,7 @@ export const StockMovementForm: React.FC = () => {
         id: m.id,
         name: m.name,
         code: m.code,
+        barcode: m.barcode,
         minStock: m.minStock,
         unitsPerCarton: 0,
         stockItemType: m.stockItemType,
@@ -567,6 +568,8 @@ export const StockMovementForm: React.FC = () => {
           value: opt.id,
           label: `${opt.name} — المتاح: ${available}`,
           searchText: [opt.code, opt.barcode].filter(Boolean).join(' '),
+          keywords: [opt.code, opt.barcode].filter(Boolean).join(' '),
+          scanKeys: [opt.code, opt.barcode].filter((key): key is string => Boolean(key)),
         };
       }),
     [itemOptions, balances, effectiveWarehouseId, itemType, componentById],
@@ -1597,11 +1600,12 @@ export const StockMovementForm: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               <div>
                 <label className={labelClass}>الصنف</label>
-                <SearchableSelect
+                <VoucherItemCombobox
                   options={itemSelectOptions}
+                  catalog={itemOptions}
                   value={itemId}
-                  onChange={(value) => setItemId(value)}
-                  placeholder="ابحث واختر الصنف"
+                  onChange={setItemId}
+                  placeholder="ابحث بالاسم أو امسح الكود"
                 />
               </div>
               <div>
