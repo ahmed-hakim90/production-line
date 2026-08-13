@@ -20,6 +20,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
 import { Button } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
 import { DomainHomeShell } from '../components/DomainHomeShell';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
@@ -125,6 +126,7 @@ const DashboardIcon = ({
 };
 
 export const Dashboard: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees']);
   const productionLines = useAppStore((s) => s.productionLines);
   const storeTodayReports = useAppStore((s) => s.todayReports);
   const storeMonthlyReports = useAppStore((s) => s.monthlyReports);
@@ -636,7 +638,7 @@ export const Dashboard: React.FC = () => {
     [kpis],
   );
 
-  if (loading) {
+  if (loading || referenceDataLoading) {
     return <PageContentSkeleton variant="dashboard" kpiCount={6} />;
   }
 

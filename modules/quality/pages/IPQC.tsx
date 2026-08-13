@@ -16,6 +16,8 @@ import { SingleIPQCPrint } from '../components/QualityReportPrint';
 import { storageService } from '@/services/storageService';
 import { eventBus, SystemEvents } from '@/shared/events';
 import { actionTrackerService } from '@/modules/system/audit';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import {
   WORK_ORDER_OPERATION_KEYS,
   WORK_ORDER_UPDATE_PATHS,
@@ -23,6 +25,7 @@ import {
 } from '@/modules/system/lib/operationPathSettings';
 
 export const IPQC: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'workOrders']);
   const { can } = usePermission();
   const canInspectPermission = can('quality.ipqc.inspect');
   const canPrint = can('quality.print');
@@ -330,6 +333,10 @@ export const IPQC: React.FC = () => {
     }
   };
 
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="form" />;
+  }
+
   return (
     <ModuleOpsPageShell
       eyebrow="IPQC"
@@ -512,4 +519,3 @@ export const IPQC: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-

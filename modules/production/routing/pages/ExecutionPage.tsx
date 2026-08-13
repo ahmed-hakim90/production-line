@@ -6,6 +6,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { LoadingSkeleton } from '@/modules/production/components/UI';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ import { filterProductionProducts } from '@/modules/production/utils/isProductio
 type Phase = 'pick' | 'preview' | 'run' | 'done';
 
 export const ExecutionPage: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'employees']);
   const { executionId = '' } = useParams<{ executionId: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useTenantNavigate();
@@ -315,7 +317,7 @@ export const ExecutionPage: React.FC = () => {
     );
   }
 
-  if (!isNew && execQuery.isLoading) {
+  if (referenceDataLoading || (!isNew && execQuery.isLoading)) {
     return (
       <ModuleOpsPageShell className="mx-auto w-full min-w-0 max-w-lg" eyebrow="تنفيذ المسار" rangeLabel="جاري تحميل التنفيذ">
         <LoadingSkeleton rows={8} type="card" />

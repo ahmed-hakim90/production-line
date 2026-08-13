@@ -11,6 +11,8 @@ import { qualityInspectionService } from '../services/qualityInspectionService';
 import { qualityNotificationService } from '../services/qualityNotificationService';
 import { qualityPrintService } from '../services/qualityPrintService';
 import { ReworkOrdersPrint } from '../components/QualityReportPrint';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 
 const STATUS_OPTIONS: QualityReworkOrder['status'][] = ['open', 'in_progress', 'done', 'scrap'];
 const STATUS_LABELS: Record<QualityReworkOrder['status'], string> = {
@@ -27,6 +29,7 @@ const STATUS_BADGE_CLASS: Record<QualityReworkOrder['status'], string> = {
 };
 
 export const ReworkOrders: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'workOrders']);
   const { can } = usePermission();
   const canManageRework = can('quality.rework.manage');
   const canPrint = can('quality.print');
@@ -62,6 +65,10 @@ export const ReworkOrders: React.FC = () => {
   );
 
   useEffect(() => qualityInspectionService.subscribeRework(setRows), []);
+
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={6} />;
+  }
 
   return (
     <ModuleOpsPageShell
@@ -183,4 +190,3 @@ export const ReworkOrders: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-

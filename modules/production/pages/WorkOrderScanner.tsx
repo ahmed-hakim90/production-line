@@ -5,6 +5,8 @@ import { Badge, Button, KPIBox } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useShallowStore } from '../../../store/useAppStore';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { scanEventService } from '../services/scanEventService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
@@ -50,6 +52,7 @@ const toDayTimeMs = (baseMs: number, hm: string) => {
 };
 
 export const WorkOrderScanner: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees']);
   const { id: workOrderId } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
   const {
@@ -446,6 +449,10 @@ export const WorkOrderScanner: React.FC = () => {
     );
   }
 
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="detail" />;
+  }
+
   if (!workOrder) {
     return (
       <ModuleOpsPageShell eyebrow="الإنتاج" rangeLabel="ماسح أمر الشغل">
@@ -700,7 +707,6 @@ export const WorkOrderScanner: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
 
 
 

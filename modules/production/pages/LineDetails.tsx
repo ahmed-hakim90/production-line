@@ -16,6 +16,7 @@ import { KPIBox, Badge } from '../components/UI';
 import { LineProductWorkerTargetsSection } from '../components/LineProductWorkerTargetsSection';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { reportService } from '@/modules/production/services/reportService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { workOrderService } from '../services/workOrderService';
@@ -103,6 +104,7 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
 // â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const LineDetails: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'productionPlans']);
   const { id } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
   const shellBackAction = (
@@ -695,7 +697,7 @@ export const LineDetails: React.FC = () => {
 
   // â”€â”€ Loading / Not Found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  if (loading) {
+  if (loading || referenceDataLoading) {
     return (
       <ModuleOpsPageShell eyebrow="تفاصيل الخط" rangeLabel="جاري التحميل" actions={shellBackAction}>
         <DetailPageStickyHeader>
@@ -710,7 +712,7 @@ export const LineDetails: React.FC = () => {
     );
   }
 
-  if (!line && !loading) {
+  if (!line && !loading && !referenceDataLoading) {
     return (
       <ModuleOpsPageShell eyebrow="تفاصيل الخط" actions={shellBackAction}>
         <OpsDashPanel title="خط الإنتاج غير موجود" accent="production">
@@ -1398,6 +1400,5 @@ export const LineDetails: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
 
 

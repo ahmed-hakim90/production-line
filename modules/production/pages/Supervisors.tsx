@@ -27,6 +27,7 @@ import { saveAs } from 'file-saver';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import {
   Select,
   SelectContent,
@@ -186,6 +187,7 @@ export const Supervisors: React.FC = () => {
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const productionWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'workOrders']);
 
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
   const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
@@ -1182,7 +1184,7 @@ export const Supervisors: React.FC = () => {
 
   // Loading
 
-  if (dataLoading) {
+  if (dataLoading || referenceDataLoading) {
     return <div className="erp-ds-clean space-y-6"><LoadingSkeleton type="detail" /></div>;
   }
 
@@ -1571,7 +1573,6 @@ export const Supervisors: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
 
 
 

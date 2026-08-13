@@ -14,8 +14,11 @@ import type { QualityDefect } from '@/types';
 import { QualityDefectsPrint, QualityReportPrint } from '../components/QualityReportPrint';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { formatNumber } from '@/utils/calculations';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 
 export const QualityReports: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'workOrders']);
   const { can } = usePermission();
   const canPrint = can('quality.print');
   const canDeleteQualityReports =
@@ -247,6 +250,10 @@ export const QualityReports: React.FC = () => {
       setDeletingWorkOrderId(null);
     }
   };
+
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
 
   return (
     <ModuleOpsPageShell

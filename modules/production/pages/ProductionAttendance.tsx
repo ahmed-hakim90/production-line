@@ -11,6 +11,8 @@ import type { FirestoreProductionLine, FirestoreProduct, ProductionAttendanceRec
 import { getTodayDateString } from '@/utils/calculations';
 import { productionAttendanceService } from '../services/productionAttendanceService';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -41,6 +43,7 @@ const getMonthStart = (): string => {
 };
 
 export const ProductionAttendance: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines']);
   const { can } = usePermission();
   const canManage = can('production.attendance.manage') || can('reports.edit');
   const lines = useAppStore((s) => s._rawLines);
@@ -200,6 +203,10 @@ export const ProductionAttendance: React.FC = () => {
     },
   ], [busyId, deleteRows]);
 
+  if (referenceDataLoading && records.length === 0) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
+
   return (
     <ModuleOpsPageShell
       eyebrow="سجل حضور الإنتاج"
@@ -210,7 +217,7 @@ export const ProductionAttendance: React.FC = () => {
         { key: 'absent', label: 'غياب', value: stats.absent },
       ]}
       onRefresh={() => void reload()}
-      refreshing={loading}
+      refreshing={loading || referenceDataLoading}
     >
       <OpsDashPanel title="سجلات الحضور" accent="production" bodyClassName="p-0 overflow-hidden">
       <SmartFilterBar

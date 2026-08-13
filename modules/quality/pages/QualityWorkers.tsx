@@ -10,6 +10,7 @@ import type { QualityWorkerAssignment } from '@/types';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 
 type QualityRole = QualityWorkerAssignment['qualityRole'];
 
@@ -29,6 +30,7 @@ const splitCsv = (value: string): string[] =>
     .filter(Boolean);
 
 export const QualityWorkers: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['employees']);
   const { canView, canManage, canAccessPage } = useResourcePermission('quality.workers');
   const rawEmployees = useAppStore((s) => s._rawEmployees);
 
@@ -159,7 +161,7 @@ export const QualityWorkers: React.FC = () => {
     );
   }
 
-  if (loading && list.length === 0) return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  if ((loading && list.length === 0) || referenceDataLoading) return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
 
   return (
     <ModuleOpsPageShell
@@ -331,4 +333,3 @@ export const QualityWorkers: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-

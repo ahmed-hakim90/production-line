@@ -111,6 +111,7 @@ export const WorkOrders: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const uid = useAppStore((s) => s.uid);
+  const tenantId = useAppStore((s) => s.userProfile?.tenantId ?? null);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const userRoleName = useAppStore((s) => s.userRoleName);
   const { _rawProducts, _rawLines, _rawEmployees, laborSettings, costCenters, costCenterValues, costAllocations } = useShallowStore((s) => ({
@@ -166,6 +167,7 @@ export const WorkOrders: React.FC = () => {
     ? filters.status
     : 'all';
   const { orders: liveOrders, loading, loadingMore, hasMore, hasPrevious, page, error, loadMore, loadPrevious } = useWorkOrdersRealtime({
+    tenantId,
     status: realtimeStatus,
     lineId: filters.lineId,
     supervisorId: scopedSupervisorId,

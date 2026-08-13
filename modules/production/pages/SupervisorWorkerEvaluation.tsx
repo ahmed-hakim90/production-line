@@ -26,6 +26,7 @@ import {
   resolveLineWorkerLaborRole,
 } from '../utils/lineWorkerLaborRoles';
 import { getPresenceLabel, summarizeWorkerPresenceByWorker } from '../utils/workerPresence';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import type {
   FirestoreEmployee,
   LineWorkerAssignment,
@@ -186,6 +187,7 @@ function StarRating({
 }
 
 export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProps> = ({ embedded = false }) => {
+  const referenceDataLoading = useEnsureStoreData(['lines', 'employees', 'productionPlans']);
   const { id } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
   const { can } = usePermission();
@@ -714,7 +716,7 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
     }));
   }, []);
 
-  if (loading) return <LoadingSkeleton rows={8} />;
+  if (loading || referenceDataLoading) return <LoadingSkeleton rows={8} />;
 
   if (!employee) {
     return (

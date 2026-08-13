@@ -2,6 +2,8 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { flushSync } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import {
@@ -227,6 +229,7 @@ const isQuickActionFormDraftEmpty = (draft: QuickActionFormDraft) => (
 );
 
 export const QuickAction: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'workOrders']);
   const navigate = useTenantNavigate();
   const { can, isPackagingOnly } = usePermission();
   const canCreateForAnySupervisor = can('reports.createForAnySupervisor');
@@ -1648,6 +1651,10 @@ export const QuickAction: React.FC = () => {
         </OpsDashPanel>
       </ModuleOpsPageShell>
     );
+  }
+
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="form" />;
   }
 
   return (

@@ -5,6 +5,7 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { qualitySettingsService } from '../services/qualitySettingsService';
 import {
   fetchCachedPageData,
@@ -64,6 +65,7 @@ type QualitySettingsPageData = {
 const QUALITY_SETTINGS_CACHE_KEY = 'quality:settings';
 
 export const QualitySettings: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines']);
   const { can } = usePermission();
   const canManageSettings = can('quality.settings.manage');
   const canManageCatalog = can('quality.settings.manage');
@@ -342,7 +344,7 @@ export const QualitySettings: React.FC = () => {
     setMessage('تم حفظ قوالب الطباعة');
   };
 
-  if (loading && reasons.length === 0) return <PageContentSkeleton variant="form" />;
+  if ((loading && reasons.length === 0) || referenceDataLoading) return <PageContentSkeleton variant="form" />;
 
   return (
     <ModuleOpsPageShell
@@ -835,5 +837,4 @@ export const QualitySettings: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
 

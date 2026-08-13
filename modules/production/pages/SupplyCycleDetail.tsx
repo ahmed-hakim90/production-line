@@ -21,6 +21,7 @@ import type { RawMaterial } from '../../inventory/types';
 import { exportSupplyCycleDetailExcel } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { toast } from '../../../components/Toast';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -71,6 +72,7 @@ function statusVariant(s: SupplyCycleStatus): 'success' | 'warning' | 'neutral' 
 }
 
 export const SupplyCycleDetail: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees']);
   const { cycleId } = useParams<{ cycleId: string }>();
   const navigate = useTenantNavigate();
   const shellBackAction = (
@@ -479,7 +481,7 @@ export const SupplyCycleDetail: React.FC = () => {
     );
   }
 
-  if (loading) {
+  if (loading || referenceDataLoading) {
     return (
       <ModuleOpsPageShell className="w-full min-w-0" eyebrow="تفاصيل دورة التوريد" rangeLabel="جاري التحميل" actions={shellBackAction}>
         <DetailPageStickyHeader>

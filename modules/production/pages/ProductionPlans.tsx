@@ -67,6 +67,7 @@ import {
   isOperationPathEnabled,
 } from '@/modules/system/lib/operationPathSettings';
 import { PLAN_STATUS_SORT_RANK } from '../utils/productionPlanReports';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 
 const STATUS_CONFIG: Record<PlanStatus, { label: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger' }> = {
   planned: { label: 'مش شغال', variant: 'info' },
@@ -225,6 +226,7 @@ export const ProductionPlans: React.FC = () => {
   const [sortField, setSortField] = useState<PlanSortField>('');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [activeDrawerPlanId, setActiveDrawerPlanId] = useState<string | null>(null);
+  const initialDataLoading = useEnsureStoreData(['productionPlans', 'products', 'lines']);
 
   // â”€â”€ Form state â”€â”€
   const [formProductId, setFormProductId] = useState(searchParams.get('productId') || '');
@@ -932,7 +934,7 @@ export const ProductionPlans: React.FC = () => {
     [kpis],
   );
 
-  if (loading) {
+  if (loading || initialDataLoading) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
 

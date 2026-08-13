@@ -9,6 +9,8 @@ import type { ProductionReport, ReportComponentScrapItem } from '../../../types'
 import { formatNumber, getMonthDateRange, getOperationalDateString } from '../../../utils/calculations';
 import { getShareResultFeedbackMessage } from '../../../utils/reportExport';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 
 type MaterialOption = {
   materialId: string;
@@ -60,6 +62,7 @@ function formatComponentsLabel(items: ReportComponentScrapItem[]): string {
 }
 
 export const ComponentWasteReports: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees']);
   const createComponentWasteReport = useAppStore((s) => s.createComponentWasteReport);
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -318,6 +321,10 @@ export const ComponentWasteReports: React.FC = () => {
 
   const shareItems = shareReport ? getReportComponents(shareReport) : [];
   const shareTotalQty = shareItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="form" />;
+  }
 
   return (
     <ModuleOpsPageShell

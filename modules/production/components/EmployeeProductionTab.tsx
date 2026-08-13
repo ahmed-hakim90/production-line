@@ -8,6 +8,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { formatNumber } from '@/utils/calculations';
 import { getTodayDateString } from '@/utils/calculations';
 import { usePermission } from '@/utils/permissions';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 
 type Props = { employeeId: string };
 
@@ -17,6 +18,7 @@ const currentMonth = (): string => {
 };
 
 export const EmployeeProductionTab: React.FC<Props> = ({ employeeId }) => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'employees']);
   const navigate = useTenantNavigate();
   const { can } = usePermission();
   const canView = can('production.workers.view') || can('productionWorkers.view');
@@ -111,7 +113,7 @@ export const EmployeeProductionTab: React.FC<Props> = ({ employeeId }) => {
   };
 
   if (!canView) return <p className="text-sm text-[var(--color-text-muted)] p-4">غير مصرح</p>;
-  if (loading) return <LoadingSkeleton rows={4} />;
+  if (loading || referenceDataLoading) return <LoadingSkeleton rows={4} />;
   if (!workerId) {
     return (
       <div className="p-4 space-y-3">

@@ -6,6 +6,7 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { formatNumber, getTodayDateString } from '@/utils/calculations';
 import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '../components/SelectableTable';
@@ -58,6 +59,7 @@ type WorkerRow = ProductionWorker & {
 const defaultPeriod = getDefaultProductionWorkersPeriod();
 
 export const ProductionWorkers: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees']);
   const navigate = useTenantNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { can } = usePermission();
@@ -614,7 +616,7 @@ export const ProductionWorkers: React.FC = () => {
     },
   ];
 
-  if (loading || !supervisorLinesLoaded) return <LoadingSkeleton rows={8} />;
+  if (loading || !supervisorLinesLoaded || referenceDataLoading) return <LoadingSkeleton rows={8} />;
 
   const workersHero = activeWorkspaceTab === 'summary' ? [
     { key: 'total', label: 'إجمالي العمال', value: scopedRows.length },

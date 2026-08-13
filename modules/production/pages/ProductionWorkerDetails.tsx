@@ -6,6 +6,7 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { formatNumber, getTodayDateString } from '@/utils/calculations';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
@@ -101,6 +102,7 @@ const joinLabels = (labels: Iterable<string | undefined>): string => {
 };
 
 export const ProductionWorkerDetails: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees']);
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useTenantNavigate();
@@ -396,7 +398,7 @@ export const ProductionWorkerDetails: React.FC = () => {
     </Button>
   );
 
-  if (loading) {
+  if (loading || referenceDataLoading) {
     return (
       <ModuleOpsPageShell eyebrow="تفاصيل عامل الإنتاج" actions={backAction}>
         <LoadingSkeleton rows={8} />

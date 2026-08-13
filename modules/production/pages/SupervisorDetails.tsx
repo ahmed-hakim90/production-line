@@ -27,6 +27,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { fetchCachedPageData, peekPageDataCache } from '../../shared/lib/pageDataCache';
 import { PRODUCTION_REPORT_CREATE_PATHS, PRODUCTION_REPORT_OPERATION_KEYS, isOperationPathEnabled } from '../../system/lib/operationPathSettings';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 
 // â”€â”€â”€ Performance Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -181,6 +182,7 @@ function getWeekStart(): string {
 }
 
 export const SupervisorDetails: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'productionPlans']);
   const { id } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
   const { can } = usePermission();
@@ -842,7 +844,7 @@ export const SupervisorDetails: React.FC = () => {
     </div>
   );
 
-  if (loading) {
+  if (loading || referenceDataLoading) {
     return (
       <ModuleOpsPageShell
         eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'}
@@ -1665,4 +1667,3 @@ export const SupervisorDetails: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-

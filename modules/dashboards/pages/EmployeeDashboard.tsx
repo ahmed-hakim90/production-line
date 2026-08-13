@@ -8,6 +8,7 @@ import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from 
 import { commitAndPrint, useManagedPrint } from '@/utils/printManager';
 import { ShiftLifecyclePanel } from '../../../components/EmployeeDashboardWidget';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
@@ -102,6 +103,13 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
 // â”€â”€â”€ Employee Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export const EmployeeDashboard: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData([
+    'products',
+    'lines',
+    'employees',
+    'productionPlans',
+    'workOrders',
+  ]);
   const navigate = useTenantNavigate();
   const {
     uid,
@@ -577,7 +585,7 @@ export const EmployeeDashboard: React.FC = () => {
 
   // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  if (loading) {
+  if (loading || referenceDataLoading) {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
@@ -1295,7 +1303,6 @@ export const EmployeeDashboard: React.FC = () => {
     </DomainHomeShell>
   );
 };
-
 
 
 

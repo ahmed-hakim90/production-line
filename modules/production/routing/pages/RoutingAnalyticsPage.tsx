@@ -13,6 +13,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { KPIBox, LoadingSkeleton, SearchableSelect } from '@/modules/production/components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -56,6 +57,7 @@ function routingInstantDateKey(value: unknown): string {
 }
 
 export const RoutingAnalyticsPage: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'employees']);
   const { can } = usePermission();
   const queryClient = useQueryClient();
   const navigate = useTenantNavigate();
@@ -530,6 +532,10 @@ export const RoutingAnalyticsPage: React.FC = () => {
   );
 
   const showEmptyGlobal = !isLoading && completed.length === 0;
+
+  if (referenceDataLoading) {
+    return <LoadingSkeleton rows={6} type="card" />;
+  }
 
   return (
     <ModuleOpsPageShell

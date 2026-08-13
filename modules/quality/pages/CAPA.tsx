@@ -12,6 +12,8 @@ import { qualityNotificationService } from '../services/qualityNotificationServi
 import { qualityPrintService } from '../services/qualityPrintService';
 import { qualitySettingsService } from '../services/qualitySettingsService';
 import { SingleCAPAPrint } from '../components/QualityReportPrint';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 
 const STATUS_OPTIONS: QualityCAPA['status'][] = ['open', 'in_progress', 'done', 'closed'];
 const STATUS_LABELS: Record<QualityCAPA['status'], string> = {
@@ -22,6 +24,7 @@ const STATUS_LABELS: Record<QualityCAPA['status'], string> = {
 };
 
 export const CAPA: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'workOrders']);
   const { can } = usePermission();
   const canManageCapa = can('quality.capa.manage');
   const canPrint = can('quality.print');
@@ -108,6 +111,10 @@ export const CAPA: React.FC = () => {
       toast.error('تعذر إنشاء CAPA.');
     }
   };
+
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={6} />;
+  }
 
   return (
     <ModuleOpsPageShell
@@ -284,4 +291,3 @@ export const CAPA: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-

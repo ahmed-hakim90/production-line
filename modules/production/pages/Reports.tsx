@@ -38,6 +38,8 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { formatNumber, getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import {
   buildShareStandardVarianceBanner,
@@ -614,6 +616,13 @@ const getPreviousOperationalDateString = (startHour = 8): string =>
   addDaysToDateInputValue(getOperationalDateString(startHour), -1);
 
 export const Reports: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData([
+    'products',
+    'lines',
+    'employees',
+    'productionPlans',
+    'workOrders',
+  ]);
   const { dir } = useAppDirection();
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
@@ -4027,6 +4036,10 @@ export const Reports: React.FC = () => {
     ? (importDateUpdateResult?.validCount ?? 0)
     : (importResult?.validCount ?? 0);
   const hasImportPreview = importMode === 'updateDate' ? !!importDateUpdateResult : !!importResult;
+
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
 
   return (
     <ModuleOpsPageShell

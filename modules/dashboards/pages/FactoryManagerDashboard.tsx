@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { DomainHomeShell } from '../components/DomainHomeShell';
 import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
 import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
@@ -101,6 +102,13 @@ const resolveWorkOrderProducedNow = (
 };
 
 export const FactoryManagerDashboard: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData([
+    'products',
+    'lines',
+    'employees',
+    'productionPlans',
+    'workOrders',
+  ]);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const products = useAppStore((s) => s.products);
   const reportsUiReferenceCache = useAppStore((s) => s.reportsUiReferenceCache);
@@ -715,7 +723,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     [kpis, alertCfg.wasteThreshold, qualityKpis.pendingQuality, workOrderRisk.atRiskCount],
   );
 
-  if (loading && reports.length === 0) {
+  if ((loading && reports.length === 0) || referenceDataLoading) {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 

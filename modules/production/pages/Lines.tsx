@@ -17,6 +17,7 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { filterProductionProducts } from '../utils/isProductionProduct';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import {
   Select,
   SelectContent,
@@ -61,6 +62,7 @@ export const Lines: React.FC = () => {
   const lineStatusPerms = useResourcePermission('lineStatus');
   const navigate = useTenantNavigate();
   const appLoading = useAppStore((s) => s.loading);
+  const referenceDataLoading = useEnsureStoreData(['lines', 'products', 'employees']);
 
   const [todayAssignments, setTodayAssignments] = useState<LineWorkerAssignment[]>([]);
   const [supervisorNameByLineId, setSupervisorNameByLineId] = useState<Record<string, string>>({});
@@ -288,7 +290,7 @@ export const Lines: React.FC = () => {
     });
   }, [sortedLines, searchTerm, statusFilter]);
 
-  if (appLoading && productionLines.length === 0) {
+  if ((appLoading || referenceDataLoading) && productionLines.length === 0) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
 
@@ -673,7 +675,6 @@ export const Lines: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
 
 
 

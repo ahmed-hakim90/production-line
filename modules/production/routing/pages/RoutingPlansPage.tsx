@@ -23,8 +23,10 @@ import { formatRoutingFirestoreInstant } from '../domain/formatFirestore';
 import type { ProductionRoutingPlan } from '../types';
 import { cn } from '@/lib/utils';
 import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 
 export const RoutingPlansPage: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products', 'employees']);
   const navigate = useTenantNavigate();
   const { can } = usePermission();
   const products = useAppStore((s) => s.products);
@@ -148,6 +150,10 @@ export const RoutingPlansPage: React.FC = () => {
       </Button>
     </div>
   );
+
+  if (referenceDataLoading) {
+    return <LoadingSkeleton rows={8} type="card" />;
+  }
 
   return (
     <ModuleOpsPageShell

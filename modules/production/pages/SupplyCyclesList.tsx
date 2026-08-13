@@ -23,6 +23,8 @@ import type { RawMaterial } from '../../inventory/types';
 import { exportSupplyCyclesListExcel } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { CalendarDays, Package, Plus, Trash2 } from 'lucide-react';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import {
   Select,
   SelectContent,
@@ -72,6 +74,7 @@ function statusBadgeVariant(s: SupplyCycleStatus): 'success' | 'warning' | 'neut
 }
 
 export const SupplyCyclesList: React.FC = () => {
+  const referenceDataLoading = useEnsureStoreData(['products']);
   const navigate = useTenantNavigate();
   const { can } = usePermission();
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -298,6 +301,10 @@ export const SupplyCyclesList: React.FC = () => {
       window.alert(e instanceof Error ? e.message : 'فشل الحذف');
     }
   };
+
+  if (referenceDataLoading) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
 
   return (
     <ModuleOpsPageShell

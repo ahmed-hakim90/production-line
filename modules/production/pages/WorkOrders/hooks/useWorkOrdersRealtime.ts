@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  collection,
   documentId,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
+  query,
   startAfter,
   where,
   type DocumentData,
@@ -13,7 +15,6 @@ import {
 } from 'firebase/firestore';
 
 import { db, isConfigured } from '../../../../auth/services/firebase';
-import { tenantQuery } from '../../../../../lib/tenantFirestore';
 import type { WorkOrder, WorkOrderStatus } from '../../../../../types';
 import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
 
@@ -21,6 +22,7 @@ const COLLECTION_NAME = 'work_orders';
 const DEFAULT_PAGE_SIZE = 20;
 
 export interface WorkOrderRealtimeFilters {
+  tenantId?: string | null;
   status?: WorkOrderStatus | 'all' | null;
   lineId?: string | 'all' | null;
   supervisorId?: string | null;
@@ -98,6 +100,7 @@ export function useWorkOrdersRealtime(
   pageIndexRef.current = pageIndex;
 
   const safePageSize = Math.max(1, Math.min(pageSize, 50));
+  const tenantId = filters.tenantId ?? null;
   const status = filters.status ?? 'all';
   const lineId = filters.lineId ?? 'all';
   const supervisorId = filters.supervisorId ?? null;
@@ -118,25 +121,40 @@ export function useWorkOrdersRealtime(
       setLoading(false);
       return;
     }
+    if (!tenantId) {
+      // Auth can hydrate before the tenant profile is ready. Keep the initial
+      // loading state and retry when the resolved tenant id reaches this hook.
+      setLoading(true);
+      return;
+    }
     setLoading(true);
-    const firstPageQuery = tenantQuery(db, COLLECTION_NAME, ...baseConstraints, limit(safePageSize + 1));
-    return onSnapshot(firstPageQuery, (snap) => {
+    const firstPageQuery = query(
+      collection(db, COLLECTION_NAME),
+      where('tenantId', '==', tenantId),
+      ...baseConstraints,
+      limit(safePageSize + 1),
+    );
+    return onSnapshot(firstPageQuery, { includeMetadataChanges: true }, (snap) => {
       const page = toPage(snap.docs, safePageSize);
       pagesRef.current[0] = page;
       if (pageIndexRef.current === 0) {
         setOrders(page.orders);
         setHasMore(page.hasNext);
       }
-      setLoading(false);
+      // Firestore may emit an empty cache snapshot before the server result.
+      // Do not present that provisional state as a confirmed empty list.
+      if (!snap.metadata.fromCache || page.orders.length > 0) {
+        setLoading(false);
+      }
     }, (snapshotError) => {
       console.error('useWorkOrdersRealtime snapshot error:', snapshotError);
       setError('تعذر تحميل أوامر الشغل في الوقت الحقيقي.');
       setLoading(false);
     });
-  }, [baseConstraints, safePageSize]);
+  }, [baseConstraints, safePageSize, tenantId]);
 
   const loadMore = useCallback(async () => {
-    if (!isConfigured || !db || loadingMore || !hasMore) return;
+    if (!isConfigured || !db || !tenantId || loadingMore || !hasMore) return;
     const nextIndex = pageIndex + 1;
     const cached = pagesRef.current[nextIndex];
     if (cached) {
@@ -150,9 +168,9 @@ export function useWorkOrdersRealtime(
     setLoadingMore(true);
     setError(null);
     try {
-      const nextQuery = tenantQuery(
-        db,
-        COLLECTION_NAME,
+      const nextQuery = query(
+        collection(db, COLLECTION_NAME),
+        where('tenantId', '==', tenantId),
         ...baseConstraints,
         startAfter(current.nextCursor),
         limit(safePageSize + 1),
@@ -169,7 +187,7 @@ export function useWorkOrdersRealtime(
     } finally {
       setLoadingMore(false);
     }
-  }, [baseConstraints, hasMore, loadingMore, pageIndex, safePageSize]);
+  }, [baseConstraints, hasMore, loadingMore, pageIndex, safePageSize, tenantId]);
 
   const loadPrevious = useCallback(() => {
     if (loadingMore || pageIndex === 0) return;
