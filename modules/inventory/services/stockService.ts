@@ -336,14 +336,25 @@ export const stockService = {
     if (!isConfigured) return [];
     const scope = await resolveInventoryWarehouseReadScope(params?.warehouseId);
     if (scope.denied) return [];
-    const constraints: any[] = [orderBy('updatedAt', 'desc'), limit(1000)];
-    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
-    if (params?.locationId) constraints.unshift(where('locationId', '==', params.locationId));
-    if (params?.itemType) constraints.unshift(where('itemType', '==', params.itemType));
-    if (params?.itemId) constraints.unshift(where('itemId', '==', params.itemId));
-    const q = tenantQuery(db, LOCATION_BALANCES_COLLECTION, ...constraints);
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockLocationBalance));
+    const extraFilters = Boolean(params?.locationId || params?.itemType || params?.itemId);
+    const pageSize = extraFilters ? 1000 : 500;
+    const maxPages = extraFilters ? 1 : 20;
+    const rows: StockLocationBalance[] = [];
+    let cursor: FirestoreCursor = null;
+    for (let page = 0; page < maxPages; page += 1) {
+      const constraints: QueryConstraint[] = [orderBy('updatedAt', 'desc'), limit(pageSize)];
+      if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
+      if (params?.locationId) constraints.unshift(where('locationId', '==', params.locationId));
+      if (params?.itemType) constraints.unshift(where('itemType', '==', params.itemType));
+      if (params?.itemId) constraints.unshift(where('itemId', '==', params.itemId));
+      if (cursor) constraints.push(startAfter(cursor));
+      const q = tenantQuery(db, LOCATION_BALANCES_COLLECTION, ...constraints);
+      const snap = await getDocs(q);
+      rows.push(...snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockLocationBalance)));
+      if (snap.docs.length < pageSize) break;
+      cursor = snap.docs[snap.docs.length - 1];
+    }
+    return rows;
   },
 
   async getTransactions(warehouseId?: string): Promise<StockTransaction[]> {

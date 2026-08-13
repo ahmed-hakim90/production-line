@@ -4,6 +4,7 @@ import {
   buildCountSheetRowsForScope,
   buildWarehouseLocationLabelMap,
   locationBelongsToRack,
+  locationCodesMatch,
   locationMatchesShelf,
   resolveWarehouseItemLocation,
 } from '../modules/inventory/lib/warehouseCountSheet.ts';
@@ -200,6 +201,79 @@ assert.equal(locationMatchesShelf(locationBalances[0]!, shelves[1]!), false);
     ],
   });
   assert.equal(extras.rows.some((row) => row.code === 'OR-1'), true);
+}
+
+assert.equal(locationCodesMatch('B1-10', 'SP-B1-10'), true);
+assert.equal(locationCodesMatch('B1-10', 'B2-10'), false);
+assert.equal(locationCodesMatch('B1-10', '10'), false);
+assert.equal(locationMatchesShelf({ locationCode: 'SP-B1-10' }, shelves[0]!), false);
+assert.equal(locationMatchesShelf({ locationCode: 'WH-R1-S1' }, shelves[0]!), true);
+assert.equal(locationBelongsToRack({ locationCode: 'WH-R1-S9', rackCode: '' }, rackA), true);
+assert.equal(locationBelongsToRack({ locationCode: 'WH-R2-S1', rackCode: 'R2' }, rackA), false);
+
+{
+  const suffixShelf: WarehouseLocation = {
+    ...shelves[0]!,
+    code: 'B1-10',
+    rack: 'B1',
+    rackCode: 'B1',
+    shelf: '10',
+  };
+  assert.equal(locationMatchesShelf({ locationCode: 'SP-B1-10' }, suffixShelf), true);
+  const fromItems = buildCountSheetRowsForScope({
+    scope: 'rack',
+    itemBalances: [{
+      warehouseId: 'wh-1',
+      itemType: 'material',
+      itemId: 'motor',
+      itemName: 'موتور',
+      itemCode: 'MT-1',
+      quantity: 8,
+      minStock: 0,
+      updatedAt: '2026-01-01',
+    }],
+    locationLabelMap: new Map([['motor', 'B1-10']]),
+    locationBalances: [],
+    locations: [suffixShelf],
+    rack: { id: 'rack-b1', code: 'B1', name: 'B1' },
+  });
+  assert.equal(fromItems.rows.length, 1);
+  assert.equal(fromItems.rows[0]?.name, 'موتور');
+  assert.equal(fromItems.rows[0]?.code, 'MT-1');
+  assert.equal(fromItems.rows[0]?.quantity, 8);
+  assert.equal(fromItems.rows[0]?.location, 'B1-10');
+}
+
+{
+  const nameless = buildCountSheetRowsForScope({
+    scope: 'shelf',
+    itemBalances: [{
+      warehouseId: 'wh-1',
+      itemType: 'material',
+      itemId: 'a',
+      itemName: 'قاعدة',
+      itemCode: 'SP-1',
+      quantity: 3,
+      minStock: 0,
+      updatedAt: '2026-01-01',
+    }],
+    locationBalances: [{
+      warehouseId: 'wh-1',
+      locationId: 'loc-1',
+      locationCode: 'WH-R1-S1',
+      itemType: 'material',
+      itemId: 'a',
+      itemName: '',
+      itemCode: '',
+      quantity: 3,
+      minStock: 0,
+      updatedAt: '2026-01-01',
+    }],
+    locations: shelves,
+    shelf: shelves[0],
+  });
+  assert.equal(nameless.rows[0]?.name, 'قاعدة');
+  assert.equal(nameless.rows[0]?.code, 'SP-1');
 }
 
 console.log('warehouse-count-sheet.test.ts: ok');

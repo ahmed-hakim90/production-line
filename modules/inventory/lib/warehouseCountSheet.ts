@@ -144,10 +144,39 @@ export async function loadWarehouseCountLocationLabels(
   });
 }
 
+export function locationCodesMatch(left?: string | null, right?: string | null): boolean {
+  const a = normalizeCountKey(left);
+  const b = normalizeCountKey(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  if (!short.includes('-')) return false;
+  return long.endsWith(`-${short}`);
+}
+
+function splitLocationLabels(value: string | undefined | null): string[] {
+  return String(value || '')
+    .split(/[،,]/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function locationCodeOf(
+  loc: { code?: string; locationCode?: string },
+): string {
+  return String(('locationCode' in loc && loc.locationCode) || loc.code || '').trim();
+}
+
+function locationIdOf(
+  loc: { id?: string; locationId?: string },
+): string {
+  return String(('locationId' in loc && loc.locationId) || loc.id || '').trim();
+}
+
 export function locationBelongsToRack(
-  loc: Pick<WarehouseLocation, 'rackId' | 'rackCode' | 'rackName' | 'rack'> | Pick<
+  loc: Pick<WarehouseLocation, 'rackId' | 'rackCode' | 'rackName' | 'rack' | 'code'> | Pick<
     StockLocationBalance,
-    'rackId' | 'rackCode' | 'rackName' | 'rack'
+    'rackId' | 'rackCode' | 'rackName' | 'rack' | 'locationCode'
   >,
   rack: Pick<WarehouseRack, 'id' | 'code' | 'name'>,
 ): boolean {
@@ -158,19 +187,43 @@ export function locationBelongsToRack(
   if (rackCode && locCode && locCode === rackCode) return true;
   const rackName = normalizeCountKey(rack.name);
   const locName = normalizeCountKey(loc.rackName);
-  return Boolean(rackName && locName && locName === rackName);
+  if (rackName && locName && locName === rackName) return true;
+  if (!rackCode) return false;
+  const full = normalizeCountKey(locationCodeOf(loc));
+  if (!full) return false;
+  return full === rackCode || full.startsWith(`${rackCode}-`) || full.includes(`-${rackCode}-`);
 }
 
+type ShelfMatchInput = {
+  id?: string;
+  locationId?: string;
+  code?: string;
+  locationCode?: string;
+  rackId?: string;
+  rackCode?: string;
+  rack?: string;
+  rackName?: string;
+  shelf?: string;
+  shelfCode?: string;
+};
+
 export function locationMatchesShelf(
-  loc: Pick<WarehouseLocation, 'id' | 'code'> | Pick<StockLocationBalance, 'locationId' | 'locationCode'>,
-  shelf: Pick<WarehouseLocation, 'id' | 'code'>,
+  loc: ShelfMatchInput,
+  shelf: ShelfMatchInput,
 ): boolean {
   const shelfId = String(shelf.id || '').trim();
-  const locId = String(('locationId' in loc ? loc.locationId : loc.id) || '').trim();
+  const locId = locationIdOf(loc);
   if (shelfId && locId && locId === shelfId) return true;
-  const shelfCode = normalizeCountKey(shelf.code);
-  const locCode = normalizeCountKey(('locationCode' in loc ? loc.locationCode : loc.code) || '');
-  return Boolean(shelfCode && locCode && locCode === shelfCode);
+  const locCode = locationCodeOf(loc);
+  if (locationCodesMatch(locCode, locationCodeOf(shelf))) return true;
+  const shelfToken = String(shelf.shelfCode || shelf.shelf || '').trim();
+  const rackToken = String(shelf.rackCode || shelf.rack || '').trim();
+  if (shelfToken && rackToken && locationCodesMatch(locCode, `${rackToken}-${shelfToken}`)) return true;
+  if (shelfToken && normalizeCountKey(loc.shelfCode || loc.shelf) === normalizeCountKey(shelfToken)) {
+    if (!rackToken) return true;
+    return locationBelongsToRack(loc, { id: shelf.rackId, code: rackToken, name: shelf.rackName || rackToken });
+  }
+  return splitLocationLabels(locCode).some((part) => locationCodesMatch(part, locationCodeOf(shelf)));
 }
 
 function locationSortKey(loc: WarehouseLocation): string {
@@ -212,15 +265,22 @@ function shelfCoveredByCatalog(
 
 export function locationBalancesToCountSheetRows(
   balances: StockLocationBalance[],
+  itemBalances: StockItemBalance[] = [],
 ): WarehouseCountSheetRow[] {
+  const itemById = new Map(
+    itemBalances
+      .filter((row) => String(row.itemId || '').trim())
+      .map((row) => [String(row.itemId), row] as const),
+  );
   return [...balances]
     .filter((row) => String(row.itemId || '').trim())
     .map((row) => {
+      const item = itemById.get(String(row.itemId));
       const location = String(row.locationCode || '').trim() || '—';
       return {
         id: row.id || `${row.locationId || location}__${row.itemType}__${row.itemId}`,
-        code: String(row.itemCode || '').trim() || '—',
-        name: String(row.itemName || '').trim() || '—',
+        code: String(row.itemCode || item?.itemCode || '').trim() || '—',
+        name: String(row.itemName || item?.itemName || '').trim() || '—',
         quantity: Number(row.quantity || 0),
         location,
         rack: String(row.rackName || row.rack || '').trim() || undefined,
@@ -232,6 +292,56 @@ export function locationBalancesToCountSheetRows(
       if (loc !== 0) return loc;
       return a.name.localeCompare(b.name, 'ar');
     });
+}
+
+function itemKey(row: Pick<StockItemBalance, 'itemType' | 'itemId'> | Pick<StockLocationBalance, 'itemType' | 'itemId'>): string {
+  return `${String(row.itemType || '')}__${String(row.itemId || '')}`;
+}
+
+function itemBalanceMatchesShelf(
+  row: StockItemBalance,
+  shelf: WarehouseLocation,
+  locationLabelMap: Map<string, string> | ReadonlyMap<string, string>,
+): boolean {
+  const label = resolveWarehouseItemLocation(locationLabelMap, row);
+  if (!label || label === '—') return false;
+  return splitLocationLabels(label).some((part) => locationMatchesShelf({
+    locationCode: part,
+    code: part,
+  }, shelf));
+}
+
+function rowsForShelf(input: {
+  shelf: WarehouseLocation;
+  locationBalances: StockLocationBalance[];
+  itemBalances: StockItemBalance[];
+  locationLabelMap: Map<string, string> | ReadonlyMap<string, string>;
+}): WarehouseCountSheetRow[] {
+  const onShelf = input.locationBalances.filter((row) => locationMatchesShelf(row, input.shelf));
+  const rows = locationBalancesToCountSheetRows(onShelf, input.itemBalances);
+  const seen = new Set(onShelf.map((row) => itemKey(row)));
+  for (const item of input.itemBalances) {
+    const key = itemKey(item);
+    if (seen.has(key)) continue;
+    if (!String(item.itemId || '').trim()) continue;
+    if (!itemBalanceMatchesShelf(item, input.shelf, input.locationLabelMap)) continue;
+    seen.add(key);
+    rows.push({
+      id: item.id || key,
+      code: String(item.itemCode || '').trim() || '—',
+      name: String(item.itemName || '').trim() || '—',
+      quantity: Number(item.quantity || 0),
+      location: String(input.shelf.code || '').trim() || '—',
+      rack: String(input.shelf.rackName || input.shelf.rack || '').trim() || undefined,
+      shelf: String(input.shelf.shelfName || input.shelf.shelf || input.shelf.code || '').trim() || undefined,
+    });
+  }
+  if (rows.length === 0) return [emptyShelfRow(input.shelf)];
+  return rows.sort((a, b) => {
+    const loc = a.location.localeCompare(b.location, 'ar');
+    if (loc !== 0) return loc;
+    return a.name.localeCompare(b.name, 'ar');
+  });
 }
 
 export function buildCountSheetRowsForScope(input: {
@@ -263,19 +373,20 @@ export function buildCountSheetRowsForScope(input: {
     if (!rack) return { rows: [], scopeLabel: 'راك' };
     const shelves = locations.filter((loc) => locationBelongsToRack(loc, rack));
     const rows: WarehouseCountSheetRow[] = [];
+    const locationLabelMap = input.locationLabelMap || new Map();
     for (const shelf of shelves) {
-      const onShelf = locationBalances.filter((row) => locationMatchesShelf(row, shelf));
-      if (onShelf.length > 0) {
-        rows.push(...locationBalancesToCountSheetRows(onShelf));
-      } else {
-        rows.push(emptyShelfRow(shelf));
-      }
+      rows.push(...rowsForShelf({
+        shelf,
+        locationBalances,
+        itemBalances: input.itemBalances,
+        locationLabelMap,
+      }));
     }
     const extras = locationBalances.filter(
       (row) => locationBelongsToRack(row, rack) && !shelfCoveredByCatalog(row, shelves),
     );
     if (extras.length > 0) {
-      rows.push(...locationBalancesToCountSheetRows(extras));
+      rows.push(...locationBalancesToCountSheetRows(extras, input.itemBalances));
     }
     return { rows, scopeLabel };
   }
@@ -283,19 +394,24 @@ export function buildCountSheetRowsForScope(input: {
   const shelf = input.shelf;
   const shelfLabel = String(shelf?.code || shelf?.shelf || '').trim();
   if (!shelf) return { rows: [], scopeLabel: 'رف' };
-  const onShelf = locationBalances.filter((row) => locationMatchesShelf(row, shelf));
-  const rows = onShelf.length > 0
-    ? locationBalancesToCountSheetRows(onShelf)
-    : [emptyShelfRow({
-      id: shelf.id,
-      code: String(shelf.code || ''),
-      rack: String(shelf.rack || ''),
-      rackName: shelf.rackName,
-      shelf: String(shelf.shelf || shelf.code || ''),
-      shelfName: shelf.shelfName,
-    })];
+  const catalogShelf = locations.find((loc) => locationMatchesShelf(loc, shelf)) || {
+    warehouseId: '',
+    rack: String(shelf.rack || ''),
+    rackName: shelf.rackName,
+    shelf: String(shelf.shelf || shelf.code || ''),
+    shelfName: shelf.shelfName,
+    code: String(shelf.code || ''),
+    isActive: true,
+    createdAt: '',
+    id: shelf.id,
+  } as WarehouseLocation;
   return {
-    rows,
+    rows: rowsForShelf({
+      shelf: catalogShelf,
+      locationBalances,
+      itemBalances: input.itemBalances,
+      locationLabelMap: input.locationLabelMap || new Map(),
+    }),
     scopeLabel: `رف ${shelfLabel}`.trim(),
   };
 }
