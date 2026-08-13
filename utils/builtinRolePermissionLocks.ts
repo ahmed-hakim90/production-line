@@ -5,6 +5,19 @@
 export const BUILTIN_ROLE_PERMISSION_LOCKS: Record<string, readonly string[]> = {
   // Line supervisor: day-to-day ops only — not factory planning / KPI boards.
   supervisor: ['plans.view', 'productionDashboard.view'],
+  // Central spare-parts warehouse: stock + replenishment, not manufacturing catalog.
+  spare_parts_central_warehouse: [
+    'materials.view',
+    'materials.manage',
+    'products.view',
+    'catalog.categories.view',
+  ],
+  maintenance_center_warehouse: [
+    'materials.view',
+    'materials.manage',
+    'products.view',
+    'catalog.categories.view',
+  ],
 };
 
 export function applyBuiltinRolePermissionLocks(

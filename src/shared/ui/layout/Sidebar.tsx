@@ -30,6 +30,7 @@ import {
   isFactoryProductionMenuVisibleForWarehouseScope,
   isInventoryMenuItemVisibleForWarehouseScope,
   isInventorySidebarHiddenForRoleKey,
+  isManufacturingCatalogMenuVisibleForWarehouseScope,
   isRepairCenterPartsMenuVisible,
   isRepairPartsReplenishmentMenuVisible,
   resolveAccessibleWarehouseRoles,
@@ -287,6 +288,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                   accessibleWarehouseRoles,
                 })
               )
+            )
+            && (
+              g.key !== 'catalog'
+              || isManufacturingCatalogMenuVisibleForWarehouseScope({
+                accessibleWarehouseRoles,
+                warehouseScoped,
+              })
             )
             && (
               i.key !== 'packaging-control'

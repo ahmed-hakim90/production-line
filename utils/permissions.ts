@@ -557,16 +557,16 @@ export function checkPermission(
   if (permission === 'inventory.locations.manage') {
     return permissions['inventory.warehouses.manage'] === true;
   }
-  // Legacy roles had inventory.items.manage before materials.manage existed.
+  // Legacy manufacturing roles used products.createRawMaterial before materials.manage.
+  // Do not treat inventory.items.manage / inventory.view as the manufacturing catalog —
+  // spare-parts central operators hold those keys for stock cards, not BOM materials.
   if (permission === 'materials.manage') {
-    return permissions['inventory.items.manage'] === true || permissions['products.createRawMaterial'] === true;
+    return permissions['products.createRawMaterial'] === true;
   }
   if (permission === 'materials.view') {
     return (
       permissions['materials.manage'] === true
-      || permissions['inventory.items.manage'] === true
       || permissions['products.rawMaterials.view'] === true
-      || permissions['inventory.view'] === true
     );
   }
   if (permission === 'productionIssue.create' || permission === 'productionIssue.print' || permission === 'productionIssue.return') {

@@ -52,8 +52,13 @@ import { MENU_CONFIG, canAccessMenuItem } from '../config/menu.config.ts';
   const catalogItems = MENU_CONFIG.find((group) => group.key === 'catalog')?.children || [];
   const materials = catalogItems.find((item) => item.key === 'manufacturing-materials');
   assert.ok(materials?.excludeRoleKeys?.includes('repair_reception'));
+  assert.ok(materials?.excludeRoleKeys?.includes('spare_parts_central_warehouse'));
   assert.equal(canAccessMenuItem(() => true, materials!, 'repair_reception'), false);
+  assert.equal(canAccessMenuItem(() => true, materials!, 'spare_parts_central_warehouse'), false);
   assert.equal(canAccessMenuItem(() => true, materials!, 'factory_manager'), true);
+  const catalogBoard = catalogItems.find((item) => item.key === 'catalog-dashboard');
+  assert.equal(canAccessMenuItem(() => true, catalogBoard!, 'spare_parts_central_warehouse'), false);
+  assert.equal(canAccessMenuItem(() => true, catalogBoard!, 'factory_manager'), true);
 }
 
 {

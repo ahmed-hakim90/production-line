@@ -3,6 +3,7 @@ import {
   isFactoryProductionMenuVisibleForWarehouseScope,
   isInventoryMenuItemVisibleForWarehouseScope,
   isInventorySidebarHiddenForRoleKey,
+  isManufacturingCatalogMenuVisibleForWarehouseScope,
   isRepairCenterPartsMenuVisible,
   isRepairPartsReplenishmentMenuVisible,
   isRepairSparePartsRecallMenuVisible,
@@ -364,6 +365,21 @@ assert.equal(
 assert.equal(
   isFactoryProductionMenuVisibleForWarehouseScope({
     accessibleWarehouseRoles: [],
+    warehouseScoped: true,
+  }),
+  true,
+);
+
+assert.equal(
+  isManufacturingCatalogMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: true,
+  }),
+  false,
+);
+assert.equal(
+  isManufacturingCatalogMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: ['finished_staging'],
     warehouseScoped: true,
   }),
   true,

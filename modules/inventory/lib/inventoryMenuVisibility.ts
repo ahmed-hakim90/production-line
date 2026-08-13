@@ -154,6 +154,14 @@ export function isFactoryProductionMenuVisibleForWarehouseScope(input: {
   return !roles.every((role) => SPARE_PARTS_SCOPE_ROLES.includes(role));
 }
 
+/** Manufacturing catalog (products / BOM materials) is factory master data, not spare-parts ops. */
+export function isManufacturingCatalogMenuVisibleForWarehouseScope(input: {
+  accessibleWarehouseRoles: readonly (WarehouseRole | string)[];
+  warehouseScoped: boolean;
+}): boolean {
+  return isFactoryProductionMenuVisibleForWarehouseScope(input);
+}
+
 /**
  * «متابعة تموين القطع» is for maintenance centers.
  * Hide it from spare-parts-central-only operators (they use central replenishment).
