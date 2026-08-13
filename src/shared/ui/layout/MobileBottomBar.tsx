@@ -1,29 +1,42 @@
 import React, { useMemo } from 'react';
 import { Menu } from 'lucide-react';
-import { NavLink, useParams } from 'react-router-dom';
+import { NavLink, useLocation, useParams } from 'react-router-dom';
 import { MENU_CONFIG, canAccessMenuItem, type MenuItem } from '@/config/menu.config';
 import { isMenuGroupEnabledForPacks } from '@/lib/activityPacks';
 import { cn } from '@/lib/utils';
-import { withTenantPath } from '@/lib/tenantPaths';
+import { logicalPathnameFromLocation, withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { resolveMenuIcon } from './menuIconMap';
 import { useSidebarActiveRoute } from './useSidebar';
 import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
+import {
+  isWarehouseBottomBarItemActive,
+  resolveVisibleWarehouseBottomBarItems,
+  type ResolvedWarehouseBottomBarItem,
+} from './warehouseBottomBar';
 
 interface MobileBottomBarProps {
   onMoreClick: () => void;
 }
 
-type BottomBarItem = {
+type FactoryBottomBarItem = {
   key: string;
   label: string;
   menuItemKey: string;
+  primary?: boolean;
+  menuItem: MenuItem;
+  path: string;
 };
 
-const BOTTOM_BAR_ITEMS: BottomBarItem[] = [
+const FACTORY_BOTTOM_BAR_ITEMS: Array<{
+  key: string;
+  label: string;
+  menuItemKey: string;
+  primary?: boolean;
+}> = [
   { key: 'dashboard', label: 'لوحة التحكم', menuItemKey: 'home' },
-  { key: 'quick', label: 'إدخال سريع', menuItemKey: 'quick' },
+  { key: 'quick', label: 'إدخال سريع', menuItemKey: 'quick', primary: true },
   { key: 'line-workers', label: 'ربط العمالة', menuItemKey: 'line-workers' },
   { key: 'reports', label: 'التقارير', menuItemKey: 'reports' },
 ];
@@ -49,20 +62,45 @@ function renderIcon(name?: string, className?: string, size = 20) {
 
 export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ onMoreClick }) => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const location = useLocation();
   const { can } = usePermission();
   const { isActiveItem } = useSidebarActiveRoute();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
+  const inventoryWarehouseId = useAppStore((s) => s.userProfile?.inventoryWarehouseId);
+  const userRoleName = useAppStore((s) => s.userRoleName);
   const operationPaths = useAppStore((s) => s.systemSettings.operationPaths);
   const tenantActivityPacks = useAppStore((s) => s.tenantActivityPacks);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
   );
+  const logicalPath = useMemo(
+    () => logicalPathnameFromLocation(location.pathname),
+    [location.pathname],
+  );
 
-  const visibleItems = useMemo(
+  const warehouseItems = useMemo(
     () =>
-      BOTTOM_BAR_ITEMS.map((item) => {
+      resolveVisibleWarehouseBottomBarItems({
+        can,
+        roleKey,
+        roleName: userRoleName,
+        boundWarehouseId: inventoryWarehouseId,
+        menuItemsByKey: MENU_ITEMS_BY_KEY,
+        isOperationPathEnabled: (menuItemKey) =>
+          isMenuItemOperationPathEnabled(operationPaths, menuItemKey)
+          && isMenuGroupEnabledForPacks(
+            MENU_GROUP_BY_ITEM_KEY[menuItemKey] || '',
+            tenantActivityPacks,
+          ),
+      }),
+    [can, inventoryWarehouseId, operationPaths, roleKey, tenantActivityPacks, userRoleName],
+  );
+
+  const factoryItems = useMemo(
+    () =>
+      FACTORY_BOTTOM_BAR_ITEMS.map((item) => {
         const menuItem = MENU_ITEMS_BY_KEY[item.menuItemKey];
         const groupKey = MENU_GROUP_BY_ITEM_KEY[item.menuItemKey];
         if (
@@ -71,27 +109,44 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ onMoreClick })
           || !canAccessMenuItem(can, menuItem, roleKey)
           || !isMenuItemOperationPathEnabled(operationPaths, menuItem.key)
         ) return null;
-        return { ...item, menuItem };
-      }).filter(Boolean),
+        return { ...item, menuItem, path: menuItem.path };
+      }).filter((item): item is FactoryBottomBarItem => Boolean(item)),
     [can, operationPaths, roleKey, tenantActivityPacks],
   );
 
+  const visibleItems: Array<FactoryBottomBarItem | ResolvedWarehouseBottomBarItem> =
+    warehouseItems.length > 0 ? warehouseItems : factoryItems;
+  const hasPrimary = visibleItems.some((item) => item.primary || item.key === 'quick');
+  const columnCount = Math.max(2, visibleItems.length + 1);
+
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden"
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden',
+        hasPrimary ? 'pt-5' : 'pt-1.5',
+      )}
       aria-label="التنقل السريع"
       data-hakimo-flow="bottom-nav"
     >
-      <div className="mx-auto grid max-w-md grid-cols-5 items-end gap-1">
+      <div
+        className="mx-auto grid max-w-md items-end gap-1"
+        style={{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
+      >
         {visibleItems.map((item) => {
-          if (!item) return null;
-          const active = isActiveItem(item.menuItem);
-          const isPrimary = item.key === 'quick';
+          const isWarehouseItem = warehouseItems.length > 0;
+          const active = isWarehouseItem
+            ? isWarehouseBottomBarItemActive(
+                item as ResolvedWarehouseBottomBarItem,
+                logicalPath,
+                isActiveItem,
+              )
+            : isActiveItem(item.menuItem);
+          const isPrimary = Boolean(item.primary || item.key === 'quick');
 
           return (
             <NavLink
               key={item.key}
-              to={withTenantPath(tenantSlug, item.menuItem.path)}
+              to={withTenantPath(tenantSlug, item.path)}
               className={cn(
                 'group flex min-w-0 flex-col items-center justify-end gap-1 rounded-[var(--border-radius-base)] px-1 py-1.5 text-[10.5px] font-bold transition-colors',
                 active

@@ -60,9 +60,28 @@ const alwaysEnabled = () => true;
     false,
   );
   assert.equal(
-    shouldShowRepairBottomBar({ can: (p) => p === 'adminDashboard.view' }),
+    shouldShowRepairBottomBar({
+      can: (p) => p === 'adminDashboard.view',
+      roleKey: 'admin',
+    }),
     false,
     'system admin keeps factory bottom bar',
+  );
+  assert.equal(
+    shouldShowRepairBottomBar({
+      can: (p) => p === 'adminDashboard.view' || p === 'repair.adminDashboard.view',
+      roleName: 'مدير الصيانة',
+    }),
+    true,
+    'مدير الصيانة keeps repair bar even if adminDashboard.view was copied onto the role',
+  );
+  assert.equal(
+    shouldShowRepairBottomBar({
+      can: (p) => p === 'adminDashboard.view' || p === 'repair.jobs.create',
+      roleName: 'مسؤول الصيانة',
+    }),
+    true,
+    'مسؤول الصيانة keeps repair bar even if adminDashboard.view was copied onto the role',
   );
 }
 
@@ -70,6 +89,21 @@ const alwaysEnabled = () => true;
   assert.equal(
     resolveRepairBottomPersona({ can: (p) => p === 'repair.adminDashboard.view' }),
     'admin',
+  );
+  assert.equal(
+    resolveRepairBottomPersona({
+      can: (p) => p === 'repair.adminDashboard.view' || p === 'repair.jobs.create',
+      roleName: 'مدير الصيانة',
+    }),
+    'admin',
+  );
+  assert.equal(
+    resolveRepairBottomPersona({
+      can: (p) => p === 'repair.adminDashboard.view' || p === 'repair.jobs.create',
+      roleName: 'مسؤول الصيانة',
+    }),
+    'reception',
+    'مسؤول الصيانة keeps طلب جديد even when the role also has the admin dashboard key',
   );
   assert.equal(
     resolveRepairBottomPersona({
@@ -92,16 +126,36 @@ const alwaysEnabled = () => true;
     can: (p) =>
       p === 'repair.adminDashboard.view'
       || p === 'repair.view'
+      || p === 'repair.payments.view'
+      || p === 'repair.technician.view'
+      || p === 'sparePartsReplenishment.view',
+    roleName: 'مدير الصيانة',
+    menuItemsByKey: MENU_ITEMS_BY_KEY,
+    isOperationPathEnabled: alwaysEnabled,
+  });
+  assert.deepEqual(
+    adminItems.map((i) => i.key),
+    ['admin-home', 'jobs', 'payments', 'kpis'],
+  );
+  assert.equal(adminItems.find((i) => i.key === 'jobs')?.primary, true);
+  assert.equal(adminItems[0]?.path, '/');
+}
+
+{
+  const adminWithoutPayments = resolveVisibleRepairBottomBarItems({
+    can: (p) =>
+      p === 'repair.adminDashboard.view'
+      || p === 'repair.view'
       || p === 'sparePartsReplenishment.view'
       || p === 'repair.technician.view',
     menuItemsByKey: MENU_ITEMS_BY_KEY,
     isOperationPathEnabled: alwaysEnabled,
   });
   assert.deepEqual(
-    adminItems.map((i) => i.key),
-    ['admin-home', 'jobs', 'replenish', 'kpis'],
+    adminWithoutPayments.map((i) => i.key),
+    ['admin-home', 'jobs', 'kpis', 'replenish'],
+    'تموين fills the 4th slot when التحصيل is not granted',
   );
-  assert.equal(adminItems[0]?.path, '/');
 }
 
 {
@@ -120,6 +174,25 @@ const alwaysEnabled = () => true;
     ['dash', 'new-job', 'jobs', 'payments'],
   );
   assert.equal(receptionItems.find((i) => i.key === 'new-job')?.primary, true);
+}
+
+{
+  const namedReception = resolveVisibleRepairBottomBarItems({
+    can: (p) =>
+      p === 'adminDashboard.view'
+      || p === 'repair.adminDashboard.view'
+      || p === 'repair.jobs.create'
+      || p === 'repair.view'
+      || p === 'repair.payments.view',
+    roleName: 'مسؤول الصيانة',
+    menuItemsByKey: MENU_ITEMS_BY_KEY,
+    isOperationPathEnabled: alwaysEnabled,
+  });
+  assert.deepEqual(
+    namedReception.map((i) => i.key),
+    ['dash', 'new-job', 'jobs', 'payments'],
+    'مسؤول الصيانة bar is طلب جديد not أداء الفنيين',
+  );
 }
 
 {
@@ -155,19 +228,6 @@ const alwaysEnabled = () => true;
 }
 
 {
-  const adminWithPrimary = resolveVisibleRepairBottomBarItems({
-    can: (p) =>
-      p === 'repair.adminDashboard.view'
-      || p === 'repair.view'
-      || p === 'sparePartsReplenishment.view'
-      || p === 'repair.technician.view',
-    menuItemsByKey: MENU_ITEMS_BY_KEY,
-    isOperationPathEnabled: alwaysEnabled,
-  });
-  assert.equal(adminWithPrimary.find((i) => i.key === 'jobs')?.primary, true);
-}
-
-{
   const filtered = resolveVisibleRepairBottomBarItems({
     can: (p) => p === 'repair.adminDashboard.view' || p === 'repair.view',
     menuItemsByKey: MENU_ITEMS_BY_KEY,
@@ -176,7 +236,7 @@ const alwaysEnabled = () => true;
   assert.deepEqual(
     filtered.map((i) => i.key),
     ['admin-home', 'jobs'],
-    'omits replenish/kpis when permissions missing',
+    'omits payments/kpis/replenish when permissions missing',
   );
 }
 

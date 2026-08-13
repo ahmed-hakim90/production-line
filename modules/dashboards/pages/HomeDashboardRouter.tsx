@@ -43,10 +43,12 @@ export const HomeDashboardRouter: React.FC = () => {
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
   );
+  const userRoleName = useAppStore((s) => s.userRoleName);
 
   const portal = resolvePortalKind({
     can,
     roleKey,
+    roleName: userRoleName,
     inventoryWarehouseId: userProfile?.inventoryWarehouseId,
   });
 

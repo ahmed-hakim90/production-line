@@ -34,6 +34,7 @@ export const RepairMobileBottomBar: React.FC<RepairMobileBottomBarProps> = ({ on
   const { isActiveItem } = useSidebarActiveRoute();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
+  const userRoleName = useAppStore((s) => s.userRoleName);
   const operationPaths = useAppStore((s) => s.systemSettings.operationPaths);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
@@ -50,11 +51,12 @@ export const RepairMobileBottomBar: React.FC<RepairMobileBottomBarProps> = ({ on
       resolveVisibleRepairBottomBarItems({
         can,
         roleKey,
+        roleName: userRoleName,
         menuItemsByKey: MENU_ITEMS_BY_KEY,
         isOperationPathEnabled: (menuItemKey) =>
           isMenuItemOperationPathEnabled(operationPaths, menuItemKey),
       }),
-    [can, operationPaths, roleKey],
+    [can, operationPaths, roleKey, userRoleName],
   );
 
   const columnCount = Math.max(2, visibleItems.length + 1);

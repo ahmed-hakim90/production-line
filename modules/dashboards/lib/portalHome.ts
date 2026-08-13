@@ -3,6 +3,8 @@
  * Matches HomeDashboardRouter permission priority.
  */
 
+import { isNamedRepairOpsRole, isSystemOrFactoryChromeRole } from '@/modules/repair/lib/repairRoleChrome';
+
 export type PortalKind =
   | 'admin'
   | 'factory_manager'
@@ -15,6 +17,7 @@ export type PortalKind =
 export type PortalPermissionChecker = {
   can: (permission: string) => boolean;
   roleKey?: string | null;
+  roleName?: string | null;
   inventoryWarehouseId?: string | null;
 };
 
@@ -27,7 +30,7 @@ export function isRepairTechnicianPortal(checker: PortalPermissionChecker): bool
   return true;
 }
 
-function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
+export function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
   // Repair ops (مدير مراكز / مدير مركز / استقبال) and technicians stay on repair portals
   // even when bound to a maintenance_center warehouse for spare-parts receive/confirm.
   // Match by permission — custom role names rarely have built-in roleKeys.
@@ -55,18 +58,30 @@ function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
 
 /** Repair ops / centers-manager home — not factory production dashboards. */
 export function isRepairOpsPortal(checker: PortalPermissionChecker): boolean {
+  if (isRepairTechnicianPortal(checker)) return false;
   // Stock-only center warehouse role still lives inside الصيانة (no inventory portal).
   if (checker.roleKey === 'maintenance_center_warehouse') return true;
-  return checker.can('repair.adminDashboard.view') || checker.can('repair.dashboard.view');
+  if (isNamedRepairOpsRole(checker)) return true;
+  return checker.can('repair.adminDashboard.view')
+    || checker.can('repair.dashboard.view')
+    || checker.can('repair.jobs.create')
+    || checker.can('repair.jobs.reception');
 }
 
 export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind {
-  if (checker.can('adminDashboard.view')) return 'admin';
-  if (checker.can('factoryDashboard.view')) return 'factory_manager';
+  // مدير النظام / مدير المصنع keep platform chrome even when they also hold repair keys.
+  if (isSystemOrFactoryChromeRole(checker)) {
+    if (checker.can('adminDashboard.view')) return 'admin';
+    if (checker.can('factoryDashboard.view')) return 'factory_manager';
+  }
 
   // Centers / center managers + reception before warehouse: they often share a bound
   // maintenance_center warehouse for replenishment, but their home is repair ops.
+  // Named «مدير الصيانة / مسؤول الصيانة» beat a copied adminDashboard.view on the role.
   if (isRepairOpsPortal(checker)) return 'repair';
+
+  if (checker.can('adminDashboard.view')) return 'admin';
+  if (checker.can('factoryDashboard.view')) return 'factory_manager';
 
   if (isWarehouseOperatorPortal(checker)) return 'warehouse_manager';
 

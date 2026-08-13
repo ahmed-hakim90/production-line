@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP **ForgeOps** — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-10 (product brand: ForgeOps)
+**Last updated:** 2026-08-13 (product brand: ForgeOps)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -69,10 +69,10 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 |------------|----------------|
 | Factory / production | Plans, reports, production issues |
 | Materials warehouse | Raw/decomposed control, production issues |
-| Spare-parts central | `/inventory/spare-parts-replenishment` (approve/prepare; menu badge) |
+| Spare-parts central | Home `/` → warehouse workspace; mobile bar (لوحتي / التموين / الأرصدة / المراكز); queue `/inventory/spare-parts-replenishment` |
 | Inventory admin | `/inventory/warehouses` hub (role/branch filters) |
-| Repair center / reception | Home `/` → repair ops; mobile repair bottom bar (طلب جديد); branch scope via warehouse bind + `repairBranchIds` |
-| Repair admin / centers manager | Home `/` → repair admin; mobile repair bottom bar (طلبات / تموين / أداء) |
+| Repair center / reception | Home `/` → repair ops; mobile bar (لوحتي / طلب جديد / الطلبات / التحصيل) |
+| Repair admin / مدير الصيانة | Home `/` → repair admin; mobile bar (لوحتي / الطلبات / التحصيل / الأداء) |
 | Repair technician | Home `/` → technician portal (mobile cards); mobile bar (لوحتي / طلباتي); job workspace steps: تشخيص → قطع → إنهاء |
 | Customer portal | `/portal/:tenantSlug` after PIN login; bottom bar (طلباتي / طلب جديد / التحديثات / ملفي) |
 

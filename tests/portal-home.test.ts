@@ -138,4 +138,32 @@ assert.equal(
   'ordinary employees remain on the employee dashboard',
 );
 
+assert.equal(
+  resolvePortalKind({
+    can: (p) => p === 'adminDashboard.view' || p === 'repair.adminDashboard.view',
+    roleName: 'مدير الصيانة',
+  }),
+  'repair',
+  'مدير الصيانة lands on repair portal even with copied adminDashboard.view',
+);
+
+assert.equal(
+  resolvePortalKind({
+    can: (p) => p === 'adminDashboard.view' || p === 'repair.jobs.create' || p === 'repair.dashboard.view',
+    roleName: 'مسؤول الصيانة',
+  }),
+  'repair',
+  'مسؤول الصيانة lands on repair portal even with copied adminDashboard.view',
+);
+
+assert.equal(
+  resolvePortalKind({
+    can: (p) => p === 'adminDashboard.view' || p === 'repair.adminDashboard.view',
+    roleKey: 'admin',
+    roleName: 'مدير النظام',
+  }),
+  'admin',
+  'system admin keeps the admin portal',
+);
+
 console.log('portal-home.test.ts passed');

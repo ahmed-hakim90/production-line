@@ -70,13 +70,15 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
   );
+  const userRoleName = useAppStore((s) => s.userRoleName);
   const useRepairBottomBar = useMemo(
     () => shouldShowRepairBottomBar({
       can: (permission: string) => can(permission as Parameters<typeof can>[0]),
       roleKey,
+      roleName: userRoleName,
       inventoryWarehouseId,
     }),
-    [can, inventoryWarehouseId, roleKey],
+    [can, inventoryWarehouseId, roleKey, userRoleName],
   );
   const online = useOnlineStatus();
   const showContentSkeleton = shellLoading || contentLoading || contentRefreshing;
