@@ -135,6 +135,12 @@ interface UseManagedPrintOptions {
   onAfterPrint?: () => void;
   /** When set, replaces the global @page style (e.g. thermal barcode label sizes). */
   pageStyle?: string;
+  /**
+   * Skip copying app stylesheets into the print iframe.
+   * Required for thermal labels: App.css / index.css force `@page { size: A4; margin: 10mm }`
+   * which overrides 40×30mm and prints one design across several stickers.
+   */
+  ignoreGlobalStyles?: boolean;
 }
 
 export const useManagedPrint = ({
@@ -143,6 +149,7 @@ export const useManagedPrint = ({
   documentTitle,
   onAfterPrint,
   pageStyle: pageStyleOverride,
+  ignoreGlobalStyles = false,
 }: UseManagedPrintOptions) => {
   const pageStyle = useMemo(
     () => pageStyleOverride || buildGlobalPrintPageStyle(printSettings),
@@ -154,6 +161,7 @@ export const useManagedPrint = ({
     documentTitle,
     pageStyle,
     onAfterPrint,
+    ignoreGlobalStyles,
   });
 };
 

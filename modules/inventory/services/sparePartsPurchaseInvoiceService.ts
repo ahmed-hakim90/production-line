@@ -3,6 +3,7 @@ import {
   limit,
   orderBy,
   where,
+  type QueryConstraint,
 } from 'firebase/firestore';
 import { db, isConfigured, mutateSparePartsPurchaseInvoiceCallable } from '../../auth/services/firebase';
 import { tenantQuery } from '../../../lib/tenantFirestore';
@@ -20,7 +21,7 @@ export const sparePartsPurchaseInvoiceService = {
     if (!isConfigured) return [];
     const scope = await resolveInventoryWarehouseReadScope();
     if (scope.denied) return [];
-    const constraints = [
+    const constraints: QueryConstraint[] = [
       orderBy('postedAt', 'desc'),
       limit(Math.min(100, Math.max(1, limitCount))),
     ];

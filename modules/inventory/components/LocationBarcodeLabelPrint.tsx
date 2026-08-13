@@ -9,6 +9,7 @@ import { Code128Barcode } from './Code128Barcode';
 import { ThermalBarcodeLabelCard } from './ThermalBarcodeLabelCard';
 import {
   resolveBarcodeLabelSize,
+  type BarcodeLabelCustomMm,
   type BarcodeLabelSizeId,
 } from '../lib/barcodeLabelEngine';
 
@@ -24,16 +25,17 @@ type Props = {
   printSettings?: PrintTemplateSettings;
   printedAt?: string;
   labelSizeId?: BarcodeLabelSizeId | string;
+  labelCustomMm?: BarcodeLabelCustomMm;
 };
 
 export const LocationBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
-  ({ labels, printSettings, printedAt, labelSizeId }, ref) => {
+  ({ labels, printSettings, printedAt, labelSizeId, labelCustomMm }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
     const doc = resolvePrintDocumentConfig(ps, 'locationBarcodeLabel');
     const font = resolvePrintFont(ps);
     const accent = resolvePrintAccentHex(ps.primaryColor);
     const when = printedAt || new Date().toLocaleString('ar-EG');
-    const size = resolveBarcodeLabelSize(labelSizeId);
+    const size = resolveBarcodeLabelSize(labelSizeId, labelCustomMm);
     const thermal = size.layout === 'thermal';
     const showCode = doc.isFieldVisible('locationCode');
     const showRack = doc.isFieldVisible('rack');
@@ -129,7 +131,7 @@ export const LocationBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>
                     <QRCodeSVG value={value} size={72} includeMargin={false} level="M" />
                   ) : null}
                   {showLinear && value ? (
-                    <div style={{ flex: 1, textAlign: 'start', overflow: 'hidden' }}>
+                    <div style={{ flex: 1, textAlign: 'start', overflow: 'hidden', height: 44 }}>
                       <Code128Barcode value={value} height={44} width={1.35} displayValue={false} margin={0} />
                     </div>
                   ) : null}

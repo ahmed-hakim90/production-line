@@ -22,7 +22,15 @@ export type BarcodeLabelLocationOption = {
   shelf?: string;
 };
 
-export type BarcodeLabelSizeId = 'a4' | '40x30' | '50x30' | '60x40' | '80x50';
+export type BarcodeLabelSizeId =
+  | 'a4'
+  | '30x20'
+  | '40x20'
+  | '40x30'
+  | '50x30'
+  | '60x40'
+  | '80x50'
+  | 'custom';
 
 export type BarcodeLabelSizePreset = {
   id: BarcodeLabelSizeId;
@@ -35,39 +43,53 @@ export type BarcodeLabelSizePreset = {
   thermal?: boolean;
 };
 
+export type BarcodeLabelCustomMm = {
+  widthMm?: number;
+  heightMm?: number;
+};
+
+/** Xprinter Stock uses inches (e.g. USER 3.00 in × 4.00 in). */
+export function mmToDriverInches(mm: number): string {
+  return (Number(mm) / 25.4).toFixed(2);
+}
+
+export function formatDriverStockSize(widthMm: number, heightMm: number): string {
+  return `${mmToDriverInches(widthMm)} in × ${mmToDriverInches(heightMm)} in`;
+}
+
+export function clampThermalLabelMm(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(15, Math.min(120, Math.round(value)));
+}
+
+function thermalPreset(
+  id: Exclude<BarcodeLabelSizeId, 'a4' | 'custom'>,
+  widthMm: number,
+  heightMm: number,
+): BarcodeLabelSizePreset {
+  return {
+    id,
+    labelAr: `حراري ${widthMm}×${heightMm} مم — ${formatDriverStockSize(widthMm, heightMm)}`,
+    widthMm,
+    heightMm,
+    layout: 'thermal',
+    columns: 1,
+    thermal: true,
+  };
+}
+
 export const BARCODE_LABEL_SIZE_PRESETS: readonly BarcodeLabelSizePreset[] = [
+  thermalPreset('40x30', 40, 30),
+  thermalPreset('50x30', 50, 30),
+  thermalPreset('40x20', 40, 20),
+  thermalPreset('30x20', 30, 20),
+  thermalPreset('60x40', 60, 40),
+  thermalPreset('80x50', 80, 50),
   {
-    id: '40x30',
-    labelAr: 'حراري 40×30 مم — Xprinter',
+    id: 'custom',
+    labelAr: 'مخصص — قِس الاستيكر بالمليمتر',
     widthMm: 40,
     heightMm: 30,
-    layout: 'thermal',
-    columns: 1,
-    thermal: true,
-  },
-  {
-    id: '50x30',
-    labelAr: 'حراري 50×30 مم',
-    widthMm: 50,
-    heightMm: 30,
-    layout: 'thermal',
-    columns: 1,
-    thermal: true,
-  },
-  {
-    id: '60x40',
-    labelAr: 'حراري 60×40 مم',
-    widthMm: 60,
-    heightMm: 40,
-    layout: 'thermal',
-    columns: 1,
-    thermal: true,
-  },
-  {
-    id: '80x50',
-    labelAr: 'حراري 80×50 مم',
-    widthMm: 80,
-    heightMm: 50,
     layout: 'thermal',
     columns: 1,
     thermal: true,
@@ -80,9 +102,12 @@ export const BARCODE_LABEL_SIZE_PRESETS: readonly BarcodeLabelSizePreset[] = [
     layout: 'grid',
     columns: 2,
   },
-] as const;
+];
 
 export const DEFAULT_BARCODE_LABEL_SIZE_ID: BarcodeLabelSizeId = '40x30';
+
+/** Print-iframe class: one physical sticker = one CSS page. */
+export const THERMAL_BARCODE_LABEL_CLASS = 'thermal-barcode-label';
 
 /** Human-readable code on the label (scan value stays original). */
 export function formatBarcodeLabelDisplayCode(code: string): string {
@@ -93,17 +118,38 @@ export function formatBarcodeLabelDisplayCode(code: string): string {
     .trim();
 }
 
-export function resolveBarcodeLabelSize(id?: string | null): BarcodeLabelSizePreset {
+export function resolveBarcodeLabelSize(
+  id?: string | null,
+  customMm?: BarcodeLabelCustomMm | null,
+): BarcodeLabelSizePreset {
+  if (id === 'custom') {
+    const widthMm = clampThermalLabelMm(Number(customMm?.widthMm), 40);
+    const heightMm = clampThermalLabelMm(Number(customMm?.heightMm), 30);
+    return {
+      id: 'custom',
+      labelAr: `حراري مخصص ${widthMm}×${heightMm} مم — ${formatDriverStockSize(widthMm, heightMm)}`,
+      widthMm,
+      heightMm,
+      layout: 'thermal',
+      columns: 1,
+      thermal: true,
+    };
+  }
   const found = BARCODE_LABEL_SIZE_PRESETS.find((row) => row.id === id);
   return found || BARCODE_LABEL_SIZE_PRESETS.find((row) => row.id === DEFAULT_BARCODE_LABEL_SIZE_ID)!;
 }
 
 /** @page CSS for browser → Xprinter / thermal (no Bartender needed). */
-export function buildBarcodeLabelPageStyle(sizeId?: string | null): string {
-  const size = resolveBarcodeLabelSize(sizeId);
+export function buildBarcodeLabelPageStyle(
+  sizeId?: string | null,
+  customMm?: BarcodeLabelCustomMm | null,
+): string {
+  const size = resolveBarcodeLabelSize(sizeId, customMm);
   if (size.layout === 'grid') {
     return `
       @page { size: A4 portrait; margin: 8mm; }
+      html, body { margin: 0; padding: 0; background: #fff; }
+      *, *::before, *::after { box-sizing: border-box; }
       @media print {
         html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
         * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -112,6 +158,26 @@ export function buildBarcodeLabelPageStyle(sizeId?: string | null): string {
   }
   return `
     @page { size: ${size.widthMm}mm ${size.heightMm}mm; margin: 0; }
+    html, body {
+      width: ${size.widthMm}mm;
+      margin: 0;
+      padding: 0;
+      background: #fff;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    .${THERMAL_BARCODE_LABEL_CLASS} {
+      width: ${size.widthMm}mm;
+      height: ${size.heightMm}mm;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .${THERMAL_BARCODE_LABEL_CLASS}:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
     @media print {
       html, body {
         width: ${size.widthMm}mm !important;
@@ -120,6 +186,18 @@ export function buildBarcodeLabelPageStyle(sizeId?: string | null): string {
         background: #fff !important;
       }
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .${THERMAL_BARCODE_LABEL_CLASS} {
+        width: ${size.widthMm}mm !important;
+        height: ${size.heightMm}mm !important;
+        max-width: ${size.widthMm}mm !important;
+        max-height: ${size.heightMm}mm !important;
+        overflow: hidden !important;
+      }
+      .${THERMAL_BARCODE_LABEL_CLASS} svg,
+      .${THERMAL_BARCODE_LABEL_CLASS} img,
+      .${THERMAL_BARCODE_LABEL_CLASS} canvas {
+        max-width: 100% !important;
+      }
     }
   `;
 }

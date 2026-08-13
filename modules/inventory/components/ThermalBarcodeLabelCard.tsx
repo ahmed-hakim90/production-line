@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Code128Barcode } from './Code128Barcode';
 import {
+  THERMAL_BARCODE_LABEL_CLASS,
   formatBarcodeLabelDisplayCode,
   type BarcodeLabelSizePreset,
 } from '../lib/barcodeLabelEngine';
@@ -10,6 +11,10 @@ function normalizeLabelText(value: string): string {
   return String(value || '')
     .toLowerCase()
     .replace(/[^a-z0-9\u0600-\u06ff]+/gi, '');
+}
+
+function mmToPx(mm: number): number {
+  return Math.max(8, Math.round((mm * 96) / 25.4));
 }
 
 type ThermalBarcodeLabelCardProps = {
@@ -29,8 +34,9 @@ type ThermalBarcodeLabelCardProps = {
 };
 
 /**
- * Compact centered thermal label for Xprinter:
- * [border] warehouse → location → barcode + QR (tight, no empty middle).
+ * Compact thermal sticker for Xprinter:
+ * one CSS page = one physical label. No outer frame (thin borders dither
+ * into a dashed line at 203 DPI and shift when @page size is wrong).
  */
 export function ThermalBarcodeLabelCard({
   size,
@@ -52,40 +58,42 @@ export function ThermalBarcodeLabelCard({
     ? subtitle
     : undefined;
 
-  const qrPx = compact ? 32 : Math.min(44, Math.floor(size.heightMm * 1.0));
-  const barHeight = compact ? 20 : Math.min(32, Math.floor(size.heightMm * 0.48));
-  const barWidth = compact ? 1.1 : 1.2;
-  const pad = compact ? '1.2mm' : '1.8mm';
+  const insetMm = compact ? 1.4 : 2;
+  const qrMm = compact ? 7 : Math.min(11, size.heightMm * 0.28);
+  const barMm = compact ? 5.6 : Math.min(8.5, size.heightMm * 0.22);
+  const qrPx = mmToPx(qrMm);
+  const barHeightPx = mmToPx(barMm);
 
   const pageStyle: CSSProperties = {
     width: `${size.widthMm}mm`,
     height: `${size.heightMm}mm`,
     boxSizing: 'border-box',
-    padding: pad,
+    padding: `${insetMm}mm`,
     overflow: 'hidden',
     background: '#fff',
     color: '#0b1220',
     pageBreakAfter: isLast ? 'auto' : 'always',
     breakAfter: isLast ? 'auto' : 'page',
+    pageBreakInside: 'avoid',
+    breakInside: 'avoid',
   };
 
-  const frameStyle: CSSProperties = {
+  const innerStyle: CSSProperties = {
     width: '100%',
     height: '100%',
     boxSizing: 'border-box',
-    border: '0.35mm solid #0f172a',
-    borderRadius: compact ? '0.6mm' : '1mm',
-    padding: compact ? '1.1mm 1.3mm' : '1.6mm',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: compact ? '1.1mm' : '1.6mm',
+    gap: compact ? '0.8mm' : '1.4mm',
+    overflow: 'hidden',
+    minHeight: 0,
   };
 
   return (
-    <div style={pageStyle}>
-      <div style={frameStyle}>
+    <div className={THERMAL_BARCODE_LABEL_CLASS} style={pageStyle}>
+      <div style={innerStyle}>
         <div
           style={{
             width: '100%',
@@ -95,12 +103,13 @@ export function ThermalBarcodeLabelCard({
             flexDirection: 'column',
             alignItems: 'center',
             gap: compact ? 1 : 2,
+            flexShrink: 0,
           }}
         >
           {eyebrow ? (
             <div
               style={{
-                fontSize: compact ? 7.5 : 9,
+                fontSize: compact ? 7 : 8.5,
                 fontWeight: 800,
                 lineHeight: 1.1,
                 color: '#334155',
@@ -117,7 +126,7 @@ export function ThermalBarcodeLabelCard({
           {safeSubtitle ? (
             <div
               style={{
-                fontSize: compact ? 7 : 8.5,
+                fontSize: compact ? 6.5 : 8,
                 fontWeight: 600,
                 lineHeight: 1.1,
                 color: '#475569',
@@ -136,8 +145,8 @@ export function ThermalBarcodeLabelCard({
               style={{
                 fontWeight: 900,
                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                fontSize: compact ? 12.5 : 15,
-                letterSpacing: '0.03em',
+                fontSize: compact ? 13 : 16,
+                letterSpacing: '0.04em',
                 lineHeight: 1,
                 maxWidth: '100%',
                 whiteSpace: 'nowrap',
@@ -154,38 +163,54 @@ export function ThermalBarcodeLabelCard({
 
         {(showQr || showLinear) && value ? (
           <div
+            dir="ltr"
             style={{
               width: '100%',
+              minHeight: 0,
               display: 'flex',
-              flexDirection: 'row-reverse',
+              flexDirection: 'row',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: compact ? 3 : 5,
+              gap: compact ? '1.2mm' : '2mm',
+              overflow: 'hidden',
             }}
           >
-            {showQr ? (
-              <div style={{ flexShrink: 0, lineHeight: 0 }}>
-                <QRCodeSVG value={value} size={qrPx} includeMargin={false} level="M" />
-              </div>
-            ) : null}
             {showLinear ? (
               <div
                 style={{
                   flex: 1,
                   minWidth: 0,
+                  height: `${barMm}mm`,
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
                   overflow: 'hidden',
                 }}
               >
                 <Code128Barcode
                   value={value}
-                  height={barHeight}
-                  width={barWidth}
+                  height={barHeightPx}
+                  width={compact ? 1.05 : 1.2}
                   displayValue={false}
                   margin={0}
-                  className="max-w-full"
+                />
+              </div>
+            ) : null}
+            {showQr ? (
+              <div
+                style={{
+                  flexShrink: 0,
+                  width: `${qrMm}mm`,
+                  height: `${qrMm}mm`,
+                  lineHeight: 0,
+                  overflow: 'hidden',
+                }}
+              >
+                <QRCodeSVG
+                  value={value}
+                  size={qrPx}
+                  includeMargin={false}
+                  level="M"
+                  style={{ width: '100%', height: '100%', display: 'block' }}
                 />
               </div>
             ) : null}

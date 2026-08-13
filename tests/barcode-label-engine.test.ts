@@ -7,6 +7,9 @@ import {
   resolveBarcodeLabelSize,
   buildBarcodeLabelPageStyle,
   formatBarcodeLabelDisplayCode,
+  formatDriverStockSize,
+  mmToDriverInches,
+  clampThermalLabelMm,
   DEFAULT_BARCODE_LABEL_SIZE_ID,
 } from '../modules/inventory/lib/barcodeLabelEngine.ts';
 import { DEFAULT_PRINT_TEMPLATE } from '../utils/dashboardConfig.ts';
@@ -62,6 +65,9 @@ import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentC
   const thermalCss = buildBarcodeLabelPageStyle('40x30');
   assert.match(thermalCss, /40mm 30mm/);
   assert.match(thermalCss, /margin: 0/);
+  assert.match(thermalCss, /thermal-barcode-label/);
+  assert.match(thermalCss, /overflow: hidden/);
+  assert.doesNotMatch(thermalCss, /size: A4/);
   const a4Css = buildBarcodeLabelPageStyle('a4');
   assert.match(a4Css, /A4/);
 }
@@ -69,6 +75,21 @@ import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentC
 {
   assert.equal(formatBarcodeLabelDisplayCode('A1-1'), 'A1 - 1');
   assert.equal(formatBarcodeLabelDisplayCode('CENTRAL_A1/2'), 'CENTRAL - A1 - 2');
+}
+
+{
+  const custom = resolveBarcodeLabelSize('custom', { widthMm: 32, heightMm: 25 });
+  assert.equal(custom.id, 'custom');
+  assert.equal(custom.widthMm, 32);
+  assert.equal(custom.heightMm, 25);
+  assert.equal(custom.layout, 'thermal');
+  assert.equal(mmToDriverInches(40), '1.57');
+  assert.equal(mmToDriverInches(30), '1.18');
+  assert.equal(formatDriverStockSize(40, 30), '1.57 in × 1.18 in');
+  assert.equal(clampThermalLabelMm(3, 40), 15);
+  assert.equal(clampThermalLabelMm(400, 40), 120);
+  const customCss = buildBarcodeLabelPageStyle('custom', { widthMm: 32, heightMm: 25 });
+  assert.match(customCss, /32mm 25mm/);
 }
 
 console.log('barcode-label-engine.test.ts: ok');

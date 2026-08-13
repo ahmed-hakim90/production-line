@@ -34,6 +34,15 @@ export function Code128Barcode({
         margin,
         textMargin: displayValue ? 2 : 0,
       });
+      const svg = ref.current;
+      const svgWidth = svg.getAttribute('width');
+      const svgHeight = svg.getAttribute('height');
+      if (svgWidth && svgHeight) {
+        svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
+        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        svg.removeAttribute('width');
+        svg.removeAttribute('height');
+      }
     } catch {
       // Invalid characters for Code128 — leave empty svg
       while (ref.current.firstChild) ref.current.removeChild(ref.current.firstChild);
@@ -41,5 +50,11 @@ export function Code128Barcode({
   }, [code, height, width, displayValue, margin]);
 
   if (!code) return null;
-  return <svg ref={ref} className={className} style={{ maxWidth: '100%', height: 'auto' }} />;
+  return (
+    <svg
+      ref={ref}
+      className={className}
+      style={{ display: 'block', width: '100%', maxWidth: '100%', height }}
+    />
+  );
 }
