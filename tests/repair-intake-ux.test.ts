@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { hideZeroForInput } from '../lib/inputDisplayValue.ts';
-import { searchableSelectFilter } from '../lib/searchableSelectFilter.ts';
+import { matchSelectOptionByScan, searchableSelectFilter } from '../lib/searchableSelectFilter.ts';
 import { accessoriesForProductCategory } from '../modules/repair/config/repairSettings.ts';
 import {
   buildRepairProductCardFields,
@@ -24,8 +24,46 @@ assert.equal(normalizeCustomerPhoneDigits('abc'), '');
 // Searchable select: Arabic digits match Western product codes.
 assert.equal(searchableSelectFilter('خلاط (7033) prod-1', '٧٠٣٣'), 1);
 assert.equal(searchableSelectFilter('خلاط (7033) prod-1', '7033'), 1);
-assert.equal(searchableSelectFilter('خلاط (7033) prod-1', '٩٩٩٩'), 0);
-assert.equal(searchableSelectFilter('خلاط (7033) prod-1', ''), 1);
+assert.equal(searchableSelectFilter('موتور (SP-1) 622123 mat-1', '622123'), 1);
+assert.equal(searchableSelectFilter('موتور (SP-1) 622123 mat-1', '٦٢٢١٢٣'), 1);
+
+assert.equal(
+  matchSelectOptionByScan(
+    [
+      { value: 'mat-1', scanKeys: ['622123', 'SP-1'] },
+      { value: 'mat-2', scanKeys: ['SP-2'] },
+    ],
+    '622123',
+  ),
+  'mat-1',
+);
+assert.equal(
+  matchSelectOptionByScan(
+    [
+      { value: 'mat-1', scanKeys: ['622123', 'SP-1'] },
+      { value: 'mat-2', scanKeys: ['SP-2'] },
+    ],
+    '٦٢٢١٢٣',
+  ),
+  'mat-1',
+);
+assert.equal(
+  matchSelectOptionByScan(
+    [
+      { value: 'mat-1', scanKeys: ['SP-1'] },
+      { value: 'mat-2', scanKeys: ['SP-1'] },
+    ],
+    'SP-1',
+  ),
+  null,
+);
+assert.equal(
+  matchSelectOptionByScan(
+    [{ value: 'mat-1', scanKeys: ['622123'] }],
+    'موتور',
+  ),
+  null,
+);
 
 // Category-scoped accessories: empty categoryIds = all categories.
 const catalog: RepairAccessoryCatalogItem[] = [

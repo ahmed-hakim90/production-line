@@ -43,6 +43,8 @@ export const repairTechnicianService = {
       id: string;
       name: string;
       code: string;
+      barcode?: string;
+      scanKeys?: string[];
       unit: string;
       centerQty: number;
       centralQty: number;
@@ -52,7 +54,7 @@ export const repairTechnicianService = {
     const result = await repairTechnicianOpsCallable({ operation: 'catalog', jobId });
     return {
       materials: Array.isArray(result.materials) ? result.materials as Array<{
-        id: string; name: string; code: string; unit: string; centerQty: number; centralQty: number;
+        id: string; name: string; code: string; barcode?: string; scanKeys?: string[]; unit: string; centerQty: number; centralQty: number;
       }> : [],
       services: Array.isArray(result.services)
         ? result.services as Array<{ id: string; name: string; enabled: boolean }>

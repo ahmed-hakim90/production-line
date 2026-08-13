@@ -568,12 +568,30 @@ const loadPartsCatalog = async (actor: Actor, data: Record<string, unknown>) => 
     balances = balances.concat(await db.getAll(...stockRefs.slice(i, i + stockChunk)));
   }
   const qtyById = new Map(balances.map((row) => [row.id, Number(row.data()?.quantity || 0)]));
+  const partCodesByMaterial = new Map<string, string[]>();
+  for (const doc of branchPartsSnap.docs) {
+    const part = doc.data() as { materialId?: string; componentId?: string; code?: string };
+    const materialId = String(part.materialId || part.componentId || '').trim();
+    const partCode = String(part.code || '').trim();
+    if (!materialId || !partCode) continue;
+    const list = partCodesByMaterial.get(materialId) || [];
+    if (!list.includes(partCode)) list.push(partCode);
+    partCodesByMaterial.set(materialId, list);
+  }
+
   const materials = active.map((row) => {
     const item = row.data() as Record<string, unknown>;
+    const barcode = String(item.barcode || item.barcodeNormalized || '').trim();
+    const code = String(item.code || '').trim();
+    const scanKeys = Array.from(new Set(
+      [barcode, code, ...(partCodesByMaterial.get(row.id) || [])].filter(Boolean),
+    ));
     return {
       id: row.id,
       name: String(item.name || ''),
-      code: String(item.code || ''),
+      code,
+      barcode,
+      scanKeys,
       unit: String(item.baseUnit || item.unit || 'قطعة'),
       centerQty: centerWarehouseId ? Number(qtyById.get(balanceId(centerWarehouseId, row.id)) || 0) : 0,
       centralQty: centralWarehouse?.id ? Number(qtyById.get(balanceId(centralWarehouse.id, row.id)) || 0) : 0,

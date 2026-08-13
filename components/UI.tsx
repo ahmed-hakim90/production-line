@@ -31,7 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { LegacyLoadingSkeleton } from '@/src/shared/ui/skeletons';
 import { cn } from '@/lib/utils';
-import { searchableSelectFilter } from '@/lib/searchableSelectFilter';
+import { matchSelectOptionByScan, searchableSelectFilter } from '@/lib/searchableSelectFilter';
 import { tableIconActionToneClass } from '@/src/components/erp/TableIconAction';
 import { resolveButtonLook } from './buttonLook';
 
@@ -259,6 +259,10 @@ export interface SelectOption {
   /** Optional trailing chip (e.g. stock availability) rendered beside the label. */
   hint?: string;
   hintType?: SelectOptionHintType;
+  /** Extra searchable text (not shown), e.g. barcode. */
+  keywords?: string;
+  /** Exact codes a barcode gun / typed scan should select. */
+  scanKeys?: string[];
 }
 
 const SELECT_OPTION_HINT_STYLES: Record<SelectOptionHintType, string> = {
@@ -274,11 +278,19 @@ interface SearchableSelectProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  searchPlaceholder?: string;
   className?: string;
   disabled?: boolean;
   /** Open the menu when the trigger receives focus (useful for keyboard voucher flows). */
   openOnFocus?: boolean;
   onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>;
+}
+
+function optionCommandValue(opt: SelectOption): string {
+  return [opt.label, opt.hint, opt.keywords, ...(opt.scanKeys || []), opt.value]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean)
+    .join(' ');
 }
 
 export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSelectProps>(
@@ -288,6 +300,7 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
       value,
       onChange,
       placeholder,
+      searchPlaceholder,
       className = '',
       disabled = false,
       openOnFocus = false,
@@ -309,12 +322,19 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
     const selectedCommandValue = useMemo(() => {
       const opt = options.find((o) => o.value === value);
       if (!opt) return '';
-      return `${opt.label} ${opt.hint || ''} ${opt.value}`;
+      return optionCommandValue(opt);
     }, [options, value]);
 
     const handleSelect = (val: string) => {
       onChange(val);
       setOpen(false);
+    };
+
+    const selectByScan = (raw: string) => {
+      const hit = matchSelectOptionByScan(options, raw);
+      if (!hit) return false;
+      handleSelect(hit);
+      return true;
     };
 
     const handleClear = (e: React.MouseEvent<HTMLElement>) => {
@@ -442,7 +462,12 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
             value={cmdValue}
             onValueChange={setCmdValue}
           >
-            <CommandInput placeholder={t('shared.searchPlaceholder')} />
+            <CommandInput
+              placeholder={searchPlaceholder || resolvedPlaceholder || t('shared.searchPlaceholder')}
+              onInput={(event) => {
+                selectByScan((event.target as HTMLInputElement).value);
+              }}
+            />
             <CommandList className="max-h-[min(50dvh,18rem)] overscroll-contain">
               <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
               <CommandGroup>
@@ -450,7 +475,7 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
                   <CommandItem
                     key={opt.value || `opt-${idx}`}
                     // cmdk filters by `value`; include id so items stay unique when labels repeat (e.g. product names).
-                    value={`${opt.label} ${opt.hint || ''} ${opt.value}`}
+                    value={optionCommandValue(opt)}
                     onSelect={() => handleSelect(opt.value)}
                     className="min-h-11 touch-manipulation"
                   >

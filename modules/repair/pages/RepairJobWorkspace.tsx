@@ -188,11 +188,13 @@ export const RepairJobWorkspace: React.FC = () => {
             id: row.id,
             name: row.name,
             code: row.code,
+            barcode: row.barcode,
+            scanKeys: row.scanKeys,
             type: 'raw_material',
             baseUnit: 'piece',
             isActive: true,
             createdAt: '',
-          })));
+          } as Material & { scanKeys?: string[] })));
           setCenterBalances(new Map(rows.map((row) => [row.id, row.centerQty])));
           setCentralBalances(new Map(rows.map((row) => [row.id, row.centralQty])));
           setTechnicianServices(services.map((row) => ({ ...row, price: 0 })));
@@ -334,11 +336,21 @@ export const RepairJobWorkspace: React.FC = () => {
       const centralQty = Number(centralBalances.get(id) || 0);
       const availability = resolvePartAvailabilityBadge(centerQty, centralQty);
       const code = material.code ? ` (${material.code})` : '';
+      const extraKeys = Array.isArray((material as Material & { scanKeys?: string[] }).scanKeys)
+        ? (material as Material & { scanKeys?: string[] }).scanKeys || []
+        : [];
+      const scanKeys = Array.from(new Set(
+        [material.barcode, material.code, ...extraKeys]
+          .map((key) => String(key || '').trim())
+          .filter(Boolean),
+      ));
       return {
         value: id,
         label: `${material.name}${code}`,
         hint: formatPartAvailabilityPickerHint(availability, centerQty, centralQty),
         hintType: repairPartAvailabilityChipType(availability),
+        keywords: scanKeys.join(' '),
+        scanKeys,
         availability,
       };
     });
@@ -953,10 +965,14 @@ export const RepairJobWorkspace: React.FC = () => {
                       label: opt.label,
                       hint: opt.hint,
                       hintType: opt.hintType,
+                      keywords: opt.keywords,
+                      scanKeys: opt.scanKeys,
                     }))}
                     value={selectedMaterialId}
                     onChange={setSelectedMaterialId}
-                    placeholder="ابحث واختر قطعة"
+                    placeholder="ابحث أو امسح الباركود"
+                    searchPlaceholder="ابحث أو امسح الباركود"
+                    openOnFocus
                     disabled={!canEditWorkshop || !actionState?.canUseParts || !hasBranchWarehouse}
                   />
                 </div>
