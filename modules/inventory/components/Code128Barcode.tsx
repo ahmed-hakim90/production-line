@@ -8,6 +8,8 @@ type Props = {
   displayValue?: boolean;
   margin?: number;
   className?: string;
+  /** Stretch bars to the container width (when QR is off). */
+  fillWidth?: boolean;
 };
 
 /** Linear Code128 barcode for warehouse labels (gun-scanner friendly). */
@@ -18,6 +20,7 @@ export function Code128Barcode({
   displayValue = true,
   margin = 2,
   className,
+  fillWidth = false,
 }: Props) {
   const ref = useRef<SVGSVGElement>(null);
   const code = String(value || '').trim();
@@ -39,7 +42,7 @@ export function Code128Barcode({
       const svgHeight = svg.getAttribute('height');
       if (svgWidth && svgHeight) {
         svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+        svg.setAttribute('preserveAspectRatio', fillWidth ? 'none' : 'xMidYMid meet');
         svg.removeAttribute('width');
         svg.removeAttribute('height');
       }
@@ -47,7 +50,7 @@ export function Code128Barcode({
       // Invalid characters for Code128 — leave empty svg
       while (ref.current.firstChild) ref.current.removeChild(ref.current.firstChild);
     }
-  }, [code, height, width, displayValue, margin]);
+  }, [code, height, width, displayValue, margin, fillWidth]);
 
   if (!code) return null;
   return (

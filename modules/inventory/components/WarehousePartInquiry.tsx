@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { withTenantPath } from '@/lib/tenantPaths';
@@ -48,6 +49,9 @@ export function WarehousePartInquiry({
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerHostId = useRef(`warehouse-scan-${Math.random().toString(36).slice(2, 9)}`).current;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const gunBufferRef = useRef('');
+  const gunTimerRef = useRef<number | null>(null);
 
   const debounced = useDebouncedValue(query.trim(), 250);
 
@@ -63,34 +67,70 @@ export function WarehousePartInquiry({
     });
   }, [balances, catalogItems, debounced, exactToken, locationBalances, locations, query]);
 
-  const commitExact = useCallback((raw: string) => {
+  const commitExact = useCallback((raw: string, announce = false) => {
     const value = String(raw || '').trim();
     setQuery(value);
     setExactToken(value || null);
-  }, []);
+    if (!announce || !value) return;
+    const lookup = resolveWarehouseScanLookup({
+      query: value,
+      exact: true,
+      balances,
+      locationBalances,
+      locations,
+      catalogItems,
+    });
+    if (lookup.status === 'not_found') {
+      toast.error(`تم قراءة «${value}» — غير موجود في هذا المخزن.`);
+      return;
+    }
+    toast.success(`تم قراءة «${value}».`);
+  }, [balances, catalogItems, locationBalances, locations]);
 
   useEffect(() => {
-    if (!cameraOpen) return;
+    if (!cameraOpen) {
+      inputRef.current?.focus();
+      return;
+    }
     let cancelled = false;
     let scanner: { stop: () => Promise<void>; clear: () => void } | null = null;
 
-    void import('html5-qrcode').then(async ({ Html5Qrcode }) => {
+    void import('html5-qrcode').then(async ({ Html5Qrcode, Html5QrcodeSupportedFormats }) => {
       if (cancelled) return;
       try {
-        const instance = new Html5Qrcode(scannerHostId);
+        const instance = new Html5Qrcode(scannerHostId, {
+          verbose: false,
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.QR_CODE,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+          ],
+          useBarCodeDetectorIfSupported: true,
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        });
         scanner = instance;
-        await instance.start(
-          { facingMode: 'environment' },
-          { fps: 8, qrbox: { width: 220, height: 220 } },
-          (decoded) => {
-            commitExact(decoded);
-            setCameraOpen(false);
-          },
-          () => undefined,
-        );
-        setCameraError(null);
+        const config = {
+          fps: 12,
+          qrbox: (viewfinderWidth: number, viewfinderHeight: number) => ({
+            width: Math.max(160, Math.floor(viewfinderWidth * 0.88)),
+            height: Math.max(72, Math.floor(viewfinderHeight * 0.42)),
+          }),
+        };
+        const onDecoded = (decoded: string) => {
+          if (cancelled) return;
+          commitExact(decoded, true);
+          setCameraOpen(false);
+        };
+        try {
+          await instance.start({ facingMode: 'environment' }, config, onDecoded, () => undefined);
+        } catch {
+          await instance.start({ facingMode: 'user' }, config, onDecoded, () => undefined);
+        }
+        if (!cancelled) setCameraError(null);
       } catch {
-        if (!cancelled) setCameraError('تعذر فتح الكاميرا. استخدم المسدس أو اكتب الكود يدوياً.');
+        if (!cancelled) setCameraError('تعذر فتح الكاميرا. استخدم مسدس الباركود أو اكتب الكود يدوياً.');
       }
     });
 
@@ -101,6 +141,45 @@ export function WarehousePartInquiry({
       }
     };
   }, [cameraOpen, commitExact, scannerHostId]);
+
+  useEffect(() => {
+    const flushGun = () => {
+      const code = gunBufferRef.current.trim();
+      gunBufferRef.current = '';
+      if (code.length < 2) return;
+      commitExact(code, true);
+      setCameraOpen(false);
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey || event.altKey || event.metaKey) return;
+      const target = event.target as HTMLElement | null;
+      const tag = String(target?.tagName || '').toUpperCase();
+      const inOtherField =
+        (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || Boolean(target?.isContentEditable))
+        && target !== inputRef.current;
+      if (inOtherField) return;
+
+      if (event.key === 'Enter') {
+        if (gunBufferRef.current.trim()) {
+          event.preventDefault();
+          flushGun();
+        }
+        return;
+      }
+      if (event.key.length !== 1) return;
+      if (target === inputRef.current) return;
+      gunBufferRef.current += event.key;
+      if (gunTimerRef.current) window.clearTimeout(gunTimerRef.current);
+      gunTimerRef.current = window.setTimeout(flushGun, 80);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (gunTimerRef.current) window.clearTimeout(gunTimerRef.current);
+    };
+  }, [commitExact]);
 
   const itemCardPath = (hit: WarehouseScanItemHit) =>
     withTenantPath(
@@ -224,11 +303,13 @@ export function WarehousePartInquiry({
     <OpsDashPanel title="استعلام قطعة / لوكيشن — بحث أو مسح" accent="inventory">
       <label className="block">
         <span className="mb-1 block text-xs font-bold text-[var(--color-text-muted)]">
-          امسح باركود القطعة أو اللوكيشن — أو ابحث بالاسم/الكود
+          مسدس الباركود: اضغط الخانة ثم امسح. الكاميرا تقرأ QR أوضح من الباركود الخطي الصغير.
         </span>
         <div className="flex flex-wrap gap-2">
           <input
-            type="search"
+            ref={inputRef}
+            type="text"
+            inputMode="search"
             value={query}
             onChange={(event) => {
               setExactToken(null);
@@ -237,12 +318,13 @@ export function WarehousePartInquiry({
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.preventDefault();
-                commitExact(query);
+                commitExact(query, true);
               }
             }}
-            placeholder="مثال: SP-2477 أو CENTRAL-A1-1"
+            placeholder="امسح الباركود أو اكتب الكود / الاسم"
             className="min-w-[16rem] flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2 text-sm"
             autoComplete="off"
+            autoFocus
           />
           <Button
             type="button"
@@ -263,7 +345,9 @@ export function WarehousePartInquiry({
           {cameraError ? (
             <p className="text-sm font-semibold text-[rgb(var(--color-danger))]">{cameraError}</p>
           ) : (
-            <p className="text-xs text-[var(--color-text-muted)]">وجّه الكاميرا لباركود القطعة أو اللوكيشن.</p>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              قرّب QR من الكاميرا وثبّت الصورة. الفوكس وهو بيتحرك على ملصق صغير طبيعي. الباركود الخطي أنسبه للمسدس.
+            </p>
           )}
         </div>
       ) : null}

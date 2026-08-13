@@ -2,8 +2,12 @@ import type { CSSProperties, ReactNode } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Code128Barcode } from './Code128Barcode';
 import {
+  DEFAULT_THERMAL_GAP_MM,
+  THERMAL_BARCODE_FACE_CLASS,
   THERMAL_BARCODE_LABEL_CLASS,
+  clampThermalGapMm,
   formatBarcodeLabelDisplayCode,
+  thermalPageHeightMm,
   type BarcodeLabelSizePreset,
 } from '../lib/barcodeLabelEngine';
 
@@ -30,13 +34,15 @@ type ThermalBarcodeLabelCardProps = {
   showQr?: boolean;
   showLinear?: boolean;
   isLast?: boolean;
+  /** Die-cut gap after the printable face (keeps multi-copy alignment). */
+  gapMm?: number;
   children?: ReactNode;
 };
 
 /**
  * Compact thermal sticker for Xprinter:
- * one CSS page = one physical label. No outer frame (thin borders dither
- * into a dashed line at 203 DPI and shift when @page size is wrong).
+ * one CSS page = printable face + die-cut gap (pitch). No outer frame
+ * (thin borders dither into a dashed line at 203 DPI).
  */
 export function ThermalBarcodeLabelCard({
   size,
@@ -47,6 +53,7 @@ export function ThermalBarcodeLabelCard({
   showQr = true,
   showLinear = true,
   isLast = false,
+  gapMm = DEFAULT_THERMAL_GAP_MM,
   children,
 }: ThermalBarcodeLabelCardProps) {
   const compact = size.heightMm <= 30;
@@ -58,17 +65,25 @@ export function ThermalBarcodeLabelCard({
     ? subtitle
     : undefined;
 
-  const insetMm = compact ? 1.4 : 2;
-  const qrMm = compact ? 7 : Math.min(11, size.heightMm * 0.28);
-  const barMm = compact ? 5.6 : Math.min(8.5, size.heightMm * 0.22);
+  const gap = clampThermalGapMm(gapMm);
+  const pageHeightMm = thermalPageHeightMm(size.heightMm, gap);
+  const insetMm = compact ? 1.2 : 2;
+  const barcodeOnly = Boolean(showLinear && !showQr);
+  const qrMm = compact
+    ? Math.min(10.5, Math.max(6.5, size.heightMm * 0.34))
+    : Math.min(12, size.heightMm * 0.3);
+  const barMm = barcodeOnly
+    ? (compact ? Math.min(12, size.heightMm * 0.4) : Math.min(16, size.heightMm * 0.42))
+    : (compact ? 6 : Math.min(9, size.heightMm * 0.24));
   const qrPx = mmToPx(qrMm);
   const barHeightPx = mmToPx(barMm);
 
   const pageStyle: CSSProperties = {
     width: `${size.widthMm}mm`,
-    height: `${size.heightMm}mm`,
+    height: `${pageHeightMm}mm`,
     boxSizing: 'border-box',
-    padding: `${insetMm}mm`,
+    margin: 0,
+    padding: 0,
     overflow: 'hidden',
     background: '#fff',
     color: '#0b1220',
@@ -76,6 +91,15 @@ export function ThermalBarcodeLabelCard({
     breakAfter: isLast ? 'auto' : 'page',
     pageBreakInside: 'avoid',
     breakInside: 'avoid',
+  };
+
+  const faceStyle: CSSProperties = {
+    width: `${size.widthMm}mm`,
+    height: `${size.heightMm}mm`,
+    boxSizing: 'border-box',
+    padding: `${insetMm}mm`,
+    overflow: 'hidden',
+    background: '#fff',
   };
 
   const innerStyle: CSSProperties = {
@@ -93,7 +117,8 @@ export function ThermalBarcodeLabelCard({
 
   return (
     <div className={THERMAL_BARCODE_LABEL_CLASS} style={pageStyle}>
-      <div style={innerStyle}>
+      <div className={THERMAL_BARCODE_FACE_CLASS} style={faceStyle}>
+        <div style={innerStyle}>
         <div
           style={{
             width: '100%',
@@ -178,11 +203,12 @@ export function ThermalBarcodeLabelCard({
             {showLinear ? (
               <div
                 style={{
-                  flex: 1,
+                  flex: barcodeOnly ? 'none' : 1,
+                  width: barcodeOnly ? '100%' : undefined,
                   minWidth: 0,
                   height: `${barMm}mm`,
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'stretch',
                   overflow: 'hidden',
                 }}
               >
@@ -192,6 +218,7 @@ export function ThermalBarcodeLabelCard({
                   width={compact ? 1.05 : 1.2}
                   displayValue={false}
                   margin={0}
+                  fillWidth={barcodeOnly}
                 />
               </div>
             ) : null}
@@ -216,6 +243,7 @@ export function ThermalBarcodeLabelCard({
             ) : null}
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );

@@ -26,10 +26,11 @@ type Props = {
   printedAt?: string;
   labelSizeId?: BarcodeLabelSizeId | string;
   labelCustomMm?: BarcodeLabelCustomMm;
+  gapMm?: number;
 };
 
 export const LocationBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
-  ({ labels, printSettings, printedAt, labelSizeId, labelCustomMm }, ref) => {
+  ({ labels, printSettings, printedAt, labelSizeId, labelCustomMm, gapMm }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
     const doc = resolvePrintDocumentConfig(ps, 'locationBarcodeLabel');
     const font = resolvePrintFont(ps);
@@ -58,6 +59,7 @@ export const LocationBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>
                 showQr={showQr}
                 showLinear={showLinear}
                 isLast={index === labels.length - 1}
+                gapMm={gapMm}
               />
             );
           })}
@@ -131,8 +133,8 @@ export const LocationBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>
                     <QRCodeSVG value={value} size={72} includeMargin={false} level="M" />
                   ) : null}
                   {showLinear && value ? (
-                    <div style={{ flex: 1, textAlign: 'start', overflow: 'hidden', height: 44 }}>
-                      <Code128Barcode value={value} height={44} width={1.35} displayValue={false} margin={0} />
+                    <div style={{ flex: 1, width: showQr ? undefined : '100%', textAlign: 'start', overflow: 'hidden', height: 44 }}>
+                      <Code128Barcode value={value} height={44} width={1.35} displayValue={false} margin={0} fillWidth={!showQr} />
                     </div>
                   ) : null}
                 </div>

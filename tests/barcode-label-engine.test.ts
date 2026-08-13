@@ -10,7 +10,10 @@ import {
   formatDriverStockSize,
   mmToDriverInches,
   clampThermalLabelMm,
+  clampThermalGapMm,
+  thermalPageHeightMm,
   DEFAULT_BARCODE_LABEL_SIZE_ID,
+  DEFAULT_THERMAL_GAP_MM,
 } from '../modules/inventory/lib/barcodeLabelEngine.ts';
 import { DEFAULT_PRINT_TEMPLATE } from '../utils/dashboardConfig.ts';
 import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentConfig.ts';
@@ -63,11 +66,18 @@ import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentC
   assert.equal(resolveBarcodeLabelSize('40x30').layout, 'thermal');
   assert.equal(resolveBarcodeLabelSize('a4').layout, 'grid');
   const thermalCss = buildBarcodeLabelPageStyle('40x30');
-  assert.match(thermalCss, /40mm 30mm/);
+  assert.equal(DEFAULT_THERMAL_GAP_MM, 2);
+  assert.match(thermalCss, /40mm 32mm/);
   assert.match(thermalCss, /margin: 0/);
   assert.match(thermalCss, /thermal-barcode-label/);
   assert.match(thermalCss, /overflow: hidden/);
   assert.doesNotMatch(thermalCss, /size: A4/);
+  const noGapCss = buildBarcodeLabelPageStyle('40x30', null, 0);
+  assert.match(noGapCss, /40mm 30mm/);
+  assert.equal(clampThermalGapMm(Number.NaN), DEFAULT_THERMAL_GAP_MM);
+  assert.equal(clampThermalGapMm(-1), 0);
+  assert.equal(clampThermalGapMm(99), 8);
+  assert.equal(thermalPageHeightMm(30, 2), 32);
   const a4Css = buildBarcodeLabelPageStyle('a4');
   assert.match(a4Css, /A4/);
 }
@@ -88,8 +98,10 @@ import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentC
   assert.equal(formatDriverStockSize(40, 30), '1.57 in × 1.18 in');
   assert.equal(clampThermalLabelMm(3, 40), 15);
   assert.equal(clampThermalLabelMm(400, 40), 120);
-  const customCss = buildBarcodeLabelPageStyle('custom', { widthMm: 32, heightMm: 25 });
+  const customCss = buildBarcodeLabelPageStyle('custom', { widthMm: 32, heightMm: 25 }, 0);
   assert.match(customCss, /32mm 25mm/);
+  const customWithGapCss = buildBarcodeLabelPageStyle('custom', { widthMm: 32, heightMm: 25 }, 2);
+  assert.match(customWithGapCss, /32mm 27mm/);
 }
 
 console.log('barcode-label-engine.test.ts: ok');

@@ -62,6 +62,15 @@ export function clampThermalLabelMm(value: number, fallback: number): number {
   return Math.max(15, Math.min(120, Math.round(value)));
 }
 
+export function clampThermalGapMm(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_THERMAL_GAP_MM;
+  return Math.max(0, Math.min(8, Math.round(value * 10) / 10));
+}
+
+export function thermalPageHeightMm(labelHeightMm: number, gapMm?: number): number {
+  return Number(labelHeightMm) + clampThermalGapMm(gapMm ?? DEFAULT_THERMAL_GAP_MM);
+}
+
 function thermalPreset(
   id: Exclude<BarcodeLabelSizeId, 'a4' | 'custom'>,
   widthMm: number,
@@ -105,9 +114,12 @@ export const BARCODE_LABEL_SIZE_PRESETS: readonly BarcodeLabelSizePreset[] = [
 ];
 
 export const DEFAULT_BARCODE_LABEL_SIZE_ID: BarcodeLabelSizeId = '40x30';
+/** Typical die-cut roll gap. Page pitch = label height + gap so copies stay aligned. */
+export const DEFAULT_THERMAL_GAP_MM = 2;
 
-/** Print-iframe class: one physical sticker = one CSS page. */
+/** Print-iframe class: one physical sticker + gap = one CSS page. */
 export const THERMAL_BARCODE_LABEL_CLASS = 'thermal-barcode-label';
+export const THERMAL_BARCODE_FACE_CLASS = 'thermal-barcode-label-face';
 
 /** Human-readable code on the label (scan value stays original). */
 export function formatBarcodeLabelDisplayCode(code: string): string {
@@ -143,6 +155,7 @@ export function resolveBarcodeLabelSize(
 export function buildBarcodeLabelPageStyle(
   sizeId?: string | null,
   customMm?: BarcodeLabelCustomMm | null,
+  gapMm: number = DEFAULT_THERMAL_GAP_MM,
 ): string {
   const size = resolveBarcodeLabelSize(sizeId, customMm);
   if (size.layout === 'grid') {
@@ -156,18 +169,25 @@ export function buildBarcodeLabelPageStyle(
       }
     `;
   }
+  const gap = clampThermalGapMm(gapMm);
+  const pageHeightMm = thermalPageHeightMm(size.heightMm, gap);
   return `
-    @page { size: ${size.widthMm}mm ${size.heightMm}mm; margin: 0; }
+    @page { size: ${size.widthMm}mm ${pageHeightMm}mm; margin: 0; }
     html, body {
       width: ${size.widthMm}mm;
       margin: 0;
       padding: 0;
       background: #fff;
+      font-size: 0;
+      line-height: 0;
     }
     *, *::before, *::after { box-sizing: border-box; }
     .${THERMAL_BARCODE_LABEL_CLASS} {
+      display: block;
       width: ${size.widthMm}mm;
-      height: ${size.heightMm}mm;
+      height: ${pageHeightMm}mm;
+      margin: 0;
+      padding: 0;
       overflow: hidden;
       page-break-after: always;
       break-after: page;
@@ -177,6 +197,14 @@ export function buildBarcodeLabelPageStyle(
     .${THERMAL_BARCODE_LABEL_CLASS}:last-child {
       page-break-after: auto;
       break-after: auto;
+    }
+    .${THERMAL_BARCODE_FACE_CLASS} {
+      display: block;
+      width: ${size.widthMm}mm;
+      height: ${size.heightMm}mm;
+      overflow: hidden;
+      font-size: 12px;
+      line-height: 1.1;
     }
     @media print {
       html, body {
@@ -188,9 +216,14 @@ export function buildBarcodeLabelPageStyle(
       * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .${THERMAL_BARCODE_LABEL_CLASS} {
         width: ${size.widthMm}mm !important;
-        height: ${size.heightMm}mm !important;
+        height: ${pageHeightMm}mm !important;
         max-width: ${size.widthMm}mm !important;
-        max-height: ${size.heightMm}mm !important;
+        max-height: ${pageHeightMm}mm !important;
+        overflow: hidden !important;
+      }
+      .${THERMAL_BARCODE_FACE_CLASS} {
+        width: ${size.widthMm}mm !important;
+        height: ${size.heightMm}mm !important;
         overflow: hidden !important;
       }
       .${THERMAL_BARCODE_LABEL_CLASS} svg,
