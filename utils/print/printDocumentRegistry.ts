@@ -39,6 +39,8 @@ export const PRINT_DOCUMENT_TYPE_IDS: readonly PrintDocumentTypeId[] = [
   'catalogProductDetail',
   'workOrder',
   'productionIssue',
+  'itemBarcodeLabel',
+  'locationBarcodeLabel',
 ] as const;
 
 export const PRINT_CUSTOM_LINES_MAX = 5;
@@ -292,6 +294,28 @@ export const PRINT_DOCUMENT_REGISTRY: PrintDocumentRegistryEntry[] = [
       { key: 'lines', labelAr: 'بنود الصرف', defaultVisible: true, descriptionAr: 'جدول المكونات والكميات', icon: 'list_alt' },
       { key: 'notes', labelAr: 'الملاحظات', defaultVisible: true, descriptionAr: 'ملاحظات الإذن', icon: 'notes' },
       COMMON_SIGNATURES,
+    ],
+  },
+  {
+    id: 'itemBarcodeLabel',
+    labelAr: 'ملصق باركود صنف',
+    fields: [
+      { key: 'itemName', labelAr: 'اسم الصنف', defaultVisible: true, descriptionAr: 'اسم القطعة على الملصق', icon: 'label' },
+      { key: 'itemCode', labelAr: 'كود الصنف', defaultVisible: true, descriptionAr: 'كود الصنف النصي', icon: 'tag' },
+      { key: 'warehouse', labelAr: 'المخزن', defaultVisible: true, descriptionAr: 'اسم المخزن على الملصق', icon: 'warehouse' },
+      { key: 'qrCode', labelAr: 'رمز QR', defaultVisible: true, descriptionAr: 'رمز QR للمسح بالكاميرا', icon: 'qr_code' },
+      { key: 'code128', labelAr: 'باركود Code128', defaultVisible: true, descriptionAr: 'باركود خطي لأجهزة المسح', icon: 'barcode' },
+    ],
+  },
+  {
+    id: 'locationBarcodeLabel',
+    labelAr: 'ملصق باركود لوكيشن',
+    fields: [
+      { key: 'locationCode', labelAr: 'كود اللوكيشن', defaultVisible: true, descriptionAr: 'كود الرف الممسوح', icon: 'tag' },
+      { key: 'rack', labelAr: 'الراك / الرف', defaultVisible: true, descriptionAr: 'اسم الراك والرف', icon: 'shelves' },
+      { key: 'warehouse', labelAr: 'المخزن', defaultVisible: true, descriptionAr: 'اسم المخزن على الملصق', icon: 'warehouse' },
+      { key: 'qrCode', labelAr: 'رمز QR', defaultVisible: true, descriptionAr: 'رمز QR للمسح بالكاميرا', icon: 'qr_code' },
+      { key: 'code128', labelAr: 'باركود Code128', defaultVisible: true, descriptionAr: 'باركود خطي لأجهزة المسح', icon: 'barcode' },
     ],
   },
 ];

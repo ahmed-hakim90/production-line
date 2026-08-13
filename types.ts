@@ -1370,7 +1370,9 @@ export type PrintDocumentTypeId =
   | "repairDeliveryReceipt"
   | "catalogProductDetail"
   | "workOrder"
-  | "productionIssue";
+  | "productionIssue"
+  | "itemBarcodeLabel"
+  | "locationBarcodeLabel";
 
 export type PrintCustomLine = {
   id: string;

@@ -34,6 +34,7 @@ export type StockCountCatalogMaterial = {
   unit?: string;
   categoryName?: string;
   minStock?: number;
+  barcode?: string;
 };
 
 export type StockCountSheetCreateCandidate = {

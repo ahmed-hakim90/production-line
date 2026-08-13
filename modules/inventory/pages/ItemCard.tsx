@@ -17,6 +17,7 @@ import { movementFateLabel, movementPathLabel } from '../lib/itemMovementTrace';
 import type {
   InventoryItemType,
   StockItemBalance,
+  StockLocationBalance,
   StockTransaction,
   Warehouse,
 } from '../types';
@@ -25,6 +26,8 @@ import {
   type ItemCardBomLine,
   type ItemCardPrintModel,
 } from '../components/ItemCardPrint';
+import { ItemBarcodeLabelPrint, type ItemBarcodeLabel } from '../components/ItemBarcodeLabelPrint';
+import { resolveItemLabelCode } from '../lib/warehouseScanLookup';
 import { ProductBomCountCardPreviewModal } from '../../production/components/ProductBomCountCardPreviewModal';
 import { buildProductBomCountCards } from '../../production/lib/buildProductBomCountCards';
 import type { ProductBomCountCard } from '../../production/components/ProductBomCountCardPrint';
@@ -42,6 +45,7 @@ type CatalogOption = {
   unit?: string;
   category?: string;
   itemType: InventoryItemType;
+  barcode?: string;
 };
 
 type MovementCursorState = {
@@ -99,6 +103,7 @@ export const ItemCard: React.FC = () => {
   const [warehouseId, setWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
   const [loading, setLoading] = useState(false);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
+  const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
   const [bomLines, setBomLines] = useState<ItemCardBomLine[]>([]);
   const [movements, setMovements] = useState<StockTransaction[]>([]);
   const [hasMoreMovements, setHasMoreMovements] = useState(false);
@@ -113,12 +118,19 @@ export const ItemCard: React.FC = () => {
   const [countPreviewOpen, setCountPreviewOpen] = useState(false);
   const [countLoading, setCountLoading] = useState(false);
   const [countWarning, setCountWarning] = useState<string | null>(null);
+  const [barcodeLabels, setBarcodeLabels] = useState<ItemBarcodeLabel[]>([]);
 
   const printRef = useRef<HTMLDivElement>(null);
+  const barcodePrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({
     contentRef: printRef,
     printSettings,
     documentTitle: 'كارت الصنف',
+  });
+  const handleBarcodePrint = useManagedPrint({
+    contentRef: barcodePrintRef,
+    printSettings,
+    documentTitle: 'ملصق باركود صنف',
   });
 
   const warehouseNameById = useMemo(() => {
@@ -138,6 +150,7 @@ export const ItemCard: React.FC = () => {
         unit: 'piece',
         category: p.category || '',
         itemType: 'finished_good' as const,
+        barcode: String((p as { barcode?: string }).barcode || ''),
       }));
     }
     return materials
@@ -149,6 +162,7 @@ export const ItemCard: React.FC = () => {
         unit: m.baseUnit || 'piece',
         category: m.categoryName || m.type || '',
         itemType: 'material' as const,
+        barcode: String((m as { barcode?: string }).barcode || ''),
       }))
       .filter((m) => m.id);
   }, [itemType, products, materials]);
@@ -179,6 +193,17 @@ export const ItemCard: React.FC = () => {
       }))
       .sort((a, b) => String(a.warehouseName).localeCompare(String(b.warehouseName), 'ar'));
   }, [balances, selected, warehouseId, warehouseNameById]);
+
+  const itemLocationRows = useMemo(() => {
+    if (!selected) return [];
+    return locationBalances
+      .filter((row) => String(row.itemId || '') === selected.id)
+      .filter((row) => !warehouseId || row.warehouseId === warehouseId)
+      .sort((a, b) =>
+        String(a.locationCode || '').localeCompare(String(b.locationCode || ''), 'ar')
+        || Number(b.quantity || 0) - Number(a.quantity || 0),
+      );
+  }, [locationBalances, selected, warehouseId]);
 
   const printModel = useMemo((): ItemCardPrintModel | null => {
     if (!selected) return null;
@@ -233,8 +258,12 @@ export const ItemCard: React.FC = () => {
       const ownerType = itemType === 'finished_good' ? 'product' : 'material';
       const movementTypes = itemMovementTypes(itemType);
 
-      const [allBalances, bomResult, ...movementPages] = await Promise.all([
+      const [allBalances, locBalances, bomResult, ...movementPages] = await Promise.all([
         stockService.getBalances(warehouseId || undefined),
+        stockService.getLocationBalances({
+          warehouseId: warehouseId || undefined,
+          itemId,
+        }).catch(() => [] as StockLocationBalance[]),
         bomService.getActiveBomWithLegacyFallback(ownerType, itemId).catch(() => ({ items: [] })),
         ...movementTypes.map((type) =>
           stockService.getTransactionsPaged({
@@ -248,6 +277,7 @@ export const ItemCard: React.FC = () => {
       ]);
 
       setBalances(allBalances);
+      setLocationBalances(locBalances);
 
       const materialById = new Map(
         materials.map((m) => [String(m.id || ''), m] as const).filter(([id]) => Boolean(id)),
@@ -461,6 +491,35 @@ export const ItemCard: React.FC = () => {
               كارت جرد المكونات
             </Button>
           ) : null}
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!selected}
+            onClick={() => {
+              if (!selected) return;
+              const barcodeValue = resolveItemLabelCode({
+                itemCode: selected.code,
+                barcode: selected.barcode,
+              });
+              if (!barcodeValue) {
+                toast.error('لا يوجد كود قابل للطباعة لهذا الصنف.');
+                return;
+              }
+              setBarcodeLabels([
+                {
+                  itemCode: selected.code,
+                  itemName: selected.name,
+                  barcodeValue,
+                  warehouseName: warehouseId
+                    ? warehouseNameById.get(warehouseId)
+                    : undefined,
+                },
+              ]);
+              window.setTimeout(() => handleBarcodePrint(), 50);
+            }}
+          >
+            طباعة ملصق باركود
+          </Button>
           <Button type="button" disabled={!printModel} onClick={() => handlePrint()}>
             طباعة الكارت
           </Button>
@@ -557,6 +616,37 @@ export const ItemCard: React.FC = () => {
                           {fmt(Number(row.availableQty ?? row.quantity ?? 0))}
                         </td>
                         <td className="p-2 text-sm text-center tabular-nums">{fmt(Number(row.minStock || 0))}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </OpsDashPanel>
+
+          <OpsDashPanel title="الأرصدة حسب اللوكيشن" accent="inventory">
+            {itemLocationRows.length === 0 ? (
+              <p className="text-sm text-[var(--color-text-muted)]">لا يوجد تفصيل مواقع لهذا الصنف.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="erp-table w-full">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">المخزن</th>
+                      <th className="erp-th">اللوكيشن</th>
+                      <th className="erp-th">الراك</th>
+                      <th className="erp-th text-center">الكمية</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {itemLocationRows.map((row) => (
+                      <tr key={row.id || `${row.locationId}-${row.itemId}`}>
+                        <td className="p-2 text-sm">
+                          {warehouseNameById.get(row.warehouseId) || row.warehouseName || row.warehouseId}
+                        </td>
+                        <td className="p-2 text-sm font-mono">{row.locationCode || '—'}</td>
+                        <td className="p-2 text-sm">{row.rackName || row.rack || '—'}</td>
+                        <td className="p-2 text-sm text-center tabular-nums font-bold">{fmt(Number(row.quantity || 0))}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -673,6 +763,7 @@ export const ItemCard: React.FC = () => {
       {/* Off-screen printable surface */}
       <div className="fixed -left-[10000px] top-0" aria-hidden>
         <ItemCardPrint ref={printRef} card={printModel} printSettings={printSettings} />
+        <ItemBarcodeLabelPrint ref={barcodePrintRef} labels={barcodeLabels} printSettings={printSettings} />
       </div>
 
       <ProductBomCountCardPreviewModal

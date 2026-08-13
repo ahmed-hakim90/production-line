@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -19,8 +19,10 @@ import {
 import type {
   SparePartsReplenishmentRequest,
   StockItemBalance,
+  StockLocationBalance,
   StockTransaction,
   Warehouse,
+  WarehouseLocation,
   WarehouseRole,
 } from '../types';
 import type { InventoryTransferRequest } from '../types';
@@ -47,8 +49,12 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors';
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
 import { WarehousePartInquiry } from '../components/WarehousePartInquiry';
+import { ItemBarcodeLabelPrint, type ItemBarcodeLabel } from '../components/ItemBarcodeLabelPrint';
 import { loadWarehouseCountLocationLabels, resolveWarehouseItemLocation } from '../lib/warehouseCountSheet';
 import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
+import { resolveItemLabelCode } from '../lib/warehouseScanLookup';
+import { warehouseLocationService } from '../services/warehouseLocationService';
+import { useManagedPrint } from '../../../utils/printManager';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -235,6 +241,14 @@ export const WarehouseWorkspace: React.FC = () => {
     || can('inventory.view');
   const canCreateRecall = can('sparePartsRecall.create');
   const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
+  const printSettings = useAppStore((s) => s.systemSettings?.printTemplate);
+  const itemLabelsPrintRef = useRef<HTMLDivElement>(null);
+  const [itemBarcodeLabels, setItemBarcodeLabels] = useState<ItemBarcodeLabel[]>([]);
+  const handleItemLabelsPrint = useManagedPrint({
+    contentRef: itemLabelsPrintRef,
+    printSettings,
+    documentTitle: 'ملصقات باركود الأصناف',
+  });
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
@@ -268,6 +282,8 @@ export const WarehouseWorkspace: React.FC = () => {
   const [addPartOpen, setAddPartOpen] = useState(false);
   const [countImportOpen, setCountImportOpen] = useState(false);
   const [locationByKey, setLocationByKey] = useState<Map<string, string>>(() => new Map());
+  const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
+  const [warehouseLocations, setWarehouseLocations] = useState<WarehouseLocation[]>([]);
 
   const load = useCallback(async () => {
     const id = String(warehouseId || '').trim();
@@ -286,6 +302,8 @@ export const WarehouseWorkspace: React.FC = () => {
         setLinkedBranch(null);
         setBranchParts([]);
         setLocationByKey(new Map());
+        setLocationBalances([]);
+        setWarehouseLocations([]);
         setError('المخزن غير موجود.');
         return;
       }
@@ -297,6 +315,8 @@ export const WarehouseWorkspace: React.FC = () => {
         setLinkedBranch(null);
         setBranchParts([]);
         setLocationByKey(new Map());
+        setLocationBalances([]);
+        setWarehouseLocations([]);
         setAccessDenied(true);
         setError('ليس لديك صلاحية عرض هذا المخزن.');
         return;
@@ -316,6 +336,8 @@ export const WarehouseWorkspace: React.FC = () => {
           setLinkedBranch(null);
           setBranchParts([]);
           setLocationByKey(new Map());
+          setLocationBalances([]);
+          setWarehouseLocations([]);
           setAccessDenied(true);
           setError('هذا المخزن غير مرتبط بفرعك.');
           return;
@@ -326,7 +348,7 @@ export const WarehouseWorkspace: React.FC = () => {
       setWarehouse(wh);
       setLinkedBranch(branch);
 
-      const [bal, tx, transfers, spr, parts, materials, locations] = await Promise.all([
+      const [bal, tx, transfers, spr, parts, materials, locations, locBalances, shelves] = await Promise.all([
         stockService.getBalances(id).catch(() => [] as StockItemBalance[]),
         stockService.getTransactions(id).catch(() => [] as StockTransaction[]),
         canViewInventory
@@ -340,10 +362,14 @@ export const WarehouseWorkspace: React.FC = () => {
           ? materialService.getAll().catch(() => [])
           : Promise.resolve([]),
         loadWarehouseCountLocationLabels(id).catch(() => new Map<string, string>()),
+        stockService.getLocationBalances({ warehouseId: id }).catch(() => [] as StockLocationBalance[]),
+        warehouseLocationService.getAll(id).catch(() => [] as WarehouseLocation[]),
       ]);
       setCountBalances(bal);
       setBalances(bal.slice(0, 30));
       setLocationByKey(locations);
+      setLocationBalances(locBalances);
+      setWarehouseLocations(shelves);
       setBranchParts(parts);
       setCatalogMaterials(
         (materials || [])
@@ -355,6 +381,7 @@ export const WarehouseWorkspace: React.FC = () => {
             unit: String(row.baseUnit || 'piece'),
             categoryName: String(row.categoryName || ''),
             minStock: Number(row.minStock || 0),
+            barcode: String(row.barcode || ''),
           })),
       );
       setTransactions(tx.slice(0, 20));
@@ -544,9 +571,18 @@ export const WarehouseWorkspace: React.FC = () => {
       <p className="text-lg font-bold text-[var(--color-text)] -mt-2 mb-2">{warehouse.name}</p>
 
       <WarehousePartInquiry
+        warehouseId={warehouse.id || ''}
+        warehouseName={warehouse.name}
         balances={countBalances}
-        locationByKey={locationByKey}
-        catalogItems={catalogMaterials}
+        locationBalances={locationBalances}
+        locations={warehouseLocations}
+        catalogItems={catalogMaterials.map((row) => ({
+          id: row.id,
+          code: row.code,
+          name: row.name,
+          barcode: row.barcode,
+          itemType: 'material' as const,
+        }))}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -686,6 +722,40 @@ export const WarehouseWorkspace: React.FC = () => {
                 }}
               >
                 {printing ? 'جاري تجهيز الجرد…' : 'طباعة الجرد'}
+              </Button>
+            ) : null}
+            {warehouse.id && countBalances.length > 0 ? (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  const labels: ItemBarcodeLabel[] = countBalances
+                    .filter((row) => String(row.itemCode || '').trim())
+                    .map((row) => {
+                      const cat = catalogMaterials.find((m) => m.id === row.itemId);
+                      return {
+                        itemCode: String(row.itemCode || ''),
+                        itemName: String(row.itemName || ''),
+                        barcodeValue: resolveItemLabelCode({
+                          itemCode: row.itemCode,
+                          barcode: cat?.barcode,
+                        }),
+                        warehouseName: warehouse.name,
+                      };
+                    })
+                    .filter((row) => row.barcodeValue);
+                  if (labels.length === 0) {
+                    toast.error('لا توجد أكواد قابلة للطباعة.');
+                    return;
+                  }
+                  if (labels.length > 100 && !window.confirm(`سيتم طباعة ${labels.length} ملصق. متابعة؟`)) {
+                    return;
+                  }
+                  setItemBarcodeLabels(labels);
+                  window.setTimeout(() => handleItemLabelsPrint(), 50);
+                }}
+              >
+                طباعة ملصقات باركود الأصناف
               </Button>
             ) : null}
           </div>
@@ -882,6 +952,13 @@ export const WarehouseWorkspace: React.FC = () => {
         />
       ) : null}
       {countSheetHost}
+      <div className="hidden">
+        <ItemBarcodeLabelPrint
+          ref={itemLabelsPrintRef}
+          labels={itemBarcodeLabels}
+          printSettings={printSettings}
+        />
+      </div>
     </ModuleOpsPageShell>
   );
 };

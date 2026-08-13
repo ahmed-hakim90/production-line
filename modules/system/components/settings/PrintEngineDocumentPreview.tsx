@@ -12,6 +12,8 @@ import { SparePartsInventoryCountPrint } from '../../../repair/components/SpareP
 import { WarehouseCountSheetPrint } from '../../../inventory/components/WarehouseCountSheetPrint';
 import { StockTransferPrint } from '../../../inventory/components/StockTransferPrint';
 import { ItemCardPrint } from '../../../inventory/components/ItemCardPrint';
+import { ItemBarcodeLabelPrint } from '../../../inventory/components/ItemBarcodeLabelPrint';
+import { LocationBarcodeLabelPrint } from '../../../inventory/components/LocationBarcodeLabelPrint';
 import { SuppliesReceiptPrint } from '../../../inventory/components/SuppliesReceiptPrint';
 import { ProductionIssuePrint } from '../../../inventory/components/ProductionIssuePrint';
 import { AccountingReportPrint } from '../../../accounting/components/AccountingReportPrint';
@@ -33,6 +35,8 @@ import {
   PRINT_PREVIEW_BRANCH_NAME,
   PRINT_PREVIEW_CATALOG_PRODUCT,
   PRINT_PREVIEW_ITEM_CARD,
+  PRINT_PREVIEW_ITEM_BARCODE_LABELS,
+  PRINT_PREVIEW_LOCATION_BARCODE_LABELS,
   PRINT_PREVIEW_MISSING_COMPONENTS,
   PRINT_PREVIEW_PAYSLIP,
   PRINT_PREVIEW_PRODUCT_BOM_COUNT,
@@ -312,6 +316,22 @@ export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
             ref={ref}
             order={PRINT_PREVIEW_PRODUCTION_ISSUE as any}
             sourceLabel="WO-DEMO-001"
+            printSettings={printSettings}
+          />
+        );
+      case 'itemBarcodeLabel':
+        return (
+          <ItemBarcodeLabelPrint
+            ref={ref}
+            labels={PRINT_PREVIEW_ITEM_BARCODE_LABELS}
+            printSettings={printSettings}
+          />
+        );
+      case 'locationBarcodeLabel':
+        return (
+          <LocationBarcodeLabelPrint
+            ref={ref}
+            labels={PRINT_PREVIEW_LOCATION_BARCODE_LABELS}
             printSettings={printSettings}
           />
         );

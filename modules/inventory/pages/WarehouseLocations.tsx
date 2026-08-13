@@ -26,6 +26,8 @@ import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 import { ImportItemLocationsModal } from '../components/ImportItemLocationsModal';
+import { LocationBarcodeLabelPrint, type LocationBarcodeLabel } from '../components/LocationBarcodeLabelPrint';
+import { useManagedPrint } from '../../../utils/printManager';
 
 type ShelfMode = 'single' | 'numeric_range' | 'alpha_range';
 type LocationModal = null | 'rack' | 'editRack' | 'shelves' | 'import';
@@ -60,7 +62,15 @@ export const WarehouseLocations: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const printSettings = systemSettings?.printTemplate;
   const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const locationPrintRef = useRef<HTMLDivElement>(null);
+  const [locationLabels, setLocationLabels] = useState<LocationBarcodeLabel[]>([]);
+  const handleLocationPrint = useManagedPrint({
+    contentRef: locationPrintRef,
+    printSettings,
+    documentTitle: 'ملصقات باركود اللوكيشن',
+  });
   const addJob = useJobsStore((s) => s.addJob);
   const startJob = useJobsStore((s) => s.startJob);
   const setJobProgress = useJobsStore((s) => s.setJobProgress);
@@ -124,6 +134,26 @@ export const WarehouseLocations: React.FC = () => {
   const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
   const selectedRack = racks.find((rack) => rack.id === selectedRackId);
   const canManage = can('inventory.locations.manage');
+
+  const printLocationLabels = (rows: WarehouseLocation[]) => {
+    const labels = rows
+      .filter((loc) => String(loc.code || '').trim())
+      .map((loc) => ({
+        locationCode: String(loc.code || ''),
+        rackName: loc.rackName || loc.rack,
+        shelf: loc.shelfName || loc.shelf,
+        warehouseName: loc.warehouseName || selectedWarehouse?.name,
+      }));
+    if (labels.length === 0) {
+      toast.error('لا توجد أكواد لوكيشن للطباعة.');
+      return;
+    }
+    if (labels.length > 100 && !window.confirm(`سيتم طباعة ${labels.length} ملصق. متابعة؟`)) {
+      return;
+    }
+    setLocationLabels(labels);
+    window.setTimeout(() => handleLocationPrint(), 50);
+  };
 
   const load = async (nextWarehouseId = warehouseId) => {
     try {
@@ -586,6 +616,16 @@ export const WarehouseLocations: React.FC = () => {
     <ModuleOpsPageShell
       eyebrow="لوكيشنات المخازن"
       rangeLabel="إنشاء راكات وأرفف داخل كل مخزن وتحديد الرف الافتراضي لكل مكون"
+      actions={(
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={!warehouseId || filteredLocations.length === 0}
+          onClick={() => printLocationLabels(filteredLocations)}
+        >
+          طباعة ملصقات اللوكيشنات
+        </Button>
+      )}
     >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
@@ -688,7 +728,7 @@ export const WarehouseLocations: React.FC = () => {
                 <th className="p-3 text-start">الرف / اللوكيشن</th>
                 <th className="p-3 text-start">الأصناف داخل الرف</th>
                 <th className="p-3 text-center">الحالة</th>
-                {canManage && <th className="p-3 text-center">إجراء</th>}
+                <th className="p-3 text-center">إجراء</th>
               </tr>
             </thead>
             <tbody>
@@ -701,18 +741,25 @@ export const WarehouseLocations: React.FC = () => {
                       <td className="p-3 text-[var(--color-text-muted)]">{shelves.length} رف</td>
                       <td className="p-3" />
                       <td className="p-3 text-center">{rack.isActive === false ? 'موقوف' : 'نشط'}</td>
-                      {canManage && (
-                        <td className="p-3 text-center">
-                          <div className="inline-flex flex-wrap items-center justify-center gap-1">
-                            <Button size="sm" variant="ghost" onClick={() => openEditRack(rack)}>
-                              تعديل
+                      <td className="p-3 text-center">
+                        <div className="inline-flex flex-wrap items-center justify-center gap-1">
+                          {canManage ? (
+                            <>
+                              <Button size="sm" variant="ghost" onClick={() => openEditRack(rack)}>
+                                تعديل
+                              </Button>
+                              <Button size="sm" variant="ghost" onClick={() => void toggleRack(rack)}>
+                                {rack.isActive === false ? 'تفعيل الراك' : 'تعطيل الراك'}
+                              </Button>
+                            </>
+                          ) : null}
+                          {shelves.length > 0 ? (
+                            <Button size="sm" variant="ghost" onClick={() => printLocationLabels(shelves)}>
+                              طباعة ملصقات الراك
                             </Button>
-                            <Button size="sm" variant="ghost" onClick={() => void toggleRack(rack)}>
-                              {rack.isActive === false ? 'تفعيل الراك' : 'تعطيل الراك'}
-                            </Button>
-                          </div>
-                        </td>
-                      )}
+                          ) : null}
+                        </div>
+                      </td>
                     </tr>
                     {shelves.map((loc) => {
                       const locBalances = balancesByLocation.get(loc.id || '') || [];
@@ -727,23 +774,28 @@ export const WarehouseLocations: React.FC = () => {
                               : locBalances.slice(0, 4).map((b) => `${b.itemName}: ${b.quantity}`).join('، ')}
                           </td>
                           <td className="p-3 text-center">{isEffectivelyInactive ? 'موقوف' : 'نشط'}</td>
-                          {canManage && (
-                            <td className="p-3 text-center">
-                              <div className="inline-flex flex-wrap items-center justify-center gap-1">
-                                <Button size="sm" variant="ghost" onClick={() => void toggleLocation(loc)}>
-                                  {loc.isActive === false ? 'تفعيل الرف' : 'تعطيل الرف'}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={deletingLocationId === loc.id}
-                                  onClick={() => void deleteLocation(loc)}
-                                >
-                                  {deletingLocationId === loc.id ? 'جاري الحذف...' : 'حذف'}
-                                </Button>
-                              </div>
-                            </td>
-                          )}
+                          <td className="p-3 text-center">
+                            <div className="inline-flex flex-wrap items-center justify-center gap-1">
+                              <Button size="sm" variant="ghost" onClick={() => printLocationLabels([loc])}>
+                                طباعة باركود
+                              </Button>
+                              {canManage ? (
+                                <>
+                                  <Button size="sm" variant="ghost" onClick={() => void toggleLocation(loc)}>
+                                    {loc.isActive === false ? 'تفعيل الرف' : 'تعطيل الرف'}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={deletingLocationId === loc.id}
+                                    onClick={() => void deleteLocation(loc)}
+                                  >
+                                    {deletingLocationId === loc.id ? 'جاري الحذف...' : 'حذف'}
+                                  </Button>
+                                </>
+                              ) : null}
+                            </div>
+                          </td>
                         </tr>
                       );
                     })}
@@ -754,6 +806,14 @@ export const WarehouseLocations: React.FC = () => {
           </table>
         </div>
       </OpsDashPanel>
+
+      <div className="hidden">
+        <LocationBarcodeLabelPrint
+          ref={locationPrintRef}
+          labels={locationLabels}
+          printSettings={printSettings}
+        />
+      </div>
 
       {modal && (
         <ManagedModalPortal>

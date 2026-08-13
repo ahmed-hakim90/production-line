@@ -3,3 +3,7 @@ export * from './StockTransferPrint';
 export * from './SuppliesReceiptPrint';
 export * from './StockAvailabilityHint';
 export * from './VoucherItemCombobox';
+export * from './ItemBarcodeLabelPrint';
+export * from './LocationBarcodeLabelPrint';
+export * from './WarehousePartInquiry';
+export * from './Code128Barcode';

@@ -602,3 +602,33 @@ export const PRINT_PREVIEW_PRODUCTION_ISSUE = {
     },
   ],
 };
+
+export const PRINT_PREVIEW_ITEM_BARCODE_LABELS = [
+  {
+    itemCode: 'SP-2477',
+    itemName: 'قاعدة SK',
+    barcodeValue: 'SP-2477',
+    warehouseName: 'مخزن قطع الغيار المركزي',
+  },
+  {
+    itemCode: 'SP-1102',
+    itemName: 'محرك مروحة',
+    barcodeValue: '6221234567890',
+    warehouseName: 'مخزن قطع الغيار المركزي',
+  },
+];
+
+export const PRINT_PREVIEW_LOCATION_BARCODE_LABELS = [
+  {
+    locationCode: 'CENTRAL-A1-1',
+    rackName: 'راك A1',
+    shelf: '1',
+    warehouseName: 'مخزن قطع الغيار المركزي',
+  },
+  {
+    locationCode: 'CENTRAL-B2-3',
+    rackName: 'راك B2',
+    shelf: '3',
+    warehouseName: 'مخزن قطع الغيار المركزي',
+  },
+];
