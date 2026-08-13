@@ -525,7 +525,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                   اختر صنفاً لعرض المعاينة.
                 </div>
               ) : (
-                <div className="mx-auto w-fit origin-top scale-[0.72] sm:scale-[0.85]">
+                <div className="mx-auto w-fit origin-top scale-[1.45] sm:scale-[1.7]">
                   <ItemBarcodeLabelPrint
                     labels={previewItemLabels}
                     printSettings={effectiveItemSettings}
@@ -540,7 +540,7 @@ export const BarcodeLabelPrintEngineModal: React.FC<BarcodeLabelPrintEngineModal
                 اختر لوكيشن لعرض المعاينة.
               </div>
             ) : (
-              <div className="mx-auto w-fit origin-top scale-[0.72] sm:scale-[0.85]">
+              <div className="mx-auto w-fit origin-top scale-[1.45] sm:scale-[1.7]">
                 <LocationBarcodeLabelPrint
                   labels={previewLocationLabels}
                   printSettings={effectiveLocationSettings}

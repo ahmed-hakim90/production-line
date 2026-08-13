@@ -302,7 +302,11 @@ export function defaultBarcodeLabelFields(
   documentType: Extract<PrintDocumentTypeId, 'itemBarcodeLabel' | 'locationBarcodeLabel'>,
   printSettings?: PrintTemplateSettings,
 ): Record<string, boolean> {
-  return { ...resolvePrintDocumentConfig(printSettings, documentType).fields };
+  return {
+    ...resolvePrintDocumentConfig(printSettings, documentType).fields,
+    qrCode: false,
+    code128: true,
+  };
 }
 
 export function barcodeLabelFieldDefs(

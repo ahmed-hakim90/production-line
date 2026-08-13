@@ -12,6 +12,7 @@ import {
   clampThermalLabelMm,
   clampThermalGapMm,
   thermalPageHeightMm,
+  defaultBarcodeLabelFields,
   DEFAULT_BARCODE_LABEL_SIZE_ID,
   DEFAULT_THERMAL_GAP_MM,
 } from '../modules/inventory/lib/barcodeLabelEngine.ts';
@@ -59,6 +60,12 @@ import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentC
   assert.equal(doc.isFieldVisible('qrCode'), false);
   assert.equal(doc.isFieldVisible('itemName'), true);
   assert.equal(doc.isFieldVisible('code128'), true);
+}
+
+{
+  const defaults = defaultBarcodeLabelFields('locationBarcodeLabel');
+  assert.equal(defaults.qrCode, false);
+  assert.equal(defaults.code128, true);
 }
 
 {

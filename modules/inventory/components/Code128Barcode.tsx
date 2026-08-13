@@ -57,7 +57,12 @@ export function Code128Barcode({
     <svg
       ref={ref}
       className={className}
-      style={{ display: 'block', width: '100%', maxWidth: '100%', height }}
+      style={{
+        display: 'block',
+        width: '100%',
+        maxWidth: '100%',
+        height: fillWidth ? '100%' : height,
+      }}
     />
   );
 }
