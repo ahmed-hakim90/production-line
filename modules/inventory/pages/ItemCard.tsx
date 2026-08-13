@@ -26,8 +26,7 @@ import {
   type ItemCardBomLine,
   type ItemCardPrintModel,
 } from '../components/ItemCardPrint';
-import { ItemBarcodeLabelPrint, type ItemBarcodeLabel } from '../components/ItemBarcodeLabelPrint';
-import { resolveItemLabelCode } from '../lib/warehouseScanLookup';
+import { BarcodeLabelPrintEngineModal } from '../components/BarcodeLabelPrintEngineModal';
 import { ProductBomCountCardPreviewModal } from '../../production/components/ProductBomCountCardPreviewModal';
 import { buildProductBomCountCards } from '../../production/lib/buildProductBomCountCards';
 import type { ProductBomCountCard } from '../../production/components/ProductBomCountCardPrint';
@@ -118,19 +117,13 @@ export const ItemCard: React.FC = () => {
   const [countPreviewOpen, setCountPreviewOpen] = useState(false);
   const [countLoading, setCountLoading] = useState(false);
   const [countWarning, setCountWarning] = useState<string | null>(null);
-  const [barcodeLabels, setBarcodeLabels] = useState<ItemBarcodeLabel[]>([]);
+  const [labelEngineOpen, setLabelEngineOpen] = useState(false);
 
   const printRef = useRef<HTMLDivElement>(null);
-  const barcodePrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({
     contentRef: printRef,
     printSettings,
     documentTitle: 'كارت الصنف',
-  });
-  const handleBarcodePrint = useManagedPrint({
-    contentRef: barcodePrintRef,
-    printSettings,
-    documentTitle: 'ملصق باركود صنف',
   });
 
   const warehouseNameById = useMemo(() => {
@@ -495,28 +488,7 @@ export const ItemCard: React.FC = () => {
             type="button"
             variant="secondary"
             disabled={!selected}
-            onClick={() => {
-              if (!selected) return;
-              const barcodeValue = resolveItemLabelCode({
-                itemCode: selected.code,
-                barcode: selected.barcode,
-              });
-              if (!barcodeValue) {
-                toast.error('لا يوجد كود قابل للطباعة لهذا الصنف.');
-                return;
-              }
-              setBarcodeLabels([
-                {
-                  itemCode: selected.code,
-                  itemName: selected.name,
-                  barcodeValue,
-                  warehouseName: warehouseId
-                    ? warehouseNameById.get(warehouseId)
-                    : undefined,
-                },
-              ]);
-              window.setTimeout(() => handleBarcodePrint(), 50);
-            }}
+            onClick={() => setLabelEngineOpen(true)}
           >
             طباعة ملصق باركود
           </Button>
@@ -763,8 +735,36 @@ export const ItemCard: React.FC = () => {
       {/* Off-screen printable surface */}
       <div className="fixed -left-[10000px] top-0" aria-hidden>
         <ItemCardPrint ref={printRef} card={printModel} printSettings={printSettings} />
-        <ItemBarcodeLabelPrint ref={barcodePrintRef} labels={barcodeLabels} printSettings={printSettings} />
       </div>
+
+      <BarcodeLabelPrintEngineModal
+        open={labelEngineOpen}
+        onClose={() => setLabelEngineOpen(false)}
+        warehouseName={warehouseId ? warehouseNameById.get(warehouseId) : undefined}
+        printSettings={printSettings}
+        items={selected ? [{
+          id: selected.id,
+          code: selected.code,
+          name: selected.name,
+          barcode: selected.barcode,
+        }] : catalogOptions.map((opt) => ({
+          id: opt.id,
+          code: opt.code,
+          name: opt.name,
+          barcode: opt.barcode,
+        }))}
+        locations={itemLocationRows
+          .filter((row) => row.locationId)
+          .map((row) => ({
+            id: String(row.locationId),
+            code: String(row.locationCode || ''),
+            rackName: row.rackName || row.rack,
+            shelf: row.shelfName || row.shelf,
+          }))}
+        initialMode="items"
+        initialItemId={selected?.id || ''}
+        initialCopies={1}
+      />
 
       <ProductBomCountCardPreviewModal
         open={countPreviewOpen}

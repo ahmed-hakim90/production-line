@@ -6,6 +6,11 @@ import { resolvePrintAccentHex } from '../../../utils/printTheme';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import { Code128Barcode } from './Code128Barcode';
+import { ThermalBarcodeLabelCard } from './ThermalBarcodeLabelCard';
+import {
+  resolveBarcodeLabelSize,
+  type BarcodeLabelSizeId,
+} from '../lib/barcodeLabelEngine';
 
 export type ItemBarcodeLabel = {
   itemCode: string;
@@ -19,20 +24,47 @@ type Props = {
   labels: ItemBarcodeLabel[];
   printSettings?: PrintTemplateSettings;
   printedAt?: string;
+  /** A4 grid or thermal single-label page (Xprinter). */
+  labelSizeId?: BarcodeLabelSizeId | string;
 };
 
 export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
-  ({ labels, printSettings, printedAt }, ref) => {
+  ({ labels, printSettings, printedAt, labelSizeId }, ref) => {
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
     const doc = resolvePrintDocumentConfig(ps, 'itemBarcodeLabel');
     const font = resolvePrintFont(ps);
     const accent = resolvePrintAccentHex(ps.primaryColor);
     const when = printedAt || new Date().toLocaleString('ar-EG');
+    const size = resolveBarcodeLabelSize(labelSizeId);
+    const thermal = size.layout === 'thermal';
     const showName = doc.isFieldVisible('itemName');
     const showCode = doc.isFieldVisible('itemCode');
     const showWarehouse = doc.isFieldVisible('warehouse');
     const showQr = doc.isFieldVisible('qrCode');
     const showLinear = doc.isFieldVisible('code128');
+
+    if (thermal) {
+      return (
+        <div ref={ref} dir="rtl" style={{ fontFamily: font.fontFamily, color: '#0b1220', background: '#fff' }}>
+          {labels.map((label, index) => {
+            const value = String(label.barcodeValue || label.itemCode || '').trim();
+            return (
+              <ThermalBarcodeLabelCard
+                key={`${value}-${index}`}
+                size={size}
+                eyebrow={showWarehouse ? label.warehouseName : undefined}
+                subtitle={showName ? label.itemName : undefined}
+                heroCode={showCode ? (label.itemCode || value) : undefined}
+                scanValue={value}
+                showQr={showQr}
+                showLinear={showLinear}
+                isLast={index === labels.length - 1}
+              />
+            );
+          })}
+        </div>
+      );
+    }
 
     return (
       <div
@@ -56,7 +88,7 @@ export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
+            gridTemplateColumns: `repeat(${size.columns}, 1fr)`,
             gap: '6mm',
           }}
         >
@@ -67,33 +99,41 @@ export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
                 key={`${value}-${index}`}
                 style={{
                   border: `1.5px solid ${accent}`,
-                  borderRadius: 8,
-                  padding: '4mm',
+                  borderRadius: 10,
+                  padding: '4.5mm',
                   breakInside: 'avoid',
                   pageBreakInside: 'avoid',
-                  minHeight: '42mm',
+                  minHeight: '44mm',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: 8,
                 }}
               >
-                {showName ? (
-                  <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 2, lineHeight: 1.3 }}>
-                    {label.itemName || '—'}
-                  </div>
-                ) : null}
-                {showCode ? (
-                  <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, marginBottom: 4 }}>
-                    {label.itemCode || '—'}
-                  </div>
-                ) : null}
-                {showWarehouse && label.warehouseName ? (
-                  <div style={{ fontSize: 10, color: '#64748b', marginBottom: 4 }}>{label.warehouseName}</div>
-                ) : null}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+                <div>
+                  {showWarehouse && label.warehouseName ? (
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 2 }}>
+                      {label.warehouseName}
+                    </div>
+                  ) : null}
+                  {showName ? (
+                    <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 2, lineHeight: 1.25 }}>
+                      {label.itemName || '—'}
+                    </div>
+                  ) : null}
+                  {showCode ? (
+                    <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 800 }}>
+                      {label.itemCode || '—'}
+                    </div>
+                  ) : null}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'row-reverse', alignItems: 'flex-end', gap: 10 }}>
                   {showQr && value ? (
-                    <QRCodeSVG value={value} size={64} includeMargin={false} level="M" />
+                    <QRCodeSVG value={value} size={72} includeMargin={false} level="M" />
                   ) : null}
                   {showLinear && value ? (
-                    <div style={{ flex: 1, textAlign: 'center' }}>
-                      <Code128Barcode value={value} height={40} width={1.3} />
+                    <div style={{ flex: 1, textAlign: 'start', overflow: 'hidden' }}>
+                      <Code128Barcode value={value} height={44} width={1.35} displayValue={false} margin={0} />
                     </div>
                   ) : null}
                 </div>

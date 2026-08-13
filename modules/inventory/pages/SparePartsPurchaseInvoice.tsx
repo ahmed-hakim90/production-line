@@ -13,6 +13,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { materialService } from '../../manufacturing/services/materialService';
 import { isMaterialOptedInForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import type { Material } from '../../manufacturing/types';
+import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors';
 import { sparePartsPurchaseInvoiceService } from '../services/sparePartsPurchaseInvoiceService';
 import type { SparePartsPurchaseInvoice as SparePartsPurchaseInvoiceDoc } from '../types';
 
@@ -113,14 +114,20 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const [mats, invoices] = await Promise.all([
+      const [matsResult, invoicesResult] = await Promise.allSettled([
         materialService.getAll(),
         sparePartsPurchaseInvoiceService.list(30),
       ]);
-      setMaterials(mats);
-      setRows(invoices);
-    } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : 'تعذر تحميل فواتير الشراء.');
+      if (matsResult.status === 'fulfilled') {
+        setMaterials(matsResult.value);
+      } else {
+        toast.error(toUserSafeFirestoreError(matsResult.reason, 'تعذر تحميل الأصناف.'));
+      }
+      if (invoicesResult.status === 'fulfilled') {
+        setRows(invoicesResult.value);
+      } else {
+        toast.error(toUserSafeFirestoreError(invoicesResult.reason, 'تعذر تحميل فواتير الشراء.'));
+      }
     } finally {
       setLoading(false);
     }
@@ -169,7 +176,7 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
       setNotes('');
       await load();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : 'تعذر ترحيل فاتورة الشراء.');
+      toast.error(toUserSafeFirestoreError(error, 'تعذر ترحيل فاتورة الشراء.'));
     } finally {
       setBusy(false);
     }

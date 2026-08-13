@@ -5,5 +5,7 @@ export * from './StockAvailabilityHint';
 export * from './VoucherItemCombobox';
 export * from './ItemBarcodeLabelPrint';
 export * from './LocationBarcodeLabelPrint';
+export * from './BarcodeLabelPrintEngineModal';
+export * from './ThermalBarcodeLabelCard';
 export * from './WarehousePartInquiry';
 export * from './Code128Barcode';

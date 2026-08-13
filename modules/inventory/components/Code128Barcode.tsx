@@ -6,6 +6,7 @@ type Props = {
   height?: number;
   width?: number;
   displayValue?: boolean;
+  margin?: number;
   className?: string;
 };
 
@@ -15,6 +16,7 @@ export function Code128Barcode({
   height = 36,
   width = 1.4,
   displayValue = true,
+  margin = 2,
   className,
 }: Props) {
   const ref = useRef<SVGSVGElement>(null);
@@ -29,15 +31,15 @@ export function Code128Barcode({
         fontSize: 11,
         height,
         width,
-        margin: 2,
-        textMargin: 2,
+        margin,
+        textMargin: displayValue ? 2 : 0,
       });
     } catch {
       // Invalid characters for Code128 — leave empty svg
       while (ref.current.firstChild) ref.current.removeChild(ref.current.firstChild);
     }
-  }, [code, height, width, displayValue]);
+  }, [code, height, width, displayValue, margin]);
 
   if (!code) return null;
-  return <svg ref={ref} className={className} />;
+  return <svg ref={ref} className={className} style={{ maxWidth: '100%', height: 'auto' }} />;
 }

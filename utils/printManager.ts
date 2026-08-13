@@ -133,6 +133,8 @@ interface UseManagedPrintOptions {
   printSettings?: PrintTemplateSettings;
   documentTitle?: string;
   onAfterPrint?: () => void;
+  /** When set, replaces the global @page style (e.g. thermal barcode label sizes). */
+  pageStyle?: string;
 }
 
 export const useManagedPrint = ({
@@ -140,10 +142,11 @@ export const useManagedPrint = ({
   printSettings,
   documentTitle,
   onAfterPrint,
+  pageStyle: pageStyleOverride,
 }: UseManagedPrintOptions) => {
   const pageStyle = useMemo(
-    () => buildGlobalPrintPageStyle(printSettings),
-    [printSettings],
+    () => pageStyleOverride || buildGlobalPrintPageStyle(printSettings),
+    [printSettings, pageStyleOverride],
   );
 
   return useReactToPrint({

@@ -1487,6 +1487,76 @@ await seed();
   );
 }
 
+// 12b) Spare-parts purchase invoices: client read only; warehouse-bound lists must filter.
+{
+  const postedAt = new Date();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adb = context.firestore();
+    await adb.collection('spare_parts_purchase_invoices').doc('spi-whA').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whA',
+      invoiceNo: 'SPI-00001',
+      status: 'posted',
+      postedAt,
+    });
+    await adb.collection('spare_parts_purchase_invoices').doc('spi-whB').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whB',
+      invoiceNo: 'SPI-00002',
+      status: 'posted',
+      postedAt,
+    });
+    await adb.collection('spare_parts_purchase_invoices').doc('spi-tenantB').set({
+      tenantId: 'tenantB',
+      warehouseId: 'whA',
+      invoiceNo: 'SPI-00003',
+      status: 'posted',
+      postedAt,
+    });
+  });
+
+  const unboundInvDb = testEnv.authenticatedContext('userAUsersManager').firestore();
+  await assertSucceeds(
+    unboundInvDb.collection('spare_parts_purchase_invoices')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertFails(
+    unboundInvDb.collection('spare_parts_purchase_invoices').doc('spi-whA').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whA',
+      invoiceNo: 'SPI-FORGED',
+      status: 'posted',
+    }),
+  );
+  await assertFails(
+    unboundInvDb.collection('spare_parts_purchase_invoices').doc('spi-whA').update({
+      status: 'void',
+    }),
+  );
+
+  const writerDb = testEnv.authenticatedContext('userAInventoryWriter').firestore();
+  await assertSucceeds(writerDb.collection('spare_parts_purchase_invoices').doc('spi-whA').get());
+  await assertFails(writerDb.collection('spare_parts_purchase_invoices').doc('spi-whB').get());
+  await assertFails(
+    writerDb.collection('spare_parts_purchase_invoices')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertSucceeds(
+    writerDb.collection('spare_parts_purchase_invoices')
+      .where('tenantId', '==', 'tenantA')
+      .where('warehouseId', '==', 'whA')
+      .get(),
+  );
+
+  const operatorDb = testEnv.authenticatedContext('userAOperator').firestore();
+  await assertFails(operatorDb.collection('spare_parts_purchase_invoices').doc('spi-whA').get());
+
+  const otherTenantDb = testEnv.authenticatedContext('userBAdmin').firestore();
+  await assertFails(otherTenantDb.collection('spare_parts_purchase_invoices').doc('spi-whA').get());
+}
+
 // 13) Repair expenses are server-owned approval requests; clients can only read their scope.
 {
   await testEnv.withSecurityRulesDisabled(async (context) => {

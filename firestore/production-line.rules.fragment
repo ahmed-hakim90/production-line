@@ -342,6 +342,22 @@
         );
     }
 
+    /** Matches the purchase-invoice page + post callable permission keys. */
+    function pl_canReadSparePartsPurchaseInvoicePerm() {
+      let p = pl_currentRoleDoc().data.permissions;
+      return pl_isSuperAdmin()
+        || (
+          pl_rolePermMapOk()
+          && (
+            pl_rolePermTrue(p, 'inventory.transactions.create')
+            || pl_rolePermTrue(p, 'sparePartsReplenishment.prepare')
+            || pl_rolePermTrue(p, 'sparePartsReplenishment.view')
+            || pl_rolePermTrue(p, 'repair.parts.manage')
+            || pl_rolePermTrue(p, 'inventory.view')
+          )
+        );
+    }
+
     function pl_canReadRepairSpareIssuePerm() {
       let p = pl_currentRoleDoc().data.permissions;
       return pl_isSuperAdmin()
@@ -1696,6 +1712,17 @@
         && pl_inventoryWarehouseUnboundOr(
           pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
           || pl_canAccessInventoryWarehouse(resource.data.get('toWarehouseId', ''))
+        );
+      allow create, update, delete: if false;
+    }
+
+    // Spare-parts purchase invoices: client read only; post via Admin SDK callable.
+    match /spare_parts_purchase_invoices/{docId} {
+      allow read: if pl_isActiveUser()
+        && (resource.data.tenantId == pl_tenantId() || pl_isSuperAdmin())
+        && pl_canReadSparePartsPurchaseInvoicePerm()
+        && pl_inventoryWarehouseUnboundOr(
+          pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''))
         );
       allow create, update, delete: if false;
     }

@@ -26,8 +26,8 @@ import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 import { ImportItemLocationsModal } from '../components/ImportItemLocationsModal';
-import { LocationBarcodeLabelPrint, type LocationBarcodeLabel } from '../components/LocationBarcodeLabelPrint';
-import { useManagedPrint } from '../../../utils/printManager';
+import { BarcodeLabelPrintEngineModal } from '../components/BarcodeLabelPrintEngineModal';
+import type { WarehouseLabelEngineSeed } from '../components/WarehousePartInquiry';
 
 type ShelfMode = 'single' | 'numeric_range' | 'alpha_range';
 type LocationModal = null | 'rack' | 'editRack' | 'shelves' | 'import';
@@ -64,13 +64,12 @@ export const WarehouseLocations: React.FC = () => {
   const systemSettings = useAppStore((s) => s.systemSettings);
   const printSettings = systemSettings?.printTemplate;
   const userDisplayName = useAppStore((s) => s.userDisplayName);
-  const locationPrintRef = useRef<HTMLDivElement>(null);
-  const [locationLabels, setLocationLabels] = useState<LocationBarcodeLabel[]>([]);
-  const handleLocationPrint = useManagedPrint({
-    contentRef: locationPrintRef,
-    printSettings,
-    documentTitle: 'ملصقات باركود اللوكيشن',
-  });
+  const [labelEngineOpen, setLabelEngineOpen] = useState(false);
+  const [labelEngineSeed, setLabelEngineSeed] = useState<WarehouseLabelEngineSeed>({ mode: 'locations' });
+  const openLabelEngine = (seed: WarehouseLabelEngineSeed) => {
+    setLabelEngineSeed(seed);
+    setLabelEngineOpen(true);
+  };
   const addJob = useJobsStore((s) => s.addJob);
   const startJob = useJobsStore((s) => s.startJob);
   const setJobProgress = useJobsStore((s) => s.setJobProgress);
@@ -134,26 +133,6 @@ export const WarehouseLocations: React.FC = () => {
   const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
   const selectedRack = racks.find((rack) => rack.id === selectedRackId);
   const canManage = can('inventory.locations.manage');
-
-  const printLocationLabels = (rows: WarehouseLocation[]) => {
-    const labels = rows
-      .filter((loc) => String(loc.code || '').trim())
-      .map((loc) => ({
-        locationCode: String(loc.code || ''),
-        rackName: loc.rackName || loc.rack,
-        shelf: loc.shelfName || loc.shelf,
-        warehouseName: loc.warehouseName || selectedWarehouse?.name,
-      }));
-    if (labels.length === 0) {
-      toast.error('لا توجد أكواد لوكيشن للطباعة.');
-      return;
-    }
-    if (labels.length > 100 && !window.confirm(`سيتم طباعة ${labels.length} ملصق. متابعة؟`)) {
-      return;
-    }
-    setLocationLabels(labels);
-    window.setTimeout(() => handleLocationPrint(), 50);
-  };
 
   const load = async (nextWarehouseId = warehouseId) => {
     try {
@@ -621,7 +600,7 @@ export const WarehouseLocations: React.FC = () => {
           type="button"
           variant="secondary"
           disabled={!warehouseId || filteredLocations.length === 0}
-          onClick={() => printLocationLabels(filteredLocations)}
+          onClick={() => openLabelEngine({ mode: 'locations', copies: 1 })}
         >
           طباعة ملصقات اللوكيشنات
         </Button>
@@ -754,7 +733,15 @@ export const WarehouseLocations: React.FC = () => {
                             </>
                           ) : null}
                           {shelves.length > 0 ? (
-                            <Button size="sm" variant="ghost" onClick={() => printLocationLabels(shelves)}>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openLabelEngine({
+                                mode: 'locations',
+                                locationIds: shelves.map((s) => String(s.id || '')).filter(Boolean),
+                                copies: 1,
+                              })}
+                            >
                               طباعة ملصقات الراك
                             </Button>
                           ) : null}
@@ -776,7 +763,15 @@ export const WarehouseLocations: React.FC = () => {
                           <td className="p-3 text-center">{isEffectivelyInactive ? 'موقوف' : 'نشط'}</td>
                           <td className="p-3 text-center">
                             <div className="inline-flex flex-wrap items-center justify-center gap-1">
-                              <Button size="sm" variant="ghost" onClick={() => printLocationLabels([loc])}>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => openLabelEngine({
+                                  mode: 'locations',
+                                  locationId: String(loc.id || ''),
+                                  copies: 1,
+                                })}
+                              >
                                 طباعة باركود
                               </Button>
                               {canManage ? (
@@ -807,13 +802,30 @@ export const WarehouseLocations: React.FC = () => {
         </div>
       </OpsDashPanel>
 
-      <div className="hidden">
-        <LocationBarcodeLabelPrint
-          ref={locationPrintRef}
-          labels={locationLabels}
-          printSettings={printSettings}
-        />
-      </div>
+      <BarcodeLabelPrintEngineModal
+        open={labelEngineOpen}
+        onClose={() => setLabelEngineOpen(false)}
+        warehouseName={selectedWarehouse?.name}
+        printSettings={printSettings}
+        items={itemOptions.map((row) => ({
+          id: String(row.itemId || ''),
+          code: String(row.itemCode || ''),
+          name: String(row.itemName || ''),
+        }))}
+        locations={filteredLocations
+          .filter((loc) => loc.id)
+          .map((loc) => ({
+            id: String(loc.id),
+            code: String(loc.code || ''),
+            rackName: loc.rackName || loc.rack,
+            shelf: loc.shelfName || loc.shelf,
+          }))}
+        initialMode={labelEngineSeed.mode}
+        initialItemId={labelEngineSeed.itemId || ''}
+        initialLocationId={labelEngineSeed.locationId || ''}
+        initialLocationIds={labelEngineSeed.locationIds}
+        initialCopies={labelEngineSeed.copies || 1}
+      />
 
       {modal && (
         <ManagedModalPortal>

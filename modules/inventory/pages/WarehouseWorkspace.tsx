@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -48,13 +48,11 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors';
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
-import { WarehousePartInquiry } from '../components/WarehousePartInquiry';
-import { ItemBarcodeLabelPrint, type ItemBarcodeLabel } from '../components/ItemBarcodeLabelPrint';
+import { WarehousePartInquiry, type WarehouseLabelEngineSeed } from '../components/WarehousePartInquiry';
+import { BarcodeLabelPrintEngineModal } from '../components/BarcodeLabelPrintEngineModal';
 import { loadWarehouseCountLocationLabels, resolveWarehouseItemLocation } from '../lib/warehouseCountSheet';
 import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
-import { resolveItemLabelCode } from '../lib/warehouseScanLookup';
 import { warehouseLocationService } from '../services/warehouseLocationService';
-import { useManagedPrint } from '../../../utils/printManager';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -242,13 +240,12 @@ export const WarehouseWorkspace: React.FC = () => {
   const canCreateRecall = can('sparePartsRecall.create');
   const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
   const printSettings = useAppStore((s) => s.systemSettings?.printTemplate);
-  const itemLabelsPrintRef = useRef<HTMLDivElement>(null);
-  const [itemBarcodeLabels, setItemBarcodeLabels] = useState<ItemBarcodeLabel[]>([]);
-  const handleItemLabelsPrint = useManagedPrint({
-    contentRef: itemLabelsPrintRef,
-    printSettings,
-    documentTitle: 'ملصقات باركود الأصناف',
-  });
+  const [labelEngineOpen, setLabelEngineOpen] = useState(false);
+  const [labelEngineSeed, setLabelEngineSeed] = useState<WarehouseLabelEngineSeed>({ mode: 'items' });
+  const openLabelEngine = useCallback((seed: WarehouseLabelEngineSeed) => {
+    setLabelEngineSeed(seed);
+    setLabelEngineOpen(true);
+  }, []);
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
@@ -583,6 +580,7 @@ export const WarehouseWorkspace: React.FC = () => {
           barcode: row.barcode,
           itemType: 'material' as const,
         }))}
+        onOpenLabelEngine={openLabelEngine}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -724,36 +722,11 @@ export const WarehouseWorkspace: React.FC = () => {
                 {printing ? 'جاري تجهيز الجرد…' : 'طباعة الجرد'}
               </Button>
             ) : null}
-            {warehouse.id && countBalances.length > 0 ? (
+            {warehouse.id && (countBalances.length > 0 || warehouseLocations.length > 0) ? (
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => {
-                  const labels: ItemBarcodeLabel[] = countBalances
-                    .filter((row) => String(row.itemCode || '').trim())
-                    .map((row) => {
-                      const cat = catalogMaterials.find((m) => m.id === row.itemId);
-                      return {
-                        itemCode: String(row.itemCode || ''),
-                        itemName: String(row.itemName || ''),
-                        barcodeValue: resolveItemLabelCode({
-                          itemCode: row.itemCode,
-                          barcode: cat?.barcode,
-                        }),
-                        warehouseName: warehouse.name,
-                      };
-                    })
-                    .filter((row) => row.barcodeValue);
-                  if (labels.length === 0) {
-                    toast.error('لا توجد أكواد قابلة للطباعة.');
-                    return;
-                  }
-                  if (labels.length > 100 && !window.confirm(`سيتم طباعة ${labels.length} ملصق. متابعة؟`)) {
-                    return;
-                  }
-                  setItemBarcodeLabels(labels);
-                  window.setTimeout(() => handleItemLabelsPrint(), 50);
-                }}
+                onClick={() => openLabelEngine({ mode: 'items', copies: 1 })}
               >
                 طباعة ملصقات باركود الأصناف
               </Button>
@@ -952,13 +925,34 @@ export const WarehouseWorkspace: React.FC = () => {
         />
       ) : null}
       {countSheetHost}
-      <div className="hidden">
-        <ItemBarcodeLabelPrint
-          ref={itemLabelsPrintRef}
-          labels={itemBarcodeLabels}
-          printSettings={printSettings}
-        />
-      </div>
+      <BarcodeLabelPrintEngineModal
+        open={labelEngineOpen}
+        onClose={() => setLabelEngineOpen(false)}
+        warehouseName={warehouse.name}
+        printSettings={printSettings}
+        items={countBalances.map((row) => {
+          const cat = catalogMaterials.find((m) => m.id === row.itemId);
+          return {
+            id: String(row.itemId || ''),
+            code: String(row.itemCode || ''),
+            name: String(row.itemName || ''),
+            barcode: cat?.barcode,
+          };
+        })}
+        locations={warehouseLocations
+          .filter((loc) => loc.id)
+          .map((loc) => ({
+            id: String(loc.id),
+            code: String(loc.code || ''),
+            rackName: loc.rackName || loc.rack,
+            shelf: loc.shelfName || loc.shelf,
+          }))}
+        initialMode={labelEngineSeed.mode}
+        initialItemId={labelEngineSeed.itemId || ''}
+        initialLocationId={labelEngineSeed.locationId || ''}
+        initialLocationIds={labelEngineSeed.locationIds}
+        initialCopies={labelEngineSeed.copies || 1}
+      />
     </ModuleOpsPageShell>
   );
 };

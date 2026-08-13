@@ -3,22 +3,26 @@ import { Link, useParams } from 'react-router-dom';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { useAppStore } from '../../../store/useAppStore';
-import { useManagedPrint } from '../../../utils/printManager';
 import { Button } from './UI';
-import { ItemBarcodeLabelPrint, type ItemBarcodeLabel } from './ItemBarcodeLabelPrint';
-import { LocationBarcodeLabelPrint, type LocationBarcodeLabel } from './LocationBarcodeLabelPrint';
 import {
-  resolveItemLabelCode,
   resolveWarehouseScanLookup,
   type WarehouseScanCatalogItem,
   type WarehouseScanItemHit,
   type WarehouseScanLocationHit,
 } from '../lib/warehouseScanLookup';
+import type { BarcodeLabelEngineMode } from '../lib/barcodeLabelEngine';
 import type { StockItemBalance, StockLocationBalance, WarehouseLocation } from '../types';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
+
+export type WarehouseLabelEngineSeed = {
+  mode: BarcodeLabelEngineMode;
+  itemId?: string;
+  locationId?: string;
+  locationIds?: string[];
+  copies?: number;
+};
 
 type Props = {
   warehouseId: string;
@@ -27,38 +31,23 @@ type Props = {
   locationBalances: StockLocationBalance[];
   locations: WarehouseLocation[];
   catalogItems?: WarehouseScanCatalogItem[];
+  onOpenLabelEngine?: (seed: WarehouseLabelEngineSeed) => void;
 };
 
 export function WarehousePartInquiry({
   warehouseId,
-  warehouseName,
   balances,
   locationBalances,
   locations,
   catalogItems = [],
+  onOpenLabelEngine,
 }: Props) {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
-  const printSettings = useAppStore((s) => s.systemSettings?.printTemplate);
   const [query, setQuery] = useState('');
   const [exactToken, setExactToken] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [itemLabels, setItemLabels] = useState<ItemBarcodeLabel[]>([]);
-  const [locationLabels, setLocationLabels] = useState<LocationBarcodeLabel[]>([]);
   const scannerHostId = useRef(`warehouse-scan-${Math.random().toString(36).slice(2, 9)}`).current;
-  const itemPrintRef = useRef<HTMLDivElement>(null);
-  const locationPrintRef = useRef<HTMLDivElement>(null);
-
-  const handleItemPrint = useManagedPrint({
-    contentRef: itemPrintRef,
-    printSettings,
-    documentTitle: 'ملصق باركود صنف',
-  });
-  const handleLocationPrint = useManagedPrint({
-    contentRef: locationPrintRef,
-    printSettings,
-    documentTitle: 'ملصق باركود لوكيشن',
-  });
 
   const debounced = useDebouncedValue(query.trim(), 250);
 
@@ -79,39 +68,6 @@ export function WarehousePartInquiry({
     setQuery(value);
     setExactToken(value || null);
   }, []);
-
-  const printItemHit = useCallback(
-    (hit: WarehouseScanItemHit) => {
-      const barcodeValue = resolveItemLabelCode(hit);
-      if (!barcodeValue) return;
-      setItemLabels([
-        {
-          itemCode: hit.itemCode,
-          itemName: hit.itemName,
-          barcodeValue,
-          warehouseName,
-        },
-      ]);
-      window.setTimeout(() => handleItemPrint(), 50);
-    },
-    [handleItemPrint, warehouseName],
-  );
-
-  const printLocationHit = useCallback(
-    (hit: WarehouseScanLocationHit) => {
-      if (!hit.locationCode) return;
-      setLocationLabels([
-        {
-          locationCode: hit.locationCode,
-          rackName: hit.rackName,
-          shelf: hit.shelf,
-          warehouseName,
-        },
-      ]);
-      window.setTimeout(() => handleLocationPrint(), 50);
-    },
-    [handleLocationPrint, warehouseName],
-  );
 
   useEffect(() => {
     if (!cameraOpen) return;
@@ -203,9 +159,16 @@ export function WarehousePartInquiry({
           <Link className="text-xs font-bold text-primary underline" to={itemCardPath(hit)}>
             كارت الصنف
           </Link>
-          <Button type="button" size="sm" variant="secondary" onClick={() => printItemHit(hit)}>
-            طباعة ملصق باركود
-          </Button>
+          {onOpenLabelEngine ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => onOpenLabelEngine({ mode: 'items', itemId: hit.itemId, copies: 1 })}
+            >
+              طباعة ملصق باركود
+            </Button>
+          ) : null}
         </div>
       </div>
     );
@@ -221,9 +184,16 @@ export function WarehousePartInquiry({
             {hit.isActive ? '' : ' · موقوف'}
           </p>
         </div>
-        <Button type="button" size="sm" variant="secondary" onClick={() => printLocationHit(hit)}>
-          طباعة ملصق اللوكيشن
-        </Button>
+        {onOpenLabelEngine ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={() => onOpenLabelEngine({ mode: 'locations', locationId: hit.locationId, copies: 1 })}
+          >
+            طباعة ملصق اللوكيشن
+          </Button>
+        ) : null}
       </div>
       {hit.contents.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">لا توجد بضاعة في هذا اللوكيشن.</p>
@@ -328,11 +298,6 @@ export function WarehousePartInquiry({
           {result.items.map((hit) => renderItemHit(hit, `cat-${hit.itemId}`))}
         </div>
       ) : null}
-
-      <div className="hidden">
-        <ItemBarcodeLabelPrint ref={itemPrintRef} labels={itemLabels} printSettings={printSettings} />
-        <LocationBarcodeLabelPrint ref={locationPrintRef} labels={locationLabels} printSettings={printSettings} />
-      </div>
     </OpsDashPanel>
   );
 }

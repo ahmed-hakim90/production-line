@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { MaterialCategoryTreeSelect } from '../components/MaterialCategoryTreeSelect';
@@ -216,6 +216,9 @@ export const Materials: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectingAllMatching, setSelectingAllMatching] = useState(false);
   const [bulkSpareSaving, setBulkSpareSaving] = useState(false);
+  const [catalogRows, setCatalogRows] = useState<Material[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [clientPage, setClientPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -238,14 +241,15 @@ export const Materials: React.FC = () => {
   const [importSkipUpdates, setImportSkipUpdates] = useState(true);
   const [importExistingMaterials, setImportExistingMaterials] = useState<Material[]>([]);
   const debouncedSearch = useDebouncedValue(search, 350);
+  const usesCatalog = catalogRows !== null;
+  const needsCatalog = spareFilter !== 'all' || Boolean(gapFilter);
   const materialPager = useCursorPagination<Material, NonNullable<Awaited<ReturnType<typeof materialService.listPaged>>['nextCursor']>>({
+    enabled: !usesCatalog,
     queryKey: JSON.stringify({
       search: normalizeFirestoreSearch(debouncedSearch),
       typeFilter,
       statusFilter,
       manufacturedFilter,
-      gapFilter,
-      spareFilter,
       pageSize,
     }),
     loadPage: (cursor) => materialService.listPaged({
@@ -258,8 +262,9 @@ export const Materials: React.FC = () => {
     }),
   });
   const rows = materialPager.items;
-  const isLoading = materialPager.loading;
   const refetch = materialPager.refresh;
+  const sourceRows = catalogRows ?? rows;
+  const isLoading = catalogLoading || (!usesCatalog && materialPager.loading);
   const effectivePurchaseUnit = form.purchaseUnit || form.baseUnit;
   const usesWeightPerPiece =
     form.baseUnit === 'piece' && isWeightMaterialUnit(effectivePurchaseUnit);
@@ -281,8 +286,8 @@ export const Materials: React.FC = () => {
   }), [search, typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter]);
 
   const filtered = useMemo(
-    () => rows.filter((row) => materialMatchesListFilters(row, listFilters)),
-    [rows, listFilters],
+    () => sourceRows.filter((row) => materialMatchesListFilters(row, listFilters)),
+    [sourceRows, listFilters],
   );
 
   const sorted = useMemo(() => {
@@ -304,7 +309,15 @@ export const Materials: React.FC = () => {
     return list;
   }, [filtered, sortKey, sortDir]);
 
-  const paged = sorted;
+  const catalogTotalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const safeClientPage = Math.min(clientPage, catalogTotalPages);
+  const paged = usesCatalog
+    ? sorted.slice((safeClientPage - 1) * pageSize, safeClientPage * pageSize)
+    : sorted;
+  const matchingIds = useMemo(
+    () => matchingMaterialIds(sorted, listFilters),
+    [sorted, listFilters],
+  );
   const pageIds = useMemo(
     () => paged.map((row) => row.id).filter((id): id is string => Boolean(id)),
     [paged],
@@ -312,11 +325,41 @@ export const Materials: React.FC = () => {
   const pageSelection = pageSelectionState(pageIds, selectedIds);
   const allPageSelected = pageSelection === 'all';
   const somePageSelected = pageSelection === 'some';
-  const bulkBusy = disablingSpareVisibility || bulkSpareSaving || selectingAllMatching || migrating;
+  const moreMatchingThanPage = matchingIds.length > pageIds.length;
+  const bulkBusy = disablingSpareVisibility || bulkSpareSaving || selectingAllMatching || migrating || catalogLoading;
+
+  const loadCatalog = useCallback(async () => {
+    setCatalogLoading(true);
+    try {
+      const all = await materialService.getAll();
+      setCatalogRows(all);
+      return all;
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, []);
+
+  const refreshVisibleList = useCallback(async () => {
+    if (catalogRows) {
+      await loadCatalog();
+      return;
+    }
+    await refetch();
+  }, [catalogRows, loadCatalog, refetch]);
+
+  useEffect(() => {
+    if (!needsCatalog || catalogRows) return;
+    void loadCatalog();
+  }, [needsCatalog, catalogRows, loadCatalog]);
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter, debouncedSearch, pageSize]);
+    setClientPage(1);
+  }, [typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter, debouncedSearch]);
+
+  useEffect(() => {
+    setClientPage(1);
+  }, [pageSize]);
 
   const toggleSelectAllPage = () => {
     setSelectedIds((prev) => mergePageSelection(prev, pageIds, !allPageSelected));
@@ -560,7 +603,7 @@ export const Materials: React.FC = () => {
         }
       }
 
-      await refetch();
+      await refreshVisibleList();
       setShowForm(false);
       toast.success(editing ? 'تم تحديث المادة.' : 'تمت إضافة المادة.');
     } catch (e) {
@@ -585,7 +628,7 @@ export const Materials: React.FC = () => {
     if (!window.confirm(`حذف المادة "${row.name}"؟`)) return;
     try {
       await remove.mutateAsync(row.id);
-      await refetch();
+      await refreshVisibleList();
       toast.success('تم حذف المادة.');
     } catch {
       toast.error('تعذر حذف المادة.');
@@ -610,7 +653,7 @@ export const Materials: React.FC = () => {
       toast.success(
         `تم الترحيل: ${result.materialsCreated} مادة جديدة، ${result.materialsSkipped} موجودة مسبقاً، ${result.bomsCreated} BOM، ${result.bomItemsCreated} سطر BOM، ${result.stockItemsUpdated} رصيد مخزون.${permNote}`,
       );
-      await refetch();
+      await refreshVisibleList();
     } catch (e) {
       toast.error(formatMigrationError(e));
     } finally {
@@ -644,9 +687,30 @@ export const Materials: React.FC = () => {
   };
 
   const applySparePartsVisibility = async (ids: string[], available: boolean) => {
+    const useJob = ids.length >= 20;
+    const jobId = useJob
+      ? addJob({
+          fileName: available ? 'تفعيل قطع الغيار' : 'إيقاف قطع الغيار',
+          jobType: 'Materials Spare Visibility',
+          totalRows: ids.length,
+          startedBy: userDisplayName || 'Current User',
+        })
+      : null;
+    if (jobId) {
+      setPanelHidden(false);
+      setPanelMinimized(false);
+      startJob(jobId, available ? 'جاري التفعيل في قطع الغيار...' : 'جاري الإيقاف من قطع الغيار...');
+    }
     let updatedCount = 0;
     let failedCount = 0;
+    let cancelled = false;
+    const succeeded = new Set<string>();
     for (let i = 0; i < ids.length; i += BULK_SPARE_UPDATE_CHUNK) {
+      if (jobId && isBackgroundJobCancelled(jobId)) {
+        cancelled = true;
+        failJob(jobId, 'Cancelled by user', 'Cancelled');
+        break;
+      }
       const chunk = ids.slice(i, i + BULK_SPARE_UPDATE_CHUNK);
       const results = await Promise.allSettled(
         chunk.map((id) => materialService.update(
@@ -655,14 +719,44 @@ export const Materials: React.FC = () => {
           { path: MATERIAL_UPDATE_PATHS.materialsPage },
         )),
       );
-      for (const result of results) {
-        if (result.status === 'fulfilled') updatedCount += 1;
-        else failedCount += 1;
+      results.forEach((result, index) => {
+        const id = chunk[index];
+        if (result.status === 'fulfilled' && id) {
+          updatedCount += 1;
+          succeeded.add(id);
+        } else {
+          failedCount += 1;
+        }
+      });
+      if (jobId) {
+        setJobProgress(jobId, {
+          processedRows: updatedCount + failedCount,
+          totalRows: ids.length,
+          statusText: `تم ${updatedCount + failedCount} من ${ids.length}`,
+        });
       }
     }
+    const idSet = succeeded;
+    setCatalogRows((prev) => {
+      if (!prev) return prev;
+      return prev.map((row) => (
+        row.id && idSet.has(row.id)
+          ? { ...row, availableForSpareParts: available }
+          : row
+      ));
+    });
     await queryClient.invalidateQueries({ queryKey: manufacturingQueryKeys.materials });
-    await refetch();
-    return { updatedCount, failedCount };
+    if (!usesCatalog) await refetch();
+    if (jobId && !cancelled) {
+      completeJob(jobId, {
+        addedRows: updatedCount,
+        failedRows: failedCount,
+        statusText: available
+          ? `تم تفعيل ${updatedCount} مادة`
+          : `تم إيقاف ${updatedCount} مادة`,
+      });
+    }
+    return { updatedCount, failedCount, cancelled };
   };
 
   /**
@@ -698,22 +792,14 @@ export const Materials: React.FC = () => {
     if (!canManage || selectingAllMatching) return;
     setSelectingAllMatching(true);
     try {
-      const all = await materialService.getAll();
+      const all = catalogRows ?? await loadCatalog();
       const ids = matchingMaterialIds(all, listFilters);
       if (ids.length === 0) {
         toast.success('لا توجد مواد مطابقة للفلاتر الحالية.');
         return;
       }
-      if (
-        ids.length > pageIds.length
-        && !window.confirm(
-          `سيتم تحديد ${ids.length} مادة مطابقة للفلاتر عبر كل الصفحات.\nالتحديد يبقى عند التنقل بين الصفحات.\n\nمتابعة؟`,
-        )
-      ) {
-        return;
-      }
       setSelectedIds(new Set(ids));
-      toast.success(`تم تحديد ${ids.length} مادة مطابقة للفلاتر.`);
+      toast.success(`تم تحديد ${ids.length} مادة مطابقة للفلاتر عبر كل الصفحات.`);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'تعذر تحديد المواد المطابقة.');
     } finally {
@@ -732,7 +818,14 @@ export const Materials: React.FC = () => {
     if (!confirmed) return;
     setBulkSpareSaving(true);
     try {
-      const { updatedCount, failedCount } = await applySparePartsVisibility([...selectedIds], available);
+      const { updatedCount, failedCount, cancelled } = await applySparePartsVisibility(
+        [...selectedIds],
+        available,
+      );
+      if (cancelled) {
+        toast.error('تم إلغاء التحديث.');
+        return;
+      }
       toastSpareVisibilityResult(available, updatedCount, failedCount);
       if (failedCount === 0) setSelectedIds(new Set());
     } catch (error: unknown) {
@@ -886,7 +979,7 @@ export const Materials: React.FC = () => {
         toast.error(
           `تم الإلغاء بعد: ${created} جديد، ${updated} تحديث، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}.`,
         );
-        await refetch();
+        await refreshVisibleList();
         setImportSaving(false);
         return;
       }
@@ -942,7 +1035,7 @@ export const Materials: React.FC = () => {
         `تم الاستيراد: ${created} جديد، ${updated} تحديث، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}.`,
       );
     }
-    await refetch();
+    await refreshVisibleList();
     setImportSaving(false);
   };
 
@@ -1023,9 +1116,9 @@ export const Materials: React.FC = () => {
             سعر المستهلك والجملة والتكلفة تُحفظ على المكوّن فقط — لا تسعير من شاشات الصيانة.
           </p>
           <MaterialSparePartsPricingPanel
-            materials={rows}
+            materials={sourceRows}
             canManagePricing={canManagePricing}
-            onUpdated={() => { void refetch(); }}
+            onUpdated={() => { void refreshVisibleList(); }}
           />
         </OpsDashPanel>
       ) : null}
@@ -1114,14 +1207,23 @@ export const Materials: React.FC = () => {
                 ? `${selectedIds.size} مادة محددة — التحديد يبقى عند تغيير الصفحة`
                 : 'حدّد مواد من أكثر من صفحة ثم أوقف ظهورها في قطع الغيار'}
             </span>
+            {allPageSelected && moreMatchingThanPage ? (
+              <span className="text-xs text-muted-foreground">
+                تم تحديد مواد هذه الصفحة فقط ({pageIds.length}).
+              </span>
+            ) : null}
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant={allPageSelected && moreMatchingThanPage ? 'default' : 'outline'}
               disabled={bulkBusy}
               onClick={() => void handleSelectAllMatchingFilters()}
             >
-              {selectingAllMatching ? 'جاري التحديد...' : 'تحديد كل المطابق للفلاتر (كل الصفحات)'}
+              {selectingAllMatching
+                ? 'جاري التحديد...'
+                : usesCatalog
+                  ? `تحديد كل المطابق (${matchingIds.length})`
+                  : 'تحديد كل المطابق للفلاتر (كل الصفحات)'}
             </Button>
             <Button
               type="button"
@@ -1448,24 +1550,36 @@ export const Materials: React.FC = () => {
                   size="sm"
                   variant={pageSize === size ? 'default' : 'outline'}
                   className="h-8 px-2.5"
-                  disabled={materialPager.loading}
+                  disabled={catalogLoading || materialPager.loading}
                   onClick={() => setPageSize(size)}
                 >
                   {size}
                 </Button>
               ))}
             </div>
-            <DataPaginationFooter
-              page={materialPager.page}
-              itemCount={sorted.length}
-              hasPrevious={materialPager.hasPrevious}
-              hasNext={materialPager.hasNext}
-              onPrevious={materialPager.previous}
-              onNext={() => { void materialPager.next(); }}
-              loading={materialPager.loading}
-              itemLabel="مادة"
-              className="min-w-0 flex-1 border-0 bg-transparent px-0"
-            />
+            {usesCatalog ? (
+              <DataPaginationFooter
+                page={safeClientPage}
+                totalPages={catalogTotalPages}
+                totalItems={sorted.length}
+                onPageChange={setClientPage}
+                loading={catalogLoading}
+                itemLabel="مادة"
+                className="min-w-0 flex-1 border-0 bg-transparent px-0"
+              />
+            ) : (
+              <DataPaginationFooter
+                page={materialPager.page}
+                itemCount={sorted.length}
+                hasPrevious={materialPager.hasPrevious}
+                hasNext={materialPager.hasNext}
+                onPrevious={materialPager.previous}
+                onNext={() => { void materialPager.next(); }}
+                loading={materialPager.loading}
+                itemLabel="مادة"
+                className="min-w-0 flex-1 border-0 bg-transparent px-0"
+              />
+            )}
           </div>
         )}
       </OpsDashPanel>
