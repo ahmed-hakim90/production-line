@@ -73,7 +73,7 @@
 
 مخازن `maintenance_center` تظهر في قائمة **الصيانة** فقط، مقيّدة بفرع المستخدم المرتبط. مجموعة **المخازن** تُخفى عن نطاق مركز الصيانة (تشغيل المخزن من `/repair/warehouses/:id` داخل الصيانة).
 
-مستخدم مربوط بمخزن `spare_parts_central` يرى مستندات مخازن `maintenance_center` كوجهات تموين (قراءة `warehouses` فقط؛ الأرصدة تبقى على نطاق المخزن المرتبط). عنصر القائمة «متابعة تموين القطع» للمراكز فقط — المركزي يستخدم «تموين قطع الغيار (مركزي → مراكز)».
+مستخدم مربوط بمخزن `spare_parts_central` يرى مستندات مخازن `maintenance_center` كوجهات تموين (قائمة `warehouses` بفلتر `warehouseRole`؛ الأرصدة تبقى على نطاق المخزن المرتبط). عنصر القائمة «متابعة تموين القطع» للمراكز فقط — المركزي يستخدم «تموين قطع الغيار (مركزي → مراكز)».
 
 ## الصلاحيات والمستخدمين
 
@@ -122,7 +122,9 @@
 - Rules: `firestore/production-line.rules.fragment` → `npm run compose:firestore-rules`
   - قراءة: مستأجر + (`sparePartsReplenishment.view` أو `inventory.view`) + نطاق مخزن المصدر/الوجهة
   - كتابة العميل: ممنوعة
+  - المسؤول المركزي المربوط يقرأ قائمة مخازن `maintenance_center` عبر `resource.data.warehouseRole` (مش `get()` على نفس المستند)
 - Indexes في `firestore.indexes.json` لـ:
+  - `warehouses`: `tenantId + warehouseRole` (قائمة وجهات التموين للمسؤول المركزي)
   - `tenantId + createdAt`
   - `tenantId + status + createdAt`
   - `tenantId + fromWarehouseId (+ status) + createdAt`

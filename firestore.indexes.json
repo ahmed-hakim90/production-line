@@ -1595,6 +1595,20 @@
       ]
     },
     {
+      "collectionGroup": "warehouses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "warehouseRole",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "warehouse_locations",
       "queryScope": "COLLECTION",
       "fields": [

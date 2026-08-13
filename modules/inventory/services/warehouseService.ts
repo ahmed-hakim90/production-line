@@ -115,8 +115,11 @@ export const warehouseService = {
           const centers = centersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
           return warehousesForBoundInventoryOperator(warehouse, centers) as Warehouse[];
         } catch (error) {
-          console.warn('[warehouseService] failed loading maintenance_center destinations', error);
-          return [warehouse];
+          console.warn(
+            '[warehouseService] failed loading maintenance_center destinations (needs list rules + tenantId+warehouseRole index)',
+            error,
+          );
+          throw error;
         }
       }
       return [warehouse];

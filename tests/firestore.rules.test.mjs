@@ -1209,6 +1209,13 @@ await seed();
       warehouseRole: 'general',
       isActive: true,
     });
+    await adb.collection('warehouses').doc('whMaintCenterB').set({
+      tenantId: 'tenantB',
+      name: 'Other Tenant Center',
+      code: 'MCB',
+      warehouseRole: 'maintenance_center',
+      isActive: true,
+    });
     await adb.collection('stock_items').doc('whMaintCenter__material__item1').set({
       tenantId: 'tenantA',
       warehouseId: 'whMaintCenter',
@@ -1228,7 +1235,23 @@ await seed();
   await assertSucceeds(centralSpDb.collection('warehouses').doc('whCentralSp').get());
   await assertSucceeds(centralSpDb.collection('warehouses').doc('whMaintCenter').get());
   await assertFails(centralSpDb.collection('warehouses').doc('whGeneralBoundPeer').get());
+  await assertFails(centralSpDb.collection('warehouses').doc('whMaintCenterB').get());
   await assertFails(centralSpDb.collection('stock_items').doc('whMaintCenter__material__item1').get());
+  await assertSucceeds(
+    centralSpDb.collection('warehouses')
+      .where('tenantId', '==', 'tenantA')
+      .where('warehouseRole', '==', 'maintenance_center')
+      .get(),
+  );
+  await assertFails(
+    centralSpDb.collection('warehouses').where('tenantId', '==', 'tenantA').get(),
+  );
+  await assertFails(
+    boundDb.collection('warehouses')
+      .where('tenantId', '==', 'tenantA')
+      .where('warehouseRole', '==', 'maintenance_center')
+      .get(),
+  );
   await assertSucceeds(maintCenterDb.collection('warehouses').doc('whMaintCenter').get());
   await assertFails(maintCenterDb.collection('warehouses').doc('whCentralSp').get());
   await assertFails(maintCenterDb.collection('warehouses').doc('whGeneralBoundPeer').get());

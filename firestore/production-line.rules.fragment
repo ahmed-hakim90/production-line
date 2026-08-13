@@ -489,6 +489,7 @@
     /**
      * Bound spare-parts central operators need destination center warehouse docs
      * for replenishment dropdowns — warehouses collection only (not stock_*).
+     * List queries must constrain tenantId + warehouseRole; do not get() the listed doc.
      */
     function pl_isBoundSparePartsCentralWarehouse() {
       return pl_isInventoryWarehouseBound()
@@ -497,13 +498,10 @@
           .data.get('warehouseRole', '') == 'spare_parts_central';
     }
 
-    function pl_canReadMaintenanceCenterWarehouseAsCentral(docId) {
+    function pl_canReadMaintenanceCenterWarehouseAsCentral() {
       return pl_isBoundSparePartsCentralWarehouse()
-        && docId is string
-        && docId != ''
-        && exists(/databases/$(database)/documents/warehouses/$(docId))
-        && get(/databases/$(database)/documents/warehouses/$(docId))
-          .data.get('warehouseRole', '') == 'maintenance_center';
+        && pl_sameTenantOrLegacyRead()
+        && resource.data.get('warehouseRole', '') == 'maintenance_center';
     }
 
     function pl_canCreateRepairTreasuryEntryForOpenSession() {
@@ -1774,7 +1772,7 @@
     match /warehouses/{docId} {
       allow read: if pl_isActiveUser() && (
         pl_canReadWarehouseDoc(docId)
-        || pl_canReadMaintenanceCenterWarehouseAsCentral(docId)
+        || pl_canReadMaintenanceCenterWarehouseAsCentral()
         || pl_isSuperAdmin()
       );
       allow create: if pl_isActiveUser() && (pl_canWriteWarehouseDoc(docId) || pl_superAdminTenantScopedCreateOk());
