@@ -121,7 +121,7 @@ export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
                     </div>
                   ) : null}
                   {showName ? (
-                    <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 2, lineHeight: 1.25 }}>
+                    <div style={{ fontWeight: 900, fontSize: 16, marginBottom: 2, lineHeight: 1.2, color: '#000' }}>
                       {label.itemName || '—'}
                     </div>
                   ) : null}
@@ -136,8 +136,8 @@ export const ItemBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>(
                     <QRCodeSVG value={value} size={72} includeMargin={false} level="M" />
                   ) : null}
                   {showLinear && value ? (
-                    <div style={{ flex: 1, width: showQr ? undefined : '100%', textAlign: 'start', overflow: 'hidden', height: 44 }}>
-                      <Code128Barcode value={value} height={44} width={1.35} displayValue={false} margin={0} fillWidth={!showQr} />
+                    <div style={{ flex: 1, width: showQr ? undefined : '100%', textAlign: 'start', overflow: 'hidden', height: showQr ? 44 : 64 }}>
+                      <Code128Barcode value={value} height={showQr ? 44 : 64} width={1.35} displayValue={false} margin={0} fillWidth={!showQr} />
                     </div>
                   ) : null}
                 </div>

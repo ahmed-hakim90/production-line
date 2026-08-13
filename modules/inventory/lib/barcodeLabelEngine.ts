@@ -230,6 +230,9 @@ export function buildBarcodeLabelPageStyle(
       .${THERMAL_BARCODE_LABEL_CLASS} img,
       .${THERMAL_BARCODE_LABEL_CLASS} canvas {
         max-width: 100% !important;
+        width: 100% !important;
+        height: 100% !important;
+        display: block !important;
       }
     }
   `;

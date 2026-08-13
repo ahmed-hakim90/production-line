@@ -21,13 +21,20 @@ function mmToPx(mm: number): number {
   return Math.max(8, Math.round((mm * 96) / 25.4));
 }
 
+const INK: CSSProperties = {
+  color: '#000',
+  WebkitTextStroke: '0.35px #000',
+  WebkitPrintColorAdjust: 'exact',
+  printColorAdjust: 'exact',
+};
+
 type ThermalBarcodeLabelCardProps = {
   size: BarcodeLabelSizePreset;
   /** Centered warehouse / title */
   eyebrow?: string;
-  /** Optional line between title and hero (skipped if same as hero) */
+  /** Spare-part / item name — the bold readable line */
   subtitle?: string;
-  /** Large centered location/item code — shown once */
+  /** Large centered location/item code — only when the field is enabled */
   heroCode?: string;
   /** Value encoded in QR + Code128 */
   scanValue: string;
@@ -58,7 +65,7 @@ export function ThermalBarcodeLabelCard({
 }: ThermalBarcodeLabelCardProps) {
   const compact = size.heightMm <= 30;
   const value = String(scanValue || '').trim();
-  const displayCode = formatBarcodeLabelDisplayCode(heroCode || value);
+  const displayCode = heroCode ? formatBarcodeLabelDisplayCode(heroCode) : '';
   const safeSubtitle = subtitle
     && normalizeLabelText(subtitle) !== normalizeLabelText(displayCode)
     && normalizeLabelText(subtitle) !== normalizeLabelText(eyebrow || '')
@@ -67,16 +74,27 @@ export function ThermalBarcodeLabelCard({
 
   const gap = clampThermalGapMm(gapMm);
   const pageHeightMm = thermalPageHeightMm(size.heightMm, gap);
-  const insetMm = compact ? 1 : 1.6;
+  const insetMm = compact ? 0.9 : 1.4;
   const barcodeOnly = Boolean(showLinear && !showQr);
   const qrMm = compact
     ? Math.min(10.5, Math.max(6.5, size.heightMm * 0.34))
     : Math.min(12, size.heightMm * 0.3);
+
+  const warehousePt = compact ? '3.2mm' : '4mm';
+  const namePt = compact ? '5.2mm' : '6.4mm';
+  const codePt = compact ? '3.6mm' : '4.6mm';
+  const lineGapMm = compact ? 0.45 : 0.7;
+  const textLines = [eyebrow, safeSubtitle, displayCode].filter(Boolean).length;
+  const textBlockMm = (eyebrow ? (compact ? 3.8 : 4.6) : 0)
+    + (safeSubtitle ? (compact ? 6.4 : 7.8) : 0)
+    + (displayCode ? (compact ? 4.2 : 5.2) : 0)
+    + (textLines > 1 ? (textLines - 1) * lineGapMm : 0)
+    + (children ? 2 : 0);
+  const usableMm = Math.max(8, size.heightMm - insetMm * 2);
+  const leftoverMm = Math.max(barcodeOnly ? 13 : 6, usableMm - textBlockMm - 0.6);
   const barMm = barcodeOnly
-    ? Math.max(12, size.heightMm * 0.52)
-    : (compact ? 6 : Math.min(9, size.heightMm * 0.24));
-  const warehousePt = compact ? '3.4mm' : '4.2mm';
-  const locationPt = compact ? '5.8mm' : '7mm';
+    ? leftoverMm
+    : Math.min(leftoverMm, compact ? 6 : Math.min(9, size.heightMm * 0.24));
   const qrPx = mmToPx(qrMm);
   const barHeightPx = mmToPx(barMm);
 
@@ -88,7 +106,7 @@ export function ThermalBarcodeLabelCard({
     padding: 0,
     overflow: 'hidden',
     background: '#fff',
-    color: '#0b1220',
+    color: '#000',
     pageBreakAfter: isLast ? 'auto' : 'always',
     breakAfter: isLast ? 'auto' : 'page',
     pageBreakInside: 'avoid',
@@ -111,8 +129,8 @@ export function ThermalBarcodeLabelCard({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'stretch',
-    justifyContent: barcodeOnly ? 'space-between' : 'center',
-    gap: compact ? '1mm' : '1.6mm',
+    justifyContent: 'flex-start',
+    gap: `${lineGapMm}mm`,
     overflow: 'hidden',
     minHeight: 0,
   };
@@ -130,17 +148,17 @@ export function ThermalBarcodeLabelCard({
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: compact ? '0.6mm' : '1mm',
+            gap: `${lineGapMm}mm`,
             flexShrink: 0,
           }}
         >
           {eyebrow ? (
             <div
               style={{
+                ...INK,
                 fontSize: warehousePt,
-                fontWeight: 800,
-                lineHeight: 1.15,
-                color: '#0f172a',
+                fontWeight: 900,
+                lineHeight: 1.1,
                 maxWidth: '100%',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -154,14 +172,16 @@ export function ThermalBarcodeLabelCard({
           {safeSubtitle ? (
             <div
               style={{
-                fontSize: compact ? '2.6mm' : '3.2mm',
-                fontWeight: 600,
-                lineHeight: 1.1,
-                color: '#334155',
+                ...INK,
+                fontSize: namePt,
+                fontWeight: 900,
+                lineHeight: 1.05,
                 maxWidth: '100%',
-                whiteSpace: 'nowrap',
                 overflow: 'hidden',
-                textOverflow: 'ellipsis',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                wordBreak: 'break-word',
               }}
             >
               {safeSubtitle}
@@ -171,9 +191,10 @@ export function ThermalBarcodeLabelCard({
           {displayCode ? (
             <div
               style={{
+                ...INK,
                 fontWeight: 900,
                 fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-                fontSize: locationPt,
+                fontSize: codePt,
                 letterSpacing: '0.02em',
                 lineHeight: 1,
                 maxWidth: '100%',
@@ -194,24 +215,25 @@ export function ThermalBarcodeLabelCard({
             dir="ltr"
             style={{
               width: '100%',
-              flex: barcodeOnly ? 1 : undefined,
-              minHeight: barcodeOnly ? `${barMm}mm` : 0,
+              flex: '1 1 auto',
+              minHeight: `${barMm}mm`,
+              height: barcodeOnly ? `${barMm}mm` : (showQr ? `${Math.max(barMm, qrMm)}mm` : `${barMm}mm`),
               display: 'flex',
               flexDirection: barcodeOnly ? 'column' : 'row',
               alignItems: 'stretch',
-              justifyContent: 'center',
-              gap: compact ? '1.2mm' : '2mm',
+              justifyContent: 'stretch',
+              gap: compact ? '1mm' : '1.6mm',
               overflow: 'hidden',
             }}
           >
             {showLinear ? (
               <div
                 style={{
-                  flex: 1,
+                  flex: '1 1 auto',
                   width: '100%',
                   minWidth: 0,
-                  minHeight: barcodeOnly ? 0 : `${barMm}mm`,
-                  height: barcodeOnly ? '100%' : `${barMm}mm`,
+                  height: '100%',
+                  minHeight: `${barMm}mm`,
                   display: 'flex',
                   alignItems: 'stretch',
                   overflow: 'hidden',
@@ -220,10 +242,10 @@ export function ThermalBarcodeLabelCard({
                 <Code128Barcode
                   value={value}
                   height={barHeightPx}
-                  width={compact ? 1.2 : 1.35}
+                  width={compact ? 1.25 : 1.4}
                   displayValue={false}
                   margin={0}
-                  fillWidth={barcodeOnly}
+                  fillWidth
                 />
               </div>
             ) : null}

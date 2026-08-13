@@ -133,8 +133,8 @@ export const LocationBarcodeLabelPrint = React.forwardRef<HTMLDivElement, Props>
                     <QRCodeSVG value={value} size={72} includeMargin={false} level="M" />
                   ) : null}
                   {showLinear && value ? (
-                    <div style={{ flex: 1, width: showQr ? undefined : '100%', textAlign: 'start', overflow: 'hidden', height: 44 }}>
-                      <Code128Barcode value={value} height={44} width={1.35} displayValue={false} margin={0} fillWidth={!showQr} />
+                    <div style={{ flex: 1, width: showQr ? undefined : '100%', textAlign: 'start', overflow: 'hidden', height: showQr ? 44 : 64 }}>
+                      <Code128Barcode value={value} height={showQr ? 44 : 64} width={1.35} displayValue={false} margin={0} fillWidth={!showQr} />
                     </div>
                   ) : null}
                 </div>

@@ -59,6 +59,7 @@ export interface Material {
   linkedCostCenterIds?: string[];
   legacyRawMaterialId?: string;
   minStock?: number;
+  barcode?: string;
   isActive: boolean;
   createdAt: string;
 }
