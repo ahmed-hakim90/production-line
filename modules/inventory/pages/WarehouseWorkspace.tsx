@@ -50,6 +50,7 @@ import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
 import { WarehousePartInquiry, type WarehouseLabelEngineSeed } from '../components/WarehousePartInquiry';
 import { BarcodeLabelPrintEngineModal } from '../components/BarcodeLabelPrintEngineModal';
+import { WarehouseCountSheetPrintModal } from '../components/WarehouseCountSheetPrintModal';
 import { loadWarehouseCountLocationLabels, resolveWarehouseItemLocation } from '../lib/warehouseCountSheet';
 import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
 import { warehouseLocationService } from '../services/warehouseLocationService';
@@ -278,6 +279,7 @@ export const WarehouseWorkspace: React.FC = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [addPartOpen, setAddPartOpen] = useState(false);
   const [countImportOpen, setCountImportOpen] = useState(false);
+  const [printPickerOpen, setPrintPickerOpen] = useState(false);
   const [locationByKey, setLocationByKey] = useState<Map<string, string>>(() => new Map());
   const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
   const [warehouseLocations, setWarehouseLocations] = useState<WarehouseLocation[]>([]);
@@ -705,19 +707,12 @@ export const WarehouseWorkspace: React.FC = () => {
                   : 'رفع جرد Excel'}
               </Button>
             ) : null}
-            {warehouse.id && countBalances.length > 0 ? (
+            {warehouse.id ? (
               <Button
                 type="button"
                 variant="secondary"
                 disabled={printing}
-                onClick={() => {
-                  void printWarehouseCount({
-                    warehouseId: String(warehouse.id),
-                    warehouseName: warehouse.name,
-                    warehouseRole: warehouse.warehouseRole,
-                    balances: countBalances,
-                  });
-                }}
+                onClick={() => setPrintPickerOpen(true)}
               >
                 {printing ? 'جاري تجهيز الجرد…' : 'طباعة الجرد'}
               </Button>
@@ -925,6 +920,19 @@ export const WarehouseWorkspace: React.FC = () => {
         />
       ) : null}
       {countSheetHost}
+      {warehouse.id ? (
+        <WarehouseCountSheetPrintModal
+          open={printPickerOpen}
+          onClose={() => setPrintPickerOpen(false)}
+          warehouses={[warehouse]}
+          balances={countBalances}
+          initialWarehouseId={String(warehouse.id)}
+          warehouseSelectLocked
+          printing={printing}
+          resolveWarehouseRole={() => warehouse.warehouseRole}
+          onPrint={printWarehouseCount}
+        />
+      ) : null}
       <BarcodeLabelPrintEngineModal
         open={labelEngineOpen}
         onClose={() => setLabelEngineOpen(false)}

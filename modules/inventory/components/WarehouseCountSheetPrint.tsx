@@ -25,6 +25,7 @@ type Props = {
   rows: WarehouseCountSheetRow[];
   warehouseName?: string;
   warehouseRoleLabel?: string;
+  scopeLabel?: string;
   paperSize?: 'a4' | 'a5';
   printSettings?: PrintTemplateSettings;
 };
@@ -43,6 +44,7 @@ export const WarehouseCountSheetPrint = React.forwardRef<HTMLDivElement, Props>(
       rows,
       warehouseName,
       warehouseRoleLabel,
+      scopeLabel,
       paperSize = 'a4',
       printSettings,
     },
@@ -94,9 +96,9 @@ export const WarehouseCountSheetPrint = React.forwardRef<HTMLDivElement, Props>(
           doc.isFieldVisible('meta')
             ? [
                 { label: 'المخزن', value: warehouseName || '—' },
+                { label: 'النطاق', value: scopeLabel || 'المخزن كله' },
                 { label: 'الدور', value: warehouseRoleLabel || '—' },
                 { label: 'التاريخ', value: printedAt },
-                { label: 'عدد الأصناف', value: String(rows.length) },
               ]
             : undefined
         }

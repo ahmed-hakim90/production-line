@@ -197,6 +197,7 @@ export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
             rows={[...PRINT_PREVIEW_WAREHOUSE_COUNT.rows]}
             warehouseName={PRINT_PREVIEW_WAREHOUSE_COUNT.warehouseName}
             warehouseRoleLabel={PRINT_PREVIEW_WAREHOUSE_COUNT.warehouseRoleLabel}
+            scopeLabel="المخزن كله"
             printSettings={printSettings}
           />
         );

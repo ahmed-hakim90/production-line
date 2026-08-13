@@ -24,6 +24,7 @@ import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { downloadStockCountErrors, downloadStockCountTemplate, parseStockCountSheet, type StockCountSheetResult } from '../lib/stockCountSheet';
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
+import { WarehouseCountSheetPrintModal } from '../components/WarehouseCountSheetPrintModal';
 
 const STOCK_COUNTS_CACHE_KEY = 'inventory:stock-counts';
 
@@ -100,6 +101,7 @@ export const StockCounts: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState<string>('');
   const [countPreview, setCountPreview] = useState<{ fileName: string; data: ArrayBuffer; parsed: StockCountSheetResult } | null>(null);
+  const [printPickerOpen, setPrintPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = async () => {
@@ -277,16 +279,8 @@ export const StockCounts: React.FC = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={() => {
-              const warehouse = warehouses.find((row) => row.id === warehouseId);
-              void printWarehouseCount({
-                warehouseId,
-                warehouseName: selectedWarehouseName,
-                warehouseRole: warehouse?.warehouseRole,
-                balances: selectedBalances,
-              });
-            }}
-            disabled={!warehouseId || selectedBalances.length === 0 || printing}
+            onClick={() => setPrintPickerOpen(true)}
+            disabled={!warehouseId || printing}
           >
             <span className="material-icons-round text-sm">print</span>
             {printing ? 'جاري تجهيز الجرد…' : 'طباعة الجرد'}
@@ -391,6 +385,20 @@ export const StockCounts: React.FC = () => {
         )}
       </OpsDashPanel>
       {countSheetHost}
+      <WarehouseCountSheetPrintModal
+        open={printPickerOpen}
+        onClose={() => setPrintPickerOpen(false)}
+        warehouses={warehouses}
+        balances={balances}
+        initialWarehouseId={warehouseId}
+        warehouseSelectLocked={warehouseSelectLocked}
+        printing={printing}
+        resolveWarehouseRole={(id) => warehouses.find((row) => row.id === id)?.warehouseRole}
+        onPrint={(input) => {
+          setWarehouseId(input.warehouseId);
+          void printWarehouseCount(input);
+        }}
+      />
     </ModuleOpsPageShell>
   );
 };

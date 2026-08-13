@@ -31,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 import {
@@ -42,6 +41,7 @@ import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
 import { ImportItemLocationsModal } from '../components/ImportItemLocationsModal';
+import { WarehouseCountSheetPrintModal } from '../components/WarehouseCountSheetPrintModal';
 import { toast } from '../../../components/Toast';
 
 const PAGE_SIZE = 25;
@@ -298,40 +298,12 @@ export const StockBalances: React.FC = () => {
       warehouses.find((w) => w.id === warehouseId)?.warehouseRole,
     );
 
-  const printCountForWarehouse = useCallback((warehouseId: string) => {
-    const id = String(warehouseId || '').trim();
-    if (!id) {
-      toast.error('اختر مخزناً لطباعة ورقة الجرد.');
-      return;
-    }
-    const warehouse = warehouses.find((row) => row.id === id);
-    void printWarehouseCount({
-      warehouseId: id,
-      warehouseName: warehouseNameById.get(id) || warehouse?.name || id,
-      warehouseRole: resolveWarehouseRoleFromRouting(id, routing, warehouse?.warehouseRole),
-      balances: balances.filter((row) => row.warehouseId === id),
-    });
-  }, [balances, printWarehouseCount, routing, warehouseNameById, warehouses]);
-
   const resolvedPrintWarehouseId = warehouseFilter || (scoped && warehouseIds.length === 1 ? warehouseIds[0] : '');
 
   const openPrintCount = useCallback(() => {
-    if (warehouseSelectLocked && resolvedPrintWarehouseId) {
-      printCountForWarehouse(resolvedPrintWarehouseId);
-      return;
-    }
-    if (resolvedPrintWarehouseId) {
-      printCountForWarehouse(resolvedPrintWarehouseId);
-      return;
-    }
-    setPrintPickerWarehouseId(warehouseFilterOptions[0]?.value || '');
+    setPrintPickerWarehouseId(resolvedPrintWarehouseId || warehouseFilterOptions[0]?.value || '');
     setPrintPickerOpen(true);
-  }, [
-    printCountForWarehouse,
-    resolvedPrintWarehouseId,
-    warehouseFilterOptions,
-    warehouseSelectLocked,
-  ]);
+  }, [resolvedPrintWarehouseId, warehouseFilterOptions]);
   const unitsPerCartonByProductId = useMemo(
     () => new Map(rawProducts.map((p) => [p.id || '', Number(p.unitsPerCarton || 0)])),
     [rawProducts],
@@ -1083,77 +1055,26 @@ export const StockBalances: React.FC = () => {
         canMoveStock={can('inventory.transactions.create')}
         onApplied={() => void reload()}
       />
-      <ManagedModalPortal open={printPickerOpen}>
-        <div
-          className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
-          role="presentation"
-          onClick={() => setPrintPickerOpen(false)}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setPrintPickerOpen(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="warehouse-count-print-title"
-            className="flex w-full max-w-md flex-col overflow-hidden rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] px-5 py-4">
-              <h3 id="warehouse-count-print-title" className="text-lg font-bold">
-                اختر المخزن
-              </h3>
-              <button
-                type="button"
-                onClick={() => setPrintPickerOpen(false)}
-                className="rounded-md p-1 text-[var(--color-text-muted)]"
-                aria-label="إغلاق"
-              >
-                <span className="material-icons-round" aria-hidden>close</span>
-              </button>
-            </div>
-            <div className="space-y-3 px-5 py-4">
-              <p className="text-sm text-[var(--color-text-muted)]">
-                ورقة الجرد تُطبع لمخزن واحد. اختر المخزن ثم اضغط طباعة.
-              </p>
-              <Select
-                value={printPickerWarehouseId || 'none'}
-                onValueChange={(value) => setPrintPickerWarehouseId(value === 'none' ? '' : value)}
-              >
-                <SelectTrigger className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]">
-                  <SelectValue placeholder="اختر المخزن" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">اختر المخزن</SelectItem>
-                  {warehouseFilterOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-[var(--color-border)] px-5 py-3">
-              <Button type="button" variant="outline" onClick={() => setPrintPickerOpen(false)}>
-                إلغاء
-              </Button>
-              <Button
-                type="button"
-                variant="primary"
-                disabled={!printPickerWarehouseId || printing}
-                onClick={() => {
-                  const id = printPickerWarehouseId;
-                  setWarehouseFilter(id);
-                  setPrintPickerOpen(false);
-                  printCountForWarehouse(id);
-                }}
-              >
-                طباعة الجرد
-              </Button>
-            </div>
-          </div>
-        </div>
-      </ManagedModalPortal>
+      <WarehouseCountSheetPrintModal
+        open={printPickerOpen}
+        onClose={() => setPrintPickerOpen(false)}
+        warehouses={warehouseFilterOptions}
+        balances={balances}
+        initialWarehouseId={printPickerWarehouseId || resolvedPrintWarehouseId}
+        warehouseSelectLocked={warehouseSelectLocked}
+        printing={printing}
+        resolveWarehouseRole={(id) =>
+          resolveWarehouseRoleFromRouting(
+            id,
+            routing,
+            warehouses.find((row) => row.id === id)?.warehouseRole,
+          )
+        }
+        onPrint={(input) => {
+          setWarehouseFilter(input.warehouseId);
+          void printWarehouseCount(input);
+        }}
+      />
     </ModuleOpsPageShell>
   );
 };
