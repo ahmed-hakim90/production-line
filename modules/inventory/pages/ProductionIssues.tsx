@@ -34,6 +34,8 @@ import type { PaperSize } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '../../../utils/printManager';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
+import { ProductionIssuePrint } from '../components/ProductionIssuePrint';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
@@ -71,14 +73,6 @@ const formatQty = (value: number | undefined, digits = 2) => {
   });
 };
 
-const formatPrintDate = (value: string) => new Date(value).toLocaleString('en-GB', {
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
 type LineActionKind = 'return' | 'compensate' | 'scrap';
 type LineActionModal = {
   kind: LineActionKind;
@@ -99,133 +93,6 @@ function shortageReasonLabel(row: ProductionIssueShortageRow) {
   }
   return 'اللوكيشنات لا تغطي الكمية المطلوبة';
 }
-
-const IssuePrint = React.forwardRef<HTMLDivElement, { order: ProductionIssueOrder | null; sourceLabel?: string; paperSize: PaperSize }>(({ order, sourceLabel, paperSize }, ref) => {
-  if (!order) return <div ref={ref} />;
-  const isA5 = paperSize === 'a5';
-  const totalBase = order.lines.reduce((sum, line) => sum + Number(line.baseRequiredQty || 0), 0);
-  const totalWaste = order.lines.reduce((sum, line) => sum + Number(line.plannedWasteQty || 0), 0);
-  const totalRequired = order.lines.reduce((sum, line) => sum + Number(line.requiredQty || 0), 0);
-  const cell: React.CSSProperties = { border: '1px solid var(--color-border)', padding: '5.5px 6.5px', verticalAlign: 'top' };
-  const headCell: React.CSSProperties = { ...cell, background: 'var(--color-text)', color: '#fff', fontWeight: 800, textAlign: 'center' };
-  const numericCell: React.CSSProperties = { ...cell, textAlign: 'center', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' };
-  const avoidBreak: React.CSSProperties = { breakInside: 'avoid', pageBreakInside: 'avoid' };
-  const infoBox: React.CSSProperties = { border: '1px solid var(--color-border)', borderRadius: 7, padding: '6px 8px', minHeight: 40 };
-  const infoLabel: React.CSSProperties = { margin: 0, color: 'var(--color-text-muted)', fontSize: 9.5, fontWeight: 800 };
-  const infoValue: React.CSSProperties = { margin: '2px 0 0', color: 'var(--color-text)', fontSize: 11.5, fontWeight: 900, overflowWrap: 'anywhere', lineHeight: 1.35 };
-
-  return (
-    <div
-      ref={ref}
-      dir="rtl"
-      style={{
-        width: '190mm',
-        minHeight: isA5 ? '128mm' : '270mm',
-        boxSizing: 'border-box',
-        background: 'var(--color-card)',
-        color: 'var(--color-text)',
-        padding: '7mm 9mm',
-        fontFamily: '"Cairo", "Tahoma", "Arial", sans-serif',
-        fontSize: 12,
-        lineHeight: 1.45,
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, borderBottom: '2px solid var(--color-text)', paddingBottom: 8, marginBottom: 8 }}>
-        <div>
-          <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: 10.5, fontWeight: 800 }}>مخازن الإنتاج</p>
-          <h1 style={{ margin: '1px 0', color: 'var(--color-text)', fontSize: 22, fontWeight: 900, lineHeight: 1.1 }}>إذن صرف إنتاج</h1>
-          <p style={{ margin: 0, direction: 'ltr', textAlign: 'right', fontFamily: 'monospace', fontSize: 12.5, fontWeight: 800 }}>{order.referenceNo}</p>
-        </div>
-        <div style={{ width: 210, border: '1px solid var(--color-border)', borderRadius: 7, overflow: 'hidden', fontSize: 10 }}>
-          {[
-            ['الحالة', statusLabel(order.status)],
-            ['التاريخ', formatPrintDate(order.createdAt)],
-            ['المخزن', order.sourceWarehouseName || order.sourceWarehouseId],
-          ].map(([label, value], index) => (
-            <div key={label} style={{ display: 'grid', gridTemplateColumns: '66px 1fr', borderBottom: index === 2 ? 'none' : '1px solid var(--color-border)' }}>
-              <span style={{ background: 'var(--color-bg)', padding: '4px 6px', fontWeight: 800 }}>{label}</span>
-              <span style={{ padding: '4px 6px', overflowWrap: 'anywhere' }}>{value}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.75fr 0.75fr 1fr', gap: 7, marginBottom: 8 }}>
-        {[
-          ['المنتج', order.productName],
-          ['كود المنتج', order.productCode || '—'],
-          ['كمية الصرف للإنتاج', formatQty(order.quantity, 3)],
-          ['أمر/خطة/تقرير', sourceLabel || order.productionReportCode || order.workOrderId || order.productionPlanId || '—'],
-        ].map(([label, value]) => (
-          <div key={label} style={infoBox}>
-            <p style={infoLabel}>{label}</p>
-            <p style={infoValue}>{value}</p>
-          </div>
-        ))}
-      </div>
-
-      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 10 }}>
-        <colgroup>
-          <col style={{ width: '14%' }} />
-          <col style={{ width: '38%' }} />
-          <col style={{ width: '10%' }} />
-          <col style={{ width: '12%' }} />
-          <col style={{ width: '11%' }} />
-          <col style={{ width: '15%' }} />
-        </colgroup>
-        <thead>
-          <tr>
-            <th style={{ ...headCell, textAlign: 'right' }}>اللوكيشن</th>
-            <th style={{ ...headCell, textAlign: 'right' }}>المكون</th>
-            <th style={headCell}>لكل وحدة</th>
-            <th style={headCell}>طبيعي</th>
-            <th style={headCell}>هالك قياسي</th>
-            <th style={headCell}>إجمالي الصرف</th>
-          </tr>
-        </thead>
-        <tbody>
-          {order.lines.map((line) => (
-            <tr key={`${line.itemType}-${line.itemId}`}>
-              <td style={{ ...cell, fontSize: 9.5, overflowWrap: 'anywhere' }}>
-                {line.allocations.map((a) => {
-                  const rackShelf = [a.rack, a.shelf].filter(Boolean).join(' / ');
-                  return `${a.locationCode}${rackShelf ? ` (${rackShelf})` : ''}: ${formatQty(a.quantity)}`;
-                }).join('، ')}
-              </td>
-              <td style={{ ...cell, fontWeight: 800, overflowWrap: 'anywhere' }}>{line.itemName}</td>
-              <td style={numericCell}>{formatQty(line.qtyPerUnit, 4)}</td>
-              <td style={numericCell}>{formatQty(line.baseRequiredQty)}</td>
-              <td style={numericCell}>{formatQty(line.plannedWasteQty)}</td>
-              <td style={{ ...numericCell, fontWeight: 900 }}>{formatQty(line.requiredQty)} {line.unit}</td>
-            </tr>
-          ))}
-          <tr style={{ background: 'var(--color-bg)', fontWeight: 900, ...avoidBreak }}>
-            <td style={cell} colSpan={3}>الإجمالي</td>
-            <td style={numericCell}>{formatQty(totalBase)}</td>
-            <td style={numericCell}>{formatQty(totalWaste)}</td>
-            <td style={numericCell}>{formatQty(totalRequired)}</td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div style={{ ...avoidBreak, marginTop: 6 }}>
-        {order.note?.trim() && (
-          <div style={{ ...infoBox, marginBottom: 12 }}>
-            <p style={infoLabel}>ملاحظات</p>
-            <p style={infoValue}>{order.note}</p>
-          </div>
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 34, textAlign: 'center', fontSize: 11, fontWeight: 800 }}>
-          {['أمين المخزن', 'مستلم الإنتاج', 'اعتماد الإدارة'].map((label) => (
-            <div key={label} style={{ borderTop: '1.5px solid var(--color-text)', paddingTop: 5 }}>{label}</div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-});
-IssuePrint.displayName = 'IssuePrint';
 
 export const ProductionIssues: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -1284,26 +1151,15 @@ export const ProductionIssues: React.FC = () => {
         </OpsDashPanel>
         </div>
       </div>
-      <div
-        aria-hidden
-        style={{
-          position: 'fixed',
-          left: '-9999px',
-          top: 0,
-          pointerEvents: 'none',
-          direction: 'rtl',
-          width: '210mm',
-          maxWidth: 'none',
-          overflow: 'visible',
-        }}
-      >
-        <IssuePrint
+      <PrintOffscreenHost>
+        <ProductionIssuePrint
           ref={printRef}
           order={printOrder}
           sourceLabel={printOrder?.id ? sourceLabelByOrder.get(printOrder.id) : undefined}
           paperSize={issuePaperSize}
+          printSettings={issuePrintSettings}
         />
-      </div>
+      </PrintOffscreenHost>
       {shortageModalOpen && shortageRows.length > 0 && (
         <ManagedModalPortal>
         <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setShortageModalOpen(false)}>

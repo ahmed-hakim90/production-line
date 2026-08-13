@@ -17,6 +17,8 @@ import type {
 } from '../types';
 import { SPARE_PARTS_REPLENISHMENT_COLLECTION } from '../lib/sparePartsReplenishment';
 import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
+import { warehouseService } from './warehouseService';
+import { replenishmentScopeFieldForBoundRole } from '../lib/boundWarehouseCatalog';
 
 const COLLECTION = SPARE_PARTS_REPLENISHMENT_COLLECTION;
 const MAX_PAGE = 50;
@@ -117,12 +119,22 @@ export const sparePartsReplenishmentService = {
     const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
     if (params?.status) constraints.unshift(where('status', '==', params.status));
     if (scope.warehouseId) {
-      // Bound users see requests involving their warehouse (as source OR destination).
-      // Prefer destination filter when browsing as a center; otherwise source.
-      if (params?.toWarehouseId === scope.warehouseId || !params?.fromWarehouseId) {
+      // Bound users: central is source (fromWarehouseId); center is destination (toWarehouseId).
+      // Explicit request filters still win when they match the bound warehouse.
+      if (params?.fromWarehouseId === scope.warehouseId) {
+        constraints.unshift(where('fromWarehouseId', '==', scope.warehouseId));
+      } else if (params?.toWarehouseId === scope.warehouseId) {
         constraints.unshift(where('toWarehouseId', '==', scope.warehouseId));
       } else {
-        constraints.unshift(where('fromWarehouseId', '==', scope.warehouseId));
+        let boundRole = '';
+        try {
+          const bound = await warehouseService.getById(scope.warehouseId);
+          boundRole = String(bound?.warehouseRole || '');
+        } catch {
+          boundRole = '';
+        }
+        const field = replenishmentScopeFieldForBoundRole(boundRole);
+        constraints.unshift(where(field, '==', scope.warehouseId));
       }
     } else {
       if (params?.fromWarehouseId) {

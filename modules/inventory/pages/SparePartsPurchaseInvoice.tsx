@@ -11,7 +11,7 @@ import { usePermission } from '../../../utils/permissions';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { useAppStore } from '../../../store/useAppStore';
 import { materialService } from '../../manufacturing/services/materialService';
-import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
+import { isMaterialOptedInForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import type { Material } from '../../manufacturing/types';
 import { sparePartsPurchaseInvoiceService } from '../services/sparePartsPurchaseInvoiceService';
 import type { SparePartsPurchaseInvoice as SparePartsPurchaseInvoiceDoc } from '../types';
@@ -106,7 +106,7 @@ export const SparePartsPurchaseInvoicePage: React.FC = () => {
   };
 
   const spareMaterials = useMemo(
-    () => materials.filter((m) => isMaterialAvailableForSpareParts(m) && m.isActive !== false),
+    () => materials.filter((m) => isMaterialOptedInForSpareParts(m) && m.isActive !== false),
     [materials],
   );
 

@@ -2,11 +2,11 @@ import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { PrintTemplateSettings } from '@/types';
 import { DEFAULT_PRINT_TEMPLATE } from '@/utils/dashboardConfig';
-import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
 import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from '@/src/components/erp/FactoryPrintShell';
+import { FactoryPrintTable } from '@/src/components/erp/FactoryPrintTable';
 import { Factory_DEFAULT_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
@@ -55,28 +55,27 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
     const dp = ps.decimalPlaces;
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const font = resolvePrintFont(ps);
+    const accent = resolvePrintAccentHex(ps.primaryColor);
+    const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
+    const isThermal = ps.paperSize === 'thermal';
     const showQr = doc.isFieldVisible('qrCode');
 
     return (
-      <PrintReportLayout
+      <FactoryPrintShell
         ref={ref}
         companyName={doc.headerText || 'مؤسسة المغربي'}
-        reportType={title || 'تقرير الجودة'}
+        documentType={title || 'تقرير الجودة'}
         printDate={now}
         logoUrl={ps.logoUrl}
-        brandAccent={resolvePrintAccentHex(ps.primaryColor)}
+        brandAccent={accent}
         footerTagline={doc.footerText?.trim() || Factory_DEFAULT_FOOTER_TAGLINE}
         extraLines={doc.customLines}
-        paperSize={ps.paperSize}
-        orientation={ps.orientation}
+        paperWidth={paper.width}
+        minHeight={paper.minHeight}
+        padding={isThermal ? '4mm 3mm' : ps.paperSize === 'a5' ? '8mm 9mm' : '10mm 12mm'}
+        dense={isThermal}
         fontFamily={font.fontFamily}
-        fontSize={font.fontSize}
-        meta={{
-          reportNumber: workOrderNumber || '—',
-          reportDate: now,
-          lineName: subtitle || 'قسم إدارة الجودة',
-          supervisorName: 'تقارير الجودة',
-        }}
+        fontSize={isThermal ? font.denseFontSize : font.fontSize}
         metaCards={
           doc.isFieldVisible('meta')
             ? [
@@ -90,55 +89,15 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
         kpis={
           doc.isFieldVisible('kpis')
             ? [
-                { label: 'تم الفحص', value: summary.inspectedUnits, color: 'indigo' },
-                { label: 'ناجح', value: summary.passedUnits, color: 'green' },
-                { label: 'فاشل', value: summary.failedUnits, color: 'red' },
-                { label: 'إعادة تشغيل', value: summary.reworkUnits, color: 'sky' },
-                { label: 'معدل العيوب', value: `${fmtNum(summary.defectRate, dp)}%`, color: 'red' },
-                { label: 'FPY', value: `${fmtNum(summary.firstPassYield, dp)}%`, color: 'indigo' },
+                { label: 'تم الفحص', value: summary.inspectedUnits, tone: 'indigo' as const },
+                { label: 'ناجح', value: summary.passedUnits, tone: 'green' as const },
+                { label: 'فاشل', value: summary.failedUnits, tone: 'red' as const },
+                { label: 'إعادة تشغيل', value: summary.reworkUnits, tone: 'sky' as const },
+                { label: 'معدل العيوب', value: `${fmtNum(summary.defectRate, dp)}%`, tone: 'red' as const },
+                { label: 'FPY', value: `${fmtNum(summary.firstPassYield, dp)}%`, tone: 'indigo' as const },
               ]
-            : []
+            : undefined
         }
-        sections={[
-          ...(doc.isFieldVisible('defects')
-            ? [
-                {
-                  title: 'أهم أسباب العيوب',
-                  rows:
-                    topDefects.length === 0
-                      ? [{ label: 'العيوب', value: 'لا توجد عيوب مسجلة' }]
-                      : topDefects.map((item, idx) => ({
-                          label: `${idx + 1}. ${item.reasonLabel}`,
-                          value: fmtNum(item.quantity, 0),
-                          highlight: true,
-                        })),
-                },
-              ]
-            : []),
-          ...(showQr
-            ? [
-                {
-                  title: 'التحقق',
-                  rows: [
-                    {
-                      label: 'رمز QR',
-                      fullWidth: true as const,
-                      value: (
-                        <div className="flex flex-col items-center gap-1 py-1">
-                          <QRCodeSVG
-                            value={`quality-kpi|${workOrderNumber || 'snapshot'}|inspected:${summary.inspectedUnits}|failed:${summary.failedUnits}`}
-                            size={64}
-                            level="L"
-                          />
-                          <span className="text-[10px] font-bold text-slate-500">رمز QR للتحقق من صحة تقرير الجودة</span>
-                        </div>
-                      ),
-                    },
-                  ],
-                },
-              ]
-            : []),
-        ]}
         signatures={
           doc.isFieldVisible('signatures')
             ? [
@@ -146,9 +105,54 @@ export const QualityReportPrint = React.forwardRef<HTMLDivElement, QualityReport
                 { title: 'مشرف الجودة' },
                 { title: 'مدير الإنتاج' },
               ]
-            : []
+            : undefined
         }
-      />
+      >
+        {doc.isFieldVisible('defects') ? (
+          <>
+            <FactoryPrintSectionTitle title="أهم أسباب العيوب" accent={accent} />
+            <FactoryPrintTable
+              dense={isThermal}
+              brandAccent={accent}
+              printSettings={ps}
+              columns={[
+                { key: 'reason', header: 'السبب', width: '70%' },
+                { key: 'qty', header: 'الكمية', width: '30%', align: 'center' },
+              ]}
+              rows={
+                topDefects.length === 0
+                  ? [
+                      {
+                        key: 'empty',
+                        cells: { reason: 'لا توجد عيوب مسجلة', qty: '—' },
+                      },
+                    ]
+                  : topDefects.map((item, idx) => ({
+                      key: `defect-${idx}`,
+                      cells: {
+                        reason: `${idx + 1}. ${item.reasonLabel}`,
+                        qty: <strong>{fmtNum(item.quantity, 0)}</strong>,
+                      },
+                    }))
+              }
+            />
+          </>
+        ) : null}
+
+        {showQr ? (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <FactoryPrintSectionTitle title="التحقق" accent={accent} />
+            <QRCodeSVG
+              value={`quality-kpi|${workOrderNumber || 'snapshot'}|inspected:${summary.inspectedUnits}|failed:${summary.failedUnits}`}
+              size={64}
+              level="L"
+            />
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>
+              رمز QR للتحقق من صحة تقرير الجودة
+            </span>
+          </div>
+        ) : null}
+      </FactoryPrintShell>
     );
   },
 );

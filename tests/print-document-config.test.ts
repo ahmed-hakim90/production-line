@@ -128,6 +128,7 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('productBomCountCard'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('workOrder'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('warehouseStockCount'), true);
+  assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('productionIssue'), true);
   const payslipResolved = resolvePrintDocumentConfig(
     {
       ...DEFAULT_PRINT_TEMPLATE,

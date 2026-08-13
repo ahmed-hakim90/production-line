@@ -1,7 +1,12 @@
 import React from 'react';
-import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
+import {
+  FactoryPrintSectionTitle,
+  FactoryPrintShell,
+} from '@/src/components/erp/FactoryPrintShell';
+import { FactoryPrintTable } from '@/src/components/erp/FactoryPrintTable';
 import type { PrintTemplateSettings } from '@/types';
 import { DEFAULT_PRINT_TEMPLATE } from '@/utils/dashboardConfig';
+import { Factory_DEFAULT_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { formatDurationSeconds } from '../domain/calculations';
@@ -18,6 +23,12 @@ export interface RoutingExecutionPrintProps {
   exportRootId?: string;
 }
 
+const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
+  a4: { width: '210mm', minHeight: '297mm' },
+  a5: { width: '148mm', minHeight: '210mm' },
+  thermal: { width: '80mm', minHeight: 'auto' },
+};
+
 export const RoutingExecutionPrint = React.forwardRef<HTMLDivElement, RoutingExecutionPrintProps>(
   ({ execution, steps, productName, supervisorName, printSettings, exportRootId = 'routing-exec-print-root' }, ref) => {
     if (!execution) {
@@ -27,6 +38,9 @@ export const RoutingExecutionPrint = React.forwardRef<HTMLDivElement, RoutingExe
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
     const doc = resolvePrintDocumentConfig(ps, 'routingExecution');
     const font = resolvePrintFont(ps);
+    const accent = resolvePrintAccentHex(ps.primaryColor);
+    const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
+    const isThermal = ps.paperSize === 'thermal';
     const dp = ps.decimalPlaces ?? 0;
     const now = new Date().toLocaleString('ar-EG');
     const refShort =
@@ -46,128 +60,173 @@ export const RoutingExecutionPrint = React.forwardRef<HTMLDivElement, RoutingExe
 
     const sortedSteps = [...steps].sort((a, b) => a.orderIndex - b.orderIndex);
 
-    const stepRows =
-      sortedSteps.length > 0
-        ? sortedSteps.map((st, idx) => {
-            const act = st.actualDurationSeconds ?? 0;
-            const actW = st.actualWorkersCount ?? st.standardWorkersCount;
-            return {
-              label: `الخطوة ${idx + 1} — ${st.name || '—'}`,
-              value: `قياسي ${formatDurationSeconds(st.standardDurationSeconds)} (${st.standardWorkersCount} عامل) | فعلي ${formatDurationSeconds(act)} (${actW} عامل)`,
-            };
-          })
-        : [{ label: 'الخطوات', value: 'لا تتوفر تفاصيل خطوات في التقرير.' }];
-
     return (
-      <PrintReportLayout
+      <FactoryPrintShell
         ref={ref}
         exportRootId={exportRootId}
         companyName={doc.headerText || 'مؤسسة المغربي للإستيراد'}
-        reportType="تقرير تنفيذ مسار"
+        documentType="تقرير تنفيذ مسار"
         printDate={now}
         logoUrl={ps.logoUrl}
-        brandAccent={resolvePrintAccentHex(ps.primaryColor)}
-        footerTagline={doc.footerText?.trim() || undefined}
+        brandAccent={accent}
+        footerTagline={doc.footerText?.trim() || Factory_DEFAULT_FOOTER_TAGLINE}
         extraLines={doc.customLines}
-        paperSize={ps.paperSize}
-        orientation={ps.orientation}
+        paperWidth={paper.width}
+        minHeight={paper.minHeight}
+        padding={isThermal ? '4mm 3mm' : ps.paperSize === 'a5' ? '8mm 9mm' : '10mm 12mm'}
+        dense={isThermal}
         fontFamily={font.fontFamily}
-        fontSize={font.fontSize}
-        meta={{
-          reportNumber: refShort,
-          reportDate: finishedLabel,
-          lineName: 'مسار إنتاج',
-          supervisorName: supervisorName || '—',
-        }}
+        fontSize={isThermal ? font.denseFontSize : font.fontSize}
+        metaCards={[
+          { label: 'المرجع', value: refShort },
+          { label: 'تاريخ الإنهاء', value: finishedLabel },
+          { label: 'المسار', value: 'مسار إنتاج' },
+          { label: 'المشرف', value: supervisorName || '—' },
+        ]}
         kpis={
           doc.isFieldVisible('kpis')
             ? [
-                {
-                  label: 'الكمية',
-                  value: execution.quantity,
-                  unit: 'وحدة',
-                  color: 'indigo',
-                },
-                {
-                  label: 'الزمن القياسي',
-                  value: formatDurationSeconds(stdTotal),
-                  color: 'default',
-                },
-                {
-                  label: 'الزمن الفعلي',
-                  value: formatDurationSeconds(actTotal),
-                  color: 'default',
-                },
-                {
-                  label: 'كفاءة الزمن',
-                  value: effPct,
-                  color: 'green',
-                },
+                { label: 'الكمية', value: execution.quantity, unit: 'وحدة', tone: 'indigo' as const },
+                { label: 'الزمن القياسي', value: formatDurationSeconds(stdTotal) },
+                { label: 'الزمن الفعلي', value: formatDurationSeconds(actTotal) },
+                { label: 'كفاءة الزمن', value: effPct, tone: 'green' as const },
               ]
-            : []
+            : undefined
         }
-        sections={[
-          ...(doc.isFieldVisible('productBlock')
-            ? [
+        signatures={
+          doc.isFieldVisible('signatures')
+            ? [{ title: 'المشرف' }, { title: 'الاعتماد' }]
+            : undefined
+        }
+      >
+        {doc.isFieldVisible('productBlock') ? (
+          <>
+            <FactoryPrintSectionTitle title="المنتج والخطة" accent={accent} />
+            <FactoryPrintTable
+              dense={isThermal}
+              brandAccent={accent}
+              printSettings={ps}
+              columns={[
+                { key: 'label', header: 'البند', width: '40%' },
+                { key: 'value', header: 'القيمة', width: '60%' },
+              ]}
+              rows={[
                 {
-                  title: 'المنتج والخطة',
-                  rows: [
-                    { label: 'المنتج', value: productName || '—', highlight: true },
-                    { label: 'إصدار الخطة', value: `v${execution.planVersion}` },
-                    { label: 'معرّف التنفيذ', value: execution.id },
-                  ],
+                  key: 'product',
+                  cells: {
+                    label: 'المنتج',
+                    value: <strong>{productName || '—'}</strong>,
+                  },
                 },
-              ]
-            : []),
-          ...(doc.isFieldVisible('costs')
-            ? [
                 {
-                  title: 'التكلفة والأداء',
-                  rows: [
-                    {
-                      label: 'تكلفة الوحدة',
-                      value:
-                        execution.costPerUnit != null && execution.costPerUnit > 0
-                          ? `${execution.costPerUnit.toFixed(dp)} ج.م`
-                          : '—',
-                    },
-                    {
-                      label: 'إجمالي التكلفة',
-                      value:
-                        execution.totalCost != null && execution.totalCost > 0
-                          ? `${execution.totalCost.toFixed(dp)} ج.م`
-                          : '—',
-                    },
-                    {
-                      label: 'أجر الساعة المستخدم',
-                      value:
-                        execution.workerHourRateUsed != null && execution.workerHourRateUsed > 0
-                          ? `${execution.workerHourRateUsed.toFixed(dp)} ج.م/ساعة`
-                          : '—',
-                    },
-                    ...(laborEffPct
-                      ? [
-                          {
-                            label: 'كفاءة العمالة (إصدار قديم)',
-                            value: laborEffPct,
-                          },
-                        ]
-                      : []),
-                  ],
+                  key: 'plan',
+                  cells: { label: 'إصدار الخطة', value: `v${execution.planVersion}` },
                 },
-              ]
-            : []),
-          ...(doc.isFieldVisible('steps')
-            ? [
                 {
-                  title: 'خطوات التنفيذ',
-                  rows: stepRows,
+                  key: 'exec',
+                  cells: { label: 'معرّف التنفيذ', value: execution.id },
                 },
-              ]
-            : []),
-        ]}
-        signatures={doc.isFieldVisible('signatures') ? [{ title: 'المشرف' }, { title: 'الاعتماد' }] : []}
-      />
+              ]}
+            />
+          </>
+        ) : null}
+
+        {doc.isFieldVisible('costs') ? (
+          <>
+            <FactoryPrintSectionTitle title="التكلفة والأداء" accent={accent} />
+            <FactoryPrintTable
+              dense={isThermal}
+              brandAccent={accent}
+              printSettings={ps}
+              columns={[
+                { key: 'label', header: 'البند', width: '45%' },
+                { key: 'value', header: 'القيمة', width: '55%', align: 'center' },
+              ]}
+              rows={[
+                {
+                  key: 'cpu',
+                  cells: {
+                    label: 'تكلفة الوحدة',
+                    value:
+                      execution.costPerUnit != null && execution.costPerUnit > 0
+                        ? `${execution.costPerUnit.toFixed(dp)} ج.م`
+                        : '—',
+                  },
+                },
+                {
+                  key: 'total',
+                  cells: {
+                    label: 'إجمالي التكلفة',
+                    value:
+                      execution.totalCost != null && execution.totalCost > 0
+                        ? `${execution.totalCost.toFixed(dp)} ج.م`
+                        : '—',
+                  },
+                },
+                {
+                  key: 'rate',
+                  cells: {
+                    label: 'أجر الساعة المستخدم',
+                    value:
+                      execution.workerHourRateUsed != null && execution.workerHourRateUsed > 0
+                        ? `${execution.workerHourRateUsed.toFixed(dp)} ج.م/ساعة`
+                        : '—',
+                  },
+                },
+                ...(laborEffPct
+                  ? [
+                      {
+                        key: 'labor',
+                        cells: {
+                          label: 'كفاءة العمالة (إصدار قديم)',
+                          value: laborEffPct,
+                        },
+                      },
+                    ]
+                  : []),
+              ]}
+            />
+          </>
+        ) : null}
+
+        {doc.isFieldVisible('steps') ? (
+          <>
+            <FactoryPrintSectionTitle title="خطوات التنفيذ" accent={accent} />
+            <FactoryPrintTable
+              dense={isThermal}
+              brandAccent={accent}
+              printSettings={ps}
+              columns={[
+                { key: 'step', header: 'الخطوة', width: '40%' },
+                { key: 'detail', header: 'القياسي / الفعلي', width: '60%' },
+              ]}
+              rows={
+                sortedSteps.length > 0
+                  ? sortedSteps.map((st, idx) => {
+                      const act = st.actualDurationSeconds ?? 0;
+                      const actW = st.actualWorkersCount ?? st.standardWorkersCount;
+                      return {
+                        key: `step-${st.orderIndex}-${idx}`,
+                        cells: {
+                          step: `الخطوة ${idx + 1} — ${st.name || '—'}`,
+                          detail: `قياسي ${formatDurationSeconds(st.standardDurationSeconds)} (${st.standardWorkersCount} عامل) | فعلي ${formatDurationSeconds(act)} (${actW} عامل)`,
+                        },
+                      };
+                    })
+                  : [
+                      {
+                        key: 'empty',
+                        cells: {
+                          step: 'الخطوات',
+                          detail: 'لا تتوفر تفاصيل خطوات في التقرير.',
+                        },
+                      },
+                    ]
+              }
+            />
+          </>
+        ) : null}
+      </FactoryPrintShell>
     );
   },
 );

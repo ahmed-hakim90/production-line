@@ -15,6 +15,7 @@ import type { Material } from '../../manufacturing/types';
 import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
 import { sparePartsReplenishmentService } from '../services/sparePartsReplenishmentService';
+import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
 import {
   SPARE_PARTS_REPLENISHMENT_STATUS_LABELS,
   canApproveSparePartsRequest,
@@ -78,7 +79,7 @@ export const SparePartsReplenishment: React.FC = () => {
   const canReceive = can('sparePartsReplenishment.receive');
   const canCancelPerm = can('sparePartsReplenishment.cancel');
   const canRejectPerm = can('sparePartsReplenishment.reject');
-  const canManageCounts = can('inventory.counts.manage');
+  const canUploadOpening = canUploadOpeningBalances(can);
 
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -406,10 +407,10 @@ export const SparePartsReplenishment: React.FC = () => {
       onRefresh={() => void load()}
       refreshing={loading}
       actions={
-        (canManageCounts && primaryCentralWarehouseId) || canCreate
+        (canUploadOpening && primaryCentralWarehouseId) || canCreate
           ? (
             <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-              {canManageCounts && primaryCentralWarehouseId ? (
+              {canUploadOpening && primaryCentralWarehouseId ? (
                 <Link
                   className="min-w-0 flex-1 sm:flex-none"
                   to={withTenantPath(

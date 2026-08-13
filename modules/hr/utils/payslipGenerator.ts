@@ -226,7 +226,6 @@ function renderPayslipBody(data: PayslipData, palette: ImageExportPalette): stri
       <div class="brand">
         ${companyLogo ? `<img src="${companyLogo}" alt="" style="max-height:40px;margin-bottom:6px;display:block;" />` : ''}
         <h1>${companyName}</h1>
-        <div class="sys">ForgeOps</div>
       </div>
       <div>
         <div class="badge">كشف راتب</div>
@@ -306,13 +305,8 @@ export function generatePayslipHTML(data: PayslipData): string {
 </html>`;
 }
 
-export function printPayslip(data: PayslipData): void {
-  const html = generatePayslipHTML(data);
-  const printWindow = window.open('', '_blank', 'width=900,height=700');
-  if (!printWindow) return;
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.onload = () => printWindow.print();
+export function printPayslip(_data: PayslipData): void {
+  throw new Error('استخدم PayslipPrint عبر محرك الطباعة — الطباعة عبر نافذة HTML ملغاة.');
 }
 
 export interface CombinedPayslipData {
@@ -358,12 +352,6 @@ export function generateCombinedPayslipHTML(data: CombinedPayslipData): string {
 </html>`;
 }
 
-export function printCombinedPayslips(data: CombinedPayslipData): void {
-  const html = generateCombinedPayslipHTML(data);
-  if (!html) return;
-  const printWindow = window.open('', '_blank', 'width=1000,height=800');
-  if (!printWindow) return;
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.onload = () => printWindow.print();
+export function printCombinedPayslips(_data: CombinedPayslipData): void {
+  throw new Error('استخدم CombinedPayslipsPrint عبر محرك الطباعة — الطباعة عبر نافذة HTML ملغاة.');
 }

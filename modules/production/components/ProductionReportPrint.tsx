@@ -7,10 +7,16 @@ import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ProductionReport, PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
-import { getPrintThemePalette, resolvePrintAccentHex } from '../../../utils/printTheme';
+import { resolvePrintAccentHex } from '../../../utils/printTheme';
 import { getReportWaste } from '../../../utils/calculations';
 import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
-import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
+import {
+  FactoryPrintSectionTitle,
+  FactoryPrintShell,
+} from '@/src/components/erp/FactoryPrintShell';
+import { FactoryPrintTable } from '@/src/components/erp/FactoryPrintTable';
+import type { FactoryPrintTableRow } from '@/src/components/erp/FactoryPrintTable';
+import { Factory_DEFAULT_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import { cn } from '@/lib/utils';
@@ -195,27 +201,6 @@ const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
   thermal: { width: '80mm', minHeight: 'auto' },
 };
 
-const PRINT_SPACING = {
-  regular: {
-    pagePadding: '10mm 12mm',
-    sectionGap: '5mm',
-    tableHeaderPadding: '3.2mm 3.4mm',
-    tableCellPadding: '2.8mm 3.4mm',
-    tableFontSize: '10pt',
-    tableHeaderFontSize: '9pt',
-    signatureTopMargin: '11mm',
-  },
-  thermal: {
-    pagePadding: '4mm 3mm',
-    sectionGap: '3mm',
-    tableHeaderPadding: '1.8mm 2mm',
-    tableCellPadding: '1.6mm 2mm',
-    tableFontSize: '7.3pt',
-    tableHeaderFontSize: '7pt',
-    signatureTopMargin: '0',
-  },
-} as const;
-
 function fmtNum(value: number, decimalPlaces: number): string {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: decimalPlaces,
@@ -302,208 +287,152 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
     const doc = resolvePrintDocumentConfig(ps, 'productionReport');
     const font = resolvePrintFont(ps);
-    const palette = getPrintThemePalette(ps);
+    const accent = resolvePrintAccentHex(ps.primaryColor);
     const dp = ps.decimalPlaces;
     const t = totals ?? computePrintTotals(rows, dp);
     const now = generatedAt ?? new Date().toLocaleString('ar-EG');
     const paper = PAPER_DIMENSIONS[ps.paperSize] || PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
-    const spacing = isThermal ? PRINT_SPACING.thermal : PRINT_SPACING.regular;
 
-    const showWaste    = doc.isFieldVisible('waste');
+    const showWaste = doc.isFieldVisible('waste');
     const showEmployee = doc.isFieldVisible('employee');
-    const showCosts    = doc.isFieldVisible('costs') && rows.some((r) => r.costPerUnit != null && r.costPerUnit > 0);
-    const showWO       = doc.isFieldVisible('workOrder') && rows.some((r) => !!r.workOrderNumber);
+    const showCosts = doc.isFieldVisible('costs') && rows.some((r) => r.costPerUnit != null && r.costPerUnit > 0);
+    const showWO = doc.isFieldVisible('workOrder') && rows.some((r) => !!r.workOrderNumber);
     const showSignatures = doc.isFieldVisible('signatures');
-    const showQR       = doc.isFieldVisible('qrCode');
-    const showNotes    = rows.some((r) => !!r.notes?.trim());
-    const headerColSpan =
-      4 +
-      (showEmployee ? 1 : 0) +
-      (showWO ? 1 : 0) +
-      (showNotes ? 1 : 0);
+    const showQR = doc.isFieldVisible('qrCode');
+    const showNotes = rows.some((r) => !!r.notes?.trim());
+
+    const columns = [
+      { key: 'idx', header: '#', width: '4%', align: 'center' as const },
+      { key: 'date', header: 'التاريخ', width: '9%' },
+      { key: 'line', header: 'خط الإنتاج', width: '10%' },
+      { key: 'product', header: 'المنتج', width: '14%' },
+      ...(showEmployee ? [{ key: 'employee', header: 'المشرف', width: '10%' }] : []),
+      ...(showWO ? [{ key: 'wo', header: 'أمر شغل', width: '9%' }] : []),
+      ...(showNotes ? [{ key: 'notes', header: 'ملاحظات', width: '10%' }] : []),
+      { key: 'qty', header: 'الكمية', width: '8%', align: 'center' as const },
+      ...(showWaste ? [{ key: 'waste', header: 'الهالك', width: '7%', align: 'center' as const }] : []),
+      { key: 'workers', header: 'عمال', width: '6%', align: 'center' as const },
+      { key: 'labor', header: 'تفصيل العمالة', width: '12%' },
+      { key: 'presence', header: 'الحضور', width: '10%' },
+      { key: 'hours', header: 'ساعات', width: '7%', align: 'center' as const },
+      ...(showCosts ? [{ key: 'cost', header: 'تكلفة', width: '7%', align: 'center' as const }] : []),
+    ];
+
+    const dataRows: FactoryPrintTableRow[] = rows.map((row, i) => ({
+      key: `row-${i}`,
+      cells: {
+        idx: i + 1,
+        date: row.date,
+        line: row.lineName,
+        product: shortProductName(row.productName),
+        employee: row.employeeName,
+        wo: row.workOrderNumber || '—',
+        notes: row.notes?.trim() || '—',
+        qty: <strong style={{ color: '#059669' }}>{fmtNum(row.quantityProduced, dp)}</strong>,
+        waste: <strong>{fmtNum(row.wasteQuantity, dp)}</strong>,
+        workers: row.workersCount,
+        labor: `إ:${row.workersProductionCount ?? 0} | ت:${row.workersPackagingCount ?? 0} | ج:${row.workersQualityCount ?? 0} | ص:${row.workersMaintenanceCount ?? 0} | خ:${row.workersExternalCount ?? 0}`,
+        presence: `حاضر:${row.presentAssignments ?? 0} | غائب:${row.absentAssignments ?? 0}`,
+        hours: fmtNum(row.workHours, dp),
+        cost:
+          row.costPerUnit != null && row.costPerUnit > 0 ? (
+            <strong style={{ color: accent }}>{fmtNum(row.costPerUnit, 2)}</strong>
+          ) : (
+            '—'
+          ),
+      },
+    }));
+
+    const avgCost = (() => {
+      const costsArr = rows.filter((r) => r.costPerUnit != null && r.costPerUnit > 0).map((r) => r.costPerUnit!);
+      if (!costsArr.length) return 0;
+      return costsArr.reduce((s, v) => s + v, 0) / costsArr.length;
+    })();
+
+    dataRows.push({
+      key: 'totals',
+      cells: {
+        idx: '',
+        date: 'الإجمالي',
+        line: '',
+        product: '',
+        employee: '',
+        wo: '',
+        notes: '',
+        qty: <strong style={{ color: '#059669' }}>{fmtNum(t.totalProduced, dp)}</strong>,
+        waste: <strong style={{ color: '#f43f5e' }}>{fmtNum(t.totalWaste, dp)}</strong>,
+        workers: fmtNum(t.totalWorkers, dp),
+        labor: '—',
+        presence: '—',
+        hours: fmtNum(t.totalHours, dp),
+        cost: avgCost > 0 ? <strong style={{ color: accent }}>{fmtNum(avgCost, 2)}</strong> : '—',
+      },
+    });
 
     return (
-      <div
+      <FactoryPrintShell
         ref={ref}
-        className="print-root print-report"
-        dir="rtl"
-        data-print-font={font.fontFamily}
-        style={{
-          fontFamily: font.fontFamily,
-          width: paper.width,
-          minHeight: paper.minHeight,
-          padding: spacing.pagePadding,
-          background: '#fff',
-          color: palette.text,
-          ['--print-text' as any]: palette.text,
-          ['--print-muted-text' as any]: palette.mutedText,
-          ['--print-border' as any]: palette.border,
-          ['--print-th-bg' as any]: palette.tableHeaderBg,
-          ['--print-th-text' as any]: palette.tableHeaderText,
-          ['--print-row-alt' as any]: palette.tableRowAltBg,
-          fontSize: isThermal ? font.denseFontSize : font.fontSize,
-          lineHeight: 1.55,
-          boxSizing: 'border-box',
-        }}
+        companyName={doc.headerText || 'مؤسسة المغربي للإستيراد'}
+        documentType={title || 'تقرير إنتاج'}
+        printDate={now}
+        logoUrl={ps.logoUrl}
+        brandAccent={accent}
+        footerTagline={doc.footerText?.trim() || Factory_DEFAULT_FOOTER_TAGLINE}
+        extraLines={doc.customLines}
+        paperWidth={paper.width}
+        minHeight={paper.minHeight}
+        padding={isThermal ? '4mm 3mm' : ps.paperSize === 'a5' ? '8mm 9mm' : '10mm 12mm'}
+        dense={isThermal}
+        fontFamily={font.fontFamily}
+        fontSize={isThermal ? font.denseFontSize : font.fontSize}
+        metaCards={[
+          ...(subtitle ? [{ label: 'الوصف', value: subtitle }] : []),
+          { label: 'عدد السجلات', value: String(rows.length) },
+          { label: 'تاريخ الطباعة', value: now },
+        ]}
+        kpis={[
+          { label: 'الكمية المنتجة', value: fmtNum(t.totalProduced, dp), unit: 'وحدة', tone: 'indigo' as const },
+          ...(showWaste
+            ? [
+                { label: 'الهالك', value: fmtNum(t.totalWaste, dp), unit: 'وحدة', tone: 'red' as const },
+                { label: 'نسبة الهالك', value: `${t.wasteRatio}%`, tone: 'sky' as const },
+              ]
+            : []),
+          { label: 'ساعات العمل', value: fmtNum(t.totalHours, dp), unit: 'ساعة' },
+          { label: 'عدد التقارير', value: t.reportsCount },
+        ]}
+        signatures={
+          !isThermal && showSignatures
+            ? [
+                { title: 'مدير المصنع' },
+                ...(showEmployee ? [{ title: 'مدير الخط' }] : []),
+                { title: 'مراقب الجودة' },
+              ]
+            : undefined
+        }
       >
-        {/* ── Factory Header ── */}
-        <div style={{ textAlign: 'center', marginBottom: spacing.sectionGap, borderBottom: `2px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '5mm' }}>
-          {ps.logoUrl && (
-            <img
-              src={ps.logoUrl}
-              alt="logo"
-              style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }}
+        <FactoryPrintSectionTitle title="تفاصيل التقارير" accent={accent} />
+        <FactoryPrintTable
+          dense={isThermal}
+          brandAccent={accent}
+          printSettings={ps}
+          columns={columns}
+          rows={dataRows}
+        />
+        {showQR ? (
+          <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+            <QRCodeSVG
+              value={`report-batch|${now}|count:${rows.length}|produced:${t.totalProduced}`}
+              size={isThermal ? 40 : 64}
+              level="L"
             />
-          )}
-          <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
-            {doc.headerText}
-          </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText, fontWeight: 600 }}>
-           مؤسسة المغربي
-          </p>
-        </div>
-
-        <PrintExtraLines lines={doc.customLines} dense={isThermal} />
-
-        {/* ── Report Title ── */}
-        <div style={{ marginBottom: spacing.sectionGap }}>
-          <h2 style={{ margin: 0, fontSize: isThermal ? '10pt' : '16pt', fontWeight: 800, color: '#0f172a' }}>{title}</h2>
-          {subtitle && <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '10pt', color: palette.mutedText }}>{subtitle}</p>}
-          <div
-            style={{
-              marginTop: '2.2mm',
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: '2mm',
-              fontSize: isThermal ? '6pt' : '9pt',
-              color: palette.mutedText,
-              border: `1px solid ${palette.border}`,
-              borderRadius: '2mm',
-              padding: isThermal ? '1mm 1.3mm' : '1.4mm 1.8mm',
-              background: palette.tableRowAltBg,
-            }}
-          >
-            <span>تاريخ الطباعة: {now}</span>
-            <span>عدد السجلات: {rows.length}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b' }}>
+              امسح رمز QR للتحقق من صحة التقرير
+            </span>
           </div>
-        </div>
-
-        {/* ── Summary Cards ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: isThermal ? 'repeat(2, minmax(0, 1fr))' : 'repeat(5, minmax(0, 1fr))', gap: isThermal ? '1.5mm' : '3mm', marginBottom: spacing.sectionGap }}>
-          <SummaryBox label="الكمية المنتجة"  value={fmtNum(t.totalProduced, dp)} unit="وحدة" color={ps.primaryColor} small={isThermal} />
-          {showWaste && (
-            <>
-              <SummaryBox label="الكمية الهالكة" value={fmtNum(t.totalWaste, dp)}    unit="وحدة" color="#f43f5e"    small={isThermal} />
-              <SummaryBox label="نسبة الهالك"    value={`${t.wasteRatio}%`}                       color="#f59e0b"    small={isThermal} />
-            </>
-          )}
-          <SummaryBox label="ساعات العمل"    value={fmtNum(t.totalHours, dp)}    unit="ساعة" color="#8b5cf6"    small={isThermal} />
-          <SummaryBox label="عدد التقارير"   value={String(t.reportsCount)}                   color="#64748b"    small={isThermal} />
-        </div>
-
-        {/* ── Data Table ── */}
-        <table
-          className="erp-table"
-          style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            tableLayout: 'fixed',
-            fontSize: spacing.tableFontSize,
-            marginBottom: spacing.sectionGap,
-            border: `1px solid ${palette.border}`,
-          }}
-        >
-          <thead>
-            <tr style={{ background: palette.tableHeaderBg }}>
-              <Th>#</Th>
-              <Th>التاريخ</Th>
-              <Th>خط الإنتاج</Th>
-              <Th wrap>المنتج</Th>
-              {showEmployee && <Th>المشرف</Th>}
-              {showWO       && <Th>أمر شغل</Th>}
-              {showNotes    && <Th wrap>ملاحظات</Th>}
-              <Th align="center">الكمية المنتجة</Th>
-              {showWaste    && <Th align="center">الهالك</Th>}
-              <Th align="center">عدد العمال</Th>
-              <Th wrap>تفصيل العمالة</Th>
-              <Th wrap>الحضور</Th>
-              <Th align="center">ساعات العمل</Th>
-              {showCosts    && <Th align="center">تكلفة الوحدة</Th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row, i) => (
-              <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : palette.tableRowAltBg }}>
-                <Td>{i + 1}</Td>
-                <Td>{row.date}</Td>
-                <Td>{row.lineName}</Td>
-                <Td wrap>{shortProductName(row.productName)}</Td>
-                {showEmployee && <Td>{row.employeeName}</Td>}
-                {showWO       && <Td>{row.workOrderNumber || '—'}</Td>}
-                {showNotes    && <Td wrap>{row.notes?.trim() || '—'}</Td>}
-                <Td align="center" bold color="#059669">{fmtNum(row.quantityProduced, dp)}</Td>
-                {showWaste    && <Td align="center" bold>{fmtNum(row.wasteQuantity, dp)}</Td>}
-                <Td align="center">{row.workersCount}</Td>
-                <Td wrap>
-                  إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
-                </Td>
-                <Td wrap>حاضر:{row.presentAssignments ?? 0} | غائب:{row.absentAssignments ?? 0}</Td>
-                <Td align="center">{fmtNum(row.workHours, dp)}</Td>
-                {showCosts    && (
-                  <Td align="center" bold color={ps.primaryColor}>
-                    {row.costPerUnit != null && row.costPerUnit > 0 ? fmtNum(row.costPerUnit, 2) : '—'}
-                  </Td>
-                )}
-              </tr>
-            ))}
-
-            {/* Totals Row */}
-            <tr style={{ background: palette.tableHeaderBg, fontWeight: 800 }}>
-              <Td colSpan={headerColSpan} bold>الإجمالي</Td>
-              <Td align="center" bold color="#059669">{fmtNum(t.totalProduced, dp)}</Td>
-              {showWaste && <Td align="center" bold color="#f43f5e">{fmtNum(t.totalWaste, dp)}</Td>}
-              <Td align="center">{fmtNum(t.totalWorkers, dp)}</Td>
-              <Td>—</Td>
-              <Td>—</Td>
-              <Td align="center">{fmtNum(t.totalHours, dp)}</Td>
-              {showCosts && (() => {
-                const costsArr = rows.filter((r) => r.costPerUnit != null && r.costPerUnit > 0).map((r) => r.costPerUnit!);
-                const avg = costsArr.length > 0 ? costsArr.reduce((s, v) => s + v, 0) / costsArr.length : 0;
-                return <Td align="center" bold color={ps.primaryColor}>{avg > 0 ? fmtNum(avg, 2) : '—'}</Td>;
-              })()}
-            </tr>
-          </tbody>
-        </table>
-
-        {/* ── Signature Section ── */}
-        {!isThermal && showSignatures && (
-          <div style={{ marginTop: spacing.signatureTopMargin, display: 'flex', justifyContent: 'space-between', gap: '14mm' }}>
-            <SignatureBlock label="مدير المصنع" />
-            {showEmployee && <SignatureBlock label="مدير الخط" />}
-            <SignatureBlock label="مراقب الجودة" />
-          </div>
-        )}
-
-        {/* ── Footer ── */}
-        <div style={{ marginTop: isThermal ? '2.8mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '2.8mm', textAlign: 'center' }}>
-          {showQR && (
-            <div style={{ marginBottom: '3mm' }}>
-              <QRCodeSVG
-                value={`report-batch|${now}|count:${rows.length}|produced:${t.totalProduced}`}
-                size={isThermal ? 40 : 64}
-                level="L"
-              />
-              <p style={{ margin: '1mm 0 0', fontSize: '6pt', color: '#94a3b8' }}>
-                امسح رمز QR للتحقق من صحة التقرير
-              </p>
-            </div>
-          )}
-          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
-            {doc.footerText} — {now}
-          </p>
-        </div>
-      </div>
+        ) : null}
+      </FactoryPrintShell>
     );
   },
 );
@@ -831,93 +760,3 @@ export const WorkOrderPrint = React.forwardRef<HTMLDivElement, WorkOrderPrintPro
 );
 
 WorkOrderPrint.displayName = 'WorkOrderPrint';
-
-/* ─── Helper sub-components (inline styled for print isolation) ─────────── */
-
-const DetailRow: React.FC<{
-  label: string;
-  value: string;
-  even?: boolean;
-  highlight?: string;
-}> = ({ label, value, even, highlight }) => (
-  <tr style={{ background: even ? '#f8fafc' : '#fff' }}>
-    <td
-      style={{
-        padding: '2.5mm 3mm',
-        fontWeight: 700,
-        color: 'var(--print-muted-text, #475569)',
-        borderBottom: '1px solid var(--print-border, #e2e8f0)',
-        width: '35%',
-        fontSize: '9.5pt',
-      }}
-    >
-      {label}
-    </td>
-    <td
-      style={{
-        padding: '2.5mm 3mm',
-        fontWeight: highlight ? 800 : 400,
-        color: highlight || 'var(--print-text, #0f172a)',
-        borderBottom: '1px solid var(--print-border, #e2e8f0)',
-        fontSize: highlight ? '11.5pt' : '10pt',
-      }}
-    >
-      {value}
-    </td>
-  </tr>
-);
-
-const SummaryBox: React.FC<{ label: string; value: string; unit?: string; color: string; small?: boolean }> = ({ label, value, unit, color, small }) => (
-  <div style={{ minWidth: small ? '18mm' : '30mm', border: '1px solid var(--print-border, #e2e8f0)', borderRadius: '2.5mm', padding: small ? '1.3mm 1.8mm' : '2.2mm 2.8mm', textAlign: 'center', background: '#fff' }}>
-    <p style={{ margin: 0, fontSize: small ? '6pt' : '8pt', color: 'var(--print-muted-text, #64748b)', fontWeight: 600 }}>{label}</p>
-    <p style={{ margin: '1mm 0 0', fontSize: small ? '10pt' : '14pt', fontWeight: 900, color }}>
-      {value}
-      {unit && <span style={{ fontSize: small ? '5pt' : '8pt', fontWeight: 600, marginRight: '1mm', color: '#94a3b8' }}>{unit}</span>}
-    </p>
-  </div>
-);
-
-const Th: React.FC<{ children: React.ReactNode; align?: string; wrap?: boolean }> = ({ children, align, wrap }) => (
-  <th
-    style={{
-      padding: '3.2mm 3.4mm',
-      textAlign: (align || 'right') as React.CSSProperties['textAlign'],
-      fontWeight: 800,
-      fontSize: '9pt',
-      color: 'var(--print-th-text, #475569)',
-      borderBottom: '2px solid var(--print-border, #cbd5e1)',
-      whiteSpace: wrap ? 'normal' : 'nowrap',
-      lineHeight: 1.35,
-    }}
-  >
-    {children}
-  </th>
-);
-
-const Td: React.FC<{ children: React.ReactNode; align?: string; bold?: boolean; color?: string; colSpan?: number; wrap?: boolean }> = ({
-  children, align, bold, color, colSpan, wrap,
-}) => (
-  <td
-    colSpan={colSpan}
-    style={{
-      padding: '2.8mm 3.4mm',
-      textAlign: (align || 'right') as React.CSSProperties['textAlign'],
-      fontWeight: bold ? 700 : 400,
-      color: color || 'var(--print-text, #334155)',
-      borderBottom: '1px solid var(--print-border, #e2e8f0)',
-      whiteSpace: wrap ? 'normal' : 'nowrap',
-      lineHeight: 1.45,
-      wordBreak: wrap ? 'break-word' : 'normal',
-    }}
-  >
-    {children}
-  </td>
-);
-
-const SignatureBlock: React.FC<{ label: string }> = ({ label }) => (
-  <div style={{ flex: 1, textAlign: 'center' }}>
-    <p style={{ margin: 0, fontSize: '9pt', fontWeight: 700, color: 'var(--print-muted-text, #475569)' }}>{label}</p>
-    <div style={{ marginTop: '12mm', borderBottom: '1px solid var(--print-border, #94a3b8)', width: '80%', marginLeft: 'auto', marginRight: 'auto' }} />
-    <p style={{ margin: '2mm 0 0', fontSize: '8pt', color: 'var(--print-muted-text, #94a3b8)' }}>الاسم / التوقيع</p>
-  </div>
-);

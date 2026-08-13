@@ -170,12 +170,12 @@ export const sparePartsService = {
         throw new Error('المكون غير موجود في ماستر داتا المواد.');
       }
       if (material) {
-        const {
-          isMaterialAvailableForSpareParts,
-          MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR,
-        } = await import('../../manufacturing/utils/isMaterialAvailableForSpareParts');
-        if (!isMaterialAvailableForSpareParts(material)) {
-          throw new Error(MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR);
+        if (material.availableForSpareParts !== true && material.id) {
+          await materialService.update(
+            material.id,
+            { availableForSpareParts: true },
+            { internal: true },
+          );
         }
       }
       await sparePartsService.updatePartCatalog(partId, {
@@ -194,18 +194,19 @@ export const sparePartsService = {
     if (materialId) {
       // Prefer manufacturing materials; allow legacy raw ids only when explicitly set as rawMaterialId
       const { materialService } = await import('../../manufacturing/services/materialService');
-      const {
-        isMaterialAvailableForSpareParts,
-        MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR,
-      } = await import('../../manufacturing/utils/isMaterialAvailableForSpareParts');
       const material = await materialService.getById(materialId);
       const isLegacyRawLink =
         !material && String(input.rawMaterialId || '').trim() === materialId;
       if (!material && !isLegacyRawLink) {
         throw new Error('المكون غير موجود في ماستر داتا المواد.');
       }
-      if (material && !isMaterialAvailableForSpareParts(material)) {
-        throw new Error(MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR);
+      // Creating a repair spare part is an explicit opt-in to the spare catalog.
+      if (material?.id && material.availableForSpareParts !== true) {
+        await materialService.update(
+          material.id,
+          { availableForSpareParts: true },
+          { internal: true },
+        );
       }
     }
     const partRef = doc(collection(db, REPAIR_SPARE_PARTS_COLLECTION));

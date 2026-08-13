@@ -49,6 +49,8 @@ assert.doesNotMatch(popover, /z-\[70\]/);
 /** SearchableSelect must not pin PopoverContent under modal shells (z-[500] regression). */
 const searchableSelect = read('components/UI.tsx');
 assert.match(searchableSelect, /export const SearchableSelect/);
+assert.match(searchableSelect, /ArrowDown/);
+assert.match(searchableSelect, /\bloop\b/);
 assert.doesNotMatch(searchableSelect, /PopoverContent[\s\S]{0,200}z-\[(?:50|70|100|200|300|500)\]/);
 
 {

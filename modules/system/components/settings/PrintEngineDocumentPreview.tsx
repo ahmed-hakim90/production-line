@@ -13,10 +13,17 @@ import { WarehouseCountSheetPrint } from '../../../inventory/components/Warehous
 import { StockTransferPrint } from '../../../inventory/components/StockTransferPrint';
 import { ItemCardPrint } from '../../../inventory/components/ItemCardPrint';
 import { SuppliesReceiptPrint } from '../../../inventory/components/SuppliesReceiptPrint';
+import { ProductionIssuePrint } from '../../../inventory/components/ProductionIssuePrint';
 import { AccountingReportPrint } from '../../../accounting/components/AccountingReportPrint';
 import { QualityReportPrint } from '../../../quality/components/QualityReportPrint';
 import { PayslipPrint } from '../../../hr/components/PayslipPrint';
 import { CatalogProductDetailPrint } from '../../../catalog/components/CatalogProductDetailPrint';
+import { MissingComponentsReportPrint } from '../../../production/components/MissingComponentsReportPrint';
+import { SupervisorPerformancePrint } from '../../../production/components/SupervisorPerformancePrint';
+import { ProductBomCountCardPrint } from '../../../production/components/ProductBomCountCardPrint';
+import { RepairJobPrint } from '../../../repair/components/RepairJobPrint';
+import { RepairJobProductCardPrint } from '../../../repair/components/RepairJobProductCardPrint';
+import { DeliveryReceiptPDF } from '../../../repair/components/DeliveryReceiptPDF';
 import { FactoryPrintShell } from '@/src/components/erp/FactoryPrintShell';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 import { getPrintDocumentEntry } from '../../../../utils/print/printDocumentRegistry';
@@ -26,15 +33,21 @@ import {
   PRINT_PREVIEW_BRANCH_NAME,
   PRINT_PREVIEW_CATALOG_PRODUCT,
   PRINT_PREVIEW_ITEM_CARD,
+  PRINT_PREVIEW_MISSING_COMPONENTS,
   PRINT_PREVIEW_PAYSLIP,
+  PRINT_PREVIEW_PRODUCT_BOM_COUNT,
+  PRINT_PREVIEW_PRODUCTION_ISSUE,
   PRINT_PREVIEW_QUALITY,
+  PRINT_PREVIEW_REPAIR_BRANCH,
   PRINT_PREVIEW_REPAIR_INVOICE,
+  PRINT_PREVIEW_REPAIR_JOB,
   PRINT_PREVIEW_REPAIR_PAYMENT_AUTH,
   PRINT_PREVIEW_REPAIR_SPARE_ISSUE,
   PRINT_PREVIEW_REPAIR_TREASURY,
   PRINT_PREVIEW_ROUTING_EXECUTION,
   PRINT_PREVIEW_SAMPLE_ROW,
   PRINT_PREVIEW_SPARE_PARTS_COUNT,
+  PRINT_PREVIEW_SUPERVISOR_PERFORMANCE,
   PRINT_PREVIEW_SUPPLIES_RECEIPT,
   PRINT_PREVIEW_TRANSFER,
   PRINT_PREVIEW_WAREHOUSE_COUNT,
@@ -225,6 +238,80 @@ export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
             periodLabel={PRINT_PREVIEW_CATALOG_PRODUCT.periodLabel}
             kpis={[...PRINT_PREVIEW_CATALOG_PRODUCT.kpis]}
             rows={[...PRINT_PREVIEW_CATALOG_PRODUCT.rows]}
+            printSettings={printSettings}
+          />
+        );
+      case 'missingComponentsReport':
+        return (
+          <MissingComponentsReportPrint
+            ref={ref}
+            title={PRINT_PREVIEW_MISSING_COMPONENTS.title}
+            subtitle={PRINT_PREVIEW_MISSING_COMPONENTS.subtitle}
+            warehouseName={PRINT_PREVIEW_MISSING_COMPONENTS.warehouseName}
+            sections={[...PRINT_PREVIEW_MISSING_COMPONENTS.sections] as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'supervisorPerformance':
+        return (
+          <SupervisorPerformancePrint
+            ref={ref}
+            data={PRINT_PREVIEW_SUPERVISOR_PERFORMANCE as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'productBomCountCard':
+        return (
+          <ProductBomCountCardPrint
+            ref={ref}
+            cards={[...PRINT_PREVIEW_PRODUCT_BOM_COUNT.cards] as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'repairJobReceipt':
+        return (
+          <RepairJobPrint
+            ref={ref}
+            job={PRINT_PREVIEW_REPAIR_JOB as any}
+            branch={PRINT_PREVIEW_REPAIR_BRANCH as any}
+            printSettings={printSettings}
+            trackUrl="https://example.com/track/RCP-DEMO-001"
+          />
+        );
+      case 'repairJobCard':
+        return (
+          <RepairJobProductCardPrint
+            ref={ref}
+            job={PRINT_PREVIEW_REPAIR_JOB as any}
+            branch={PRINT_PREVIEW_REPAIR_BRANCH as any}
+            printSettings={printSettings}
+            workUrl="https://example.com/repair/jobs/demo"
+          />
+        );
+      case 'repairDeliveryReceipt':
+        return (
+          <DeliveryReceiptPDF
+            ref={ref}
+            job={{
+              ...(PRINT_PREVIEW_REPAIR_JOB as any),
+              status: 'delivered',
+              deliveredAt: new Date().toISOString(),
+              finalCost: 350,
+              paidAmount: 350,
+              balanceDue: 0,
+              paymentStatus: 'paid',
+              deliveryAuthorizationNo: 'DEL-DEMO-001',
+            }}
+            branch={PRINT_PREVIEW_REPAIR_BRANCH as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'productionIssue':
+        return (
+          <ProductionIssuePrint
+            ref={ref}
+            order={PRINT_PREVIEW_PRODUCTION_ISSUE as any}
+            sourceLabel="WO-DEMO-001"
             printSettings={printSettings}
           />
         );

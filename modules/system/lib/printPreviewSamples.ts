@@ -415,3 +415,190 @@ export const PRINT_PREVIEW_CATALOG_PRODUCT = {
     },
   ],
 } as const;
+
+export const PRINT_PREVIEW_REPAIR_JOB = {
+  tenantId: 'preview',
+  receiptNo: 'RCP-DEMO-001',
+  branchId: 'preview-branch',
+  customerName: 'عميل تجريبي',
+  customerPhone: '01000000000',
+  customerAddress: 'القاهرة',
+  deviceType: 'ميكروويف',
+  deviceBrand: 'Sokany',
+  deviceModel: 'SK-438',
+  problemDescription: 'لا يسخن',
+  status: 'received',
+  warranty: 'none' as const,
+  partsUsed: [] as const,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  jobProducts: [
+    {
+      itemId: 'jp-1',
+      productId: 'p-1',
+      productName: 'ميكروويف SK-438',
+      quantity: 1,
+      serialNo: 'SN-001',
+      accessories: 'كابل + صينية',
+      diagnosis: 'لا يسخن',
+      inWarranty: false,
+      finalCost: 350,
+    },
+  ],
+} as const;
+
+export const PRINT_PREVIEW_REPAIR_BRANCH = {
+  id: 'preview-branch',
+  name: 'فرع المعاينة',
+  phone: '02-1234567',
+  address: 'مدينة العبور',
+} as const;
+
+export const PRINT_PREVIEW_MISSING_COMPONENTS = {
+  title: 'تقرير المكونات الناقصة',
+  subtitle: 'خطة إنتاج تجريبية',
+  warehouseName: 'مخزن المستلزمات',
+  sections: [
+    {
+      productId: 'prod-1',
+      productName: 'راديو RX-606',
+      productCode: 'FG-RX606',
+      kind: 'partial' as const,
+      remaining: 100,
+      maxAssemblable: 40,
+      lines: [
+        {
+          materialName: 'لوحة تحكم',
+          materialCode: 'CMP-01',
+          requiredForTarget: 100,
+          availableQty: 40,
+          shortageQty: 60,
+        },
+      ],
+    },
+  ],
+} as const;
+
+export const PRINT_PREVIEW_SUPERVISOR_PERFORMANCE = {
+  supervisorName: 'مشرف تجريبي',
+  supervisorCode: 'SUP-01',
+  departmentName: 'الإنتاج',
+  jobTitle: 'مشرف خط',
+  statusLabel: 'نشط',
+  periodLabel: 'مارس 2026',
+  performanceScore: 88,
+  totalProduced: 4200,
+  totalWaste: 65,
+  wasteRatio: 1.5,
+  reportsCount: 22,
+  workDays: 20,
+  todayProduced: 180,
+  weekProduced: 900,
+  linesCount: 2,
+  avgWorkers: 6,
+  requiredQty: 4500,
+  achievedQty: 4200,
+  performanceRatio: 93.3,
+  costStatusLabel: 'ضمن الميزانية',
+  costStatusHigh: false,
+  lineUtilizationRatio: 86,
+  lineUtilizationHigh: true,
+  appreciationTitle: 'أداء جيد',
+  appreciationBody: 'المحافظة على نسبة الهالك المنخفضة ومتابعة خطوط التجميع.',
+  recommendations: ['رفع إنتاجية الخط 2 بنسبة 5%', 'مراجعة تزويد المكونات أسبوعيًا'],
+  productRows: [
+    {
+      productName: 'راديو RX-606',
+      reportsCount: 12,
+      requiredQty: 2500,
+      achievedQty: 2400,
+      performanceRatio: 96,
+    },
+  ],
+  lineRows: [
+    {
+      lineName: 'خط التجميع 1',
+      reportsCount: 12,
+      produced: 2400,
+      waste: 30,
+      wasteRatio: 1.2,
+      avgWorkers: 6,
+      totalHours: 96,
+    },
+  ],
+} as const;
+
+export const PRINT_PREVIEW_PRODUCT_BOM_COUNT = {
+  cards: [
+    {
+      productId: 'prod-1',
+      productCode: 'FG-RX606',
+      productName: 'راديو RX-606',
+      category: 'إلكترونيات',
+      warehouseId: 'wh-1',
+      warehouseName: 'مخزن المستلزمات',
+      lines: [
+        {
+          itemCode: 'CMP-01',
+          itemName: 'لوحة تحكم',
+          unit: 'قطعة',
+          qtyPerUnit: 1,
+          locationCode: 'A1-1',
+          stockQty: 80,
+          availableQty: 70,
+        },
+        {
+          itemCode: 'CMP-02',
+          itemName: 'غلاف بلاستيك',
+          unit: 'قطعة',
+          qtyPerUnit: 1,
+          locationCode: 'A1-2',
+          stockQty: 200,
+          availableQty: 200,
+        },
+      ],
+    },
+  ],
+} as const;
+
+export const PRINT_PREVIEW_PRODUCTION_ISSUE = {
+  referenceNo: 'PI-DEMO-001',
+  sourceType: 'work_order' as const,
+  workOrderId: 'WO-DEMO-001',
+  productId: 'prod-1',
+  productName: 'راديو RX-606',
+  productCode: 'FG-RX606',
+  quantity: 100,
+  sourceWarehouseId: 'wh-1',
+  sourceWarehouseName: 'مخزن المستلزمات',
+  status: 'issued' as const,
+  createdBy: 'مشرف تجريبي',
+  createdAt: new Date().toISOString(),
+  note: 'معاينة إذن صرف إنتاج',
+  lines: [
+    {
+      materialId: 'mat-1',
+      itemType: 'material' as const,
+      itemId: 'mat-1',
+      itemName: 'لوحة تحكم',
+      itemCode: 'CMP-01',
+      unit: 'قطعة',
+      qtyPerUnit: 1,
+      baseRequiredQty: 100,
+      wastePercent: 5,
+      plannedWasteQty: 5,
+      requiredQty: 105,
+      availableQty: 200,
+      shortageQty: 0,
+      allocations: [
+        {
+          locationId: 'loc-1',
+          locationCode: 'A1-1',
+          rack: 'A',
+          shelf: '1',
+          quantity: 105,
+        },
+      ],
+    },
+  ],
+};

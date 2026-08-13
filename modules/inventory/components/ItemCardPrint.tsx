@@ -1,10 +1,15 @@
 import React from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
-import { getPrintThemePalette } from '../../../utils/printTheme';
-import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
+import { Factory_DEFAULT_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import { resolvePrintAccentHex } from '../../../utils/printTheme';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { resolvePrintFont } from '@/utils/print/printFont';
+import {
+  FactoryPrintSectionTitle,
+  FactoryPrintShell,
+} from '@/src/components/erp/FactoryPrintShell';
+import { FactoryPrintTable } from '@/src/components/erp/FactoryPrintTable';
 import { itemTypeLabel } from '../lib/stockLabels';
 import { movementFateLabel, movementPathLabel } from '../lib/itemMovementTrace';
 import type { InventoryItemType, StockItemBalance, StockTransaction } from '../types';
@@ -48,7 +53,7 @@ export const ItemCardPrint = React.forwardRef<HTMLDivElement, Props>(
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
     const doc = resolvePrintDocumentConfig(ps, 'itemCard');
     const font = resolvePrintFont(ps);
-    const palette = getPrintThemePalette(ps);
+    const accent = resolvePrintAccentHex(ps.primaryColor);
     const when = printedAt || new Date().toLocaleString('ar-EG');
     const totalQty = card.balances.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
     const showBalances = doc.isFieldVisible('balances');
@@ -56,265 +61,141 @@ export const ItemCardPrint = React.forwardRef<HTMLDivElement, Props>(
     const showMovements = doc.isFieldVisible('movements');
     const showCategory = doc.isFieldVisible('category');
     const showWarehouse = doc.isFieldVisible('warehouse');
+    const showBomStock = card.bomLines.some((line) => line.stockQty != null);
 
     return (
-      <div
+      <FactoryPrintShell
         ref={ref}
-        dir="rtl"
-        data-print-font={font.fontFamily}
-        style={{
-          width: '210mm',
-          minHeight: '297mm',
-          margin: '0 auto',
-          padding: '10mm',
-          background: '#fff',
-          color: palette.text,
-          fontFamily: font.fontFamily,
-          fontSize: font.fontSize,
-          boxSizing: 'border-box',
-        }}
+        companyName={doc.headerText || card.itemName}
+        documentType="كارت الصنف"
+        printDate={when}
+        logoUrl={ps.logoUrl}
+        brandAccent={accent}
+        footerTagline={doc.footerText?.trim() || Factory_DEFAULT_FOOTER_TAGLINE}
+        paperWidth="210mm"
+        minHeight="297mm"
+        padding="10mm 12mm"
+        fontFamily={font.fontFamily}
+        fontSize={font.fontSize}
+        extraLines={doc.customLines}
+        metaCards={[
+          { label: 'الكود', value: card.itemCode || '—' },
+          { label: 'النوع', value: itemTypeLabel(card.itemType) },
+          { label: 'الوحدة', value: card.unit || '—' },
+          ...(showCategory ? [{ label: 'التصنيف', value: card.category || '—' }] : []),
+          ...(showWarehouse && card.warehouseName
+            ? [{ label: 'المخزن', value: card.warehouseName }]
+            : []),
+        ]}
+        kpis={[
+          { label: 'إجمالي الرصيد', value: fmt(totalQty), tone: 'indigo' as const },
+          { label: 'عدد المخازن', value: card.balances.length },
+          { label: 'مكونات BOM', value: card.bomLines.length },
+          { label: 'الحركات', value: card.movements.length },
+        ]}
       >
-        <div
-          style={{
-            border: `2px solid ${palette.primary}`,
-            borderRadius: '4mm',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              background: palette.primary,
-              color: '#fff',
-              padding: '4mm 5mm',
-              display: 'flex',
-              justifyContent: 'space-between',
-              gap: '4mm',
-              alignItems: 'flex-start',
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '16pt', fontWeight: 800 }}>كارت الصنف</div>
-              <div style={{ fontSize: '10pt', opacity: 0.95, marginTop: '1mm' }}>
-                {doc.headerText || card.itemName}
-              </div>
-              {doc.headerText ? (
-                <div style={{ fontSize: '9pt', opacity: 0.9, marginTop: '1mm' }}>{card.itemName}</div>
-              ) : null}
-            </div>
-            <div style={{ textAlign: 'left', fontSize: '9pt', opacity: 0.95 }}>
-              <div>{when}</div>
-              {showWarehouse && card.warehouseName ? <div>{card.warehouseName}</div> : null}
-            </div>
-          </div>
+        {doc.headerText ? (
+          <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 800 }}>{card.itemName}</p>
+        ) : null}
 
-          <div style={{ padding: '3mm 4mm 0' }}>
-            <PrintExtraLines lines={doc.customLines} />
-          </div>
+        {showBalances ? (
+          <>
+            <FactoryPrintSectionTitle title="الأرصدة حسب المخزن" />
+            {card.balances.length === 0 ? (
+              <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 11 }}>لا يوجد رصيد لهذا الصنف.</p>
+            ) : (
+              <FactoryPrintTable
+                brandAccent={accent}
+                printSettings={ps}
+                columns={[
+                  { key: 'warehouse', header: 'المخزن' },
+                  { key: 'qty', header: 'الرصيد', width: '14%', align: 'center' },
+                  { key: 'reserved', header: 'محجوز', width: '14%', align: 'center' },
+                  { key: 'available', header: 'متاح', width: '14%', align: 'center' },
+                  { key: 'min', header: 'الحد الأدنى', width: '14%', align: 'center' },
+                ]}
+                rows={card.balances.map((row) => ({
+                  key: `${row.warehouseId}-${row.warehouseName}`,
+                  cells: {
+                    warehouse: row.warehouseName,
+                    qty: fmt(Number(row.quantity || 0)),
+                    reserved: fmt(Number(row.reservedQty || 0)),
+                    available: fmt(Number(row.availableQty ?? row.quantity ?? 0)),
+                    min: fmt(Number(row.minStock || 0)),
+                  },
+                }))}
+              />
+            )}
+          </>
+        ) : null}
 
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '10pt' }}>
-            <tbody>
-              <tr>
-                <td style={labelCell}>الكود</td>
-                <td style={valueCell}>{card.itemCode || '—'}</td>
-                <td style={labelCell}>النوع</td>
-                <td style={valueCell}>{itemTypeLabel(card.itemType)}</td>
-              </tr>
-              <tr>
-                <td style={labelCell}>الوحدة</td>
-                <td style={valueCell}>{card.unit || '—'}</td>
-                {showCategory ? (
-                  <>
-                    <td style={labelCell}>التصنيف</td>
-                    <td style={valueCell}>{card.category || '—'}</td>
-                  </>
-                ) : (
-                  <>
-                    <td style={labelCell}>إجمالي الرصيد</td>
-                    <td style={valueCell}>{fmt(totalQty)}</td>
-                  </>
-                )}
-              </tr>
-              {showCategory ? (
-                <tr>
-                  <td style={labelCell}>إجمالي الرصيد</td>
-                  <td style={valueCell} colSpan={3}>{fmt(totalQty)}</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+        {showBom ? (
+          <>
+            <FactoryPrintSectionTitle title="المكونات (BOM)" />
+            {card.bomLines.length === 0 ? (
+              <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 11 }}>لا توجد مكونات مرتبطة بهذا الصنف.</p>
+            ) : (
+              <FactoryPrintTable
+                brandAccent={accent}
+                printSettings={ps}
+                columns={[
+                  { key: 'code', header: 'كود المكون', width: '18%' },
+                  { key: 'name', header: 'اسم المكون' },
+                  { key: 'qty', header: 'الكمية / وحدة', width: '16%', align: 'center' },
+                  { key: 'unit', header: 'الوحدة', width: '12%', align: 'center' },
+                  ...(showBomStock
+                    ? [{ key: 'stock', header: 'رصيد المخزن', width: '14%', align: 'center' as const }]
+                    : []),
+                ]}
+                rows={card.bomLines.map((line, index) => ({
+                  key: `${line.itemCode}-${index}`,
+                  cells: {
+                    code: line.itemCode || '—',
+                    name: line.itemName || '—',
+                    qty: fmt(line.qtyPerUnit),
+                    unit: line.unit || '—',
+                    stock: line.stockQty == null ? '—' : fmt(line.stockQty),
+                  },
+                }))}
+              />
+            )}
+          </>
+        ) : null}
 
-          {showBalances ? (
-            <>
-              <SectionTitle title="الأرصدة حسب المخزن" color={palette.primary} />
-              {card.balances.length === 0 ? (
-                <EmptyNote text="لا يوجد رصيد لهذا الصنف." />
-              ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>المخزن</th>
-                      <th style={thStyle}>الرصيد</th>
-                      <th style={thStyle}>محجوز</th>
-                      <th style={thStyle}>متاح</th>
-                      <th style={thStyle}>الحد الأدنى</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.balances.map((row) => (
-                      <tr key={`${row.warehouseId}-${row.warehouseName}`}>
-                        <td style={tdStyle}>{row.warehouseName}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.quantity || 0))}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.reservedQty || 0))}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                          {fmt(Number(row.availableQty ?? row.quantity ?? 0))}
-                        </td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(Number(row.minStock || 0))}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          ) : null}
-
-          {showBom ? (
-            <>
-              <SectionTitle title="المكونات (BOM)" color={palette.primary} />
-              {card.bomLines.length === 0 ? (
-                <EmptyNote text="لا توجد مكونات مرتبطة بهذا الصنف." />
-              ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>كود المكون</th>
-                      <th style={thStyle}>اسم المكون</th>
-                      <th style={thStyle}>الكمية / وحدة</th>
-                      <th style={thStyle}>الوحدة</th>
-                      {card.bomLines.some((line) => line.stockQty != null) ? (
-                        <th style={thStyle}>رصيد المخزن</th>
-                      ) : null}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.bomLines.map((line, index) => (
-                      <tr key={`${line.itemCode}-${index}`}>
-                        <td style={tdStyle}>{line.itemCode || '—'}</td>
-                        <td style={tdStyle}>{line.itemName || '—'}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>{fmt(line.qtyPerUnit)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>{line.unit || '—'}</td>
-                        {card.bomLines.some((row) => row.stockQty != null) ? (
-                          <td style={{ ...tdStyle, textAlign: 'center' }}>
-                            {line.stockQty == null ? '—' : fmt(line.stockQty)}
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          ) : null}
-
-          {showMovements ? (
-            <>
-              <SectionTitle title="آخر الحركات" color={palette.primary} />
-              {card.movements.length === 0 ? (
-                <EmptyNote text="لا توجد حركات لهذا الصنف." />
-              ) : (
-                <table style={tableStyle}>
-                  <thead>
-                    <tr>
-                      <th style={thStyle}>التاريخ</th>
-                      <th style={thStyle}>المرجع</th>
-                      <th style={thStyle}>المسار</th>
-                      <th style={thStyle}>الكمية</th>
-                      <th style={thStyle}>الحالة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.movements.slice(0, 40).map((tx) => (
-                      <tr key={tx.id || `${tx.createdAt}-${tx.referenceNo}`}>
-                        <td style={tdStyle}>
-                          {String(tx.createdAt || '').slice(0, 16).replace('T', ' ') || '—'}
-                        </td>
-                        <td style={tdStyle}>{tx.referenceNo || tx.sourceId || '—'}</td>
-                        <td style={tdStyle}>{movementPathLabel(tx)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'center' }}>
-                          {tx.movementType === 'OUT' ? '−' : tx.movementType === 'IN' ? '+' : ''}
-                          {fmt(Math.abs(Number(tx.quantity || 0)))}
-                        </td>
-                        <td style={tdStyle}>{movementFateLabel(tx)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </>
-          ) : null}
-
-          {doc.footerText ? (
-            <div style={{ padding: '3mm 4mm', fontSize: '8pt', color: '#64748b', borderTop: '1px solid #e2e8f0' }}>
-              {doc.footerText}
-            </div>
-          ) : null}
-        </div>
-      </div>
+        {showMovements ? (
+          <>
+            <FactoryPrintSectionTitle title="آخر الحركات" />
+            {card.movements.length === 0 ? (
+              <p style={{ margin: '0 0 12px', color: '#64748b', fontSize: 11 }}>لا توجد حركات لهذا الصنف.</p>
+            ) : (
+              <FactoryPrintTable
+                brandAccent={accent}
+                printSettings={ps}
+                dense
+                columns={[
+                  { key: 'date', header: 'التاريخ', width: '18%' },
+                  { key: 'ref', header: 'المرجع', width: '18%' },
+                  { key: 'path', header: 'المسار' },
+                  { key: 'qty', header: 'الكمية', width: '12%', align: 'center' },
+                  { key: 'fate', header: 'الحالة', width: '16%' },
+                ]}
+                rows={card.movements.slice(0, 40).map((tx) => ({
+                  key: tx.id || `${tx.createdAt}-${tx.referenceNo}`,
+                  cells: {
+                    date: String(tx.createdAt || '').slice(0, 16).replace('T', ' ') || '—',
+                    ref: tx.referenceNo || tx.sourceId || '—',
+                    path: movementPathLabel(tx),
+                    qty: `${tx.movementType === 'OUT' ? '−' : tx.movementType === 'IN' ? '+' : ''}${fmt(Math.abs(Number(tx.quantity || 0)))}`,
+                    fate: movementFateLabel(tx),
+                  },
+                }))}
+              />
+            )}
+          </>
+        ) : null}
+      </FactoryPrintShell>
     );
   },
 );
 
 ItemCardPrint.displayName = 'ItemCardPrint';
-
-const labelCell: React.CSSProperties = {
-  padding: '2.5mm 3mm',
-  width: '18%',
-  background: '#f8fafc',
-  borderBottom: '1px solid #e2e8f0',
-  fontWeight: 700,
-  color: '#475569',
-};
-
-const valueCell: React.CSSProperties = {
-  padding: '2.5mm 3mm',
-  width: '32%',
-  borderBottom: '1px solid #e2e8f0',
-  fontWeight: 700,
-};
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '9pt',
-};
-
-const thStyle: React.CSSProperties = {
-  padding: '2mm 2.5mm',
-  background: '#f1f5f9',
-  borderBottom: '1px solid #cbd5e1',
-  textAlign: 'right',
-  fontWeight: 800,
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '2mm 2.5mm',
-  borderBottom: '1px solid #e2e8f0',
-  textAlign: 'right',
-};
-
-const SectionTitle: React.FC<{ title: string; color: string }> = ({ title, color }) => (
-  <div
-    style={{
-      padding: '3mm 4mm 2mm',
-      fontWeight: 800,
-      fontSize: '11pt',
-      color,
-      borderTop: '1px solid #e2e8f0',
-    }}
-  >
-    {title}
-  </div>
-);
-
-const EmptyNote: React.FC<{ text: string }> = ({ text }) => (
-  <div style={{ padding: '2mm 4mm 4mm', color: '#64748b', fontSize: '9pt' }}>{text}</div>
-);

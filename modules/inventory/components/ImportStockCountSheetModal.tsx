@@ -15,6 +15,8 @@ import { stockService } from '../services/stockService';
 import type { StockItemBalance } from '../types';
 import type { RepairSparePart } from '../../repair/types';
 import { useAppStore } from '../../../store/useAppStore';
+import { usePermission } from '../../../utils/permissions';
+import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
 
 type Props = {
   open: boolean;
@@ -52,15 +54,17 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
   onPartsChanged,
 }) => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const { can } = usePermission();
+  const canSeedOpening = canUploadOpeningBalances(can);
   const inputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [fileName, setFileName] = useState('');
   const [parsed, setParsed] = useState<StockCountSheetResult | null>(null);
 
-  const allowCreate = Boolean(centerCreate?.branchId) || Boolean(catalogSeed);
+  const allowCreate = canSeedOpening && (Boolean(centerCreate?.branchId) || Boolean(catalogSeed));
   const isOpeningMode = allowCreate;
-  const isCenterMode = Boolean(centerCreate?.branchId);
+  const isCenterMode = canSeedOpening && Boolean(centerCreate?.branchId);
   const catalogMaterials = centerCreate?.catalogMaterials || catalogSeed?.catalogMaterials || [];
   const createCount = parsed?.createCandidates.length || 0;
 
@@ -147,6 +151,9 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
     setConfirming(true);
     try {
       if (parsed.createCandidates.length > 0) {
+        if (!canSeedOpening) {
+          throw new Error('رفع أرصدة أول المدة متاح لمدير النظام فقط.');
+        }
         if (centerCreate?.branchId) {
           const seeded = await ensureCenterItemsForStockCount({
             warehouseId,

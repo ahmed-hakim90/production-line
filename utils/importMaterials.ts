@@ -495,7 +495,8 @@ export function parseMaterialsFromBuffer(
       else isActive = a;
     }
 
-    let availableForSpareParts = true;
+    // New materials default off; updates without the column keep existing value.
+    let availableForSpareParts = false;
     if (providedFields.availableForSpareParts) {
       const visible = parseSparePartsVisibility(get(raw, 'availableForSpareParts'));
       if (visible == null) errors.push('عمود «تظهر في قطع الغيار» غير صالح (نعم/لا)');
@@ -550,9 +551,7 @@ export function parseMaterialsFromBuffer(
         ? manufacturedProductId
         : matched?.manufacturedProductId ?? null,
       manufacturedProductCode,
-      availableForSpareParts: providedFields.availableForSpareParts
-        ? availableForSpareParts
-        : matched?.availableForSpareParts !== false,
+      availableForSpareParts,
       isActive: providedFields.isActive ? isActive : matched?.isActive !== false,
       errors,
       changes: matched ? undefined : undefined,

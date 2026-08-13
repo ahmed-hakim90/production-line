@@ -17,6 +17,8 @@ export type TransferItemOption = {
   id: string;
   name: string;
   code: string;
+  /** Optional product/material barcode — used for scan match only, not dropdown display. */
+  barcode?: string;
   minStock: number;
   unitsPerCarton?: number;
   /** Actual stock ledger type (e.g. manufacturing `material` vs legacy `raw_material`). */
@@ -91,14 +93,18 @@ export function validateTransferLines(
   return null;
 }
 
-/** Find catalog option by exact code only (safe for barcode scanners). */
+/** Find catalog option by exact code or barcode (safe for scanners). */
 export function findItemOptionByCode(
   options: TransferItemOption[],
   rawCode: string,
 ): TransferItemOption | undefined {
   const code = String(rawCode || '').trim().toLowerCase();
   if (!code) return undefined;
-  return options.find((opt) => String(opt.code || '').trim().toLowerCase() === code);
+  return options.find((opt) => {
+    if (String(opt.code || '').trim().toLowerCase() === code) return true;
+    const barcode = String(opt.barcode || '').trim().toLowerCase();
+    return Boolean(barcode) && barcode === code;
+  });
 }
 
 /**
@@ -217,6 +223,8 @@ export function buildTransferPrintDataPayload(params: {
   toWarehouseId: string;
   transferDisplayUnit: TransferDisplayUnitMode;
   createdBy: string;
+  documentType?: string;
+  resolveLocationCode?: (locationId?: string) => string | undefined;
 }): StockTransferPrintData {
   const now = new Date().toISOString();
   const transferNo =
@@ -237,6 +245,7 @@ export function buildTransferPrintDataPayload(params: {
         },
         params.transferDisplayUnit,
       );
+      const locationCode = params.resolveLocationCode?.(line.locationId);
       return {
         itemName: item.name,
         itemCode: item.code,
@@ -244,6 +253,7 @@ export function buildTransferPrintDataPayload(params: {
         quantity: display.quantity,
         quantityPieces,
         unitsPerCarton: params.itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
+        ...(locationCode ? { locationCode } : {}),
       };
     })
     .filter(Boolean) as NonNullable<StockTransferPrintData['items']>;
@@ -255,5 +265,6 @@ export function buildTransferPrintDataPayload(params: {
     toWarehouseName: params.toWarehouseName || params.toWarehouseId,
     items: printableItems,
     createdBy: params.createdBy,
+    ...(params.documentType ? { documentType: params.documentType } : {}),
   };
 }

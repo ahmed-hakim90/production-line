@@ -97,6 +97,9 @@ describe('parseMaterialsFromBuffer', () => {
     expect(result.newCount).toBe(1);
     expect(result.rows[0].type).toBe('semi_finished');
     expect(result.rows[0].baseUnit).toBe('kg');
+    // New materials are not spare-parts catalog by default.
+    expect(result.rows[0].availableForSpareParts).toBe(false);
+    expect(toMaterialCreateData(result.rows[0]).availableForSpareParts).toBe(false);
   });
 
   it('requires an explicit source when creating a material', () => {
@@ -133,6 +136,7 @@ describe('parseMaterialsFromBuffer', () => {
     expect(payload.conversionRate).toBe(1);
     expect(payload.purchaseCost).toBe(0);
     expect(payload.wastePercent).toBe(0);
+    expect(payload.availableForSpareParts).toBe(false);
   });
 
   it('omitted columns do not overwrite on merge', () => {

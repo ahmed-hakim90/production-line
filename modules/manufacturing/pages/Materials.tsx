@@ -23,7 +23,8 @@ import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { usePermission } from '@/utils/permissions';
 import { useResourcePermission } from '@/utils/useResourcePermission';
-import { useMaterialMutations } from '../hooks/useMaterials';
+import { useQueryClient } from '@tanstack/react-query';
+import { manufacturingQueryKeys, useMaterialMutations } from '../hooks/useMaterials';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
@@ -38,6 +39,19 @@ import {
   type MaterialUnit,
   weightPerPieceFromConversionRate,
 } from '../types';
+import { isMaterialAvailableForSpareParts } from '../utils/isMaterialAvailableForSpareParts';
+import {
+  isMaterialSpareVisible,
+  matchingMaterialIds,
+  materialMatchesListFilters,
+  mergePageSelection,
+  pageSelectionState,
+  toggleIdSelection,
+  type MaterialListFilters,
+  type MaterialManufacturedFilter,
+  type MaterialSpareFilter,
+  type MaterialStatusFilter,
+} from '../lib/materialListFilters';
 import { manufacturingMigrationService } from '../services/manufacturingMigrationService';
 import {
   parseCatalogMaterialGap,
@@ -79,7 +93,7 @@ import { materialShowsSparePartsPricing } from '../lib/materialSparePartsPricing
 import { repairPartsPricingService } from '../../repair/services/repairPartsPricingService';
 import { normalizeRepairSalePrice } from '../../repair/utils/sparePartPricing';
 
-const PAGE_SIZE = 20;
+const BULK_SPARE_UPDATE_CHUNK = 8;
 
 const arNum = (n: number) =>
   n.toLocaleString('ar-EG', {
@@ -88,8 +102,9 @@ const arNum = (n: number) =>
   });
 
 type SortKey = 'code' | 'name' | 'type' | 'purchaseCost' | 'wastePercent';
-type StatusFilter = 'all' | 'active' | 'inactive';
-type ManufacturedFilter = 'all' | 'internal' | 'external';
+type StatusFilter = MaterialStatusFilter;
+type ManufacturedFilter = MaterialManufacturedFilter;
+type MaterialsPageSize = 20 | 50;
 type MaterialSource = 'internal' | 'external';
 
 const EMPTY_FORM = {
@@ -105,7 +120,7 @@ const EMPTY_FORM = {
   traderSalePrice: 0,
   wastePercent: 0,
   isManufacturedInternally: false,
-  availableForSpareParts: true,
+  availableForSpareParts: false,
   isActive: true,
 };
 
@@ -186,6 +201,7 @@ export const Materials: React.FC = () => {
     MANUFACTURING_OPERATION_KEYS.bomUpsert,
     BOM_UPSERT_PATHS.migration,
   );
+  const queryClient = useQueryClient();
   const { create, update, remove } = useMaterialMutations();
   const importInputRef = useRef<HTMLInputElement>(null);
   const categoryCodeRequestRef = useRef(0);
@@ -195,6 +211,11 @@ export const Materials: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [manufacturedFilter, setManufacturedFilter] = useState<ManufacturedFilter>('all');
   const [gapFilter, setGapFilter] = useState<CatalogMaterialGap | ''>('');
+  const [spareFilter, setSpareFilter] = useState<MaterialSpareFilter>('all');
+  const [pageSize, setPageSize] = useState<MaterialsPageSize>(20);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectingAllMatching, setSelectingAllMatching] = useState(false);
+  const [bulkSpareSaving, setBulkSpareSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -204,6 +225,7 @@ export const Materials: React.FC = () => {
   const [codeLoading, setCodeLoading] = useState(false);
   const [weightPerPiece, setWeightPerPiece] = useState(0);
   const [migrating, setMigrating] = useState(false);
+  const [disablingSpareVisibility, setDisablingSpareVisibility] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('code');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -223,9 +245,11 @@ export const Materials: React.FC = () => {
       statusFilter,
       manufacturedFilter,
       gapFilter,
+      spareFilter,
+      pageSize,
     }),
     loadPage: (cursor) => materialService.listPaged({
-      pageSize: PAGE_SIZE,
+      pageSize,
       cursor,
       search: debouncedSearch,
       type: typeFilter === 'all' ? undefined : typeFilter,
@@ -247,25 +271,19 @@ export const Materials: React.FC = () => {
     conversionRate: effectiveConversionRate,
   });
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (typeFilter !== 'all' && r.type !== typeFilter) return false;
-      if (statusFilter === 'active' && r.isActive === false) return false;
-      if (statusFilter === 'inactive' && r.isActive !== false) return false;
-      if (manufacturedFilter === 'internal' && !r.isManufacturedInternally) return false;
-      if (manufacturedFilter === 'external' && r.isManufacturedInternally) return false;
-      if (gapFilter === 'no_category' && String(r.categoryId || '').trim()) return false;
-      if (gapFilter === 'no_cost' && Number(r.purchaseCost) > 0) return false;
-      if (!q) return true;
-      const category = String(r.categoryName || '').toLowerCase();
-      return (
-        r.name.toLowerCase().includes(q) ||
-        r.code.toLowerCase().includes(q) ||
-        category.includes(q)
-      );
-    });
-  }, [rows, search, typeFilter, statusFilter, manufacturedFilter, gapFilter]);
+  const listFilters = useMemo<MaterialListFilters>(() => ({
+    search,
+    typeFilter,
+    statusFilter,
+    manufacturedFilter,
+    gapFilter,
+    spareFilter,
+  }), [search, typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter]);
+
+  const filtered = useMemo(
+    () => rows.filter((row) => materialMatchesListFilters(row, listFilters)),
+    [rows, listFilters],
+  );
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -287,6 +305,26 @@ export const Materials: React.FC = () => {
   }, [filtered, sortKey, sortDir]);
 
   const paged = sorted;
+  const pageIds = useMemo(
+    () => paged.map((row) => row.id).filter((id): id is string => Boolean(id)),
+    [paged],
+  );
+  const pageSelection = pageSelectionState(pageIds, selectedIds);
+  const allPageSelected = pageSelection === 'all';
+  const somePageSelected = pageSelection === 'some';
+  const bulkBusy = disablingSpareVisibility || bulkSpareSaving || selectingAllMatching || migrating;
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter, debouncedSearch, pageSize]);
+
+  const toggleSelectAllPage = () => {
+    setSelectedIds((prev) => mergePageSelection(prev, pageIds, !allPageSelected));
+  };
+
+  const toggleRowSelection = (id: string) => {
+    setSelectedIds((prev) => toggleIdSelection(prev, id));
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -343,7 +381,7 @@ export const Materials: React.FC = () => {
       traderSalePrice: normalizeRepairSalePrice(row.traderSalePrice),
       wastePercent: Number(row.wastePercent ?? 0),
       isManufacturedInternally: Boolean(row.isManufacturedInternally),
-      availableForSpareParts: row.availableForSpareParts !== false,
+      availableForSpareParts: row.availableForSpareParts === true,
       isActive: row.isActive !== false,
     });
     setGeneratedCode(row.code);
@@ -580,6 +618,130 @@ export const Materials: React.FC = () => {
     }
   };
 
+  const toastSpareVisibilityResult = (
+    available: boolean,
+    updatedCount: number,
+    failedCount: number,
+  ) => {
+    const actionLabel = available ? 'تفعيل' : 'إيقاف';
+    if (updatedCount === 0 && failedCount > 0) {
+      toast.error(`تعذر ${actionLabel} ظهور المواد في قطع الغيار.`);
+      return;
+    }
+    if (failedCount > 0) {
+      toast.error(`تم ${actionLabel} ${updatedCount} مادة، وفشل ${failedCount}.`);
+      return;
+    }
+    if (updatedCount === 0) {
+      toast.success(available ? 'لا توجد مواد لإظهارها في قطع الغيار.' : 'لا توجد مواد مفعّلة لقطع الغيار.');
+      return;
+    }
+    toast.success(
+      available
+        ? `تم تفعيل ${updatedCount} مادة في قطع الغيار.`
+        : `تم إيقاف ${updatedCount} مادة من قطع الغيار.`,
+    );
+  };
+
+  const applySparePartsVisibility = async (ids: string[], available: boolean) => {
+    let updatedCount = 0;
+    let failedCount = 0;
+    for (let i = 0; i < ids.length; i += BULK_SPARE_UPDATE_CHUNK) {
+      const chunk = ids.slice(i, i + BULK_SPARE_UPDATE_CHUNK);
+      const results = await Promise.allSettled(
+        chunk.map((id) => materialService.update(
+          id,
+          { availableForSpareParts: available },
+          { path: MATERIAL_UPDATE_PATHS.materialsPage },
+        )),
+      );
+      for (const result of results) {
+        if (result.status === 'fulfilled') updatedCount += 1;
+        else failedCount += 1;
+      }
+    }
+    await queryClient.invalidateQueries({ queryKey: manufacturingQueryKeys.materials });
+    await refetch();
+    return { updatedCount, failedCount };
+  };
+
+  /**
+   * One-shot cleanup: old catalog defaulted spare visibility ON, so manufacturing
+   * components flooded central spare vouchers. Operator re-enables real spare parts after.
+   */
+  const handleDisableSpareVisibilityForAll = async () => {
+    if (!canManage) return;
+    if (
+      !window.confirm(
+        'سيتم إيقاف «تظهر في قطع الغيار» لكل المواد المفعّلة حاليًا.\n\nبعدها فعّل يدويًا قطع الغيار الحقيقية فقط من تعديل المادة (أو استيراد نعم).\nمكونات التصنيع تختفي من إذن المركزي.\n\nمتابعة؟',
+      )
+    ) {
+      return;
+    }
+    setDisablingSpareVisibility(true);
+    try {
+      const all = await materialService.getAll();
+      const targets = all
+        .filter((row) => row.id && isMaterialAvailableForSpareParts(row))
+        .map((row) => row.id as string);
+      const { updatedCount, failedCount } = await applySparePartsVisibility(targets, false);
+      toastSpareVisibilityResult(false, updatedCount, failedCount);
+      setSelectedIds(new Set());
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تنفيذ التصحيح.');
+    } finally {
+      setDisablingSpareVisibility(false);
+    }
+  };
+
+  const handleSelectAllMatchingFilters = async () => {
+    if (!canManage || selectingAllMatching) return;
+    setSelectingAllMatching(true);
+    try {
+      const all = await materialService.getAll();
+      const ids = matchingMaterialIds(all, listFilters);
+      if (ids.length === 0) {
+        toast.success('لا توجد مواد مطابقة للفلاتر الحالية.');
+        return;
+      }
+      if (
+        ids.length > pageIds.length
+        && !window.confirm(
+          `سيتم تحديد ${ids.length} مادة مطابقة للفلاتر عبر كل الصفحات.\nالتحديد يبقى عند التنقل بين الصفحات.\n\nمتابعة؟`,
+        )
+      ) {
+        return;
+      }
+      setSelectedIds(new Set(ids));
+      toast.success(`تم تحديد ${ids.length} مادة مطابقة للفلاتر.`);
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تحديد المواد المطابقة.');
+    } finally {
+      setSelectingAllMatching(false);
+    }
+  };
+
+  const handleBulkSpareVisibility = async (available: boolean) => {
+    if (!canManage || bulkSpareSaving || selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    const confirmed = window.confirm(
+      available
+        ? `تفعيل ظهور ${count} مادة محددة في قطع الغيار / الصيانة؟`
+        : `إيقاف ظهور ${count} مادة محددة من قطع الغيار؟\nالمواد التصنيعية لن تظهر في إذن المركزي بعد ذلك.`,
+    );
+    if (!confirmed) return;
+    setBulkSpareSaving(true);
+    try {
+      const { updatedCount, failedCount } = await applySparePartsVisibility([...selectedIds], available);
+      toastSpareVisibilityResult(available, updatedCount, failedCount);
+      if (failedCount === 0) setSelectedIds(new Set());
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تحديث ظهور قطع الغيار.');
+    } finally {
+      setBulkSpareSaving(false);
+    }
+  };
+
   const productCodeById = useMemo(() => {
     const map = new Map<string, string>();
     for (const p of rawProducts) {
@@ -612,7 +774,7 @@ export const Materials: React.FC = () => {
         manufacturedProductCode: r.manufacturedProductId
           ? productCodeById.get(r.manufacturedProductId) || ''
           : '',
-        availableForSpareParts: r.availableForSpareParts !== false,
+        availableForSpareParts: r.availableForSpareParts === true,
         isActive: r.isActive !== false,
       })),
     );
@@ -789,7 +951,7 @@ export const Materials: React.FC = () => {
   }
 
   const showPricingCols = canManagePricing;
-  const colCount = (canManage ? 10 : 9) + (showPricingCols ? 2 : 0);
+  const colCount = 10 + (showPricingCols ? 2 : 0) + (canManage ? 2 : 0);
   const formPricingCode = editing ? form.code : generatedCode;
   const showFormPricingFields = canManagePricing && materialShowsSparePartsPricing({
     type: form.type,
@@ -832,8 +994,20 @@ export const Materials: React.FC = () => {
               type="button"
               size="sm"
               variant="outline"
+              onClick={() => void handleDisableSpareVisibilityForAll()}
+              disabled={bulkBusy}
+            >
+              <span className="material-icons-round text-sm">hide_source</span>
+              {disablingSpareVisibility ? 'جاري الإيقاف...' : 'إيقاف الكل من قطع الغيار'}
+            </Button>
+          ) : null}
+          {canManage ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
               onClick={() => void handleMigrate()}
-              disabled={migrating}
+              disabled={bulkBusy}
             >
               <span className="material-icons-round text-sm">refresh</span>
               {migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم'}
@@ -907,21 +1081,79 @@ export const Materials: React.FC = () => {
                 { value: 'no_cost', label: 'بلا تكلفة شراء' },
               ],
             },
+            {
+              key: 'spare',
+              placeholder: 'قطع الغيار',
+              options: [
+                { value: 'visible', label: 'تظهر في قطع الغيار' },
+                { value: 'hidden', label: 'لا تظهر في قطع الغيار' },
+              ],
+            },
           ]}
           quickFilterValues={{
             type: typeFilter,
             status: statusFilter,
             manufactured: manufacturedFilter,
             gap: gapFilter || 'all',
+            spare: spareFilter,
           }}
           onQuickFilterChange={(key, value) => {
             if (key === 'type') setTypeFilter(value as MaterialType | 'all');
             if (key === 'status') setStatusFilter(value as StatusFilter);
             if (key === 'manufactured') setManufacturedFilter(value as ManufacturedFilter);
             if (key === 'gap') setGapFilter(value === 'all' ? '' : (value as CatalogMaterialGap));
+            if (key === 'spare') setSpareFilter(value === 'all' ? 'all' : (value as MaterialSpareFilter));
           }}
           className="mb-0 border-0 rounded-none"
         />
+
+        {canManage && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-primary/20 bg-primary/5 px-4 py-3">
+            <span className="text-sm font-bold text-primary">
+              {selectedIds.size > 0
+                ? `${selectedIds.size} مادة محددة — التحديد يبقى عند تغيير الصفحة`
+                : 'حدّد مواد من أكثر من صفحة ثم أوقف ظهورها في قطع الغيار'}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={bulkBusy}
+              onClick={() => void handleSelectAllMatchingFilters()}
+            >
+              {selectingAllMatching ? 'جاري التحديد...' : 'تحديد كل المطابق للفلاتر (كل الصفحات)'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={bulkBusy || selectedIds.size === 0}
+              onClick={() => void handleBulkSpareVisibility(false)}
+            >
+              {bulkSpareSaving ? 'جاري التحديث...' : 'إيقاف المحدد من قطع الغيار'}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={bulkBusy || selectedIds.size === 0}
+              onClick={() => void handleBulkSpareVisibility(true)}
+            >
+              تفعيل المحدد في قطع الغيار
+            </Button>
+            {selectedIds.size > 0 ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={bulkBusy}
+                onClick={() => setSelectedIds(new Set())}
+              >
+                إلغاء التحديد
+              </Button>
+            ) : null}
+          </div>
+        )}
 
         <div className="erp-mobile-card-list p-2">
           {isLoading &&
@@ -939,20 +1171,37 @@ export const Materials: React.FC = () => {
               return (
                 <div
                   key={`m-${row.id}`}
-                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                  className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${
+                    row.id && selectedIds.has(row.id) ? 'ring-1 ring-primary/40' : ''
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
-                        {row.code}
-                      </p>
-                      <p className="truncate text-sm font-bold text-[var(--color-text)]">{row.name}</p>
-                      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                        {row.categoryName || '—'}
-                      </p>
+                    <div className="flex min-w-0 items-start gap-2">
+                      {canManage && row.id ? (
+                        <input
+                          type="checkbox"
+                          className="mt-1 cursor-pointer"
+                          checked={selectedIds.has(row.id)}
+                          onChange={() => toggleRowSelection(row.id!)}
+                          aria-label={`تحديد ${row.name}`}
+                        />
+                      ) : null}
+                      <div className="min-w-0">
+                        <p className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
+                          {row.code}
+                        </p>
+                        <p className="truncate text-sm font-bold text-[var(--color-text)]">{row.name}</p>
+                        <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                          {row.categoryName || '—'}
+                        </p>
+                      </div>
                     </div>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       <StatusBadge label={MATERIAL_TYPE_LABELS[row.type]} type={TYPE_BADGE[row.type]} />
+                      <StatusBadge
+                        label={isMaterialSpareVisible(row) ? 'تظهر في قطع الغيار' : 'مخفية من قطع الغيار'}
+                        type={isMaterialSpareVisible(row) ? 'success' : 'muted'}
+                      />
                       <StatusBadge label={active ? 'نشط' : 'موقوف'} type={active ? 'success' : 'danger'} />
                     </div>
                   </div>
@@ -1004,9 +1253,24 @@ export const Materials: React.FC = () => {
         </div>
 
         <div className="erp-desktop-table erp-table-wrap overflow-x-auto erp-table-scroll">
-          <table className="erp-table w-full min-w-[980px] border-collapse text-right">
+          <table className="erp-table w-full min-w-[1080px] border-collapse text-right">
             <thead className="erp-thead">
               <tr>
+                {canManage && (
+                  <th className="erp-th w-10 text-center">
+                    <input
+                      type="checkbox"
+                      className="cursor-pointer"
+                      checked={allPageSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = somePageSelected;
+                      }}
+                      onChange={toggleSelectAllPage}
+                      aria-label="تحديد صفوف هذه الصفحة"
+                      title="تحديد صفوف هذه الصفحة — التحديد يبقى عند تغيير الصفحة"
+                    />
+                  </th>
+                )}
                 {(
                   [
                     { key: 'code' as const, label: 'الكود', sortable: true },
@@ -1023,6 +1287,7 @@ export const Materials: React.FC = () => {
                       : []),
                     { key: 'wastePercent' as const, label: 'هالك %', sortable: true },
                     { key: null, label: 'التصنيع', sortable: false },
+                    { key: null, label: 'قطع الغيار', sortable: false },
                     { key: null, label: 'الحالة', sortable: false },
                   ] as const
                 ).map((col) => (
@@ -1066,7 +1331,23 @@ export const Materials: React.FC = () => {
                 paged.map((row) => {
                   const active = row.isActive !== false;
                   return (
-                    <tr key={row.id} className="hover:bg-[var(--color-bg)]/70/40">
+                    <tr
+                      key={row.id}
+                      className={`hover:bg-[var(--color-bg)]/70/40${row.id && selectedIds.has(row.id) ? ' bg-primary/5' : ''}`}
+                    >
+                      {canManage && (
+                        <td className="px-4 py-3 text-center">
+                          {row.id ? (
+                            <input
+                              type="checkbox"
+                              className="cursor-pointer"
+                              checked={selectedIds.has(row.id)}
+                              onChange={() => toggleRowSelection(row.id!)}
+                              aria-label={`تحديد ${row.name}`}
+                            />
+                          ) : null}
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-mono text-sm tabular-nums">{row.code}</td>
                       <td className="px-4 py-3">
                         <p className="text-sm font-bold text-[var(--color-text)]">{row.name}</p>
@@ -1117,6 +1398,12 @@ export const Materials: React.FC = () => {
                         )}
                       </td>
                       <td className="px-4 py-3">
+                        <StatusBadge
+                          label={isMaterialSpareVisible(row) ? 'تظهر' : 'مخفية'}
+                          type={isMaterialSpareVisible(row) ? 'success' : 'muted'}
+                        />
+                      </td>
+                      <td className="px-4 py-3">
                         <StatusBadge label={active ? 'نشط' : 'موقوف'} type={active ? 'success' : 'danger'} />
                       </td>
                       {canManage && (
@@ -1151,16 +1438,35 @@ export const Materials: React.FC = () => {
         </div>
 
         {!isLoading && (
-          <DataPaginationFooter
-            page={materialPager.page}
-            itemCount={sorted.length}
-            hasPrevious={materialPager.hasPrevious}
-            hasNext={materialPager.hasNext}
-            onPrevious={materialPager.previous}
-            onNext={() => { void materialPager.next(); }}
-            loading={materialPager.loading}
-            itemLabel="مادة"
-          />
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/30 px-4">
+            <div className="flex items-center gap-1 py-2">
+              <span className="text-xs text-muted-foreground">صفوف الصفحة</span>
+              {([20, 50] as const).map((size) => (
+                <Button
+                  key={size}
+                  type="button"
+                  size="sm"
+                  variant={pageSize === size ? 'default' : 'outline'}
+                  className="h-8 px-2.5"
+                  disabled={materialPager.loading}
+                  onClick={() => setPageSize(size)}
+                >
+                  {size}
+                </Button>
+              ))}
+            </div>
+            <DataPaginationFooter
+              page={materialPager.page}
+              itemCount={sorted.length}
+              hasPrevious={materialPager.hasPrevious}
+              hasNext={materialPager.hasNext}
+              onPrevious={materialPager.previous}
+              onNext={() => { void materialPager.next(); }}
+              loading={materialPager.loading}
+              itemLabel="مادة"
+              className="min-w-0 flex-1 border-0 bg-transparent px-0"
+            />
+          </div>
         )}
       </OpsDashPanel>
 
@@ -1472,7 +1778,7 @@ export const Materials: React.FC = () => {
               <div className="flex items-start gap-2">
                 <Checkbox
                   id="material-available-for-spare-parts"
-                  checked={form.availableForSpareParts !== false}
+                  checked={form.availableForSpareParts === true}
                   onCheckedChange={(checked) =>
                     setForm((current) => ({
                       ...current,
@@ -1483,7 +1789,7 @@ export const Materials: React.FC = () => {
                 <div className="space-y-1">
                   <Label htmlFor="material-available-for-spare-parts">تظهر في قطع الغيار / الصيانة</Label>
                   <p className="text-xs text-muted-foreground">
-                    عطّلها لمنع ربط المادة كقطعة غيار (يُفرض من السيرفر، مش الواجهة فقط).
+                    افتراضيًا مغلقة للمواد الجديدة. فعّلها فقط لقطع الغيار الحقيقية (يُفرض من السيرفر).
                   </p>
                 </div>
               </div>

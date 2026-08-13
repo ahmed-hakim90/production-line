@@ -88,8 +88,9 @@ const kpiValueColor = (tone: FactoryPrintKpi['tone'], accent: string): string =>
 }
 
 /**
- * Shared Factory print chrome — same visual language as PrintReportLayout / stock transfer permit.
+ * Shared Factory print chrome — same visual language as stock transfer permit / report layouts.
  * Use for vouchers and invoices that need custom table bodies via `children`.
+ * Prefer `PrintReportLayout` (which wraps this shell) for KPI + section reports.
  */
 export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellProps>(
   (

@@ -1,5 +1,5 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
@@ -276,136 +276,203 @@ interface SearchableSelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /** Open the menu when the trigger receives focus (useful for keyboard voucher flows). */
+  openOnFocus?: boolean;
+  onKeyDown?: React.KeyboardEventHandler<HTMLButtonElement>;
 }
 
-export const SearchableSelect: React.FC<SearchableSelectProps> = ({
-  options,
-  value,
-  onChange,
-  placeholder,
-  className = '',
-  disabled = false,
-}) => {
-  const { t } = useTranslation();
-  const resolvedPlaceholder = placeholder ?? t('shared.selectPlaceholder');
-  const [open, setOpen] = useState(false);
+export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSelectProps>(
+  function SearchableSelect(
+    {
+      options,
+      value,
+      onChange,
+      placeholder,
+      className = '',
+      disabled = false,
+      openOnFocus = false,
+      onKeyDown,
+    },
+    ref,
+  ) {
+    const { t } = useTranslation();
+    const resolvedPlaceholder = placeholder ?? t('shared.selectPlaceholder');
+    const [open, setOpen] = useState(false);
+    const [cmdValue, setCmdValue] = useState('');
+    const pointerOpenedRef = useRef(false);
 
-  const selectedLabel = useMemo(
-    () => options.find((o) => o.value === value)?.label ?? '',
-    [options, value]
-  );
+    const selectedLabel = useMemo(
+      () => options.find((o) => o.value === value)?.label ?? '',
+      [options, value],
+    );
 
-  const handleSelect = (val: string) => {
-    onChange(val);
-    setOpen(false);
-  };
+    const selectedCommandValue = useMemo(() => {
+      const opt = options.find((o) => o.value === value);
+      if (!opt) return '';
+      return `${opt.label} ${opt.hint || ''} ${opt.value}`;
+    }, [options, value]);
 
-  const handleClear = (e: React.MouseEvent<HTMLElement>) => {
-    e.stopPropagation();
-    onChange('');
-  };
+    const handleSelect = (val: string) => {
+      onChange(val);
+      setOpen(false);
+    };
 
-  return (
-    <Popover
-      modal
-      open={disabled ? false : open}
-      onOpenChange={(next) => !disabled && setOpen(next)}
-    >
-      <PopoverTrigger asChild>
-        <UiButton
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          disabled={disabled}
-          className={cn(
-            'w-full justify-between min-h-[var(--control-height-lg)] h-[var(--control-height-lg)] touch-manipulation [font-size:var(--font-size-sm)] font-medium border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
-            disabled && 'opacity-70 cursor-not-allowed',
-            className
-          )}
-        >
-          <span className="flex items-center gap-2 min-w-0">
-            <Search className="h-4 w-4 text-[var(--color-text-muted)] shrink-0" />
-            <span className="truncate text-[var(--color-text)]">{selectedLabel || resolvedPlaceholder}</span>
-          </span>
-          <span className="flex items-center gap-1">
-            {value && (
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={t('shared.clearSelection')}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-sm hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring touch-manipulation"
-                onClick={handleClear}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onChange('');
-                  }
-                }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-              >
-                <X className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
-              </span>
-            )}
-            <ChevronDown className="h-4 w-4 text-[var(--color-text-muted)]" />
-          </span>
-        </UiButton>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-[--radix-popover-trigger-width] max-w-[min(100vw-1.5rem,28rem)] p-0"
-        align="start"
-        collisionPadding={16}
-        onOpenAutoFocus={(e) => {
-          // Keep focus inside the panel so soft keyboard open does not dismiss on tablet.
-          e.preventDefault();
-          const root = e.currentTarget as HTMLElement | null;
-          const input = root?.querySelector<HTMLInputElement>('[cmdk-input]');
-          window.setTimeout(() => input?.focus({ preventScroll: true }), 0);
-        }}
-        onCloseAutoFocus={(e) => e.preventDefault()}
-        onFocusOutside={(e) => {
-          // Soft keyboard / visualViewport shifts can fire spurious focusoutside on iPad.
-          const next = e.detail?.originalEvent?.relatedTarget as Node | null | undefined;
-          if (next && (e.currentTarget as HTMLElement).contains(next)) {
-            e.preventDefault();
-          }
+    const handleClear = (e: React.MouseEvent<HTMLElement>) => {
+      e.stopPropagation();
+      onChange('');
+    };
+
+    const openMenu = () => {
+      if (disabled) return;
+      setOpen(true);
+      setCmdValue(selectedCommandValue);
+    };
+
+    const handleTriggerKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+      onKeyDown?.(e);
+      if (e.defaultPrevented || disabled) return;
+
+      if (
+        e.key === 'ArrowDown'
+        || e.key === 'ArrowUp'
+        || e.key === 'Down'
+        || e.key === 'Up'
+        || e.key === 'Enter'
+        || e.key === ' '
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        openMenu();
+      }
+    };
+
+    return (
+      <Popover
+        modal
+        open={disabled ? false : open}
+        onOpenChange={(next) => {
+          if (disabled) return;
+          setOpen(next);
+          if (next) setCmdValue(selectedCommandValue);
         }}
       >
-        <Command filter={searchableSelectFilter} shouldFilter>
-          <CommandInput placeholder={t('shared.searchPlaceholder')} />
-          <CommandList className="max-h-[min(50dvh,18rem)] overscroll-contain">
-            <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
-            <CommandGroup>
-              {options.map((opt, idx) => (
-                <CommandItem
-                  key={opt.value || `opt-${idx}`}
-                  // cmdk filters by `value`; include id so items stay unique when labels repeat (e.g. product names).
-                  value={`${opt.label} ${opt.hint || ''} ${opt.value}`}
-                  onSelect={() => handleSelect(opt.value)}
-                  className="min-h-11 touch-manipulation"
+        <PopoverTrigger asChild>
+          <UiButton
+            ref={ref}
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            aria-haspopup="listbox"
+            disabled={disabled}
+            onPointerDown={() => {
+              pointerOpenedRef.current = true;
+            }}
+            onFocus={() => {
+              if (!openOnFocus || disabled) return;
+              // Skip when focus came from a pointer click (Popover toggles itself).
+              if (pointerOpenedRef.current) {
+                pointerOpenedRef.current = false;
+                return;
+              }
+              openMenu();
+            }}
+            onKeyDown={handleTriggerKeyDown}
+            className={cn(
+              'w-full justify-between min-h-[var(--control-height-lg)] h-[var(--control-height-lg)] touch-manipulation [font-size:var(--font-size-sm)] font-medium border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
+              disabled && 'opacity-70 cursor-not-allowed',
+              className,
+            )}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <Search className="h-4 w-4 text-[var(--color-text-muted)] shrink-0" />
+              <span className="truncate text-[var(--color-text)]">{selectedLabel || resolvedPlaceholder}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              {value && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t('shared.clearSelection')}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-sm hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring touch-manipulation"
+                  onClick={handleClear}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onChange('');
+                    }
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
                 >
-                  <Check className={cn('mr-2 h-4 w-4 shrink-0', value === opt.value ? 'opacity-100' : 'opacity-0')} />
-                  <span className="min-w-0 flex-1 truncate">{opt.label}</span>
-                  {opt.hint ? (
-                    <span
-                      className={cn(
-                        'ms-2 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none',
-                        SELECT_OPTION_HINT_STYLES[opt.hintType || 'muted'],
-                      )}
-                    >
-                      {opt.hint}
-                    </span>
-                  ) : null}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-};
+                  <X className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+                </span>
+              )}
+              <ChevronDown className="h-4 w-4 text-[var(--color-text-muted)]" />
+            </span>
+          </UiButton>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-[--radix-popover-trigger-width] max-w-[min(100vw-1.5rem,28rem)] p-0"
+          align="start"
+          collisionPadding={16}
+          onOpenAutoFocus={(e) => {
+            // Keep focus inside the panel so soft keyboard open does not dismiss on tablet.
+            e.preventDefault();
+            const root = e.currentTarget as HTMLElement | null;
+            const input = root?.querySelector<HTMLInputElement>('[cmdk-input]');
+            window.setTimeout(() => input?.focus({ preventScroll: true }), 0);
+          }}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          onFocusOutside={(e) => {
+            // Soft keyboard / visualViewport shifts can fire spurious focusoutside on iPad.
+            const next = e.detail?.originalEvent?.relatedTarget as Node | null | undefined;
+            if (next && (e.currentTarget as HTMLElement).contains(next)) {
+              e.preventDefault();
+            }
+          }}
+        >
+          <Command
+            loop
+            filter={searchableSelectFilter}
+            shouldFilter
+            value={cmdValue}
+            onValueChange={setCmdValue}
+          >
+            <CommandInput placeholder={t('shared.searchPlaceholder')} />
+            <CommandList className="max-h-[min(50dvh,18rem)] overscroll-contain">
+              <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
+              <CommandGroup>
+                {options.map((opt, idx) => (
+                  <CommandItem
+                    key={opt.value || `opt-${idx}`}
+                    // cmdk filters by `value`; include id so items stay unique when labels repeat (e.g. product names).
+                    value={`${opt.label} ${opt.hint || ''} ${opt.value}`}
+                    onSelect={() => handleSelect(opt.value)}
+                    className="min-h-11 touch-manipulation"
+                  >
+                    <Check className={cn('mr-2 h-4 w-4 shrink-0', value === opt.value ? 'opacity-100' : 'opacity-0')} />
+                    <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                    {opt.hint ? (
+                      <span
+                        className={cn(
+                          'ms-2 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+                          SELECT_OPTION_HINT_STYLES[opt.hintType || 'muted'],
+                        )}
+                      >
+                        {opt.hint}
+                      </span>
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    );
+  },
+);

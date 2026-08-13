@@ -2,10 +2,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button, SearchableSelect } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '../../../store/useAppStore';
+import { getCurrentTenantIdOrNull } from '@/lib/currentTenant';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { useLocalFormDraft } from '@/modules/shared/hooks';
 import { stockService } from '../services/stockService';
 import { createStockMovement } from '../usecases/createStockMovement';
 import { createTransferRequest } from '../usecases/createTransferRequest';
@@ -14,7 +18,7 @@ import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { warehouseRackService } from '../services/warehouseRackService';
-import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack, TransferRequestLine, StockTransaction } from '../types';
+import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack, TransferRequestLine } from '../types';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { StockAvailabilityHint } from '../components/StockAvailabilityHint';
 import { usePermission } from '../../../utils/permissions';
@@ -30,9 +34,7 @@ import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData
 import type { TransferDisplayUnitMode } from '../utils/transferUnits';
 import {
   INV_REF_REGEX,
-  applyScannedCodeToLines,
   createTransferLine,
-  findItemOptionByCode,
   formatInvReference,
   lineQuantityInPieces as lineQtyPieces,
   validateTransferLines,
@@ -59,18 +61,15 @@ import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope'
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { Material } from '../../manufacturing/types';
+import { isMaterialOptedInForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import {
   buildComponentCatalogOptions,
   getComponentAvailableQty,
   resolveComponentStockIdentity,
   type ComponentCatalogOption,
 } from '../lib/componentCatalogOptions';
-import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { WAREHOUSE_ROLE_LABELS } from '../lib/stockLabels';
-import { movementLabel } from './stockTransactions/types';
-import { formatNumber } from '../../../utils/calculations';
 import {
-  flattenRecentVoucherFeed,
   voucherDestinationLabel,
   voucherMovementTitle,
   voucherPrintFilePrefix,
@@ -94,6 +93,23 @@ import {
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
 type TransferLine = TransferFormLine;
+
+type StockMovementFormDraft = {
+  movementType: MovementType;
+  itemType: ItemType;
+  warehouseId: string;
+  toWarehouseId: string;
+  locationId: string;
+  toLocationId: string;
+  voucherNote: string;
+  transferItems: Array<{
+    itemId: string;
+    quantity: number;
+    unit: 'piece' | 'carton';
+    locationId?: string;
+  }>;
+};
+
 const APP_VERSION = __APP_VERSION__;
 const SPARE_WAREHOUSE_ROLES = new Set(['spare_parts_central', 'maintenance_center']);
 const STOCK_MOVE_FORM_CATALOG_CACHE_KEY = 'inventory:stock-movement-form-catalog';
@@ -109,6 +125,17 @@ type StockMoveFormCatalog = {
 
 function isSparePartsWarehouse(warehouse: Warehouse | undefined): boolean {
   return Boolean(warehouse?.warehouseRole && SPARE_WAREHOUSE_ROLES.has(warehouse.warehouseRole));
+}
+
+function isStockMovementFormDraftEmpty(draft: StockMovementFormDraft): boolean {
+  const hasLines = (draft.transferItems || []).some(
+    (line) => String(line.itemId || '').trim() || Number(line.quantity || 0) > 0,
+  );
+  return (
+    !hasLines
+    && !String(draft.voucherNote || '').trim()
+    && !String(draft.toWarehouseId || '').trim()
+  );
 }
 
 export const StockMovementForm: React.FC = () => {
@@ -168,13 +195,12 @@ export const StockMovementForm: React.FC = () => {
   const [adjustmentReason, setAdjustmentReason] = useState<StockAdjustmentReason>('manual_correction');
   const [quantity, setQuantity] = useState<number>(0);
   const [voucherNote, setVoucherNote] = useState('');
-  const [scanCode, setScanCode] = useState('');
   const [transferItems, setTransferItems] = useState<TransferLine[]>([createTransferLine()]);
-  const scanInputRef = useRef<HTMLInputElement>(null);
+  const lineItemInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const lineLocationTriggerRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const lineQtyInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [nextReferenceSeq, setNextReferenceSeq] = useState(1);
   const [saving, setSaving] = useState(false);
-  const [recentTxs, setRecentTxs] = useState<StockTransaction[]>([]);
-  const [recentLoading, setRecentLoading] = useState(false);
   const [defaultLocationsByKey, setDefaultLocationsByKey] = useState(
     () => new Map<string, { locationId: string; locationCode?: string }>(),
   );
@@ -188,6 +214,69 @@ export const StockMovementForm: React.FC = () => {
     contentRef: transferPrintRef,
     printSettings: printTemplate,
     documentTitle: 'stock-transfer',
+  });
+
+  const draftValue = useMemo<StockMovementFormDraft>(
+    () => ({
+      movementType,
+      itemType,
+      warehouseId,
+      toWarehouseId,
+      locationId,
+      toLocationId,
+      voucherNote,
+      transferItems: transferItems.map((line) => ({
+        itemId: line.itemId,
+        quantity: Number(line.quantity || 0),
+        unit: line.unit,
+        locationId: line.locationId || '',
+      })),
+    }),
+    [
+      movementType,
+      itemType,
+      warehouseId,
+      toWarehouseId,
+      locationId,
+      toLocationId,
+      voucherNote,
+      transferItems,
+    ],
+  );
+
+  const { hasDraft, clearDraft } = useLocalFormDraft<StockMovementFormDraft>({
+    formKey: 'inventory:stockMovementForm',
+    tenantId: getCurrentTenantIdOrNull(),
+    userId: uid,
+    value: draftValue,
+    enabled: movementType === 'IN' || movementType === 'OUT',
+    isEmpty: isStockMovementFormDraftEmpty,
+    onRestore: (draft) => {
+      if (draft.movementType === 'IN' || draft.movementType === 'OUT') {
+        setMovementType(draft.movementType);
+      }
+      if (draft.itemType === 'finished_good' || draft.itemType === 'raw_material') {
+        setItemType(draft.itemType);
+      }
+      if (draft.warehouseId) setWarehouseId(draft.warehouseId);
+      setToWarehouseId(String(draft.toWarehouseId || ''));
+      setLocationId(String(draft.locationId || ''));
+      setToLocationId(String(draft.toLocationId || ''));
+      setVoucherNote(String(draft.voucherNote || ''));
+      const lines = Array.isArray(draft.transferItems) ? draft.transferItems : [];
+      setTransferItems(
+        lines.length > 0
+          ? lines.map((line) => ({
+              ...createTransferLine({
+                locationId: String(line.locationId || ''),
+                unit: line.unit === 'carton' ? 'carton' : 'piece',
+              }),
+              itemId: String(line.itemId || ''),
+              quantity: Number(line.quantity || 0),
+            }))
+          : [createTransferLine()],
+      );
+    },
   });
 
   const loadCatalog = useCallback(async () => {
@@ -238,25 +327,6 @@ export const StockMovementForm: React.FC = () => {
     }
     const bals = await stockService.getBalances(whId);
     setBalances(bals);
-  }, []);
-
-  const loadRecentMovements = useCallback(async (whId: string) => {
-    if (!whId) {
-      setRecentTxs([]);
-      return;
-    }
-    setRecentLoading(true);
-    try {
-      const page = await stockService.getTransactionsPaged({
-        warehouseId: whId,
-        limit: 20,
-      });
-      setRecentTxs(page.items);
-    } catch {
-      setRecentTxs([]);
-    } finally {
-      setRecentLoading(false);
-    }
   }, []);
 
   useEffect(() => {
@@ -348,6 +418,7 @@ export const StockMovementForm: React.FC = () => {
       id: p.id,
       name: p.name,
       code: p.code,
+      barcode: String(raw?.barcode || '').trim() || undefined,
       minStock: 0,
       unitsPerCarton: Number(raw?.unitsPerCarton || 0),
       stockItemType: 'finished_good',
@@ -357,7 +428,7 @@ export const StockMovementForm: React.FC = () => {
   const spareEligibleMaterials = useMemo(
     () =>
       isSparePartsContext
-        ? materials.filter((m) => m.availableForSpareParts !== false)
+        ? materials.filter((m) => isMaterialOptedInForSpareParts(m))
         : materials,
     [materials, isSparePartsContext],
   );
@@ -409,8 +480,7 @@ export const StockMovementForm: React.FC = () => {
 
   useEffect(() => {
     void loadBalancesForWarehouse(effectiveWarehouseId);
-    void loadRecentMovements(effectiveWarehouseId);
-  }, [effectiveWarehouseId, loadBalancesForWarehouse, loadRecentMovements]);
+  }, [effectiveWarehouseId, loadBalancesForWarehouse]);
 
   const selectedFromWarehouse = warehouses.find((w) => w.id === effectiveWarehouseId);
   const selectedToWarehouse = warehouses.find((w) => w.id === toWarehouseId);
@@ -495,7 +565,8 @@ export const StockMovementForm: React.FC = () => {
         }
         return {
           value: opt.id,
-          label: `${opt.name} (${opt.code}) — المتاح: ${available}`,
+          label: `${opt.name} — المتاح: ${available}`,
+          searchText: [opt.code, opt.barcode].filter(Boolean).join(' '),
         };
       }),
     [itemOptions, balances, effectiveWarehouseId, itemType, componentById],
@@ -574,15 +645,15 @@ export const StockMovementForm: React.FC = () => {
     return resolveComponentStockIdentity(component, balances, effectiveWarehouseId, movement);
   };
 
-  const resolvePreferredLineLocation = (itemId: string, currentLocationId?: string) => {
+  const resolvePreferredLineLocation = (itemIdValue: string, currentLocationId?: string) => {
     const current = String(currentLocationId || '').trim();
     if (current) return current;
-    if (!itemId) return String(locationId || '').trim();
-    const identity = resolveLineStockIdentity(itemId, movementType === 'OUT' ? 'OUT' : 'IN');
+    if (!itemIdValue) return '';
+    const identity = resolveLineStockIdentity(itemIdValue, movementType === 'OUT' ? 'OUT' : 'IN');
     const linked = defaultLocationsByKey.get(
       defaultItemLocationKey(identity.itemType, identity.itemId),
     );
-    return String(linked?.locationId || locationId || '').trim();
+    return String(linked?.locationId || '').trim();
   };
 
   const lineQuantityInPieces = (line: TransferLine) =>
@@ -596,6 +667,7 @@ export const StockMovementForm: React.FC = () => {
   }, [isFinishedTransferFlow, hasAutoTransferSource, warehouseId, autoTransferSourceWarehouseId]);
 
   const resetForm = (nextMovementType: MovementType = 'IN') => {
+    clearDraft();
     setItemId('');
     if (!warehouseSelectLocked && !isSparePartsContext) {
       setWarehouseId('');
@@ -623,6 +695,9 @@ export const StockMovementForm: React.FC = () => {
       toWarehouseId,
       transferDisplayUnit,
       createdBy: userDisplayName || 'Current User',
+      documentType: 'إذن تحويل مخزون',
+      resolveLocationCode: (locId) =>
+        warehouseLocations.find((loc) => loc.id === locId)?.code,
     });
 
   const showShareFeedback = (result: ShareResult) => {
@@ -630,6 +705,11 @@ export const StockMovementForm: React.FC = () => {
     if (!msg) return;
     toast.success(msg);
   };
+
+  const inOutDocumentType =
+    movementType === 'OUT'
+      ? (isSparePartsContext ? 'إذن منصرف قطع غيار' : 'إذن منصرف')
+      : (isSparePartsContext ? 'إذن إضافة قطع غيار' : 'إذن إضافة');
 
   const buildInOutPrintPayload = (resolvedReferenceNo: string): StockTransferPrintData => ({
     transferNo: resolvedReferenceNo,
@@ -644,10 +724,12 @@ export const StockMovementForm: React.FC = () => {
       movementType === 'OUT' ? 'OUT' : 'IN',
       isSparePartsContext,
     ),
+    documentType: inOutDocumentType,
     items: transferItems.map((line) => {
       const item = getItemById(line.itemId)!;
       const isCarton = itemType === 'finished_good' && line.unit === 'carton';
       const qtyPieces = lineQuantityInPieces(line);
+      const locationCode = warehouseLocations.find((loc) => loc.id === line.locationId)?.code;
       return {
         itemName: item.name,
         itemCode: item.code,
@@ -655,6 +737,7 @@ export const StockMovementForm: React.FC = () => {
         quantity: Number(line.quantity || 0),
         quantityPieces: qtyPieces,
         unitsPerCarton: isCarton ? Number(item.unitsPerCarton || 0) : undefined,
+        ...(locationCode ? { locationCode } : {}),
       };
     }),
     createdBy: userDisplayName || 'Current User',
@@ -1055,7 +1138,6 @@ export const StockMovementForm: React.FC = () => {
       resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : movementType === 'OUT' ? 'OUT' : 'IN');
       setSaving(false);
       invalidatePageDataCache('inventory:stock-transactions');
-      void loadRecentMovements(effectiveWarehouseId);
 
       if (printPayload && printAction !== 'none') {
         if (printAction === 'preview') {
@@ -1163,45 +1245,76 @@ export const StockMovementForm: React.FC = () => {
     setShowPrintPreview(true);
   };
 
-  const handleApplyScanCode = () => {
-    const code = scanCode.trim();
-    if (!code) return;
-    if (!(movementType === 'IN' || movementType === 'OUT')) {
-      toast.error('مسح الكود متاح لإذن الوارد والمنصرف فقط.');
-      return;
-    }
-    const matched = findItemOptionByCode(itemOptions, code);
-    if (!matched) {
-      toast.error('لم يُعثر على صنف مطابق لهذا الكود تمامًا.');
-      setScanCode('');
-      scanInputRef.current?.focus();
-      return;
-    }
-    const preferredLocation = resolvePreferredLineLocation(matched.id, locationId);
-    const result = applyScannedCodeToLines({
-      lines: transferItems,
-      itemId: matched.id,
-      locationId: preferredLocation || undefined,
-      unit: 'piece',
-    });
-    setTransferItems(result.lines);
-    setScanCode('');
-    toast.success(
-      result.action === 'incremented'
-        ? `تمت زيادة كمية ${matched.name}`
-        : `تمت إضافة ${matched.name}`,
-    );
-    scanInputRef.current?.focus();
+  const focusLineField = (lineIndex: number, field: 'item' | 'location' | 'qty') => {
+    window.setTimeout(() => {
+      if (field === 'item') {
+        lineItemInputRefs.current[lineIndex]?.focus();
+        return;
+      }
+      if (field === 'location') {
+        const el = lineLocationTriggerRefs.current[lineIndex];
+        if (el) {
+          el.focus();
+          return;
+        }
+        lineQtyInputRefs.current[lineIndex]?.focus();
+        return;
+      }
+      lineQtyInputRefs.current[lineIndex]?.focus();
+      lineQtyInputRefs.current[lineIndex]?.select?.();
+    }, 0);
   };
 
-  const addVoucherLine = () => {
-    setTransferItems((prev) => [
-      ...prev,
-      createTransferLine({
-        locationId: locationId || '',
-        unit: itemType === 'finished_good' ? 'piece' : 'piece',
-      }),
-    ]);
+  const addVoucherLine = (focusNew = true) => {
+    setTransferItems((prev) => {
+      const next = [
+        ...prev,
+        createTransferLine({
+          unit: itemType === 'finished_good' ? 'piece' : 'piece',
+        }),
+      ];
+      if (focusNew) {
+        window.setTimeout(() => focusLineField(next.length - 1, 'item'), 0);
+      }
+      return next;
+    });
+  };
+
+  const handleItemSelectedOnLine = (lineIndex: number, itemIdValue: string) => {
+    setTransferItems((prev) =>
+      prev.map((x, idx) =>
+        idx === lineIndex
+          ? {
+              ...x,
+              itemId: itemIdValue,
+              locationId: resolvePreferredLineLocation(itemIdValue, x.locationId),
+            }
+          : x,
+      ),
+    );
+    if (usesLineLocations) {
+      focusLineField(lineIndex, 'location');
+    } else {
+      focusLineField(lineIndex, 'qty');
+    }
+  };
+
+  const handleQtyEnterOnLine = (lineIndex: number) => {
+    const line = transferItems[lineIndex];
+    if (!line?.itemId || Number(line.quantity || 0) <= 0) {
+      toast.error('أدخل صنفًا وكمية أكبر من صفر قبل فتح سطر جديد.');
+      return;
+    }
+    if (usesLineLocations && !String(line.locationId || '').trim()) {
+      toast.error('حدد الرف لهذا البند أولًا.');
+      focusLineField(lineIndex, 'location');
+      return;
+    }
+    if (lineIndex >= transferItems.length - 1) {
+      addVoucherLine(true);
+    } else {
+      focusLineField(lineIndex + 1, 'item');
+    }
   };
 
   const pageTitle = isSparePartsContext && movementType === 'IN'
@@ -1231,42 +1344,56 @@ export const StockMovementForm: React.FC = () => {
         : movementType === 'TRANSFER'
           ? 'حفظ التحويلة'
           : 'حفظ التسوية';
-  const recentFeed = useMemo(() => flattenRecentVoucherFeed(recentTxs), [recentTxs]);
 
-  /* ── ERPNext field helpers ── */
-  const fieldClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
-  const fieldDisabledClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[var(--color-surface-hover)] text-[var(--color-text)] font-medium select-none cursor-default';
-  const labelClass = 'block text-[11.5px] font-semibold text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wide';
+  const isVoucherMode = movementType === 'IN' || movementType === 'OUT';
+  const filledLineCount = transferItems.filter(
+    (line) => line.itemId && Number(line.quantity || 0) > 0,
+  ).length;
+  const linesQtyTotal = transferItems.reduce(
+    (sum, line) => sum + (line.itemId ? Number(line.quantity || 0) : 0),
+    0,
+  );
+
+  /* ── Field helpers ── */
+  const fieldClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2.5 text-[13px] bg-[var(--color-bg)] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-[var(--color-card)] focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium min-h-[42px]';
+  const fieldDisabledClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2.5 text-[13px] bg-[var(--color-surface-hover)] text-[var(--color-text)] font-medium select-none cursor-default min-h-[42px]';
+  const labelClass = 'block text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 tracking-wide';
 
   return (
     <ModuleOpsPageShell
       eyebrow={pageTitle}
       rangeLabel={pageSubtitle}
+      denseHero
+      hero={
+        isVoucherMode
+          ? [
+              { key: 'ref', label: 'المرجع', value: referenceNo },
+              { key: 'lines', label: 'بنود جاهزة', value: filledLineCount },
+              {
+                key: 'qty',
+                label: movementType === 'OUT' ? 'إجمالي المنصرف' : 'إجمالي الكمية',
+                value: linesQtyTotal,
+              },
+            ]
+          : undefined
+      }
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => openImportInByCodeModal(itemType === 'raw_material' ? 'raw_material' : 'finished_good')}
-            disabled={!can('inventory.transactions.create') || saving}
-          >
-            <span className="material-icons-round text-sm">upload</span>
-            استيراد إدخال بالكود
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              navigate(
-                warehouseId
-                  ? `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}`
-                  : '/inventory/transactions',
-              )
-            }
-          >
-            <span className="material-icons-round text-sm">swap_horiz</span>
-            سجل حركات المخازن
-          </Button>
+          {hasDraft && isVoucherMode ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                clearDraft();
+                setVoucherNote('');
+                setTransferItems([createTransferLine()]);
+                toast.info('تم مسح المسودة المحلية');
+              }}
+              disabled={saving}
+            >
+              مسح المسودة
+            </Button>
+          ) : null}
           {can('inventory.transactions.create') ? (
             <Button
               type="button"
@@ -1287,116 +1414,107 @@ export const StockMovementForm: React.FC = () => {
         settingsPath={settingsPath}
       />
 
-      {/* ── Main Form Card ── */}
-      <OpsDashPanel accent="inventory" bodyClassName="p-0 overflow-hidden">
-      <div
-        className="bg-[var(--color-card)]"
-      >
-        {/* Card header */}
-        <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[13px] font-semibold text-[var(--color-text)]">
-              {isSparePartsContext && movementType === 'IN' ? 'تسجيل إذن الإضافة' : 'تسجيل الحركة'}
-            </span>
-            {isSparePartsContext && selectedWarehouseRole?.warehouseRole ? (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]">
-                {WAREHOUSE_ROLE_LABELS[selectedWarehouseRole.warehouseRole] || 'قطع غيار'}
+      <OpsDashPanel accent="inventory" bodyClassName="p-0 overflow-visible">
+      <div className="bg-[var(--color-card)]">
+        {/* Compact setup strip */}
+        <div className="px-4 sm:px-5 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]/60 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[13px] font-bold text-[var(--color-text)]">
+                {isSparePartsContext && movementType === 'IN'
+                  ? 'تسجيل إذن الإضافة'
+                  : isSparePartsContext && movementType === 'OUT'
+                    ? 'تسجيل إذن المنصرف'
+                    : 'تسجيل الحركة'}
               </span>
-            ) : null}
-          </div>
-          {/* Reference badge */}
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-[var(--color-text-muted)] font-medium">رقم المرجع</span>
-            <span
-              className="text-[12.5px] font-bold px-2.5 py-0.5 rounded-full"
-              style={{
-                background: 'rgb(var(--color-primary)/0.1)',
-                color: 'rgb(var(--color-primary))',
-                border: '1px solid rgb(var(--color-primary)/0.2)',
-              }}
-            >
-              {referenceNo}
-            </span>
-          </div>
-        </div>
-
-        {/* Form body */}
-        <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-
-          {/* Movement type segmented */}
-          <div>
-            <label className={labelClass}>نوع الحركة</label>
-            <div className="erp-date-seg" style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
-              {([
-                { value: 'IN' as MovementType, label: isSparePartsContext ? 'إضافة' : 'وارد', icon: 'south_west' },
-                { value: 'OUT' as MovementType, label: 'منصرف', icon: 'north_east' },
-                { value: 'TRANSFER' as MovementType, label: 'تحويل', icon: 'swap_horiz' },
-                { value: 'ADJUSTMENT' as MovementType, label: 'تسوية', icon: 'tune' },
-              ] as const).map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => {
-                    setMovementType(opt.value);
-                    if (opt.value !== 'ADJUSTMENT' && transferItems.length === 0) {
-                      setTransferItems([createTransferLine()]);
-                    }
-                  }}
-                  className={`erp-date-seg-btn${movementType === opt.value ? ' active' : ''}`}
-                  style={{ justifyContent: 'center' }}
-                >
-                  <span className="material-icons-round" style={{ fontSize: 14 }}>{opt.icon}</span>
-                  {opt.label}
-                </button>
-              ))}
+              {isSparePartsContext && selectedWarehouseRole?.warehouseRole ? (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary)/0.2)]">
+                  {WAREHOUSE_ROLE_LABELS[selectedWarehouseRole.warehouseRole] || 'قطع غيار'}
+                </span>
+              ) : null}
+              {hasDraft && isVoucherMode ? (
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgb(var(--color-warning)/0.12)] text-[rgb(var(--color-warning))] border border-[rgb(var(--color-warning)/0.25)]">
+                  مسودة محفوظة
+                </span>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2 sm:hidden">
+              <span className="text-[11px] text-[var(--color-text-muted)]">المرجع</span>
+              <span className="text-[12.5px] font-bold px-2.5 py-0.5 rounded-full bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary)/0.2)] tabular-nums">
+                {referenceNo}
+              </span>
             </div>
           </div>
 
-          {/* Item type */}
-          <div>
-            <label className={labelClass}>نوع الصنف</label>
-              <Select
-              value={itemType}
-              disabled={scoped || isSparePartsContext}
-              onValueChange={(value) => {
-                const nextType = value as ItemType;
-                setItemType(nextType);
-                setItemId('');
-                setTransferItems((prev) =>
-                  prev.map((line) => ({ ...line, itemId: '', unit: nextType === 'finished_good' ? line.unit : 'piece' })),
-                );
-              }}
-            >
-              <SelectTrigger className={fieldClass}>
-                <SelectValue placeholder="اختر نوع الصنف">
-                  {itemType === 'finished_good'
-                    ? 'منتج نهائي'
-                    : isSparePartsContext
-                      ? 'قطع غيار / مواد'
-                      : 'مكونات المنتجات'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {!isSparePartsContext ? (
-                  <SelectItem value="finished_good">منتج نهائي</SelectItem>
-                ) : null}
-                <SelectItem value="raw_material">
-                  {isSparePartsContext ? 'قطع غيار / مواد' : 'مكونات المنتجات'}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Source warehouse */}
-          <div>
-            <label className={labelClass}>المخزن</label>
-            {isFinishedTransferFlow && hasAutoTransferSource ? (
-              <div className={fieldDisabledClass}>
-                {selectedFromWarehouse?.name || 'غير محدد'}
-                <span className="text-[11px] text-[var(--color-text-muted)] mr-2">(من تم الصنع)</span>
+          <div className={`grid gap-3 ${isSparePartsContext ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
+            <div className={isSparePartsContext ? 'sm:col-span-2' : ''}>
+              <label className={labelClass}>نوع الحركة</label>
+              <div className="erp-date-seg" style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+                {([
+                  { value: 'IN' as MovementType, label: isSparePartsContext ? 'إضافة' : 'وارد', icon: 'south_west' },
+                  { value: 'OUT' as MovementType, label: 'منصرف', icon: 'north_east' },
+                  { value: 'TRANSFER' as MovementType, label: 'تحويل', icon: 'swap_horiz' },
+                  { value: 'ADJUSTMENT' as MovementType, label: 'تسوية', icon: 'tune' },
+                ] as const).map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      setMovementType(opt.value);
+                      if (opt.value !== 'ADJUSTMENT' && transferItems.length === 0) {
+                        setTransferItems([createTransferLine()]);
+                      }
+                    }}
+                    className={`erp-date-seg-btn${movementType === opt.value ? ' active' : ''}`}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    <span className="material-icons-round" style={{ fontSize: 14 }}>{opt.icon}</span>
+                    {opt.label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              <SearchableSelect
+            </div>
+
+            {!isSparePartsContext && !scoped ? (
+              <div>
+                <label className={labelClass}>نوع الصنف</label>
+                <Select
+                  value={itemType}
+                  onValueChange={(value) => {
+                    const nextType = value as ItemType;
+                    setItemType(nextType);
+                    setItemId('');
+                    setTransferItems((prev) =>
+                      prev.map((line) => ({
+                        ...line,
+                        itemId: '',
+                        unit: nextType === 'finished_good' ? line.unit : 'piece',
+                      })),
+                    );
+                  }}
+                >
+                  <SelectTrigger className={fieldClass}>
+                    <SelectValue placeholder="اختر نوع الصنف">
+                      {itemType === 'finished_good' ? 'منتج نهائي' : 'مكونات المنتجات'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="finished_good">منتج نهائي</SelectItem>
+                    <SelectItem value="raw_material">مكونات المنتجات</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+
+            <div>
+              <label className={labelClass}>المخزن</label>
+              {isFinishedTransferFlow && hasAutoTransferSource ? (
+                <div className={fieldDisabledClass}>
+                  {selectedFromWarehouse?.name || 'غير محدد'}
+                  <span className="text-[11px] text-[var(--color-text-muted)] mr-2">(من تم الصنع)</span>
+                </div>
+              ) : (
+                <SearchableSelect
                   options={warehouseSelectOptions}
                   value={warehouseId}
                   disabled={warehouseSelectLocked}
@@ -1408,83 +1526,75 @@ export const StockMovementForm: React.FC = () => {
                 />
               )}
             </div>
+          </div>
 
-          {movementType !== 'TRANSFER' && locationSelectOptions.length > 0 && (
-            <div>
+          {movementType !== 'TRANSFER' && locationSelectOptions.length > 0 && !usesLineLocations && (
+            <div className="max-w-md">
               <label className={labelClass}>
-                {usesLineLocations
-                  ? (isSparePartsContext ? 'الرف الافتراضي للأسطر' : 'اللوكيشن الافتراضي للأسطر')
-                  : (isSparePartsContext ? 'الرف / اللوكيشن' : 'اللوكيشن')}
+                {isSparePartsContext ? 'الرف / اللوكيشن' : 'اللوكيشن'}
               </label>
               <SearchableSelect
                 options={locationSelectOptions}
                 value={locationId}
-                onChange={(value) => {
-                  setLocationId(value);
-                  if (usesLineLocations && value) {
-                    setTransferItems((prev) =>
-                      prev.map((line) => (line.locationId ? line : { ...line, locationId: value })),
-                    );
-                  }
-                }}
+                onChange={(value) => setLocationId(value)}
                 placeholder={
-                  usesLineLocations
-                    ? 'يُطبَّق على الأسطر الجديدة والفارغة'
-                    : itemType === 'raw_material'
-                      ? 'مطلوب للمكونات وقطع الغيار'
-                      : 'اختياري للمنتجات'
+                  itemType === 'raw_material'
+                    ? 'مطلوب للمكونات وقطع الغيار'
+                    : 'اختياري للمنتجات'
                 }
               />
             </div>
           )}
 
-          {/* Destination warehouse (TRANSFER only) */}
           {movementType === 'TRANSFER' && (
-            <div>
-              <label className={labelClass}>مخزن الوجهة</label>
-              <SearchableSelect
-                options={toWarehouseSelectOptions}
-                value={toWarehouseId}
-                onChange={(value) => {
-                  setToWarehouseId(value);
-                  setLocationId('');
-                  setToLocationId('');
-                }}
-                placeholder={
-                  isSparePartsContext
-                    ? 'ابحث واختر مركز صيانة أو مخزن قطع غيار'
-                    : 'ابحث واختر مخزن الوجهة أو نفس المخزن لنقل رف'
-                }
-              />
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+              <div>
+                <label className={labelClass}>مخزن الوجهة</label>
+                <SearchableSelect
+                  options={toWarehouseSelectOptions}
+                  value={toWarehouseId}
+                  onChange={(value) => {
+                    setToWarehouseId(value);
+                    setLocationId('');
+                    setToLocationId('');
+                  }}
+                  placeholder={
+                    isSparePartsContext
+                      ? 'ابحث واختر مركز صيانة أو مخزن قطع غيار'
+                      : 'ابحث واختر مخزن الوجهة أو نفس المخزن لنقل رف'
+                  }
+                />
+              </div>
+              {isShelfTransfer && locationSelectOptions.length > 0 ? (
+                <>
+                  <div>
+                    <label className={labelClass}>رف المصدر</label>
+                    <SearchableSelect
+                      options={locationSelectOptions}
+                      value={locationId}
+                      onChange={(value) => setLocationId(value)}
+                      placeholder="اختر رف المصدر"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>رف الوجهة</label>
+                    <SearchableSelect
+                      options={locationSelectOptions.filter((opt) => opt.value !== locationId)}
+                      value={toLocationId}
+                      onChange={(value) => setToLocationId(value)}
+                      placeholder="اختر رف الوجهة"
+                    />
+                  </div>
+                </>
+              ) : null}
             </div>
           )}
+        </div>
 
-          {isShelfTransfer && locationSelectOptions.length > 0 && (
-            <>
-              <div>
-                <label className={labelClass}>رف المصدر</label>
-                <SearchableSelect
-                  options={locationSelectOptions}
-                  value={locationId}
-                  onChange={(value) => setLocationId(value)}
-                  placeholder="اختر رف المصدر"
-                />
-              </div>
-              <div>
-                <label className={labelClass}>رف الوجهة</label>
-                <SearchableSelect
-                  options={locationSelectOptions.filter((opt) => opt.value !== locationId)}
-                  value={toLocationId}
-                  onChange={(value) => setToLocationId(value)}
-                  placeholder="اختر رف الوجهة"
-                />
-              </div>
-            </>
-          )}
-
-          {/* Item + qty (ADJUSTMENT only — single line) */}
+        {/* Form body — lines first for daily ops */}
+        <div className="p-4 sm:p-5 space-y-4">
           {movementType === 'ADJUSTMENT' && (
-            <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
               <div>
                 <label className={labelClass}>الصنف</label>
                 <SearchableSelect
@@ -1522,23 +1632,24 @@ export const StockMovementForm: React.FC = () => {
               </div>
               <div>
                 <label className={labelClass}>سبب التسوية</label>
-                <select
-                  className={fieldClass}
+                <SearchableSelect
+                  options={[
+                    { value: 'count_correction', label: 'تصحيح جرد' },
+                    { value: 'damage', label: 'تلف' },
+                    { value: 'missing', label: 'نقص' },
+                    { value: 'extra', label: 'زيادة' },
+                    { value: 'manual_correction', label: 'تصحيح يدوي' },
+                  ]}
                   value={adjustmentReason}
-                  onChange={(e) => setAdjustmentReason(e.target.value as StockAdjustmentReason)}
-                >
-                  <option value="count_correction">تصحيح جرد</option>
-                  <option value="damage">تلف</option>
-                  <option value="missing">نقص</option>
-                  <option value="extra">زيادة</option>
-                  <option value="manual_correction">تصحيح يدوي</option>
-                </select>
+                  onChange={(value) => setAdjustmentReason(value as StockAdjustmentReason)}
+                  placeholder="اختر سبب التسوية"
+                />
               </div>
-            </>
+            </div>
           )}
 
-          {(movementType === 'IN' || movementType === 'OUT') && (
-            <div className="md:col-span-2">
+          {isVoucherMode && (
+            <div>
               <label className={labelClass}>ملاحظة الإذن (اختياري)</label>
               <input
                 type="text"
@@ -1550,68 +1661,32 @@ export const StockMovementForm: React.FC = () => {
             </div>
           )}
 
-          {/* Multi-line items (IN / OUT / TRANSFER) */}
           {usesMultiLineItems && (
-            <div className="md:col-span-2 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className={labelClass} style={{ marginBottom: 0 }}>{linesSectionLabel}</label>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="hidden sm:inline-flex"
-                  onClick={addVoucherLine}
-                  disabled={saving}
-                >
-                  {addLineLabel}
-                </Button>
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h3 className="text-[14px] font-bold text-[var(--color-text)]">{linesSectionLabel}</h3>
+                  <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                    {isVoucherMode
+                      ? 'Enter: صنف → رف → كمية → سطر جديد · امسح الباركود في خانة الصنف'
+                      : 'أضف الأصناف ثم احفظ التحويلة'}
+                  </p>
+                </div>
+                <span className="text-[12px] font-semibold tabular-nums text-[var(--color-text)]">
+                  {filledLineCount}/{transferItems.length} جاهز
+                </span>
               </div>
 
-              {(movementType === 'IN' || movementType === 'OUT') && (
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    ref={scanInputRef}
-                    type="text"
-                    className={fieldClass}
-                    value={scanCode}
-                    onChange={(e) => setScanCode(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleApplyScanCode();
-                      }
-                    }}
-                    placeholder="امسح أو اكتب كود الصنف ثم Enter"
-                    autoComplete="off"
-                    disabled={saving}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="sm:w-auto w-full shrink-0"
-                    onClick={handleApplyScanCode}
-                    disabled={saving || !scanCode.trim()}
-                  >
-                    إضافة بالكود
-                  </Button>
-                </div>
-              )}
-
-              {/* Lines table */}
-              <div
-                className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden"
-                style={{ background: 'var(--color-card)' }}
-              >
-                {/* Table header — desktop only */}
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-visible bg-[var(--color-bg)]/40">
                 <div
-                  className="hidden sm:grid gap-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] px-3 py-2"
+                  className="hidden sm:grid gap-2 text-[11px] font-semibold text-[var(--color-text-muted)] px-3 py-2 border-b border-[var(--color-border)] bg-[var(--color-card)]"
                   style={{
                     gridTemplateColumns: itemType === 'finished_good'
-                      ? (usesLineLocations ? '1fr 140px 180px 120px 40px' : '1fr 160px 140px 40px')
-                      : (usesLineLocations ? '1fr 180px 120px 40px' : '1fr 140px 40px'),
-                    borderBottom: '1px solid var(--color-border)',
-                    background: 'var(--color-bg)',
+                      ? (usesLineLocations ? '36px 1fr 120px 160px 110px 40px' : '36px 1fr 120px 110px 40px')
+                      : (usesLineLocations ? '36px 1fr 170px 110px 40px' : '36px 1fr 110px 40px'),
                   }}
                 >
+                  <span>#</span>
                   <span>الصنف</span>
                   {itemType === 'finished_good' ? <span className="text-center">الوحدة</span> : null}
                   {usesLineLocations ? <span className="text-center">الرف</span> : null}
@@ -1619,7 +1694,6 @@ export const StockMovementForm: React.FC = () => {
                   <span />
                 </div>
 
-                {/* Rows */}
                 {transferItems.map((line, idx) => {
                   const lineItem = getItemById(line.itemId);
                   const available = getAvailableForItem(line.itemId);
@@ -1629,38 +1703,76 @@ export const StockMovementForm: React.FC = () => {
                   const remaining = available - requestedForItem;
                   const showAvailability = movementType === 'OUT' || movementType === 'TRANSFER';
                   const desktopCols = itemType === 'finished_good'
-                    ? (usesLineLocations ? '1fr 140px 180px 120px 40px' : '1fr 160px 140px 40px')
-                    : (usesLineLocations ? '1fr 180px 120px 40px' : '1fr 140px 40px');
+                    ? (usesLineLocations ? '36px 1fr 120px 160px 110px 40px' : '36px 1fr 120px 110px 40px')
+                    : (usesLineLocations ? '36px 1fr 170px 110px 40px' : '36px 1fr 110px 40px');
+                  const useCombobox = isVoucherMode;
+                  const lineReady = Boolean(
+                    line.itemId
+                    && Number(line.quantity || 0) > 0
+                    && (!usesLineLocations || line.locationId),
+                  );
                   return (
                     <div
                       key={line.id}
-                      className="px-3 py-2.5"
-                      style={{ borderBottom: idx < transferItems.length - 1 ? '1px solid var(--color-border)' : 'none' }}
+                      className={`px-3 py-3 border-b border-[var(--color-border)] last:border-b-0 ${
+                        lineReady ? 'bg-[rgb(var(--color-success)/0.04)]' : 'bg-[var(--color-card)]'
+                      }`}
                     >
-                      {/* ── Desktop grid ── */}
                       <div
-                        className="hidden sm:grid gap-0 items-start"
+                        className="hidden sm:grid gap-2 items-start"
                         style={{ gridTemplateColumns: desktopCols }}
                       >
-                        <div className="pl-3">
-                          <SearchableSelect
-                            options={itemSelectOptions}
-                            value={line.itemId}
-                            onChange={(value) =>
-                              setTransferItems((prev) =>
-                                prev.map((x) =>
-                                  x.id === line.id
-                                    ? {
-                                        ...x,
-                                        itemId: value,
-                                        locationId: resolvePreferredLineLocation(value, x.locationId),
-                                      }
-                                    : x,
-                                ),
-                              )
-                            }
-                            placeholder="ابحث واختر الصنف"
-                          />
+                        <div className="pt-2.5 text-[12px] font-bold tabular-nums text-[var(--color-text-muted)]">
+                          {idx + 1}
+                        </div>
+                        <div>
+                          {useCombobox ? (
+                            <VoucherItemCombobox
+                              ref={(el) => {
+                                lineItemInputRefs.current[idx] = el;
+                              }}
+                              options={itemSelectOptions}
+                              catalog={itemOptions}
+                              value={line.itemId}
+                              onChange={(value) =>
+                                setTransferItems((prev) =>
+                                  prev.map((x) =>
+                                    x.id === line.id
+                                      ? {
+                                          ...x,
+                                          itemId: value,
+                                          locationId: value
+                                            ? resolvePreferredLineLocation(value, x.locationId)
+                                            : '',
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              onSelected={(value) => handleItemSelectedOnLine(idx, value)}
+                              placeholder="ابحث بالاسم أو امسح الكود"
+                              disabled={saving}
+                            />
+                          ) : (
+                            <SearchableSelect
+                              options={itemSelectOptions}
+                              value={line.itemId}
+                              onChange={(value) =>
+                                setTransferItems((prev) =>
+                                  prev.map((x) =>
+                                    x.id === line.id
+                                      ? {
+                                          ...x,
+                                          itemId: value,
+                                          locationId: resolvePreferredLineLocation(value, x.locationId),
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              placeholder="ابحث واختر الصنف"
+                            />
+                          )}
                           {line.itemId && showAvailability && (
                             <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
                               متاح: {available} · متبقي: {remaining}
@@ -1674,7 +1786,7 @@ export const StockMovementForm: React.FC = () => {
                         </div>
 
                         {itemType === 'finished_good' ? (
-                          <div className="px-2">
+                          <div>
                             <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
                               <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
                                 onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)))}>قطعة</button>
@@ -1690,65 +1802,132 @@ export const StockMovementForm: React.FC = () => {
                         ) : null}
 
                         {usesLineLocations ? (
-                          <div className="px-2">
+                          <div>
                             <SearchableSelect
+                              ref={(el) => {
+                                lineLocationTriggerRefs.current[idx] = el;
+                              }}
                               options={locationSelectOptions}
                               value={line.locationId || ''}
-                              onChange={(value) =>
+                              disabled={saving}
+                              openOnFocus
+                              onChange={(value) => {
                                 setTransferItems((prev) =>
                                   prev.map((x) => (x.id === line.id ? { ...x, locationId: value } : x)),
-                                )
-                              }
+                                );
+                                if (value) focusLineField(idx, 'qty');
+                              }}
                               placeholder="اختر الرف"
                             />
                           </div>
                         ) : null}
 
-                        <div className="px-2">
-                          <input type="number" step="any" className={fieldClass} placeholder="0" value={line.quantity || ''}
-                            onChange={(e) => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x)))} />
+                        <div>
+                          <input
+                            ref={(el) => {
+                              lineQtyInputRefs.current[idx] = el;
+                            }}
+                            type="number"
+                            step="any"
+                            inputMode="decimal"
+                            className={`${fieldClass} text-center tabular-nums text-[15px] font-bold`}
+                            placeholder="0"
+                            value={line.quantity || ''}
+                            disabled={saving}
+                            onChange={(e) =>
+                              setTransferItems((prev) =>
+                                prev.map((x) =>
+                                  x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x,
+                                ),
+                              )
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && useCombobox) {
+                                e.preventDefault();
+                                handleQtyEnterOnLine(idx);
+                              }
+                            }}
+                          />
                         </div>
 
-                        <div className="flex items-center justify-center pt-0.5">
-                          <button type="button" onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
-                            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30 transition-all"
-                            disabled={transferItems.length <= 1} title="حذف الصف">
-                            <span className="material-icons-round" style={{ fontSize: 16 }}>delete_outline</span>
+                        <div className="flex items-center justify-center pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
+                            className="w-9 h-9 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30 transition-all"
+                            disabled={transferItems.length <= 1}
+                            title="حذف الصف"
+                          >
+                            <span className="material-icons-round" style={{ fontSize: 18 }}>delete_outline</span>
                           </button>
                         </div>
                       </div>
 
-                      {/* ── Mobile stacked ── */}
-                      <div className="sm:hidden space-y-2">
+                      <div className="sm:hidden space-y-2.5">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الصنف #{idx + 1}</span>
-                          <button type="button"
+                          <span className="inline-flex items-center gap-1.5 text-[12px] font-bold text-[var(--color-text)]">
+                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[rgb(var(--color-primary)/0.12)] text-[rgb(var(--color-primary))] text-[11px] tabular-nums">
+                              {idx + 1}
+                            </span>
+                            بند
+                          </span>
+                          <button
+                            type="button"
                             onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
-                            className="w-7 h-7 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30 transition-all"
-                            disabled={transferItems.length <= 1} title="حذف الصف">
-                            <span className="material-icons-round" style={{ fontSize: 15 }}>delete_outline</span>
+                            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] disabled:opacity-30"
+                            disabled={transferItems.length <= 1}
+                            title="حذف الصف"
+                          >
+                            <span className="material-icons-round" style={{ fontSize: 16 }}>delete_outline</span>
                           </button>
                         </div>
 
                         <div>
-                          <SearchableSelect
-                            options={itemSelectOptions}
-                            value={line.itemId}
-                            onChange={(value) =>
-                              setTransferItems((prev) =>
-                                prev.map((x) =>
-                                  x.id === line.id
-                                    ? {
-                                        ...x,
-                                        itemId: value,
-                                        locationId: resolvePreferredLineLocation(value, x.locationId),
-                                      }
-                                    : x,
-                                ),
-                              )
-                            }
-                            placeholder="ابحث واختر الصنف"
-                          />
+                          <span className={labelClass}>الصنف</span>
+                          {useCombobox ? (
+                            <VoucherItemCombobox
+                              options={itemSelectOptions}
+                              catalog={itemOptions}
+                              value={line.itemId}
+                              onChange={(value) =>
+                                setTransferItems((prev) =>
+                                  prev.map((x) =>
+                                    x.id === line.id
+                                      ? {
+                                          ...x,
+                                          itemId: value,
+                                          locationId: value
+                                            ? resolvePreferredLineLocation(value, x.locationId)
+                                            : '',
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              onSelected={(value) => handleItemSelectedOnLine(idx, value)}
+                              placeholder="ابحث بالاسم أو امسح الكود"
+                              disabled={saving}
+                            />
+                          ) : (
+                            <SearchableSelect
+                              options={itemSelectOptions}
+                              value={line.itemId}
+                              onChange={(value) =>
+                                setTransferItems((prev) =>
+                                  prev.map((x) =>
+                                    x.id === line.id
+                                      ? {
+                                          ...x,
+                                          itemId: value,
+                                          locationId: resolvePreferredLineLocation(value, x.locationId),
+                                        }
+                                      : x,
+                                  ),
+                                )
+                              }
+                              placeholder="ابحث واختر الصنف"
+                            />
+                          )}
                           {line.itemId && showAvailability && (
                             <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
                               متاح: {available} · متبقي: {remaining}
@@ -1763,15 +1942,18 @@ export const StockMovementForm: React.FC = () => {
 
                         {usesLineLocations ? (
                           <div>
-                            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الرف</span>
+                            <span className={labelClass}>الرف</span>
                             <SearchableSelect
                               options={locationSelectOptions}
                               value={line.locationId || ''}
-                              onChange={(value) =>
+                              disabled={saving}
+                              openOnFocus
+                              onChange={(value) => {
                                 setTransferItems((prev) =>
                                   prev.map((x) => (x.id === line.id ? { ...x, locationId: value } : x)),
-                                )
-                              }
+                                );
+                                if (value) focusLineField(idx, 'qty');
+                              }}
                               placeholder="اختر الرف"
                             />
                           </div>
@@ -1780,7 +1962,7 @@ export const StockMovementForm: React.FC = () => {
                         <div className={`grid gap-2 ${itemType === 'finished_good' ? 'grid-cols-2' : 'grid-cols-1'}`}>
                           {itemType === 'finished_good' ? (
                             <div>
-                              <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الوحدة</span>
+                              <span className={labelClass}>الوحدة</span>
                               <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
                                 <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
                                   onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)))}>قطعة</button>
@@ -1790,9 +1972,29 @@ export const StockMovementForm: React.FC = () => {
                             </div>
                           ) : null}
                           <div>
-                            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الكمية</span>
-                            <input type="number" step="any" className={fieldClass} placeholder="0" value={line.quantity || ''}
-                              onChange={(e) => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x)))} />
+                            <span className={labelClass}>الكمية</span>
+                            <input
+                              type="number"
+                              step="any"
+                              inputMode="decimal"
+                              className={`${fieldClass} text-center tabular-nums text-[16px] font-bold`}
+                              placeholder="0"
+                              value={line.quantity || ''}
+                              disabled={saving}
+                              onChange={(e) =>
+                                setTransferItems((prev) =>
+                                  prev.map((x) =>
+                                    x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x,
+                                  ),
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && useCombobox) {
+                                  e.preventDefault();
+                                  handleQtyEnterOnLine(idx);
+                                }
+                              }}
+                            />
                           </div>
                         </div>
                       </div>
@@ -1801,189 +2003,72 @@ export const StockMovementForm: React.FC = () => {
                 })}
               </div>
 
-              <Button
+              <button
                 type="button"
-                variant="secondary"
-                className="w-full sm:hidden"
-                onClick={addVoucherLine}
+                onClick={() => addVoucherLine(true)}
                 disabled={saving}
+                className="w-full min-h-[44px] rounded-[var(--border-radius-base)] border border-dashed border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.04)] text-[rgb(var(--color-primary))] text-[13px] font-bold hover:bg-[rgb(var(--color-primary)/0.08)] disabled:opacity-50 transition-colors inline-flex items-center justify-center gap-1.5"
               >
+                <span className="material-icons-round text-[18px]">add</span>
                 {addLineLabel}
-              </Button>
+              </button>
             </div>
           )}
         </div>
 
-        {/* Form actions */}
-        <div
-          className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end items-center"
-          style={{ background: 'var(--color-bg)', borderRadius: '0 0 var(--border-radius-lg) var(--border-radius-lg)' }}
-        >
-          {(movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER') && (
+        <div className="sticky bottom-0 z-10 px-4 sm:px-5 py-3.5 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 backdrop-blur-sm flex flex-col-reverse gap-2 sm:flex-row sm:justify-between sm:items-center">
+          <p className="text-[11px] text-[var(--color-text-muted)] text-center sm:text-right hidden sm:block">
+            {isVoucherMode
+              ? `${filledLineCount} بند جاهز · اضغط Enter بعد الكمية لسطر جديد`
+              : 'راجع البيانات ثم احفظ'}
+          </p>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center w-full sm:w-auto">
+            {(movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER') && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full sm:w-auto"
+                onClick={() => handlePreviewWithoutSave()}
+                disabled={saving}
+              >
+                معاينة
+              </Button>
+            )}
+            {(movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER') && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full sm:w-auto"
+                onClick={() => void handleSubmit('share')}
+                disabled={!can('inventory.transactions.create') || saving}
+              >
+                {saving ? 'جاري الحفظ...' : 'حفظ ومشاركة'}
+              </Button>
+            )}
+            {(movementType === 'IN' || movementType === 'OUT' || (movementType === 'TRANSFER' && !isShelfTransfer)) && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full sm:w-auto"
+                onClick={() => void handleSubmit('print')}
+                disabled={!can('inventory.transactions.create') || saving}
+              >
+                {saving ? 'جاري الحفظ...' : 'حفظ وطباعة'}
+              </Button>
+            )}
             <Button
               type="button"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => handlePreviewWithoutSave()}
-              disabled={saving}
-            >
-              معاينة
-            </Button>
-          )}
-          {(movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER') && (
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => void handleSubmit('share')}
+              variant="primary"
+              className="w-full sm:w-auto min-w-[9rem]"
+              onClick={() => void handleSubmit('none')}
               disabled={!can('inventory.transactions.create') || saving}
             >
-              {saving ? 'جاري الحفظ...' : 'حفظ ومشاركة'}
+              {saving ? 'جاري الحفظ...' : primarySaveLabel}
             </Button>
-          )}
-          {(movementType === 'IN' || movementType === 'OUT' || (movementType === 'TRANSFER' && !isShelfTransfer)) && (
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full sm:w-auto"
-              onClick={() => void handleSubmit('print')}
-              disabled={!can('inventory.transactions.create') || saving}
-            >
-              {saving ? 'جاري الحفظ...' : 'حفظ وطباعة'}
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="primary"
-            className="w-full sm:w-auto"
-            onClick={() => void handleSubmit('none')}
-            disabled={!can('inventory.transactions.create') || saving}
-          >
-            {saving ? 'جاري الحفظ...' : primarySaveLabel}
-          </Button>
+          </div>
         </div>
       </div>
       </OpsDashPanel>
-
-      {effectiveWarehouseId ? (
-        <OpsDashPanel
-          title="آخر الحركات في المخزن"
-          accent="inventory"
-          bodyClassName="p-0"
-          action={(
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() =>
-                navigate(
-                  `/inventory/transactions?warehouseId=${encodeURIComponent(effectiveWarehouseId)}${
-                    isSparePartsContext ? '&focus=spare' : ''
-                  }`,
-                )
-              }
-            >
-              عرض السجل الكامل
-            </Button>
-          )}
-        >
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full min-w-[640px] text-right border-collapse">
-              <thead className="erp-thead">
-                <tr>
-                  <th className="erp-th">التاريخ</th>
-                  <th className="erp-th">الصنف</th>
-                  <th className="erp-th">الحركة</th>
-                  <th className="erp-th text-center">الكمية</th>
-                  <th className="erp-th">المرجع</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-border)]">
-                {recentLoading && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-6 text-center text-sm text-[var(--color-text-muted)]">
-                      جاري التحميل...
-                    </td>
-                  </tr>
-                )}
-                {!recentLoading && recentFeed.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                      لا توجد حركات حديثة لهذا المخزن.
-                    </td>
-                  </tr>
-                )}
-                {!recentLoading &&
-                  recentFeed.map((entry) => {
-                    if (entry.kind === 'voucher') {
-                      const group = entry.group;
-                      const qtySum = group.lines.reduce((s, l) => s + Math.abs(Number(l.quantity || 0)), 0);
-                      return (
-                        <tr key={`recent-voucher-${group.movementType}-${group.referenceNo}`} className="bg-[rgb(var(--color-primary)/0.1)]/30">
-                          <td className="px-4 py-2.5 text-xs text-[var(--color-text-muted)] tabular-nums">
-                            {new Date(group.createdAt).toLocaleString('ar-EG')}
-                          </td>
-                          <td className="px-4 py-2.5">
-                            <p className="text-sm font-bold">
-                              {voucherMovementTitle(group.movementType, isSparePartsContext)} #{group.referenceNo}
-                            </p>
-                            <p className="text-xs text-[var(--color-text-muted)]">
-                              {group.lines.length} أصناف
-                              {group.note ? ` · ${group.note}` : ''}
-                            </p>
-                          </td>
-                          <td className="px-4 py-2.5 text-xs font-semibold">
-                            {movementLabel[group.movementType]}
-                          </td>
-                          <td className="px-4 py-2.5 text-center">
-                            <span
-                              className={`font-black tabular-nums ${
-                                group.movementType === 'IN' ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'
-                              }`}
-                            >
-                              {group.movementType === 'IN' ? '+' : '−'}
-                              {formatNumber(qtySum)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2.5 text-xs font-mono text-[var(--color-text-muted)]">
-                            {group.referenceNo}
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const tx = entry.tx;
-                    return (
-                      <tr key={tx.id || `${tx.itemId}-${tx.createdAt}`}>
-                        <td className="px-4 py-2.5 text-xs text-[var(--color-text-muted)] tabular-nums">
-                          {new Date(tx.createdAt).toLocaleString('ar-EG')}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <p className="text-sm font-bold">{tx.itemName}</p>
-                          <p className="text-xs font-mono text-[var(--color-text-muted)]">{tx.itemCode}</p>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-semibold">
-                          {movementLabel[tx.movementType] ?? tx.movementType}
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
-                          <span
-                            className={`font-black tabular-nums ${
-                              Number(tx.quantity) >= 0 ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]'
-                            }`}
-                          >
-                            {Number(tx.quantity) >= 0 ? '+' : ''}
-                            {formatNumber(tx.quantity)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-xs font-mono text-[var(--color-text-muted)]">
-                          {tx.referenceNo || '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </OpsDashPanel>
-      ) : null}
 
       {/* Hidden print component */}
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>

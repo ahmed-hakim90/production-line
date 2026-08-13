@@ -48,6 +48,7 @@ import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
 import { WarehousePartInquiry } from '../components/WarehousePartInquiry';
 import { loadWarehouseCountLocationLabels, resolveWarehouseItemLocation } from '../lib/warehouseCountSheet';
+import { canUploadOpeningBalances } from '../lib/openingBalanceAccess';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -61,6 +62,7 @@ type ActionLink = {
 function roleActions(
   role: WarehouseRole | undefined,
   warehouseId: string,
+  canUploadOpening = false,
 ): ActionLink[] {
   switch (role) {
     case 'spare_parts_central':
@@ -72,9 +74,11 @@ function roleActions(
           description: 'تسجيل وارد متعدد الأسطر لقطع الغيار',
         },
         {
-          label: 'أرصدة أول المدة / الجرد',
+          label: canUploadOpening ? 'أرصدة أول المدة / الجرد' : 'الجرد',
           path: `/inventory/counts?warehouseId=${encodeURIComponent(warehouseId)}`,
-          description: 'جلسات الجرد والاعتماد — أو ارفع أول المدة من أعلى هذه الصفحة',
+          description: canUploadOpening
+            ? 'جلسات الجرد والاعتماد — أو ارفع أول المدة من أعلى هذه الصفحة'
+            : 'جلسات الجرد والمطابقة واعتماد الفروق',
         },
         {
           label: 'الأرصدة',
@@ -219,6 +223,7 @@ export const WarehouseWorkspace: React.FC = () => {
   const canViewRepairParts = can('repair.parts.view');
   const canManageParts = can('repair.parts.manage');
   const canManageCounts = can('inventory.counts.manage');
+  const canUploadOpening = canUploadOpeningBalances(can);
   const canCreateMovements = can('inventory.transactions.create');
   const canViewReplenishment =
     can('sparePartsReplenishment.view')
@@ -404,9 +409,9 @@ export const WarehouseWorkspace: React.FC = () => {
   const actions = useMemo(
     () =>
       warehouse?.id
-        ? roleActions(warehouse.warehouseRole, warehouse.id)
+        ? roleActions(warehouse.warehouseRole, warehouse.id, canUploadOpening)
         : [],
-    [warehouse],
+    [canUploadOpening, warehouse],
   );
 
   const isCenterWarehouse = isMaintenanceCenterWarehouseRole(warehouse?.warehouseRole);
@@ -424,8 +429,14 @@ export const WarehouseWorkspace: React.FC = () => {
   const canEnterPage = canViewInventory || canViewRepairParts;
   const showAddPart = isCenterWarehouse && canManageParts && Boolean(linkedBranch?.id);
   const showCountImport = canManageCounts;
-  const canCenterCreateFromCount = isCenterWarehouse && Boolean(linkedBranch?.id);
-  const canCatalogSeedFromCount = isCentralSparePartsWarehouse && catalogMaterials.length > 0;
+  const canCenterCreateFromCount = canUploadOpening
+    && isCenterWarehouse
+    && Boolean(linkedBranch?.id);
+  const canCatalogSeedFromCount = canUploadOpening
+    && isCentralSparePartsWarehouse
+    && catalogMaterials.length > 0;
+  const showOpeningBalanceImport = canUploadOpening
+    && (isCentralSparePartsWarehouse || canCenterCreateFromCount);
 
   const openCreatedCountSession = useCallback(async (sessionId: string | null) => {
     await load();
@@ -646,7 +657,7 @@ export const WarehouseWorkspace: React.FC = () => {
                 onClick={() => {
                   if (countBalances.length === 0 && !canCenterCreateFromCount && !canCatalogSeedFromCount) {
                     toast.error(
-                      isCentralSparePartsWarehouse
+                      showOpeningBalanceImport && isCentralSparePartsWarehouse
                         ? 'لا توجد مواد في الماستر لرفع أرصدة أول المدة.'
                         : 'لا توجد أصناف في هذا المخزن لرفع الجرد.',
                     );
@@ -655,7 +666,7 @@ export const WarehouseWorkspace: React.FC = () => {
                   setCountImportOpen(true);
                 }}
               >
-                {isCentralSparePartsWarehouse || canCenterCreateFromCount
+                {showOpeningBalanceImport
                   ? 'رفع أرصدة أول المدة'
                   : 'رفع جرد Excel'}
               </Button>

@@ -38,6 +38,7 @@ export const PRINT_DOCUMENT_TYPE_IDS: readonly PrintDocumentTypeId[] = [
   'repairDeliveryReceipt',
   'catalogProductDetail',
   'workOrder',
+  'productionIssue',
 ] as const;
 
 export const PRINT_CUSTOM_LINES_MAX = 5;
@@ -278,6 +279,18 @@ export const PRINT_DOCUMENT_REGISTRY: PrintDocumentRegistryEntry[] = [
       COMMON_KPIS,
       { key: 'costs', labelAr: 'التكاليف', defaultVisible: true, descriptionAr: 'التكلفة التقديرية والفعلية عند توفرها', icon: 'payments' },
       { key: 'notes', labelAr: 'الملاحظات', defaultVisible: true, descriptionAr: 'ملاحظات أمر الشغل', icon: 'notes' },
+      COMMON_SIGNATURES,
+    ],
+  },
+  {
+    id: 'productionIssue',
+    labelAr: 'إذن صرف إنتاج',
+    fields: [
+      COMMON_META,
+      COMMON_KPIS,
+      { key: 'warehouse', labelAr: 'المخزن', defaultVisible: true, descriptionAr: 'مخزن الصرف في الترويسة', icon: 'warehouse' },
+      { key: 'lines', labelAr: 'بنود الصرف', defaultVisible: true, descriptionAr: 'جدول المكونات والكميات', icon: 'list_alt' },
+      { key: 'notes', labelAr: 'الملاحظات', defaultVisible: true, descriptionAr: 'ملاحظات الإذن', icon: 'notes' },
       COMMON_SIGNATURES,
     ],
   },

@@ -21,6 +21,7 @@ import { mapRoutingWarehouseIdsFromRoles } from '../lib/recommendedInventoryRout
 import { syncPlanSettingsWarehouseRouting } from '../lib/syncPlanSettingsWarehouseRouting';
 import { stockService } from './stockService';
 import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
+import { warehousesForBoundInventoryOperator } from '../lib/boundWarehouseCatalog';
 
 const COLLECTION = 'warehouses';
 const SYSTEM_SETTINGS_COLLECTION = 'system_settings';
@@ -103,7 +104,22 @@ export const warehouseService = {
     const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
     if (boundWarehouseId) {
       const warehouse = await this.getById(boundWarehouseId);
-      return warehouse ? [warehouse] : [];
+      if (!warehouse) return [];
+      // Bound spare-parts central operators need destination center warehouses
+      // for replenishment / recall dropdowns (Firestore rules already allow the read).
+      if (warehouse.warehouseRole === 'spare_parts_central') {
+        try {
+          const centersSnap = await getDocs(
+            tenantQuery(db, COLLECTION, where('warehouseRole', '==', 'maintenance_center')),
+          );
+          const centers = centersSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
+          return warehousesForBoundInventoryOperator(warehouse, centers) as Warehouse[];
+        } catch (error) {
+          console.warn('[warehouseService] failed loading maintenance_center destinations', error);
+          return [warehouse];
+        }
+      }
+      return [warehouse];
     }
     const q = tenantQuery(db, COLLECTION, orderBy('name', 'asc'));
     const snap = await getDocs(q);
