@@ -16,6 +16,7 @@ import { ItemBarcodeLabelPrint } from '../../../inventory/components/ItemBarcode
 import { LocationBarcodeLabelPrint } from '../../../inventory/components/LocationBarcodeLabelPrint';
 import { SuppliesReceiptPrint } from '../../../inventory/components/SuppliesReceiptPrint';
 import { ProductionIssuePrint } from '../../../inventory/components/ProductionIssuePrint';
+import { DepartmentConsumableIssuePrint } from '../../../inventory/components/DepartmentConsumableIssuePrint';
 import { AccountingReportPrint } from '../../../accounting/components/AccountingReportPrint';
 import { QualityReportPrint } from '../../../quality/components/QualityReportPrint';
 import { PayslipPrint } from '../../../hr/components/PayslipPrint';
@@ -40,6 +41,7 @@ import {
   PRINT_PREVIEW_MISSING_COMPONENTS,
   PRINT_PREVIEW_PAYSLIP,
   PRINT_PREVIEW_PRODUCT_BOM_COUNT,
+  PRINT_PREVIEW_DEPARTMENT_CONSUMABLE_ISSUE,
   PRINT_PREVIEW_PRODUCTION_ISSUE,
   PRINT_PREVIEW_QUALITY,
   PRINT_PREVIEW_REPAIR_BRANCH,
@@ -317,6 +319,14 @@ export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
             ref={ref}
             order={PRINT_PREVIEW_PRODUCTION_ISSUE as any}
             sourceLabel="WO-DEMO-001"
+            printSettings={printSettings}
+          />
+        );
+      case 'departmentConsumableIssue':
+        return (
+          <DepartmentConsumableIssuePrint
+            ref={ref}
+            issue={PRINT_PREVIEW_DEPARTMENT_CONSUMABLE_ISSUE as any}
             printSettings={printSettings}
           />
         );

@@ -174,10 +174,14 @@ function locationIdOf(
 }
 
 export function locationBelongsToRack(
-  loc: Pick<WarehouseLocation, 'rackId' | 'rackCode' | 'rackName' | 'rack' | 'code'> | Pick<
-    StockLocationBalance,
-    'rackId' | 'rackCode' | 'rackName' | 'rack' | 'locationCode'
-  >,
+  loc: {
+    rackId?: string;
+    rackCode?: string;
+    rackName?: string;
+    rack?: string;
+    code?: string;
+    locationCode?: string;
+  },
   rack: Pick<WarehouseRack, 'id' | 'code' | 'name'>,
 ): boolean {
   const rackId = String(rack.id || '').trim();

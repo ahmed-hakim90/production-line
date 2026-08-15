@@ -561,6 +561,40 @@ export const PRINT_PREVIEW_PRODUCT_BOM_COUNT = {
   ],
 } as const;
 
+export const PRINT_PREVIEW_DEPARTMENT_CONSUMABLE_ISSUE = {
+  id: 'dci-demo',
+  referenceNo: 'DCI-DEMO-001',
+  status: 'draft' as const,
+  approvalMode: 'direct' as const,
+  warehouseId: 'wh-supplies',
+  warehouseName: 'مخزن مستلزم انتاج',
+  departmentId: 'dep-prod',
+  departmentName: 'الانتاج',
+  createdBy: 'أمين المخزن',
+  createdAt: new Date().toISOString(),
+  note: 'معاينة بيان صرف مستهلكات قبل التنفيذ',
+  lines: [
+    {
+      itemType: 'material' as const,
+      itemId: 'm-tape',
+      itemName: 'لزق كهرباء',
+      itemCode: 'CNS-01',
+      unit: 'piece',
+      quantity: 9,
+      locationCode: '20-01-01',
+    },
+    {
+      itemType: 'material' as const,
+      itemId: 'm-iron',
+      itemName: 'سن مكواه',
+      itemCode: 'CNS-02',
+      unit: 'piece',
+      quantity: 20,
+      locationCode: '20-01-02',
+    },
+  ],
+};
+
 export const PRINT_PREVIEW_PRODUCTION_ISSUE = {
   referenceNo: 'PI-DEMO-001',
   sourceType: 'work_order' as const,

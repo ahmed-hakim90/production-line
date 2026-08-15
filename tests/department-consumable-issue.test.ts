@@ -8,7 +8,9 @@ import {
   canReturn,
   canSubmit,
   departmentConsumableLineId,
+  departmentConsumablePrintHeading,
   formatDepartmentConsumableReference,
+  isDepartmentConsumableIssued,
   materialPurchaseCostPerBaseUnit,
   monthRangeIso,
   normalizeApprovalMode,
@@ -203,5 +205,12 @@ const filtered = aggregateDepartmentConsumableMonthly({
 });
 assert.equal(filtered.rows.length, 1);
 assert.equal(filtered.issueCount, 1);
+
+assert.equal(departmentConsumablePrintHeading('draft'), 'بيان صرف مستهلكات');
+assert.equal(departmentConsumablePrintHeading('submitted'), 'بيان صرف مستهلكات');
+assert.equal(departmentConsumablePrintHeading('approved'), 'بيان صرف مستهلكات');
+assert.equal(departmentConsumablePrintHeading('issued'), 'سند صرف مستهلكات');
+assert.equal(isDepartmentConsumableIssued('draft'), false);
+assert.equal(isDepartmentConsumableIssued('issued'), true);
 
 console.log('department-consumable-issue.test.ts: ok');

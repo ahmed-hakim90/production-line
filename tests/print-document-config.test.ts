@@ -10,7 +10,7 @@ import {
   normalizePrintFontFamily,
   resolvePrintFont,
 } from '../utils/print/printFont.ts';
-import { PRINT_DOCUMENT_TYPE_IDS } from '../utils/print/printDocumentRegistry.ts';
+import { PRINT_DOCUMENT_TYPE_IDS, getPrintDocumentEntry } from '../utils/print/printDocumentRegistry.ts';
 import { PRINT_ENGINE_IFRAME_CSS } from '../utils/print/printSurface.ts';
 import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSettings.ts';
 
@@ -129,8 +129,12 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('workOrder'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('warehouseStockCount'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('productionIssue'), true);
+  assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('departmentConsumableIssue'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('itemBarcodeLabel'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('locationBarcodeLabel'), true);
+  for (const id of PRINT_DOCUMENT_TYPE_IDS) {
+    assert.equal(getPrintDocumentEntry(id).id, id);
+  }
   const payslipResolved = resolvePrintDocumentConfig(
     {
       ...DEFAULT_PRINT_TEMPLATE,

@@ -39,6 +39,7 @@ export const PRINT_DOCUMENT_TYPE_IDS: readonly PrintDocumentTypeId[] = [
   'catalogProductDetail',
   'workOrder',
   'productionIssue',
+  'departmentConsumableIssue',
   'itemBarcodeLabel',
   'locationBarcodeLabel',
 ] as const;
@@ -293,6 +294,19 @@ export const PRINT_DOCUMENT_REGISTRY: PrintDocumentRegistryEntry[] = [
       { key: 'warehouse', labelAr: 'المخزن', defaultVisible: true, descriptionAr: 'مخزن الصرف في الترويسة', icon: 'warehouse' },
       { key: 'lines', labelAr: 'بنود الصرف', defaultVisible: true, descriptionAr: 'جدول المكونات والكميات', icon: 'list_alt' },
       { key: 'notes', labelAr: 'الملاحظات', defaultVisible: true, descriptionAr: 'ملاحظات الإذن', icon: 'notes' },
+      COMMON_SIGNATURES,
+    ],
+  },
+  {
+    id: 'departmentConsumableIssue',
+    labelAr: 'سند صرف مستهلكات الأقسام',
+    fields: [
+      COMMON_META,
+      COMMON_KPIS,
+      { key: 'warehouse', labelAr: 'المخزن', defaultVisible: true, descriptionAr: 'مخزن الصرف في الترويسة', icon: 'warehouse' },
+      { key: 'lines', labelAr: 'بنود الصرف', defaultVisible: true, descriptionAr: 'جدول الأصناف والكميات', icon: 'list_alt' },
+      { key: 'costs', labelAr: 'القيمة', defaultVisible: true, descriptionAr: 'تكلفة البند والإجمالي عند توفرها', icon: 'payments' },
+      { key: 'notes', labelAr: 'الملاحظات', defaultVisible: true, descriptionAr: 'ملاحظات السند', icon: 'notes' },
       COMMON_SIGNATURES,
     ],
   },

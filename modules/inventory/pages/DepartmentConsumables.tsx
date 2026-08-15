@@ -1,11 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
+import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Button } from '../components/UI';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
+import { useManagedPrint } from '../../../utils/printManager';
 import { exportGenericRows } from '../../../utils/exportExcel';
 import { useAppStore } from '../../../store/useAppStore';
 import { organizationService } from '../../hr/services/organizationService';
@@ -41,6 +44,7 @@ import { CreateDepartmentIssueModal } from '../components/departmentConsumables/
 import { ReturnConsumableModal } from '../components/departmentConsumables/ReturnConsumableModal';
 import { ItemMovementTraceModal } from '../components/departmentConsumables/ItemMovementTraceModal';
 import { ImportConsumablesSheetModal } from '../components/departmentConsumables/ImportConsumablesSheetModal';
+import { DepartmentConsumableIssuePrint } from '../components/DepartmentConsumableIssuePrint';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { stockService } from '../services/stockService';
 import { runConsumableSheetImportJob } from '../lib/applyConsumableSheetImport';
@@ -75,6 +79,7 @@ export const DepartmentConsumables: React.FC = () => {
   const actor = userDisplayName || userEmail || 'Current User';
 
   const canView = can('departmentConsumables.view') || can('inventory.view');
+  const canPrint = canView && (can('inventory.transactions.print') || can('print') || can('departmentConsumables.view'));
   const canCreate = can('departmentConsumables.create');
   const canApproveIssue = can('departmentConsumables.approve');
   const canExecute = can('departmentConsumables.issue');
@@ -134,6 +139,21 @@ export const DepartmentConsumables: React.FC = () => {
   const [returnIssue, setReturnIssue] = useState<DepartmentConsumableIssue | null>(null);
   const [returnQtyByLine, setReturnQtyByLine] = useState<Record<string, number>>({});
   const [traceItem, setTraceItem] = useState<ConsumableOption | null>(null);
+  const [printIssue, setPrintIssue] = useState<DepartmentConsumableIssue | null>(null);
+  const printRef = useRef<HTMLDivElement>(null);
+  const printTemplate = systemSettings?.printTemplate;
+  const handlePrint = useManagedPrint({
+    contentRef: printRef,
+    printSettings: printTemplate,
+    documentTitle: 'صرف مستهلكات الأقسام',
+  });
+
+  const printVoucher = useCallback((order: DepartmentConsumableIssue) => {
+    setPrintIssue(order);
+    window.setTimeout(() => {
+      void handlePrint();
+    }, 50);
+  }, [handlePrint]);
 
   const [reportMonth, setReportMonth] = useState(THIS_MONTH);
   const [reportDepartmentId, setReportDepartmentId] = useState('');
@@ -833,6 +853,15 @@ export const DepartmentConsumables: React.FC = () => {
                       <td className="p-3 text-sm tabular-nums">{fmt(Number(order.totalCostSnapshot || 0))}</td>
                       <td className="p-3">
                         <div className="flex flex-wrap gap-1">
+                          {canPrint && (
+                            <ToneActionButton
+                              action="print"
+                              onClick={() => printVoucher(order)}
+                              aria-label={`طباعة ${order.referenceNo}`}
+                            >
+                              طباعة
+                            </ToneActionButton>
+                          )}
                           {canCreate && canSubmit(order.status, order.approvalMode) && (
                             <Button
                               size="sm"
@@ -1113,6 +1142,14 @@ export const DepartmentConsumables: React.FC = () => {
         item={traceItem}
         warehouses={warehouses}
       />
+
+      <PrintOffscreenHost>
+        <DepartmentConsumableIssuePrint
+          ref={printRef}
+          issue={printIssue}
+          printSettings={printTemplate}
+        />
+      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

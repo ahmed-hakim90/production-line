@@ -1371,6 +1371,7 @@ export type PrintDocumentTypeId =
   | "catalogProductDetail"
   | "workOrder"
   | "productionIssue"
+  | "departmentConsumableIssue"
   | "itemBarcodeLabel"
   | "locationBarcodeLabel";
 

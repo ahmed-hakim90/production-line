@@ -28,6 +28,19 @@ export const DEPARTMENT_CONSUMABLE_APPROVAL_MODE_LABELS: Record<DepartmentConsum
   required: 'يتطلب موافقة',
 };
 
+/** Draft / submitted / approved print as a statement; issued prints as an executed voucher. */
+export function departmentConsumablePrintHeading(
+  status: DepartmentConsumableIssueStatus,
+): string {
+  return status === 'issued' ? 'سند صرف مستهلكات' : 'بيان صرف مستهلكات';
+}
+
+export function isDepartmentConsumableIssued(
+  status: DepartmentConsumableIssueStatus,
+): boolean {
+  return status === 'issued';
+}
+
 const toNumber = (value: unknown): number => {
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;

@@ -115,6 +115,14 @@ const functionsIndex = readFileSync(
 );
 assert.match(functionsIndex, /export const addDepartmentConsumableStock/);
 
+const issuesPage = readFileSync(
+  new URL('../modules/inventory/pages/DepartmentConsumables.tsx', import.meta.url),
+  'utf8',
+);
+assert.match(issuesPage, /DepartmentConsumableIssuePrint/);
+assert.match(issuesPage, /printVoucher/);
+assert.match(issuesPage, /طباعة/);
+
 const invSeq = readFileSync(
   new URL('../modules/inventory/services/inventoryInvSequence.ts', import.meta.url),
   'utf8',

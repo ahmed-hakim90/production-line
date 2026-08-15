@@ -20,7 +20,6 @@ const materials: Material[] = [
     createdAt: '',
     legacyRawMaterialId: 'raw-1',
     barcode: '622111',
-    isActive: true,
   },
   {
     id: 'mat-2',
