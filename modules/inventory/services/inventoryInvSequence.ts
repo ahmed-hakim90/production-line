@@ -11,6 +11,7 @@ import {
 import { db } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
+import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
 
 /** Matches legacy reference numbers like INV-001 */
 export const INV_REF_REGEX = /^INV-(\d+)$/i;
@@ -90,6 +91,19 @@ export async function ensureInvCounter(): Promise<void> {
   const cref = counterRef(db, tenantId);
   const snap = await getDoc(cref);
   if (snap.exists()) return;
+  const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+  if (boundWarehouseId) {
+    await setDoc(
+      cref,
+      {
+        tenantId,
+        lastInvSeq: 0,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+    return;
+  }
   const [txSnap, trSnap] = await Promise.all([
     getDocs(tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),
     getDocs(tenantQuery(db, TRANSFER_REQUESTS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),

@@ -10,6 +10,10 @@ import {
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import {
+  actorHasDepartmentConsumableAccess,
+  resolveConsumableActorRoleKey,
+} from './departmentConsumableAccess.js';
+import {
   assertActorWarehousesAllowed,
   resolveBoundInventoryWarehouseId,
 } from './inventoryWarehouseScope.js';
@@ -44,6 +48,7 @@ type ActorContext = {
   permissions: Record<string, boolean>;
   isSuperAdmin: boolean;
   boundWarehouseId: string | null;
+  roleKey: string | null;
 };
 
 type DraftLineInput = {
@@ -182,14 +187,21 @@ const loadActor = async (uid: string): Promise<ActorContext> => {
   }
   const roleId = String(user.roleId || '').trim();
   let permissions: Record<string, boolean> = {};
+  let roleKey: string | null = null;
   if (roleId) {
     const roleSnap = await db.collection(ROLES_COLLECTION).doc(roleId).get();
     if (roleSnap.exists) {
-      const role = roleSnap.data() as { permissions?: Record<string, boolean>; tenantId?: string };
+      const role = roleSnap.data() as {
+        permissions?: Record<string, boolean>;
+        tenantId?: string;
+        roleKey?: string;
+        name?: string;
+      };
       if (role.tenantId && tenantId && role.tenantId !== tenantId && user.isSuperAdmin !== true) {
         throw new HttpsError('permission-denied', 'دور المستخدم غير صالح.');
       }
       permissions = role.permissions || {};
+      roleKey = resolveConsumableActorRoleKey(role);
     }
   }
   return {
@@ -199,13 +211,12 @@ const loadActor = async (uid: string): Promise<ActorContext> => {
     permissions,
     isSuperAdmin: user.isSuperAdmin === true,
     boundWarehouseId: resolveBoundInventoryWarehouseId(user),
+    roleKey,
   };
 };
 
-const hasPermission = (actor: ActorContext, keys: string[]): boolean => {
-  if (actor.isSuperAdmin) return true;
-  return keys.some((key) => actor.permissions[key] === true);
-};
+const hasPermission = (actor: ActorContext, keys: string[]): boolean =>
+  actorHasDepartmentConsumableAccess(actor, keys);
 
 const requirePermission = (actor: ActorContext, keys: string[], message: string) => {
   if (!hasPermission(actor, keys)) {

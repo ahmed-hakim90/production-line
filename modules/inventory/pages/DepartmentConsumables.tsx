@@ -144,12 +144,26 @@ export const DepartmentConsumables: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const locationPromise = (async (): Promise<WarehouseLocation[]> => {
+        if (scoped && warehouseIds.length > 0) {
+          const chunks = await Promise.all(
+            warehouseIds.map((id) => warehouseLocationService.getAll(id).catch(() => [] as WarehouseLocation[])),
+          );
+          return chunks.flat();
+        }
+        return warehouseLocationService.getAll().catch(() => [] as WarehouseLocation[]);
+      })();
       const [whs, locs, depts, materials, issueRows] = await Promise.all([
-        warehouseService.getActiveWarehouses(),
-        warehouseLocationService.getAll(),
-        organizationService.listActiveDepartments(),
+        warehouseService.getActiveWarehouses().catch(() => [] as Warehouse[]),
+        locationPromise,
+        organizationService.listActiveDepartments().catch(() => [] as FirestoreDepartment[]),
         materialService.getAll().catch(() => []),
-        departmentConsumableIssueService.listRecent(300, scoped ? warehouseIds : undefined),
+        departmentConsumableIssueService.listRecent(300, scoped ? warehouseIds : undefined).catch(
+          (error) => {
+            toast.error(toUserSafeFirestoreError(error, 'تعذر تحميل سندات صرف المستهلكات.'));
+            return [] as DepartmentConsumableIssue[];
+          },
+        ),
       ]);
       setWarehouses(whs);
       setLocations(locs);
@@ -239,7 +253,7 @@ export const DepartmentConsumables: React.FC = () => {
       toast.success(success);
       await load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'تعذر تنفيذ العملية.');
+      toast.error(toUserSafeFirestoreError(error, error instanceof Error ? error.message : 'تعذر تنفيذ العملية.'));
     } finally {
       setBusyId(null);
     }

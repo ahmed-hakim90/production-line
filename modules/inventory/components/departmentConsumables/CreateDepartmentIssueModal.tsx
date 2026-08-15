@@ -3,6 +3,7 @@ import { Button } from '../../components/UI';
 import { VoucherItemCombobox } from '../VoucherItemCombobox';
 import { buildCodeVoucherPicker } from '../../lib/materialVoucherPicker';
 import { toast } from '../../../../components/Toast';
+import { toUserSafeFirestoreError } from '../../../repair/lib/repairFirestoreErrors';
 import { departmentConsumableIssueService } from '../../services/departmentConsumableIssueService';
 import { stockService } from '../../services/stockService';
 import type { Warehouse, WarehouseLocation } from '../../types';
@@ -151,7 +152,7 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
       onCreated();
       onClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'تعذر إنشاء السند.');
+      toast.error(toUserSafeFirestoreError(error, 'تعذر إنشاء السند.'));
     } finally {
       setSaving(false);
     }
