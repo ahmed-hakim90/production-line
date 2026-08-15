@@ -6,11 +6,13 @@ import {
   addDoc,
   deleteDoc,
   doc,
+  getDocs,
   serverTimestamp,
   updateDoc,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
+import { tenantQuery } from '@/lib/tenantFirestore';
 import {
   departmentsRef,
   jobPositionsRef,
@@ -46,6 +48,15 @@ function withTenant<T extends Record<string, unknown>>(payload: T): T & { tenant
 }
 
 export const organizationService = {
+  /** Tenant-scoped active departments. Unfiltered collection lists are denied by rules. */
+  async listActiveDepartments(): Promise<FirestoreDepartment[]> {
+    if (!isConfigured) return [];
+    const snap = await getDocs(tenantQuery(db, HR_COLLECTIONS.DEPARTMENTS));
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment))
+      .filter((d) => d.isActive !== false);
+  },
+
   async createDepartment(input: {
     name: string;
     code?: string;

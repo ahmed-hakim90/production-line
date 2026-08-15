@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { getDocs } from 'firebase/firestore';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
@@ -9,8 +8,9 @@ import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { exportGenericRows } from '../../../utils/exportExcel';
 import { useAppStore } from '../../../store/useAppStore';
-import { departmentsRef } from '../../hr/collections';
+import { organizationService } from '../../hr/services/organizationService';
 import type { FirestoreDepartment } from '../../hr/types';
+import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors';
 import { materialService } from '../../manufacturing/services/materialService';
 import { MATERIAL_UNIT_LABELS, type MaterialUnit } from '../../manufacturing/types';
 import { warehouseService } from '../services/warehouseService';
@@ -144,20 +144,16 @@ export const DepartmentConsumables: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [whs, locs, deptSnap, materials, issueRows] = await Promise.all([
+      const [whs, locs, depts, materials, issueRows] = await Promise.all([
         warehouseService.getActiveWarehouses(),
         warehouseLocationService.getAll(),
-        getDocs(departmentsRef()),
+        organizationService.listActiveDepartments(),
         materialService.getAll().catch(() => []),
         departmentConsumableIssueService.listRecent(300, scoped ? warehouseIds : undefined),
       ]);
       setWarehouses(whs);
       setLocations(locs);
-      setDepartments(
-        deptSnap.docs
-          .map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment))
-          .filter((d) => d.isActive !== false),
-      );
+      setDepartments(depts);
       setConsumables(
         materials
           .filter((m) => m.id && m.isActive !== false && m.type === 'consumable')
@@ -171,7 +167,7 @@ export const DepartmentConsumables: React.FC = () => {
       );
       setOrders(issueRows);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'تعذر تحميل بيانات المستهلكات.');
+      toast.error(toUserSafeFirestoreError(error, 'تعذر تحميل بيانات المستهلكات.'));
     } finally {
       setLoading(false);
     }

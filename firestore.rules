@@ -442,6 +442,21 @@ service cloud.firestore {
         );
     }
 
+    /** Compact OR — listing department_consumable_issues must not repeat pl_hasErpPermission. */
+    function pl_canReadDepartmentConsumableIssuePerm() {
+      let p = pl_currentRoleDoc().data.permissions;
+      return pl_isSuperAdmin()
+        || (
+          pl_rolePermMapOk()
+          && (
+            pl_rolePermTrue(p, 'departmentConsumables.view')
+            || pl_rolePermTrue(p, 'departmentConsumables.create')
+            || pl_rolePermTrue(p, 'departmentConsumables.issue')
+            || pl_rolePermTrue(p, 'inventory.view')
+          )
+        );
+    }
+
     /** Manual center stock qty change / delete — inventory & multi-center admins, not branch-only managers. */
     function pl_canAdjustRepairCenterStock() {
       let p = pl_currentRoleDoc().data.permissions;
@@ -1747,14 +1762,11 @@ service cloud.firestore {
     }
 
     // Department consumable issues: client read only; mutations via Admin SDK callables.
+    // Compact permission/warehouse checks — page lists recent vouchers (tenant + warehouse).
     match /department_consumable_issues/{docId} {
       allow read: if pl_isActiveUser()
-        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
-        && (
-          pl_hasErpPermission('departmentConsumables.view')
-          || pl_hasErpPermission('inventory.view')
-          || pl_isSuperAdmin()
-        )
+        && (resource.data.tenantId == pl_tenantId() || pl_isSuperAdmin())
+        && pl_canReadDepartmentConsumableIssuePerm()
         && pl_inventoryWarehouseUnboundOr(
           pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''))
         );

@@ -1580,6 +1580,71 @@ await seed();
   await assertFails(otherTenantDb.collection('spare_parts_purchase_invoices').doc('spi-whA').get());
 }
 
+// 12c) Department consumable issues: tenant list + warehouse bind; departments list must filter tenantId.
+{
+  const createdAt = new Date().toISOString();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adb = context.firestore();
+    await adb.collection('department_consumable_issues').doc('dci-whA').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whA',
+      departmentId: 'dept-a',
+      status: 'draft',
+      createdAt,
+    });
+    await adb.collection('department_consumable_issues').doc('dci-whB').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whB',
+      departmentId: 'dept-a',
+      status: 'draft',
+      createdAt,
+    });
+    await adb.collection('departments').doc('dept-a').set({
+      tenantId: 'tenantA',
+      name: 'الإنتاج',
+      isActive: true,
+    });
+    await adb.collection('departments').doc('dept-b').set({
+      tenantId: 'tenantB',
+      name: 'أخرى',
+      isActive: true,
+    });
+  });
+
+  const unboundInvDb = testEnv.authenticatedContext('userAUsersManager').firestore();
+  await assertSucceeds(
+    unboundInvDb.collection('department_consumable_issues')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertSucceeds(
+    unboundInvDb.collection('departments').where('tenantId', '==', 'tenantA').get(),
+  );
+
+  const boundInvDb = testEnv.authenticatedContext('userAWarehouseBound').firestore();
+  await assertFails(
+    boundInvDb.collection('department_consumable_issues')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertSucceeds(
+    boundInvDb.collection('department_consumable_issues')
+      .where('tenantId', '==', 'tenantA')
+      .where('warehouseId', '==', 'whA')
+      .get(),
+  );
+  await assertFails(
+    boundInvDb.collection('department_consumable_issues').doc('dci-whB').get(),
+  );
+  await assertFails(
+    unboundInvDb.collection('department_consumable_issues').doc('dci-whA').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whA',
+      status: 'issued',
+    }),
+  );
+}
+
 // 13) Repair expenses are server-owned approval requests; clients can only read their scope.
 {
   await testEnv.withSecurityRulesDisabled(async (context) => {

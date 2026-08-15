@@ -16,6 +16,7 @@ import type {
   DepartmentConsumableReturnLine,
 } from '../types';
 import { DEPARTMENT_CONSUMABLE_ISSUES_COLLECTION } from '../lib/departmentConsumableIssue';
+import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors';
 import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const COLLECTION = DEPARTMENT_CONSUMABLE_ISSUES_COLLECTION;
@@ -49,6 +50,9 @@ const callSafe = async <T>(run: () => Promise<T>): Promise<T> => {
     const code = String(error?.code || '').toLowerCase();
     const message = String(error?.message || '').trim();
     if (code.includes('unauthenticated')) throw new Error('يجب تسجيل الدخول أولًا ثم إعادة المحاولة.');
+    if (/missing or insufficient permissions/i.test(message)) {
+      throw new Error('ليس لديك صلاحية لتنفيذ هذا الإجراء.');
+    }
     if (code.includes('permission-denied')) throw new Error(message || 'ليس لديك صلاحية لتنفيذ هذا الإجراء.');
     if (code.includes('failed-precondition')) throw new Error(message || 'لا يمكن تنفيذ العملية في الحالة الحالية.');
     if (code.includes('invalid-argument')) throw new Error(message || 'بيانات غير صالحة.');
@@ -79,7 +83,9 @@ export const departmentConsumableIssueService = {
     if (params?.departmentId) constraints.unshift(where('departmentId', '==', params.departmentId));
     if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
-    const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints));
+    const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints)).catch((error) => {
+      throw new Error(toUserSafeFirestoreError(error, 'تعذر تحميل سندات صرف المستهلكات.'));
+    });
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as DepartmentConsumableIssue));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
     return { items, nextCursor, hasMore: snap.docs.length === pageSize };
@@ -115,7 +121,9 @@ export const departmentConsumableIssueService = {
     }
     const snap = await getDocs(
       tenantQuery(db, COLLECTION, ...constraints),
-    );
+    ).catch((error) => {
+      throw new Error(toUserSafeFirestoreError(error, 'تعذر تحميل سندات صرف المستهلكات.'));
+    });
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DepartmentConsumableIssue));
   },
 
