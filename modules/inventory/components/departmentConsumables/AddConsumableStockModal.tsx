@@ -3,11 +3,13 @@ import { Button } from '../../components/UI';
 import { VoucherItemCombobox } from '../VoucherItemCombobox';
 import { buildCodeVoucherPicker } from '../../lib/materialVoucherPicker';
 import { toast } from '../../../../components/Toast';
+import { departmentConsumableIssueService } from '../../services/departmentConsumableIssueService';
 import { stockService } from '../../services/stockService';
+import { defaultItemLocationService } from '../../services/defaultItemLocationService';
+import { toUserSafeFirestoreError } from '../../../repair/lib/repairFirestoreErrors';
 import type { Warehouse, WarehouseLocation } from '../../types';
 import type { ConsumableOption } from '../../lib/itemMovementTrace';
 import { ModalShell } from './ModalShell';
-import { INVENTORY_STOCK_MOVE_PATHS } from '../../../system/lib/operationPathSettings';
 
 type Props = {
   open: boolean;
@@ -18,7 +20,6 @@ type Props = {
   locations: WarehouseLocation[];
   consumables: ConsumableOption[];
   canAdd: boolean;
-  createdBy: string;
 };
 
 export const AddConsumableStockModal: React.FC<Props> = ({
@@ -30,25 +31,70 @@ export const AddConsumableStockModal: React.FC<Props> = ({
   locations,
   consumables,
   canAdd,
-  createdBy,
 }) => {
   const [warehouseId, setWarehouseId] = useState('');
   const [itemId, setItemId] = useState('');
   const [quantity, setQuantity] = useState(0);
-  const [locationId, setLocationId] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [shelfHint, setShelfHint] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setWarehouseId((prev) => prev || warehouses[0]?.id || '');
   }, [open, warehouses]);
 
-  const warehouseLocations = useMemo(
-    () => locations.filter((loc) => loc.warehouseId === warehouseId && loc.isActive !== false),
-    [locations, warehouseId],
-  );
-  const locationsRequired = warehouseLocations.length > 0;
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      if (!open || !warehouseId || !itemId) {
+        setShelfHint('');
+        return;
+      }
+      try {
+        const warehouseLocs = locations.filter(
+          (loc) => loc.warehouseId === warehouseId && loc.isActive !== false,
+        );
+        const [def, bals] = await Promise.all([
+          defaultItemLocationService.get({
+            warehouseId,
+            itemType: 'material',
+            itemId,
+          }).catch(() => null),
+          stockService.getLocationBalances({
+            warehouseId,
+            itemType: 'material',
+            itemId,
+          }).catch(() => []),
+        ]);
+        if (cancelled) return;
+        const defId = String(def?.locationId || '').trim();
+        const defLoc = warehouseLocs.find((loc) => loc.id === defId);
+        if (defLoc) {
+          setShelfHint(defLoc.code || defId);
+          return;
+        }
+        const withQty = bals
+          .filter((row) => Number(row.quantity || 0) > 0)
+          .sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0));
+        if (withQty[0]?.locationCode || withQty[0]?.locationId) {
+          setShelfHint(String(withQty[0].locationCode || withQty[0].locationId));
+          return;
+        }
+        const first = [...warehouseLocs].sort((a, b) =>
+          String(a.code || '').localeCompare(String(b.code || ''), 'ar'),
+        )[0];
+        setShelfHint(first?.code || '');
+      } catch {
+        if (!cancelled) setShelfHint('');
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, warehouseId, itemId, locations]);
+
   const consumablePicker = useMemo(
     () =>
       buildCodeVoucherPicker(
@@ -68,8 +114,8 @@ export const AddConsumableStockModal: React.FC<Props> = ({
   const handleClose = () => {
     setItemId('');
     setQuantity(0);
-    setLocationId('');
     setNote('');
+    setShelfHint('');
     onClose();
   };
 
@@ -90,34 +136,19 @@ export const AddConsumableStockModal: React.FC<Props> = ({
       toast.error('أدخل كمية أكبر من صفر.');
       return;
     }
-    if (locationsRequired && !locationId) {
-      toast.error('حدد الرف.');
-      return;
-    }
-    const loc = warehouseLocations.find((l) => l.id === locationId);
     setSaving(true);
     try {
-      await stockService.createMovement({
+      await departmentConsumableIssueService.addStock({
         warehouseId,
-        locationId: locationId || undefined,
-        locationCode: loc?.code || undefined,
-        itemType: 'material',
         itemId: material.id,
-        itemName: material.name,
-        itemCode: material.code,
-        unit: material.unit,
-        movementType: 'IN',
         quantity: Number(quantity),
-        sourceModule: 'manual_movement',
-        sourceId: `CNS-IN-${Date.now()}`,
         note: note.trim() || `إضافة مستهلكات — ${material.name}`,
-        createdBy,
-      }, { path: INVENTORY_STOCK_MOVE_PATHS.consumableAddStock });
+      });
       toast.success('تم إضافة الكمية للمخزن.');
       onSaved();
       handleClose();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'تعذر إضافة الكمية.');
+      toast.error(toUserSafeFirestoreError(error, 'تعذر إضافة الكمية للمخزن.'));
     } finally {
       setSaving(false);
     }
@@ -141,10 +172,7 @@ export const AddConsumableStockModal: React.FC<Props> = ({
         <select
           className="w-full border rounded-lg px-3 py-2"
           value={warehouseId}
-          onChange={(e) => {
-            setWarehouseId(e.target.value);
-            setLocationId('');
-          }}
+          onChange={(e) => setWarehouseId(e.target.value)}
         >
           <option value="">اختر مخزن</option>
           {warehouses.map((w) => (
@@ -188,21 +216,11 @@ export const AddConsumableStockModal: React.FC<Props> = ({
         />
       </label>
 
-      {locationsRequired && (
-        <label className="block text-sm space-y-1">
-          <span className="font-bold">الرف *</span>
-          <select
-            className="w-full border rounded-lg px-3 py-2"
-            value={locationId}
-            onChange={(e) => setLocationId(e.target.value)}
-          >
-            <option value="">اختر رف</option>
-            {warehouseLocations.map((loc) => (
-              <option key={loc.id} value={loc.id}>{loc.code}</option>
-            ))}
-          </select>
-        </label>
-      )}
+      <p className="text-sm text-[var(--color-text-muted)]">
+        {shelfHint
+          ? `الرف: ${shelfHint} — يُحدَّد تلقائيًا من مكان الصنف.`
+          : 'الرف يُحدَّد تلقائيًا من مكان الصنف في المخزن.'}
+      </p>
 
       <label className="block text-sm space-y-1">
         <span className="font-bold">ملاحظة</span>

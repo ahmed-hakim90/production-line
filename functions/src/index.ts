@@ -18,6 +18,7 @@ import {
   type AdminRestoreMode,
 } from './tenantImportRestore.js';
 import {
+  addDepartmentConsumableStockHandler,
   approveDepartmentConsumableIssueHandler,
   cancelDepartmentConsumableIssueHandler,
   createDepartmentConsumableIssueHandler,
@@ -2338,6 +2339,11 @@ export const submitRepairApprovalPublic = onCall(
     });
     return { ok: true as const, status: afterStatus };
   },
+);
+
+export const addDepartmentConsumableStock = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  addDepartmentConsumableStockHandler,
 );
 
 export const createDepartmentConsumableIssue = onCall(

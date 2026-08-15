@@ -4,14 +4,9 @@ import {
   setDoc,
   type Firestore,
   type Transaction,
-  getDocs,
-  limit,
-  orderBy,
 } from 'firebase/firestore';
 import { db } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
-import { tenantQuery } from '../../../lib/tenantFirestore';
-import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
 
 /** Matches legacy reference numbers like INV-001 */
 export const INV_REF_REGEX = /^INV-(\d+)$/i;
@@ -20,20 +15,6 @@ export const formatInvReference = (seq: number) =>
   `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
 
 const COUNTERS_COLLECTION = 'inventory_counters';
-const TRANSACTIONS_COLLECTION = 'stock_transactions';
-const TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
-
-function invSeqFromReferenceNo(referenceNo: string): number {
-  const m = String(referenceNo || '').trim().match(INV_REF_REGEX);
-  return m ? Number(m[1] || 0) : 0;
-}
-
-function maxInvFromDocs(docs: { data: () => Record<string, unknown> }[]): number {
-  return docs.reduce((max, d) => {
-    const ref = String(d.data()?.referenceNo || '').trim();
-    return Math.max(max, invSeqFromReferenceNo(ref));
-  }, 0);
-}
 
 function counterRef(dbInst: Firestore, tenantId: string) {
   return doc(dbInst, COUNTERS_COLLECTION, tenantId);
@@ -85,36 +66,18 @@ export async function allocateInvReferenceInTransaction(t: Transaction): Promise
   return writeInvSeqInTransaction(t, nextSeq);
 }
 
-/** Seed counter from recent docs when missing (outside a transaction). */
+/** Seed counter when missing (outside a transaction). Never list ledgers — bound
+ * warehouse operators and supplies roles are denied those unfiltered collection queries. */
 export async function ensureInvCounter(): Promise<void> {
   const tenantId = getCurrentTenantId();
   const cref = counterRef(db, tenantId);
   const snap = await getDoc(cref);
   if (snap.exists()) return;
-  const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
-  if (boundWarehouseId) {
-    await setDoc(
-      cref,
-      {
-        tenantId,
-        lastInvSeq: 0,
-        updatedAt: new Date().toISOString(),
-      },
-      { merge: true },
-    );
-    return;
-  }
-  const [txSnap, trSnap] = await Promise.all([
-    getDocs(tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),
-    getDocs(tenantQuery(db, TRANSFER_REQUESTS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),
-  ]);
-  const maxLegacy = Math.max(maxInvFromDocs(txSnap.docs), maxInvFromDocs(trSnap.docs));
-  const lastInvSeq = Math.max(0, maxLegacy);
   await setDoc(
     cref,
     {
       tenantId,
-      lastInvSeq,
+      lastInvSeq: 0,
       updatedAt: new Date().toISOString(),
     },
     { merge: true },
@@ -129,10 +92,5 @@ export async function peekNextInvReferenceNo(): Promise<string> {
   if (snap.exists()) {
     return formatInvReference(Math.max(1, Math.floor(Number(snap.data().lastInvSeq || 0))) + 1);
   }
-  const [txSnap, trSnap] = await Promise.all([
-    getDocs(tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),
-    getDocs(tenantQuery(db, TRANSFER_REQUESTS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),
-  ]);
-  const maxInv = Math.max(maxInvFromDocs(txSnap.docs), maxInvFromDocs(trSnap.docs));
-  return formatInvReference(maxInv + 1);
+  return formatInvReference(1);
 }

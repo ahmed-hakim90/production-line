@@ -6,7 +6,7 @@ import { toast } from '../../../../components/Toast';
 import { toUserSafeFirestoreError } from '../../../repair/lib/repairFirestoreErrors';
 import { departmentConsumableIssueService } from '../../services/departmentConsumableIssueService';
 import { stockService } from '../../services/stockService';
-import type { Warehouse, WarehouseLocation } from '../../types';
+import type { Warehouse } from '../../types';
 import type { FirestoreDepartment } from '../../../hr/types';
 import { MATERIAL_UNIT_LABELS, type MaterialUnit } from '../../../manufacturing/types';
 import type { ConsumableOption } from '../../lib/itemMovementTrace';
@@ -16,14 +16,12 @@ type DraftLine = {
   key: string;
   itemId: string;
   quantity: number;
-  locationId: string;
 };
 
 const emptyDraftLine = (): DraftLine => ({
   key: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   itemId: '',
   quantity: 0,
-  locationId: '',
 });
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
@@ -34,7 +32,6 @@ type Props = {
   onCreated: () => void;
   onDefineConsumable: () => void;
   warehouses: Warehouse[];
-  locations: WarehouseLocation[];
   departments: FirestoreDepartment[];
   consumables: ConsumableOption[];
   initialWarehouseId?: string;
@@ -47,7 +44,6 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
   onCreated,
   onDefineConsumable,
   warehouses,
-  locations,
   departments,
   consumables,
   initialWarehouseId,
@@ -58,6 +54,7 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
   const [note, setNote] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([emptyDraftLine()]);
   const [balances, setBalances] = useState<Map<string, number>>(new Map());
+  const [locationHintByItem, setLocationHintByItem] = useState<Map<string, string>>(new Map());
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -76,7 +73,10 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
         return;
       }
       try {
-        const rows = await stockService.getBalances(warehouseId);
+        const [rows, locationRows] = await Promise.all([
+          stockService.getBalances(warehouseId),
+          stockService.getLocationBalances({ warehouseId, itemType: 'material' }).catch(() => []),
+        ]);
         if (cancelled) return;
         const map = new Map<string, number>();
         rows.forEach((row) => {
@@ -84,9 +84,24 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
             map.set(row.itemId, Number(row.quantity || 0));
           }
         });
+        const hints = new Map<string, string>();
+        locationRows.forEach((row) => {
+          if (row.itemType !== 'material' || !(Number(row.quantity || 0) > 0)) return;
+          const code = String(row.locationCode || row.locationId || '').trim();
+          if (!code) return;
+          const prev = hints.get(row.itemId);
+          hints.set(
+            row.itemId,
+            prev ? `${prev}، ${code} (${fmt(Number(row.quantity || 0))})` : `${code} (${fmt(Number(row.quantity || 0))})`,
+          );
+        });
         setBalances(map);
+        setLocationHintByItem(hints);
       } catch {
-        if (!cancelled) setBalances(new Map());
+        if (!cancelled) {
+          setBalances(new Map());
+          setLocationHintByItem(new Map());
+        }
       }
     };
     void run();
@@ -95,11 +110,6 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
     };
   }, [open, warehouseId]);
 
-  const warehouseLocations = useMemo(
-    () => locations.filter((loc) => loc.warehouseId === warehouseId && loc.isActive !== false),
-    [locations, warehouseId],
-  );
-  const locationsRequired = warehouseLocations.length > 0;
   const consumablePicker = useMemo(
     () =>
       buildCodeVoucherPicker(
@@ -122,22 +132,12 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
     }
     const payloadLines = lines
       .filter((line) => line.itemId && Number(line.quantity) > 0)
-      .map((line) => {
-        const loc = warehouseLocations.find((l) => l.id === line.locationId);
-        return {
-          itemId: line.itemId,
-          quantity: Number(line.quantity),
-          ...(line.locationId
-            ? { locationId: line.locationId, locationCode: loc?.code || line.locationId }
-            : {}),
-        };
-      });
+      .map((line) => ({
+        itemId: line.itemId,
+        quantity: Number(line.quantity),
+      }));
     if (!payloadLines.length) {
       toast.error('أضف بند مستهلك واحداً على الأقل.');
-      return;
-    }
-    if (locationsRequired && payloadLines.some((line) => !line.locationId)) {
-      toast.error('حدد رف المصدر لكل بند.');
       return;
     }
     setSaving(true);
@@ -270,30 +270,16 @@ export const CreateDepartmentIssueModal: React.FC<Props> = ({
                   )));
                 }}
               />
-              <p className="text-[11px] text-[var(--color-text-muted)] h-4">
-                {line.itemId ? `المتاح: ${fmt(available)}` : '\u00a0'}
+              <p className="text-[11px] text-[var(--color-text-muted)] min-h-4">
+                {line.itemId
+                  ? `المتاح: ${fmt(available)}${
+                    locationHintByItem.get(line.itemId)
+                      ? ` — رف ${locationHintByItem.get(line.itemId)}`
+                      : ''
+                  }`
+                  : '\u00a0'}
               </p>
             </div>
-            {locationsRequired && (
-              <div className="w-[7.5rem] shrink-0 space-y-1">
-                <p className="text-xs font-bold h-4">الرف</p>
-                <select
-                  className="w-full h-10 border border-[var(--color-border)] rounded-lg px-3 py-2 bg-[var(--color-card)]"
-                  value={line.locationId}
-                  onChange={(e) => {
-                    setLines((prev) => prev.map((row, i) => (
-                      i === index ? { ...row, locationId: e.target.value } : row
-                    )));
-                  }}
-                >
-                  <option value="">اختر رف</option>
-                  {warehouseLocations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.code}</option>
-                  ))}
-                </select>
-                <p className="text-[11px] h-4">{'\u00a0'}</p>
-              </div>
-            )}
             <div className="shrink-0 space-y-1">
               <p className="text-xs font-bold h-4">{'\u00a0'}</p>
               <Button

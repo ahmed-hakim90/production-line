@@ -127,6 +127,31 @@ export const departmentConsumableIssueService = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DepartmentConsumableIssue));
   },
 
+  async addStock(input: {
+    warehouseId: string;
+    itemId: string;
+    quantity: number;
+    locationId?: string;
+    locationCode?: string;
+    note?: string;
+  }): Promise<{ id: string; referenceNo: string }> {
+    return callSafe(async () => {
+      const callable = httpsCallable<
+        {
+          warehouseId: string;
+          itemId: string;
+          quantity: number;
+          locationId?: string;
+          locationCode?: string;
+          note?: string;
+        },
+        { id: string; referenceNo: string }
+      >(requireFunctions(), 'addDepartmentConsumableStock');
+      const result = await callable(input);
+      return result.data;
+    });
+  },
+
   async create(input: CallableCreateInput): Promise<{ id: string; referenceNo: string; status: string }> {
     return callSafe(async () => {
       const callable = httpsCallable<

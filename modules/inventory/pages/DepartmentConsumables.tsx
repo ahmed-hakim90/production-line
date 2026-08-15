@@ -1073,7 +1073,6 @@ export const DepartmentConsumables: React.FC = () => {
         locations={locations}
         consumables={consumables}
         canAdd={canAddStock}
-        createdBy={actor}
       />
 
       <ImportConsumablesSheetModal
@@ -1092,7 +1091,6 @@ export const DepartmentConsumables: React.FC = () => {
         onCreated={() => void load()}
         onDefineConsumable={() => setShowDefine(true)}
         warehouses={visibleWarehouses}
-        locations={locations}
         departments={departments}
         consumables={consumables}
         initialWarehouseId={resolveScopedWarehouseId(visibleWarehouses[0]?.id || '')}

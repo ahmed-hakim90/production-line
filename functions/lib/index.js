@@ -12,7 +12,7 @@ import { collectPushTokenTargets } from './pushTokenLookup.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
 import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRestore.js';
-import { approveDepartmentConsumableIssueHandler, cancelDepartmentConsumableIssueHandler, createDepartmentConsumableIssueHandler, getDepartmentConsumableMonthlyReportHandler, issueDepartmentConsumableIssueHandler, rejectDepartmentConsumableIssueHandler, returnDepartmentConsumableIssueHandler, submitDepartmentConsumableIssueHandler, } from './departmentConsumableIssues.js';
+import { addDepartmentConsumableStockHandler, approveDepartmentConsumableIssueHandler, cancelDepartmentConsumableIssueHandler, createDepartmentConsumableIssueHandler, getDepartmentConsumableMonthlyReportHandler, issueDepartmentConsumableIssueHandler, rejectDepartmentConsumableIssueHandler, returnDepartmentConsumableIssueHandler, submitDepartmentConsumableIssueHandler, } from './departmentConsumableIssues.js';
 import { approveRepairSpareIssueHandler, cancelRepairSpareIssueHandler, createRepairSpareIssueHandler, issueRepairSpareIssueHandler, rejectRepairSpareIssueHandler, returnRepairSpareIssueHandler, submitRepairSpareIssueHandler, } from './repairSpareIssues.js';
 import { buildPublicRepairApprovalView } from './repairApprovalPublic.js';
 import { approveSparePartsReplenishmentHandler, cancelSparePartsReplenishmentHandler, createSparePartsReplenishmentHandler, prepareSparePartsReplenishmentHandler, receiveSparePartsReplenishmentHandler, rejectSparePartsReplenishmentHandler, responsibleApproveSparePartsReplenishmentHandler, } from './sparePartsReplenishment.js';
@@ -1911,6 +1911,7 @@ export const submitRepairApprovalPublic = onCall({
     });
     return { ok: true, status: afterStatus };
 });
+export const addDepartmentConsumableStock = onCall({ region: 'us-central1', memory: '512MiB' }, addDepartmentConsumableStockHandler);
 export const createDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '512MiB' }, createDepartmentConsumableIssueHandler);
 export const submitDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, submitDepartmentConsumableIssueHandler);
 export const approveDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, approveDepartmentConsumableIssueHandler);
