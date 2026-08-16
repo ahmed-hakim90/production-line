@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button, SearchableSelect } from '../components/UI';
-import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import {
@@ -133,7 +132,7 @@ export const ProductionPlans: React.FC = () => {
 
   const {
     products, _rawLines, _rawProducts, productionPlans, planReports,
-    todayReports, lineProductConfigs, routingTotalTimeSecondsByProduct, routingVarianceBasisSecondsByProduct, loading, uid, systemSettings,
+    todayReports, lineProductConfigs, routingTotalTimeSecondsByProduct, routingVarianceBasisSecondsByProduct, uid, systemSettings,
     laborSettings, costCenters, costCenterValues, costAllocations,
   } = useShallowStore((s) => ({
     products: s.products,
@@ -145,7 +144,6 @@ export const ProductionPlans: React.FC = () => {
     lineProductConfigs: s.lineProductConfigs,
     routingTotalTimeSecondsByProduct: s.routingTotalTimeSecondsByProduct,
     routingVarianceBasisSecondsByProduct: s.routingVarianceBasisSecondsByProduct,
-    loading: s.loading,
     uid: s.uid,
     systemSettings: s.systemSettings,
     laborSettings: s.laborSettings,
@@ -934,10 +932,6 @@ export const ProductionPlans: React.FC = () => {
     [kpis],
   );
 
-  if (loading || initialDataLoading) {
-    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
-  }
-
   return (
     <ModuleOpsPageShell
       className="w-full min-w-0"
@@ -1196,7 +1190,13 @@ export const ProductionPlans: React.FC = () => {
         </ManagedModalPortal>
       )}
 
-      <OpsDashPanel title="الخطط" accent="plans" bodyClassName="p-0">
+      <OpsDashPanel
+        title="الخطط"
+        accent="plans"
+        bodyClassName="p-0"
+        loading={initialDataLoading}
+        loadingLabel="جاري تحميل الخطط…"
+      >
       <SmartFilterBar
       pageId="production-plans"
         searchPlaceholder="ابحث بالمنتج أو الكود..."
@@ -1738,8 +1738,16 @@ export const ProductionPlans: React.FC = () => {
         {totalPlans === 0 ? (
           <div className="p-12 text-center text-[var(--color-text-muted)]">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">event_note</span>
-            <p className="font-bold text-base">{emptyDueToFilters || hasActiveFilters ? 'لا توجد خطط تطابق التصفية' : 'لا توجد خطط إنتاج بعد'}</p>
-            <p className="text-sm mt-1">{emptyDueToFilters || hasActiveFilters ? 'جرب تغيير فئة الخطة أو معايير التصفية' : 'ابدأ بإنشاء خطة جديدة لتتبع الإنتاج'}</p>
+            <p className="font-bold text-base">
+              {initialDataLoading
+                ? 'جاري تحميل الخطط…'
+                : emptyDueToFilters || hasActiveFilters
+                  ? 'لا توجد خطط تطابق التصفية'
+                  : 'لا توجد خطط إنتاج بعد'}
+            </p>
+            {!initialDataLoading && (
+              <p className="text-sm mt-1">{emptyDueToFilters || hasActiveFilters ? 'جرب تغيير فئة الخطة أو معايير التصفية' : 'ابدأ بإنشاء خطة جديدة لتتبع الإنتاج'}</p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">

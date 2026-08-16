@@ -38,7 +38,6 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
-import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { formatNumber, getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import {
@@ -620,8 +619,6 @@ export const Reports: React.FC = () => {
     'products',
     'lines',
     'employees',
-    'productionPlans',
-    'workOrders',
   ]);
   const { dir } = useAppDirection();
   const { openModal } = useGlobalModalManager();
@@ -990,13 +987,13 @@ export const Reports: React.FC = () => {
   const [factorySortDirection, setFactorySortDirection] = useState<'asc' | 'desc'>('desc');
   const reportsUiReferenceCache = useAppStore((s) => s.reportsUiReferenceCache);
   const ensureReportsUiReferenceData = useAppStore((s) => s.ensureReportsUiReferenceData);
-  const fetchProducts = useAppStore((s) => s.fetchProducts);
-  const fetchLines = useAppStore((s) => s.fetchLines);
-  const fetchEmployees = useAppStore((s) => s.fetchEmployees);
+  const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
+  const fetchWorkOrders = useAppStore((s) => s.fetchWorkOrders);
 
   useEffect(() => {
-    void Promise.all([fetchProducts(), fetchLines(), fetchEmployees()]).catch(() => undefined);
-  }, [fetchEmployees, fetchLines, fetchProducts]);
+    void Promise.all([fetchProductionPlans(), fetchWorkOrders()]).catch(() => undefined);
+  }, [fetchProductionPlans, fetchWorkOrders]);
+
   const stockBalances: StockItemBalance[] = reportsUiReferenceCache?.stockBalances ?? [];
   const warehouses: Warehouse[] = reportsUiReferenceCache?.warehouses ?? [];
   const categoryOptions: string[] = reportsUiReferenceCache?.categoryOptions ?? [];
@@ -4037,10 +4034,6 @@ export const Reports: React.FC = () => {
     : (importResult?.validCount ?? 0);
   const hasImportPreview = importMode === 'updateDate' ? !!importDateUpdateResult : !!importResult;
 
-  if (referenceDataLoading) {
-    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
-  }
-
   return (
     <ModuleOpsPageShell
       eyebrow="تقارير الإنتاج"
@@ -4253,7 +4246,12 @@ export const Reports: React.FC = () => {
         </div>
       )}
       {viewMode === 'general' ? (
-        <OpsDashPanel accent="production" bodyClassName="p-0 overflow-hidden">
+        <OpsDashPanel
+          accent="production"
+          bodyClassName="p-0 overflow-hidden"
+          loading={rangeLoading}
+          loadingLabel="جاري تحميل التقرير العام…"
+        >
           <div className="p-4 border-b border-[var(--color-border)] bg-[var(--color-bg)]/40 flex flex-col gap-3">
             <div className="flex flex-col md:flex-row md:items-center gap-3">
               <Button variant="secondary" onClick={handleBackToReports}>
@@ -4390,19 +4388,36 @@ export const Reports: React.FC = () => {
         </OpsDashPanel>
       ) : (
         <div className="space-y-4">
-          <OpsDashPanel accent="production" bodyClassName="p-0 overflow-hidden">
+          <OpsDashPanel
+            accent="production"
+            bodyClassName="p-0 overflow-hidden"
+            loading={referenceDataLoading}
+            loadingLabel="جاري تحميل الفلاتر…"
+          >
             {reportsFilterBar}
           </OpsDashPanel>
           {reportGroupBy !== 'none' ? (
             <>
               {groupedReports.length === 0 ? (
-                <OpsDashPanel accent="production">
+                <OpsDashPanel
+                  accent="production"
+                  loading={rangeLoading}
+                  loadingLabel="جاري تحميل التقارير…"
+                >
                   <div className="py-16 text-center text-[var(--color-text-muted)]">
-                    لا توجد تقارير{viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}
+                    {rangeLoading
+                      ? 'جاري تحميل التقارير…'
+                      : `لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
                   </div>
                 </OpsDashPanel>
               ) : groupedReports.map((group) => (
-                <OpsDashPanel key={group.key} accent="production" bodyClassName="p-0 overflow-hidden">
+                <OpsDashPanel
+                  key={group.key}
+                  accent="production"
+                  bodyClassName="p-0 overflow-hidden"
+                  loading={rangeLoading}
+                  loadingLabel="جاري التحديث…"
+                >
                   <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]/60 flex flex-wrap items-center gap-3">
                     <span className="text-sm font-black text-[var(--color-text)]">{group.label || 'غير محدد'}</span>
                     <span className="text-xs font-bold text-[var(--color-text-muted)]">{group.reports.length} تقرير</span>
@@ -4433,6 +4448,12 @@ export const Reports: React.FC = () => {
               {reportTableFooter}
             </>
           ) : (
+            <OpsDashPanel
+              accent="production"
+              bodyClassName="p-0 overflow-hidden"
+              loading={rangeLoading}
+              loadingLabel={rangeLoading ? 'جاري تحميل التقارير…' : 'جاري التحديث…'}
+            >
             <SelectableTable<ProductionReport>
               tableId="production-reports-main"
               data={searchFilteredReports}
@@ -4449,10 +4470,15 @@ export const Reports: React.FC = () => {
                 setReportDrawerTab('summary');
               }}
               emptyIcon="bar_chart"
-              emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-              emptySubtitle={reportsPageCreateEnabled && can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+              emptyTitle={rangeLoading
+                ? 'جاري تحميل التقارير…'
+                : `لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
+              emptySubtitle={rangeLoading
+                ? ''
+                : (reportsPageCreateEnabled && can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً')}
               footer={reportTableFooter}
             />
+            </OpsDashPanel>
           )}
         </div>
       )}

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useParams } from 'react-router-dom';
 import { Check, Circle } from 'lucide-react';
-import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { PublicCustomerSurfaceShell } from '../components/PublicCustomerSurfaceShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { isConfigured, trackRepairJobPublicCallable, type PublicRepairTrackResult } from '../../../services/firebase';
 import type { RepairJobStatus } from '../types';
@@ -125,13 +125,12 @@ export const RepairTrackPublic: React.FC = () => {
   const isTerminalBad = result?.status === 'cancelled' || result?.status === 'unrepairable';
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]" dir={dir}>
-      <RepairOpsPageShell
-        className="max-w-2xl mx-auto"
-        eyebrow="الصيانة"
-        rangeLabel="تتبع طلب الصيانة — أدخل بيانات الطلب لمعرفة الحالة الحالية"
-        dir={dir}
-      >
+    <PublicCustomerSurfaceShell
+      title="تتبع طلب الصيانة"
+      subtitle="أدخل رقم الإيصال والجوال لمعرفة الحالة"
+      dir={dir}
+      contentClassName="max-w-2xl"
+    >
         <OpsDashPanel title="بيانات البحث" accent="repair">
           <div className="grid md:grid-cols-2 gap-2">
             <div><Label>رقم الإيصال</Label><Input value={receiptNo} onChange={(e) => setReceiptNo(e.target.value)} placeholder="REP-0001" /></div>
@@ -246,8 +245,7 @@ export const RepairTrackPublic: React.FC = () => {
             </div>
           </OpsDashPanel>
         )}
-      </RepairOpsPageShell>
-    </div>
+    </PublicCustomerSurfaceShell>
   );
 };
 

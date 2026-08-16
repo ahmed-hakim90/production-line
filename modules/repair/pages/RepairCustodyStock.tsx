@@ -19,6 +19,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { defaultTenantSlug, withTenantPath } from '@/lib/tenantPaths';
+import { buildCustomerPortalUrl } from '../lib/repairPublicLinks';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { StatusBadge } from '../components/StatusBadge';
@@ -278,7 +279,7 @@ export const RepairCustodyStock: React.FC = () => {
 
   const whatsappMessage = (row: CustodyRow) => {
     const receipt = `\u200E${row.receiptNo}\u200E`;
-    const portalUrl = `${window.location.origin}/portal/${tenantSlug || defaultTenantSlug()}`;
+    const portalUrl = buildCustomerPortalUrl({ tenantSlug: tenantSlug || defaultTenantSlug() });
     const statusMessage = unrepairableMode
       ? 'بعد الفحص تم تصنيف الجهاز كغير قابل للإصلاح. يرجى التواصل معنا لتحديد الإرجاع أو متابعة طلب الاستبدال.'
       : row.jobStatus === 'cancelled'
@@ -292,8 +293,8 @@ export const RepairCustodyStock: React.FC = () => {
       `رقم الطلب: ${receipt}`,
       `المنتج: ${row.productName}`,
       `الحالة: ${statusMessage}`,
-      `متابعة الطلب: ${portalUrl}`,
-    ].join('\n');
+      portalUrl ? `متابعة الطلب: ${portalUrl}` : '',
+    ].filter(Boolean).join('\n');
   };
 
   const handover = async () => {

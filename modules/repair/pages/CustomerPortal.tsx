@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { Camera, LogOut, PackagePlus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { PublicCustomerSurfaceShell } from '../components/PublicCustomerSurfaceShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import {
@@ -78,7 +78,10 @@ const portalStatusMeta = (kind: string, status: string): { label: string; type: 
 
 export const CustomerPortal: React.FC = () => {
   const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
-  const [customerCode, setCustomerCode] = useState('');
+  const [searchParams] = useSearchParams();
+  const [customerCode, setCustomerCode] = useState(() =>
+    String(searchParams.get('code') || '').trim().toUpperCase(),
+  );
   const [pin, setPin] = useState('');
   const [token, setToken] = useState(() => sessionStorage.getItem(sessionKey(tenantSlug)) || '');
   const [home, setHome] = useState<CustomerPortalHomeResult | null>(null);
@@ -107,6 +110,11 @@ export const CustomerPortal: React.FC = () => {
   useEffect(() => {
     if (token) void loadHome(token);
   }, [token, loadHome]);
+
+  useEffect(() => {
+    const fromLink = String(searchParams.get('code') || '').trim();
+    if (fromLink) setCustomerCode(fromLink.toUpperCase());
+  }, [searchParams]);
 
   const login = async () => {
     if (!customerCode.trim() || !/^\d{6}$/.test(pin)) return;
@@ -258,11 +266,14 @@ export const CustomerPortal: React.FC = () => {
 
   if (!token || !home) {
     return (
-      <div className="min-h-screen bg-[var(--color-bg)] p-4" dir="rtl">
-        <RepairOpsPageShell className="mx-auto flex min-h-[80vh] max-w-md items-center" eyebrow="الصيانة" rangeLabel="بوابة العميل">
-          <OpsDashPanel title="بوابة العميل" accent="repair">
+      <PublicCustomerSurfaceShell
+        narrow
+        title="بوابة العميل"
+        subtitle="متابعة طلبات الصيانة وإنشاء طلب جديد"
+      >
+        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-5">
             <div className="space-y-4">
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-center text-sm text-[var(--color-text-muted)]">
                 أدخل كود العميل ورمز PIN للمتابعة وإنشاء طلبات الصيانة.
               </p>
               <div className="space-y-1.5">
@@ -282,6 +293,9 @@ export const CustomerPortal: React.FC = () => {
                   maxLength={6}
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void login();
+                  }}
                   placeholder="••••••"
                 />
               </div>
@@ -293,25 +307,30 @@ export const CustomerPortal: React.FC = () => {
                 {loading ? 'جاري الدخول…' : 'دخول'}
               </Button>
             </div>
-          </OpsDashPanel>
-        </RepairOpsPageShell>
-      </div>
+        </div>
+      </PublicCustomerSurfaceShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)] p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.5rem+env(safe-area-inset-bottom))]" dir="rtl">
-      <RepairOpsPageShell
-        className="mx-auto max-w-5xl"
-        eyebrow="الصيانة"
-        rangeLabel={`مرحبًا، ${home.customer.name} — كود العميل: ${home.customer.code}`}
-        actions={(
-          <Button variant="outline" size="sm" disabled={loading} onClick={() => void loadHome(token)}>
-            <RefreshCw className="ms-1 size-4" />
-            تحديث
-          </Button>
-        )}
-      >
+    <PublicCustomerSurfaceShell
+      title="بوابة العميل"
+      subtitle={`مرحبًا، ${home.customer.name} — ${home.customer.code}`}
+      actions={(
+        <Button variant="outline" size="sm" disabled={loading} onClick={() => void loadHome(token)}>
+          <RefreshCw className="ms-1 size-4" />
+          تحديث
+        </Button>
+      )}
+      footer={(
+        <CustomerPortalBottomBar
+          activeTab={tab}
+          onTabChange={setTab}
+          requestsCount={combined.length}
+          eventsCount={(home.events || []).length}
+        />
+      )}
+    >
         {tab === 'compose' && (
           <OpsDashPanel
             title="إنشاء طلب صيانة"
@@ -513,15 +532,7 @@ export const CustomerPortal: React.FC = () => {
             </div>
           </OpsDashPanel>
         )}
-      </RepairOpsPageShell>
-
-      <CustomerPortalBottomBar
-        activeTab={tab}
-        onTabChange={setTab}
-        requestsCount={combined.length}
-        eventsCount={(home.events || []).length}
-      />
-    </div>
+    </PublicCustomerSurfaceShell>
   );
 };
 

@@ -34,7 +34,14 @@ export function logicalPathnameFromLocation(pathname: string): string {
   return pathname;
 }
 
-const NON_TENANT_ROOT_PREFIXES = ['/t/', '/super-admin', '/register-company', '/demo'];
+const NON_TENANT_ROOT_PREFIXES = [
+  '/t/',
+  '/super-admin',
+  '/register-company',
+  '/demo',
+  '/portal',
+  '/track',
+];
 
 export function resolveTenantNavigationTarget(tenantSlug: string | undefined, target: string): string {
   const raw = (target || '').trim();

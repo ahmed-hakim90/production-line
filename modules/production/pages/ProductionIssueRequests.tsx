@@ -39,11 +39,8 @@ import {
   type MissingComponentsReportSection,
 } from '../components/MissingComponentsReportPrint';
 import { ClipboardList } from 'lucide-react';
-import {
-  fetchCachedPageData,
-  invalidatePageDataCache,
-  peekPageDataCache,
-} from '../../shared/lib/pageDataCache';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import {
   PRODUCTION_PLAN_CREATE_PATHS,
   PRODUCTION_PLAN_OPERATION_KEYS,
@@ -51,11 +48,16 @@ import {
 } from '../../system/lib/operationPathSettings';
 
 const ISSUE_REQUESTS_CACHE_KEY = 'production:issue-requests';
+const ISSUE_CAPACITY_CACHE_KEY = 'production:issue-capacity';
+const ISSUE_COMPENSATIONS_CACHE_KEY = 'production:issue-compensations';
 
-type ProductionIssueRequestsLocalData = {
+type IssueRequestsListData = {
   issueRows: ProductionIssueOrder[];
+  suppliesWarehouseName: string;
+};
+
+type IssueCapacityData = {
   capacityRows: AssemblableCapacityRow[];
-  compensationRows: ComponentCompensationRequest[];
   suppliesWarehouseName: string;
 };
 
@@ -138,30 +140,88 @@ export const ProductionIssueRequests: React.FC = () => {
   const fetchProducts = useAppStore((s) => s.fetchProducts);
   const fetchLines = useAppStore((s) => s.fetchLines);
   const createProductionPlan = useAppStore((s) => s.createProductionPlan);
+  const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
 
-  const [orders, setOrders] = useState<ProductionIssueOrder[]>(() => {
-    const cached = peekPageDataCache<ProductionIssueRequestsLocalData>(ISSUE_REQUESTS_CACHE_KEY);
-    if (!cached) return [];
-    return cached.issueRows.filter(
-      (row) =>
-        row.origin === 'production_request' ||
-        row.status === 'requested' ||
-        row.status === 'rejected' ||
-        Boolean(row.requestedQuantity),
-    );
-  });
-  const [allIssueOrders, setAllIssueOrders] = useState<ProductionIssueOrder[]>(
-    () => peekPageDataCache<ProductionIssueRequestsLocalData>(ISSUE_REQUESTS_CACHE_KEY)?.issueRows ?? [],
+  const {
+    data: listData,
+    loading: listLoading,
+    refreshing: listRefreshing,
+    reload: reloadList,
+  } = useCachedPageLoad<IssueRequestsListData>(
+    ISSUE_REQUESTS_CACHE_KEY,
+    async () => {
+      const warehouses = await warehouseService.getAllWarehouses();
+      const suppliesId = resolveSuppliesWarehouseId(routing, warehouses);
+      const suppliesWh = warehouses.find((w) => w.id === suppliesId);
+      const issueRows = await productionIssueService.getAll();
+      return {
+        issueRows,
+        suppliesWarehouseName: suppliesWh?.name || suppliesWh?.code || '',
+      };
+    },
+    { maxAgeMs: 45_000 },
   );
-  const [compensations, setCompensations] = useState<ComponentCompensationRequest[]>(
-    () => peekPageDataCache<ProductionIssueRequestsLocalData>(ISSUE_REQUESTS_CACHE_KEY)?.compensationRows ?? [],
+
+  const {
+    data: capacityData,
+    loading: capacityLoading,
+    refreshing: capacityRefreshing,
+    reload: reloadCapacity,
+  } = useCachedPageLoad<IssueCapacityData>(
+    ISSUE_CAPACITY_CACHE_KEY,
+    async () => {
+      const warehouses = await warehouseService.getAllWarehouses();
+      const suppliesId = resolveSuppliesWarehouseId(routing, warehouses);
+      const suppliesWh = warehouses.find((w) => w.id === suppliesId);
+      const capacityRows = suppliesId
+        ? await assemblableCapacityService.getForWarehouse(suppliesId).catch((err) => {
+            console.error('assemblableCapacityService.getForWarehouse error:', err);
+            return [] as AssemblableCapacityRow[];
+          })
+        : [];
+      return {
+        capacityRows,
+        suppliesWarehouseName: suppliesWh?.name || suppliesWh?.code || '',
+      };
+    },
+    { maxAgeMs: 45_000 },
   );
-  const [capacity, setCapacity] = useState<AssemblableCapacityRow[]>(
-    () => peekPageDataCache<ProductionIssueRequestsLocalData>(ISSUE_REQUESTS_CACHE_KEY)?.capacityRows ?? [],
+
+  const {
+    data: compensationRows,
+    loading: compensationsLoading,
+    refreshing: compensationsRefreshing,
+    reload: reloadCompensations,
+  } = useCachedPageLoad<ComponentCompensationRequest[]>(
+    ISSUE_COMPENSATIONS_CACHE_KEY,
+    async () =>
+      componentCompensationService.getAll().catch((err) => {
+        console.error('componentCompensationService.getAll error:', err);
+        return [] as ComponentCompensationRequest[];
+      }),
+    { maxAgeMs: 45_000 },
   );
-  const [loading, setLoading] = useState(
-    () => peekPageDataCache<ProductionIssueRequestsLocalData>(ISSUE_REQUESTS_CACHE_KEY) == null,
+
+  const allIssueOrders = listData?.issueRows ?? [];
+  const orders = useMemo(
+    () =>
+      allIssueOrders.filter(
+        (row) =>
+          row.origin === 'production_request' ||
+          row.status === 'requested' ||
+          row.status === 'rejected' ||
+          Boolean(row.requestedQuantity),
+      ),
+    [allIssueOrders],
   );
+  const capacity = capacityData?.capacityRows ?? [];
+  const compensations = compensationRows ?? [];
+  const suppliesWarehouseName =
+    listData?.suppliesWarehouseName
+    || capacityData?.suppliesWarehouseName
+    || '';
+  const loading = listLoading;
+  const refreshing = listRefreshing || capacityRefreshing || compensationsRefreshing;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [sourceKind, setSourceKind] = useState<'production_plan' | 'work_order'>('production_plan');
@@ -184,11 +244,6 @@ export const ProductionIssueRequests: React.FC = () => {
   const [compBusy, setCompBusy] = useState(false);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [expandedShortageProductId, setExpandedShortageProductId] = useState<string | null>(null);
-  const [suppliesWarehouseName, setSuppliesWarehouseName] = useState(
-    () =>
-      peekPageDataCache<ProductionIssueRequestsLocalData>(ISSUE_REQUESTS_CACHE_KEY)?.suppliesWarehouseName
-      ?? '',
-  );
   const [printSections, setPrintSections] = useState<MissingComponentsReportSection[]>([]);
   const [printSubtitle, setPrintSubtitle] = useState('كل المنتجات ذات النقص مقابل الخطط المفتوحة');
   const shortagePrintRef = useRef<HTMLDivElement>(null);
@@ -199,7 +254,6 @@ export const ProductionIssueRequests: React.FC = () => {
   });
 
   const actor = userDisplayName || userEmail || 'Current User';
-  const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
 
   const productNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -417,85 +471,21 @@ export const ProductionIssueRequests: React.FC = () => {
     handleShortagePrint();
   };
 
-  const load = useCallback(async (force = false) => {
-    const cached = peekPageDataCache<ProductionIssueRequestsLocalData>(ISSUE_REQUESTS_CACHE_KEY);
-    if (cached) {
-      setAllIssueOrders(cached.issueRows);
-      setOrders(
-        cached.issueRows.filter(
-          (row) =>
-            row.origin === 'production_request' ||
-            row.status === 'requested' ||
-            row.status === 'rejected' ||
-            Boolean(row.requestedQuantity),
-        ),
-      );
-      setCapacity(cached.capacityRows);
-      setCompensations(cached.compensationRows);
-      setSuppliesWarehouseName(cached.suppliesWarehouseName);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
-    try {
-      await Promise.all([fetchProductionPlans(), fetchWorkOrders(), fetchProducts(), fetchLines()]);
-      const { data } = await fetchCachedPageData(
-        ISSUE_REQUESTS_CACHE_KEY,
-        async () => {
-          const warehouses = await warehouseService.getAllWarehouses();
-          const suppliesId = resolveSuppliesWarehouseId(routing, warehouses);
-          const suppliesWh = warehouses.find((w) => w.id === suppliesId);
-          const [issueRows, capacityRows, compensationRows] = await Promise.all([
-            productionIssueService.getAll(),
-            suppliesId
-              ? assemblableCapacityService.getForWarehouse(suppliesId).catch((err) => {
-                  console.error('assemblableCapacityService.getForWarehouse error:', err);
-                  return [] as Awaited<ReturnType<typeof assemblableCapacityService.getForWarehouse>>;
-                })
-              : Promise.resolve([]),
-            componentCompensationService.getAll().catch((err) => {
-              console.error('componentCompensationService.getAll error:', err);
-              return [] as Awaited<ReturnType<typeof componentCompensationService.getAll>>;
-            }),
-          ]);
-          return {
-            issueRows,
-            capacityRows,
-            compensationRows,
-            suppliesWarehouseName: suppliesWh?.name || suppliesWh?.code || '',
-          } satisfies ProductionIssueRequestsLocalData;
-        },
-        { force, maxAgeMs: 45_000 },
-      );
-      setAllIssueOrders(data.issueRows);
-      setOrders(
-        data.issueRows.filter(
-          (row) =>
-            row.origin === 'production_request' ||
-            row.status === 'requested' ||
-            row.status === 'rejected' ||
-            Boolean(row.requestedQuantity),
-        ),
-      );
-      setCapacity(data.capacityRows);
-      setCompensations(data.compensationRows);
-      setSuppliesWarehouseName(data.suppliesWarehouseName);
-    } catch (err) {
-      console.error('ProductionIssueRequests load error:', err);
-      toast.error('تعذر تحميل طلبات صرف الإنتاج');
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchProductionPlans, fetchWorkOrders, fetchProducts, fetchLines, routing]);
-
   const reload = useCallback(async () => {
     invalidatePageDataCache(ISSUE_REQUESTS_CACHE_KEY);
-    await load(true);
-  }, [load]);
+    invalidatePageDataCache(ISSUE_CAPACITY_CACHE_KEY);
+    invalidatePageDataCache(ISSUE_COMPENSATIONS_CACHE_KEY);
+    await Promise.all([reloadList(true), reloadCapacity(true), reloadCompensations(true)]);
+  }, [reloadList, reloadCapacity, reloadCompensations]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    void Promise.all([
+      fetchProductionPlans(),
+      fetchWorkOrders(),
+      fetchProducts(),
+      fetchLines(),
+    ]).catch(() => undefined);
+  }, [fetchProductionPlans, fetchWorkOrders, fetchProducts, fetchLines]);
 
   useEffect(() => {
     const planId = String(searchParams.get('planId') || '').trim();
@@ -714,10 +704,9 @@ export const ProductionIssueRequests: React.FC = () => {
       eyebrow="طلبات صرف الإنتاج"
       rangeLabel="تحليل الجاهزية والمكونات الناقصة، ثم طلب الصرف والتعويض من المودال"
       onRefresh={() => {
-        invalidatePageDataCache(ISSUE_REQUESTS_CACHE_KEY);
         void reload();
       }}
-      refreshing={loading}
+      refreshing={refreshing}
       actions={(
         <div className="flex flex-wrap gap-2">
           {canRequest && (
@@ -750,6 +739,8 @@ export const ProductionIssueRequests: React.FC = () => {
         title="المتاح للتجميع من مخزن المستلزمات"
         accent="production"
         bodyClassName="p-0"
+        loading={capacityLoading || capacityRefreshing}
+        loadingLabel={capacityLoading ? 'جاري تحميل السعة…' : 'جاري التحديث…'}
         action={(
           <p className="text-xs text-[var(--color-text-muted)]">
             منتجات يمكن تجميعها بالمكونات الحالية. اضغط السهم لعرض المكونات وحدودها. لو مفيش خطة مفتوحة — أنشئ خطة ثم اطلب الصرف.
@@ -769,14 +760,12 @@ export const ProductionIssueRequests: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">جاري التحميل…</td>
-                  </tr>
-                ) : assemblableRows.length === 0 ? (
+                {assemblableRows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                      لا يوجد متاح للتجميع حالياً — راجع أرصدة المستلزمات.
+                      {capacityLoading
+                        ? 'جاري تحميل السعة…'
+                        : 'لا يوجد متاح للتجميع حالياً — راجع أرصدة المستلزمات.'}
                     </td>
                   </tr>
                 ) : (
@@ -1146,8 +1135,14 @@ export const ProductionIssueRequests: React.FC = () => {
         </div>
       )}
 
-      {productionCompensations.length > 0 && (
-        <OpsDashPanel title="طلبات الصرف التعويضي" accent="production" bodyClassName="p-0">
+      {(productionCompensations.length > 0 || compensationsLoading) && (
+        <OpsDashPanel
+          title="طلبات الصرف التعويضي"
+          accent="production"
+          bodyClassName="p-0"
+          loading={compensationsLoading || compensationsRefreshing}
+          loadingLabel={compensationsLoading ? 'جاري تحميل التعويضات…' : 'جاري التحديث…'}
+        >
             <div className="overflow-x-auto">
               <table className="erp-table w-full">
                 <thead className="erp-thead">
@@ -1190,7 +1185,13 @@ export const ProductionIssueRequests: React.FC = () => {
       )}
 
       <div id="production-issue-orders" className="scroll-mt-24">
-      <OpsDashPanel title="سجل الطلبات والمصروف" accent="production" bodyClassName="p-0">
+      <OpsDashPanel
+        title="سجل الطلبات والمصروف"
+        accent="production"
+        bodyClassName="p-0"
+        loading={listLoading || listRefreshing}
+        loadingLabel={listLoading ? 'جاري تحميل الطلبات…' : 'جاري التحديث…'}
+      >
           <div className="overflow-x-auto">
             <table className="erp-table w-full">
               <thead className="erp-thead">
@@ -1205,13 +1206,11 @@ export const ProductionIssueRequests: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
+                {orders.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">جاري التحميل…</td>
-                  </tr>
-                ) : orders.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد طلبات بعد.</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
+                      {listLoading ? 'جاري تحميل الطلبات…' : 'لا توجد طلبات بعد.'}
+                    </td>
                   </tr>
                 ) : (
                   orders.map((order) => {

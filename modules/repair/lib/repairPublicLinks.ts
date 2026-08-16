@@ -51,3 +51,40 @@ export function buildRepairApprovalPublicUrl(input: {
   params.set('token', token);
   return `${base}/track/${encodeURIComponent(slug)}/approve?${params.toString()}`;
 }
+
+/** Logged-in customer portal. Never put PIN in the URL. */
+export function buildCustomerPortalUrl(input: {
+  tenantSlug?: string | null;
+  customerCode?: string | null;
+  baseUrl?: string;
+}): string {
+  const base = (input.baseUrl || resolveRepairPublicAppBaseUrl()).replace(/\/+$/, '');
+  if (!base) return '';
+  const slug = resolveRepairPublicTenantSlug(input.tenantSlug);
+  if (!slug) return '';
+  const params = new URLSearchParams();
+  const customerCode = String(input.customerCode || '').trim().toUpperCase();
+  if (customerCode) params.set('code', customerCode);
+  const query = params.toString();
+  return `${base}/portal/${encodeURIComponent(slug)}${query ? `?${query}` : ''}`;
+}
+
+export function buildCustomerPortalInviteMessage(input: {
+  customerName?: string;
+  customerCode: string;
+  pin: string;
+  portalUrl: string;
+}): string {
+  const name = String(input.customerName || '').trim() || 'عميلنا';
+  const code = String(input.customerCode || '').trim().toUpperCase();
+  const pin = String(input.pin || '').trim();
+  const portalUrl = String(input.portalUrl || '').trim();
+  return [
+    `مرحبًا ${name}`,
+    'بوابة طلبات الصيانة',
+    portalUrl ? `الرابط:\n${portalUrl}` : '',
+    code ? `كود العميل: ${code}` : '',
+    pin ? `رمز الدخول (PIN): ${pin}` : '',
+    'افتح الرابط ثم أدخل كود العميل ورمز PIN لمتابعة طلباتك أو إنشاء طلب صيانة جديد.',
+  ].filter(Boolean).join('\n\n');
+}

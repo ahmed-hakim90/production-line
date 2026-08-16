@@ -5,7 +5,6 @@ import { toast } from 'sonner';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
-import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { formatNumber } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
@@ -30,13 +29,16 @@ import type {
   Warehouse,
 } from '../../inventory/types';
 
-type PackagingControlPageData = {
+type PackagingQueueData = {
   warehouses: Warehouse[];
+  pendingPackaging: number;
+  pendingHandovers: InventoryTransferRequest[];
+};
+
+type PackagingDetailsData = {
   stagingBalances: StockItemBalance[];
   wipBalances: StockItemBalance[];
   transactions: StockTransaction[];
-  pendingPackaging: number;
-  pendingHandovers: InventoryTransferRequest[];
 };
 
 /**
@@ -60,7 +62,8 @@ export const PackagingControl: React.FC = () => {
     routing.finalProductWarehouseId || routing.packagingTargetWarehouseId || '',
   ).trim();
 
-  const CACHE_KEY = `production:packaging-control:v3:${wipWarehouseId}:${sourceWarehouseId}:${targetWarehouseId}`;
+  const QUEUE_CACHE_KEY = `production:packaging-control:v4:queue:${wipWarehouseId}:${sourceWarehouseId}:${targetWarehouseId}`;
+  const DETAILS_CACHE_KEY = `production:packaging-control:v4:details:${wipWarehouseId}:${sourceWarehouseId}`;
 
   const [receiptQtyById, setReceiptQtyById] = useState<Record<string, string>>({});
   const [finalReceiptById, setFinalReceiptById] = useState<Record<string, boolean>>({});
@@ -68,55 +71,72 @@ export const PackagingControl: React.FC = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const {
-    data,
-    loading,
+    data: queueData,
+    loading: queueLoading,
+    refreshing: queueRefreshing,
     error: loadError,
-    reload: reloadCached,
-  } = useCachedPageLoad<PackagingControlPageData>(
-    CACHE_KEY,
+    reload: reloadQueue,
+  } = useCachedPageLoad<PackagingQueueData>(
+    QUEUE_CACHE_KEY,
     async () => {
-      const [whs, stagingBals, wipBals, txs, pendingHandovers, pendingTransfers] = await Promise.all([
+      const [whs, pendingHandovers, pendingTransfers] = await Promise.all([
         warehouseService.getAllWarehouses(),
-        sourceWarehouseId ? stockService.getBalances(sourceWarehouseId) : Promise.resolve([]),
-        wipWarehouseId ? stockService.getBalances(wipWarehouseId) : Promise.resolve([]),
-        sourceWarehouseId
-          ? stockService.getTransactions(sourceWarehouseId)
-          : wipWarehouseId
-            ? stockService.getTransactions(wipWarehouseId)
-            : Promise.resolve([]),
         productionHandoverService.listPending(),
         transferApprovalService.getByStatus('pending'),
       ]);
       return {
         warehouses: whs,
+        pendingHandovers,
+        pendingPackaging: pendingTransfers.filter(
+          (row) =>
+            (row.requestType || '') === 'packaging_transfer' &&
+            (row.fromWarehouseId === sourceWarehouseId || row.toWarehouseId === targetWarehouseId),
+        ).length,
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
+
+  const {
+    data: detailsData,
+    loading: detailsLoading,
+    refreshing: detailsRefreshing,
+    reload: reloadDetails,
+  } = useCachedPageLoad<PackagingDetailsData>(
+    DETAILS_CACHE_KEY,
+    async () => {
+      const txWarehouseId = sourceWarehouseId || wipWarehouseId;
+      const [stagingBals, wipBals, txPage] = await Promise.all([
+        sourceWarehouseId ? stockService.getBalances(sourceWarehouseId) : Promise.resolve([]),
+        wipWarehouseId ? stockService.getBalances(wipWarehouseId) : Promise.resolve([]),
+        txWarehouseId
+          ? stockService.getTransactionsPaged({ warehouseId: txWarehouseId, limit: 20 })
+          : Promise.resolve({ items: [] as StockTransaction[] }),
+      ]);
+      return {
         stagingBalances: stagingBals.filter(
           (row) => row.itemType === 'finished_good' && Number(row.quantity || 0) !== 0,
         ),
         wipBalances: wipBals.filter(
           (row) => row.itemType === 'finished_good' && Number(row.quantity || 0) !== 0,
         ),
-        transactions: txs.slice(0, 10),
-        pendingPackaging: pendingTransfers.filter(
-          (row) =>
-            (row.requestType || '') === 'packaging_transfer' &&
-            (row.fromWarehouseId === sourceWarehouseId || row.toWarehouseId === targetWarehouseId),
-        ).length,
-        pendingHandovers,
+        transactions: txPage.items,
       };
     },
     { maxAgeMs: 45_000 },
   );
 
-  const warehouses = data?.warehouses ?? [];
-  const stagingBalances = data?.stagingBalances ?? [];
-  const wipBalances = data?.wipBalances ?? [];
-  const transactions = data?.transactions ?? [];
-  const pendingPackaging = data?.pendingPackaging ?? 0;
-  const pendingHandovers = data?.pendingHandovers ?? [];
+  const warehouses = queueData?.warehouses ?? [];
+  const stagingBalances = detailsData?.stagingBalances ?? [];
+  const wipBalances = detailsData?.wipBalances ?? [];
+  const transactions = detailsData?.transactions ?? [];
+  const pendingPackaging = queueData?.pendingPackaging ?? 0;
+  const pendingHandovers = queueData?.pendingHandovers ?? [];
 
   const reload = async () => {
-    invalidatePageDataCache(CACHE_KEY);
-    await reloadCached(true);
+    invalidatePageDataCache(QUEUE_CACHE_KEY);
+    invalidatePageDataCache(DETAILS_CACHE_KEY);
+    await Promise.all([reloadQueue(true), reloadDetails(true)]);
   };
 
   const sourceWarehouse = warehouses.find((w) => w.id === sourceWarehouseId) || null;
@@ -242,10 +262,6 @@ export const PackagingControl: React.FC = () => {
     }
   };
 
-  if (loading && warehouses.length === 0) {
-    return <PageContentSkeleton variant="dashboard" />;
-  }
-
   return (
     <ModuleOpsPageShell
       eyebrow="تحكم التغليف"
@@ -256,7 +272,7 @@ export const PackagingControl: React.FC = () => {
       }
       hero={packagingHero}
       onRefresh={() => void reload()}
-      refreshing={loading}
+      refreshing={queueRefreshing || detailsRefreshing}
       actions={(
         <div className="flex flex-wrap gap-2">
           {can('reports.packaging.create')
@@ -324,6 +340,8 @@ export const PackagingControl: React.FC = () => {
         title="طابور استلام التغليف (تحت التسليم)"
         accent="production"
         bodyClassName="p-0"
+        loading={queueLoading || queueRefreshing}
+        loadingLabel={queueLoading ? 'جاري تحميل الطابور…' : 'جاري التحديث…'}
         action={(
           <p className="text-xs text-[var(--color-text-muted)]">
             أكّد الكمية الفعلية. الاستلام الجزئي يبقي المتبقي معلّقًا. الإقفال بفرق يسجّل النقص على المحوّل.
@@ -344,21 +362,19 @@ export const PackagingControl: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <tr key={`hk-${i}`}>
-                      <td className="px-4 py-3" colSpan={7}>
-                        <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface-hover)]" />
-                      </td>
-                    </tr>
-                  ))
-                ) : pendingHandovers.length === 0 ? (
+                {pendingHandovers.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                      لا توجد كميات بانتظار تأكيد مشرف التغليف.
-                      {wipTotalQty > 0
-                        ? ' يوجد رصيد تحت التسليم بدون طلب استلام معلّق — تأكد أن تقرير الإنتاج رُحّل للمخزون وأن مخزن تحت التسليم يختلف عن بانتظار التغليف.'
-                        : ' تظهر الطلبات هنا بعد ترحيل مخزون تقرير المنتج التام إلى تحت التسليم.'}
+                      {queueLoading
+                        ? 'جاري تحميل الطابور…'
+                        : (
+                          <>
+                            لا توجد كميات بانتظار تأكيد مشرف التغليف.
+                            {wipTotalQty > 0
+                              ? ' يوجد رصيد تحت التسليم بدون طلب استلام معلّق — تأكد أن تقرير الإنتاج رُحّل للمخزون وأن مخزن تحت التسليم يختلف عن بانتظار التغليف.'
+                              : ' تظهر الطلبات هنا بعد ترحيل مخزون تقرير المنتج التام إلى تحت التسليم.'}
+                          </>
+                        )}
                     </td>
                   </tr>
                 ) : (
@@ -453,6 +469,8 @@ export const PackagingControl: React.FC = () => {
         title="أرصدة بانتظار التغليف"
         accent="production"
         bodyClassName="p-0"
+        loading={detailsLoading || detailsRefreshing}
+        loadingLabel={detailsLoading ? 'جاري تحميل الأرصدة…' : 'جاري التحديث…'}
         action={(
           <p className="text-xs text-[var(--color-text-muted)]">
             كميات أكدها مشرف التغليف وجاهزة لتقرير التغليف ثم التحويل إلى منتج تام.
@@ -470,18 +488,12 @@ export const PackagingControl: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {loading ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <tr key={`sk-${i}`}>
-                      <td className="px-4 py-3" colSpan={4}>
-                        <div className="h-4 w-full animate-pulse rounded bg-[var(--color-surface-hover)]" />
-                      </td>
-                    </tr>
-                  ))
-                ) : stagingBalances.length === 0 ? (
+                {stagingBalances.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                      لا توجد أرصدة بانتظار التغليف في هذا المخزن.
+                      {detailsLoading
+                        ? 'جاري تحميل الأرصدة…'
+                        : 'لا توجد أرصدة بانتظار التغليف في هذا المخزن.'}
                     </td>
                   </tr>
                 ) : (
@@ -511,9 +523,16 @@ export const PackagingControl: React.FC = () => {
           </div>
       </OpsDashPanel>
 
-      <OpsDashPanel title="آخر حركات المخزن" accent="production">
+      <OpsDashPanel
+        title="آخر حركات المخزن"
+        accent="production"
+        loading={detailsLoading || detailsRefreshing}
+        loadingLabel={detailsLoading ? 'جاري تحميل الحركات…' : 'جاري التحديث…'}
+      >
           {transactions.length === 0 ? (
-            <p className="text-sm text-[var(--color-text-muted)]">لا توجد حركات حديثة.</p>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              {detailsLoading ? 'جاري تحميل الحركات…' : 'لا توجد حركات حديثة.'}
+            </p>
           ) : (
             transactions.map((tx) => (
               <div

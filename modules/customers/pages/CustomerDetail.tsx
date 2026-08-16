@@ -5,6 +5,7 @@ import {
   Banknote,
   Building2,
   Copy,
+  Link2,
   MapPin,
   NotebookPen,
   Phone,
@@ -39,7 +40,7 @@ import {
 } from '@/components/ui/select';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { NESTED_TILE, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
-import { withTenantPath } from '@/lib/tenantPaths';
+import { withTenantPath, defaultTenantSlug } from '@/lib/tenantPaths';
 import { cn } from '@/lib/utils';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -49,6 +50,10 @@ import { customerService } from '../services/customerService';
 import { customerActivityService } from '../services/customerActivityService';
 import { customerFinancialAnalyticsService } from '../services/customerFinancialAnalyticsService';
 import { repairCustomerOperationsService } from '@/modules/repair/services/repairCustomerOperationsService';
+import {
+  buildCustomerPortalInviteMessage,
+  buildCustomerPortalUrl,
+} from '@/modules/repair/lib/repairPublicLinks';
 import {
   CUSTOMER_FOLLOW_UP_LABELS,
   CUSTOMER_FOLLOW_UP_OPTIONS,
@@ -74,6 +79,20 @@ const MODULE_LABELS: Record<string, string> = {
 
 const fmtMetric = (n: number | undefined) => (n == null ? '—' : formatNumber(n));
 const fmtMoney = (n: unknown) => `${formatNumber(Number(n || 0))} ج.م`;
+
+async function copyTextToClipboard(value: string, successMessage: string): Promise<void> {
+  const text = String(value || '').trim();
+  if (!text) {
+    toast.error('لا يوجد نص للنسخ.');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(successMessage);
+  } catch {
+    toast.error('تعذر النسخ. انسخ النص يدويًا.');
+  }
+}
 
 function sizeBadgeType(tier: CustomerSizeTier | undefined): 'info' | 'success' | 'warning' | 'muted' {
   if (tier === 'large') return 'success';
@@ -270,18 +289,23 @@ export const CustomerDetail: React.FC = () => {
       setLoading(true);
       setError('');
       try {
-        const [row, timeline] = await Promise.all([
+        const [row, timeline, pinStatus] = await Promise.all([
           customerService.getById(customerId),
           customerActivityService.listForCustomer(customerId, 100),
+          canManagePortalPin
+            ? repairCustomerOperationsService.getPortalPinStatus(customerId).catch(() => null)
+            : Promise.resolve(null),
         ]);
         if (cancelled) return;
         if (!row) {
           setError('العميل غير موجود.');
           setCustomer(null);
           setActivities([]);
+          setPortalPinConfigured(null);
         } else {
           setCustomer(row);
           setActivities(timeline);
+          setPortalPinConfigured(canManagePortalPin ? pinStatus?.configured ?? false : null);
         }
       } catch (e: unknown) {
         if (!cancelled) {
@@ -295,7 +319,7 @@ export const CustomerDetail: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [customerId]);
+  }, [customerId, canManagePortalPin]);
 
   useEffect(() => {
     let cancelled = false;
@@ -433,18 +457,11 @@ export const CustomerDetail: React.FC = () => {
   };
 
   const copyPhone = async () => {
-    const phone = String(customer?.phone || '').trim();
-    if (!phone) return;
-    try {
-      await navigator.clipboard.writeText(phone);
-      toast.success('تم نسخ رقم الموبايل.');
-    } catch {
-      toast.error('تعذر نسخ الرقم.');
-    }
+    await copyTextToClipboard(String(customer?.phone || ''), 'تم نسخ رقم الموبايل.');
   };
 
   const generatePortalPin = async (confirmReset = false) => {
-    if (!customer.id) return;
+    if (!customer?.id) return;
     setPortalPinSaving(true);
     try {
       const result = await repairCustomerOperationsService.generatePortalPin(customer.id, confirmReset);
@@ -538,6 +555,16 @@ export const CustomerDetail: React.FC = () => {
   const sizeTier = (customer.sizeTier || 'unclassified') as CustomerSizeTier;
   const followUp = (customer.followUpStatus || 'none') as CustomerFollowUpStatus;
   const balance = customer.balance;
+  const portalInviteUrl = buildCustomerPortalUrl({
+    tenantSlug: tenantSlug || defaultTenantSlug(),
+    customerCode: customer.code,
+  });
+  const portalInviteMessage = buildCustomerPortalInviteMessage({
+    customerName: customer.name,
+    customerCode: customer.code,
+    pin: portalPin,
+    portalUrl: portalInviteUrl,
+  });
   const balanceTone =
     balance == null
       ? 'text-muted-foreground'
@@ -578,16 +605,21 @@ export const CustomerDetail: React.FC = () => {
               تحديث المتابعة
             </Button>
           ) : null}
-          {canManagePortalPin && !portalPinSaving ? (
+          {canManagePortalPin ? (
             <Button
               type="button"
               variant="outline"
+              disabled={portalPinSaving || portalPinConfigured === null}
               onClick={() => {
                 if (portalPinConfigured === false) void generatePortalPin(false);
                 else setPortalPinConfirmOpen(true);
               }}
             >
-              {portalPinConfigured === false ? 'إنشاء PIN ثابت' : 'إعادة تعيين PIN الثابت'}
+              {portalPinSaving
+                ? 'جاري إنشاء PIN…'
+                : portalPinConfigured === false
+                  ? 'إنشاء PIN ثابت'
+                  : 'إعادة تعيين PIN الثابت'}
             </Button>
           ) : null}
           {canEdit ? (
@@ -610,23 +642,72 @@ export const CustomerDetail: React.FC = () => {
         <p className="text-sm text-muted-foreground">بطاقة ماستر وسجل حركات عبر الموديولات</p>
       </div>
 
-      <Dialog open={portalPinOpen} onOpenChange={setPortalPinOpen}>
-        <DialogContent dir="rtl">
+      <Dialog
+        open={portalPinOpen}
+        onOpenChange={(open) => {
+          setPortalPinOpen(open);
+          if (!open) setPortalPin('');
+        }}
+      >
+        <DialogContent dir="rtl" className="max-w-lg">
           <DialogHeader>
             <DialogTitle>PIN بوابة العميل</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            هذا هو PIN الثابت للعميل. سيستخدم نفس الرقم في كل مرة، ولن يتغير بانتهاء الجلسة أو بتسجيل الدخول.
-            انسخه الآن لأنه لا يمكن استرجاعه بعد إغلاق النافذة.
-          </p>
-          <div className="rounded-lg border bg-muted/40 p-5 text-center font-mono text-3xl font-bold tracking-[0.35em]" dir="ltr">
-            {portalPin}
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--color-text-muted)]">
+              انسخ الرمز والرابط وأرسلهما للعميل. الرمز ثابت حتى إعادة تعيينه يدويًا، ولا يظهر مرة أخرى بعد إغلاق النافذة.
+              لا تضع PIN داخل الرابط.
+            </p>
+            <div className="space-y-2">
+              <Label>رمز الدخول (PIN)</Label>
+              <div className="rounded-lg border bg-[var(--color-bg)] p-4 text-center font-mono text-3xl font-bold tracking-[0.35em]" dir="ltr">
+                {portalPin}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => void copyTextToClipboard(portalPin, 'تم نسخ رمز PIN.')}
+              >
+                <Copy className="ms-1 size-4" />
+                نسخ الرمز
+              </Button>
+            </div>
+            <div className="space-y-2">
+              <Label>رابط البوابة</Label>
+              <div
+                className="break-all rounded-lg border bg-[var(--color-bg)] p-3 text-start text-sm font-medium"
+                dir="ltr"
+              >
+                {portalInviteUrl || 'تعذر بناء الرابط.'}
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)]">
+                الرابط يفتح صفحة الدخول بكود العميل جاهزًا. العميل يكتب PIN بنفسه.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                disabled={!portalInviteUrl}
+                onClick={() => void copyTextToClipboard(portalInviteUrl, 'تم نسخ رابط البوابة.')}
+              >
+                <Link2 className="ms-1 size-4" />
+                نسخ الرابط
+              </Button>
+            </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => navigator.clipboard.writeText(portalPin).then(() => toast.success('تم نسخ PIN.'))}>
-              نسخ PIN
+          <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+            <Button
+              type="button"
+              className="w-full"
+              disabled={!portalPin || !portalInviteUrl}
+              onClick={() => void copyTextToClipboard(portalInviteMessage, 'تم نسخ الرسالة لإرسالها للعميل.')}
+            >
+              نسخ الرسالة كاملة
             </Button>
-            <Button type="button" onClick={() => setPortalPinOpen(false)}>تم</Button>
+            <Button type="button" variant="outline" className="w-full" onClick={() => setPortalPinOpen(false)}>
+              تم
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

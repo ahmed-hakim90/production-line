@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { PublicCustomerSurfaceShell } from '../components/PublicCustomerSurfaceShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import {
   getRepairApprovalPublicCallable,
@@ -105,13 +105,12 @@ export const RepairApprovalPublic: React.FC = () => {
   const canDecide = Boolean(estimate && estimate.approvalStatus === 'pending' && !done);
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg)]" dir={dir}>
-      <RepairOpsPageShell
-        className="max-w-lg mx-auto"
-        eyebrow="الصيانة"
-        rangeLabel="موافقة العميل على التقدير — لا يُطلب تسجيل دخول"
-        dir={dir}
-      >
+    <PublicCustomerSurfaceShell
+      title="موافقة على التقدير"
+      subtitle="لا يُطلب تسجيل دخول — استخدم الرابط المرسل إليك"
+      dir={dir}
+      contentClassName="max-w-lg"
+    >
         <OpsDashPanel title="موافقة العميل على التقدير" accent="repair">
           {loadingEstimate ? (
             <p className="text-sm text-muted-foreground">جاري تحميل تفاصيل التقدير…</p>
@@ -301,8 +300,7 @@ export const RepairApprovalPublic: React.FC = () => {
             </>
           ) : null}
         </OpsDashPanel>
-      </RepairOpsPageShell>
-    </div>
+    </PublicCustomerSurfaceShell>
   );
 };
 

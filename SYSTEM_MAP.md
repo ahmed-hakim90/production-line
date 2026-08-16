@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP **ForgeOps** — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-15 (product brand: ForgeOps)
+**Last updated:** 2026-08-16 (product brand: ForgeOps)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -74,7 +74,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Repair center / reception | Home `/` → repair ops; mobile bar (لوحتي / طلب جديد / الطلبات / التحصيل) |
 | Repair admin / مدير الصيانة | Home `/` → repair admin; mobile bar (لوحتي / الطلبات / التحصيل / الأداء) |
 | Repair technician | Home `/` → technician portal (mobile cards); mobile bar (لوحتي / طلباتي); job workspace steps: تشخيص → قطع → إنهاء |
-| Customer portal | `/portal/:tenantSlug` after PIN login; bottom bar (طلباتي / طلب جديد / التحديثات / ملفي) |
+| Customer portal | `/portal/:tenantSlug` after PIN login; public chrome `PublicCustomerSurfaceShell` (not staff sidebar); bottom bar (طلباتي / طلب جديد / التحديثات / ملفي). Staff create PIN on customer card and copy PIN + portal link (`?code=` prefills login; PIN never in URL). |
 
 ## Repair / spare stock permission keys (workflow)
 
@@ -127,5 +127,8 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Legacy cost URLs | `/monthly-costs`, `/cost-centers`, `/costs/*` → redirect to `/accounting/*` |
 | HR home (DomainHomeShell) | `/hr/dashboard` |
 | Customers KPI board (ModuleOpsPageShell) | `/customers/kpi` |
+| Customer portal (public chrome, PIN) | `/portal/:tenantSlug` (`?code=` prefills customer code) |
+| Public repair track | `/track/:tenantSlug` |
+| Public estimate approval | `/track/:tenantSlug/approve` |
 | Quality reports board (ModuleOpsPageShell) | `/quality/reports` |
 | Shared ops list chrome | `ModuleOpsPageShell` / `DomainHomeShell` in `modules/dashboards/components` |
