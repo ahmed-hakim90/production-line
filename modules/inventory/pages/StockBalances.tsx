@@ -9,7 +9,7 @@ import { warehouseService } from '../services/warehouseService';
 import type { StockItemBalance, Warehouse, WarehouseRole } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
-import { WAREHOUSE_ROLE_LABELS, balanceKey, itemTypeLabel } from '../lib/stockLabels';
+import { WAREHOUSE_ROLE_LABELS, itemTypeLabel } from '../lib/stockLabels';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useAppStore } from '../../../store/useAppStore';
@@ -42,7 +42,6 @@ import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
 import { ImportItemLocationsModal } from '../components/ImportItemLocationsModal';
 import { WarehouseCountSheetPrintModal } from '../components/WarehouseCountSheetPrintModal';
-import { toast } from '../../../components/Toast';
 
 const PAGE_SIZE = 25;
 const BALANCES_CACHE_KEY = 'inventory:stock-balances';
@@ -51,7 +50,6 @@ const TABLE_COL_SPAN = 7;
 type StockBalancesPageData = {
   balances: StockItemBalance[];
   warehouses: Warehouse[];
-  lastMovementByKey: Record<string, string>;
 };
 
 type BalanceStatus = 'ok' | 'low' | 'out' | 'negative';
@@ -69,6 +67,13 @@ function resolveBalanceStatus(row: StockItemBalance): BalanceStatus {
   if (qty <= 0) return 'out';
   if (row.minStock > 0 && qty <= row.minStock) return 'low';
   return 'ok';
+}
+
+function rowLastMovementAt(row: StockItemBalance): string | undefined {
+  const last = String(row.lastMovementAt || '').trim();
+  if (last) return last;
+  const updated = String(row.updatedAt || '').trim();
+  return updated || undefined;
 }
 
 function formatCompactMovementAt(iso: string | undefined): string {
@@ -220,23 +225,18 @@ export const StockBalances: React.FC = () => {
   } = useCachedPageLoad<StockBalancesPageData>(
     BALANCES_CACHE_KEY,
     async () => {
-      const [bals, whs, txs] = await Promise.all([
+      // Last-movement timestamps live on stock_items. Do not list stock_transactions
+      // here — an unfiltered ledger query can permission-deny and blank the page.
+      const [balsResult, whsResult] = await Promise.allSettled([
         stockService.getBalances(),
         warehouseService.getWarehousesForReportingFilters(),
-        stockService.getTransactions(),
       ]);
-      const movementMap: Record<string, string> = {};
-      txs.forEach((tx) => {
-        const key = balanceKey(tx.warehouseId, tx.itemType, tx.itemId);
-        const prev = movementMap[key];
-        if (!prev || new Date(tx.createdAt).getTime() > new Date(prev).getTime()) {
-          movementMap[key] = tx.createdAt;
-        }
-      });
+      if (balsResult.status === 'rejected') {
+        throw balsResult.reason;
+      }
       return {
-        balances: bals,
-        warehouses: filterWarehouses(whs),
-        lastMovementByKey: movementMap,
+        balances: balsResult.value,
+        warehouses: filterWarehouses(whsResult.status === 'fulfilled' ? whsResult.value : []),
       };
     },
     { maxAgeMs: 45_000 },
@@ -244,7 +244,6 @@ export const StockBalances: React.FC = () => {
 
   const balances = data?.balances ?? [];
   const warehouses = data?.warehouses ?? [];
-  const lastMovementByKey = data?.lastMovementByKey ?? {};
 
   const reload = async () => {
     invalidatePageDataCache(BALANCES_CACHE_KEY);
@@ -636,9 +635,14 @@ export const StockBalances: React.FC = () => {
       />
 
       {loadError && (
-        <p className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] px-4 py-3 text-sm font-medium text-[rgb(var(--color-danger))]">
-          تعذر تحميل الأرصدة. حدّث الصفحة أو أعد المحاولة.
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] px-4 py-3">
+          <p className="text-sm font-medium text-[rgb(var(--color-danger))]">
+            تعذر تحميل الأرصدة. حدّث الصفحة أو أعد المحاولة.
+          </p>
+          <Button variant="outline" className="!px-3 !py-1.5 text-sm" onClick={() => void reload()}>
+            إعادة المحاولة
+          </Button>
+        </div>
       )}
 
       {isStagingQuickFilter && !loading && rows.length === 0 && (
@@ -870,9 +874,9 @@ export const StockBalances: React.FC = () => {
                   </dl>
                 </div>
 
-                {lastMovementByKey[balanceKey(row.warehouseId, row.itemType, row.itemId)] ? (
+                {rowLastMovementAt(row) ? (
                   <p className="mt-1.5 text-[11px] text-[var(--color-text-muted)]">
-                    آخر حركة: {formatCompactMovementAt(lastMovementByKey[balanceKey(row.warehouseId, row.itemType, row.itemId)])}
+                    آخر حركة: {formatCompactMovementAt(rowLastMovementAt(row))}
                   </p>
                 ) : null}
 
@@ -937,7 +941,7 @@ export const StockBalances: React.FC = () => {
                 const role = resolveRowRole(row.warehouseId);
                 const warehouseName = warehouseNameById.get(row.warehouseId) ?? row.warehouseId;
                 const roleSecondary = warehouseRoleSecondary(warehouseName, role);
-                const lastAt = lastMovementByKey[balanceKey(row.warehouseId, row.itemType, row.itemId)];
+                const lastAt = rowLastMovementAt(row);
                 const unitsPerCarton = row.itemType === 'finished_good'
                   ? Number(unitsPerCartonByProductId.get(row.itemId) || 0)
                   : 0;

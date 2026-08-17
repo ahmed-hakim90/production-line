@@ -59,7 +59,7 @@ Not a separate package — inventory module + Cloud Functions:
 
 | Concern | Where to look |
 |---------|----------------|
-| Production floor warehouse role | `warehouseRole: 'production_floor'`, page `/inventory/production-floor` |
+| Production floor warehouse role | `warehouseRole: 'production_floor'`, page `/production/floor` |
 | Issue stock → floor | Callable `issueProductionIssueStock` (`functions/src/productionIssueStock.ts`) |
 | Report BOM consume from floor | `applyProductionReportInventory` / reverse (`functions/src/productionReportInventory.ts`) |
 | Packaging handover receipt | `confirmProductionHandoverReceipt` (`functions/src/productionHandover.ts`) |

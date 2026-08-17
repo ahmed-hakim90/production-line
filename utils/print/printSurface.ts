@@ -15,7 +15,13 @@ export const PRINT_SURFACE = {
  */
 export const PRINT_ENGINE_IFRAME_CSS = `
 .print-root, .print-report, .arabic-export-root {
-  font-family: 'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif;
+  font-family: var(--print-font-family, 'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif);
+  font-size: var(--print-font-size, 10pt);
+  line-height: var(--print-line-height, 1.5);
+  font-weight: 600;
+  font-synthesis: none;
+  letter-spacing: normal;
+  word-spacing: normal;
   color: ${PRINT_SURFACE.text};
   background: ${PRINT_SURFACE.card};
   box-sizing: border-box;
@@ -26,6 +32,7 @@ export const PRINT_ENGINE_IFRAME_CSS = `
   box-sizing: border-box;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
+  letter-spacing: normal;
 }
 .print-brand-header {
   display: flex !important;
@@ -71,14 +78,14 @@ export const PRINT_ENGINE_IFRAME_CSS = `
   height: 56px;
   width: 56px;
   border-radius: 6px;
-  font-size: 16px;
+  font-size: 1.15em;
   font-weight: 800;
 }
 .print-brand-name {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--print-heading-size, 1.4em);
   font-weight: 800;
-  line-height: 1.35;
+  line-height: 1.4;
   color: ${PRINT_SURFACE.text};
   word-break: break-word;
 }
@@ -108,15 +115,15 @@ export const PRINT_ENGINE_IFRAME_CSS = `
 .print-meta-cell:last-child { border-inline-end: none; }
 .print-meta-label {
   margin: 0 0 4px;
-  font-size: 9px;
+  font-size: var(--print-caption-size, 0.85em);
   font-weight: 700;
   color: ${PRINT_SURFACE.muted};
 }
 .print-meta-value {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--print-meta-size, 1.1em);
   font-weight: 700;
-  line-height: 1.3;
+  line-height: 1.5;
   color: ${PRINT_SURFACE.text};
   word-break: break-word;
 }
@@ -127,7 +134,7 @@ export const PRINT_ENGINE_IFRAME_CSS = `
 .print-kpi-card {
   display: flex !important;
   flex-direction: row;
-  min-height: 5.25rem;
+  min-height: 4.5rem;
   overflow: hidden;
   border-radius: 8px;
   border: 1px solid ${PRINT_SURFACE.border};
@@ -145,7 +152,7 @@ export const PRINT_ENGINE_IFRAME_CSS = `
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px 8px;
+  padding: 10px 8px;
   text-align: center;
 }
 .print-section-head {
@@ -162,7 +169,7 @@ export const PRINT_ENGINE_IFRAME_CSS = `
 }
 .print-section-title {
   margin: 0;
-  font-size: 9px;
+  font-size: var(--print-label-size, 1em);
   font-weight: 800;
   color: ${PRINT_SURFACE.muted};
 }
@@ -183,13 +190,15 @@ export const PRINT_ENGINE_IFRAME_CSS = `
 .print-kv-row:last-child { border-bottom: none; }
 .print-kv-label {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--print-label-size, 1em);
   font-weight: 600;
+  line-height: 1.5;
   color: ${PRINT_SURFACE.muted};
 }
 .print-kv-value {
-  font-size: 13px;
+  font-size: var(--print-meta-size, 1.1em);
   font-weight: 700;
+  line-height: 1.5;
   color: ${PRINT_SURFACE.text};
   min-width: 0;
 }
@@ -236,6 +245,8 @@ export const PRINT_ENGINE_IFRAME_CSS = `
   width: 100%;
   border-collapse: collapse;
   text-align: right;
+  font-size: var(--print-table-size, 1.05em);
+  line-height: 1.45;
 }
 .print-root table th, .print-report table th,
 .print-root table td, .print-report table td {

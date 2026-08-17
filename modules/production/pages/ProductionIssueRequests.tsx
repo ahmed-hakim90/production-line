@@ -21,6 +21,7 @@ import { unwrapOrThrow } from '@/shared/usecases';
 import { componentCompensationService } from '../../inventory/services/componentCompensationService';
 import { assemblableCapacityService, type AssemblableCapacityRow } from '../../inventory/services/assemblableCapacityService';
 import { warehouseService } from '../../inventory/services/warehouseService';
+import { productService } from '../services/productService';
 import { resolveInventoryRoutingV1 } from '../../inventory/lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../../inventory/lib/resolveSuppliesWarehouse';
 import { missingComponentsForTarget, componentShortageQtyForTarget } from '../../inventory/lib/assemblableCapacity';
@@ -48,7 +49,7 @@ import {
 } from '../../system/lib/operationPathSettings';
 
 const ISSUE_REQUESTS_CACHE_KEY = 'production:issue-requests';
-const ISSUE_CAPACITY_CACHE_KEY = 'production:issue-capacity';
+const ISSUE_CAPACITY_CACHE_KEY = 'production:issue-capacity:v2';
 const ISSUE_COMPENSATIONS_CACHE_KEY = 'production:issue-compensations';
 
 type IssueRequestsListData = {
@@ -59,6 +60,8 @@ type IssueRequestsListData = {
 type IssueCapacityData = {
   capacityRows: AssemblableCapacityRow[];
   suppliesWarehouseName: string;
+  /** Unfiltered catalog labels — store `_rawProducts` may hide some manufactured SKUs. */
+  catalogByProductId: Record<string, { name: string; code: string }>;
 };
 
 const COMP_REASON_LABELS: Record<ComponentCompensationReason, string> = {
@@ -111,6 +114,19 @@ function planRemaining(plan: {
   const remaining = Number(plan.remainingQuantity ?? 0);
   if (remaining > 0) return remaining;
   return Math.max(0, Number(plan.plannedQuantity || 0) - Number(plan.producedQuantity || 0));
+}
+
+/** Prefer a human label; never surface a bare Firestore id when a name/code exists. */
+function resolveProductDisplayName(
+  productId: string,
+  ...candidates: Array<string | null | undefined>
+): string {
+  const id = String(productId || '').trim();
+  for (const candidate of candidates) {
+    const label = String(candidate || '').trim();
+    if (label && label !== id) return label;
+  }
+  return id || 'منتج غير معروف';
 }
 
 /**
@@ -170,7 +186,13 @@ export const ProductionIssueRequests: React.FC = () => {
   } = useCachedPageLoad<IssueCapacityData>(
     ISSUE_CAPACITY_CACHE_KEY,
     async () => {
-      const warehouses = await warehouseService.getAllWarehouses();
+      const [warehouses, catalogProducts] = await Promise.all([
+        warehouseService.getAllWarehouses(),
+        productService.getAll().catch((err) => {
+          console.error('productService.getAll error:', err);
+          return [] as Awaited<ReturnType<typeof productService.getAll>>;
+        }),
+      ]);
       const suppliesId = resolveSuppliesWarehouseId(routing, warehouses);
       const suppliesWh = warehouses.find((w) => w.id === suppliesId);
       const capacityRows = suppliesId
@@ -179,9 +201,19 @@ export const ProductionIssueRequests: React.FC = () => {
             return [] as AssemblableCapacityRow[];
           })
         : [];
+      const catalogByProductId: Record<string, { name: string; code: string }> = {};
+      for (const product of catalogProducts) {
+        const id = String(product.id || '').trim();
+        if (!id) continue;
+        catalogByProductId[id] = {
+          name: String(product.name || '').trim(),
+          code: String(product.code || '').trim(),
+        };
+      }
       return {
         capacityRows,
         suppliesWarehouseName: suppliesWh?.name || suppliesWh?.code || '',
+        catalogByProductId,
       };
     },
     { maxAgeMs: 45_000 },
@@ -215,6 +247,7 @@ export const ProductionIssueRequests: React.FC = () => {
     [allIssueOrders],
   );
   const capacity = capacityData?.capacityRows ?? [];
+  const catalogByProductId = capacityData?.catalogByProductId ?? {};
   const compensations = compensationRows ?? [];
   const suppliesWarehouseName =
     listData?.suppliesWarehouseName
@@ -250,11 +283,49 @@ export const ProductionIssueRequests: React.FC = () => {
 
   const productNameById = useMemo(() => {
     const map = new Map<string, string>();
+    const remember = (productId: string, ...candidates: Array<string | null | undefined>) => {
+      const id = String(productId || '').trim();
+      if (!id) return;
+      const next = resolveProductDisplayName(id, ...candidates, map.get(id));
+      if (next && next !== id) map.set(id, next);
+      else if (!map.has(id)) map.set(id, next || id);
+    };
+    Object.entries(catalogByProductId).forEach(([id, row]) => {
+      remember(id, row.name, row.code);
+    });
     products.forEach((p) => {
-      if (p.id) map.set(p.id, p.name || p.code || p.id);
+      if (p.id) remember(p.id, p.name, p.code, p.model);
+    });
+    // Capacity loads the full product catalog (unfiltered) — prefer those labels when store products are filtered.
+    capacity.forEach((row) => {
+      remember(row.productId, row.productName, row.productCode);
+    });
+    allIssueOrders.forEach((order) => {
+      remember(order.productId, order.productName, order.productCode);
     });
     return map;
-  }, [products]);
+  }, [catalogByProductId, products, capacity, allIssueOrders]);
+
+  const productCodeById = useMemo(() => {
+    const map = new Map<string, string>();
+    Object.entries(catalogByProductId).forEach(([id, row]) => {
+      const code = String(row.code || '').trim();
+      if (code) map.set(id, code);
+    });
+    products.forEach((p) => {
+      const code = String(p.code || '').trim();
+      if (p.id && code) map.set(p.id, code);
+    });
+    capacity.forEach((row) => {
+      const code = String(row.productCode || '').trim();
+      if (row.productId && code) map.set(row.productId, code);
+    });
+    allIssueOrders.forEach((order) => {
+      const code = String(order.productCode || '').trim();
+      if (order.productId && code) map.set(order.productId, code);
+    });
+    return map;
+  }, [catalogByProductId, products, capacity, allIssueOrders]);
 
   const openPlans = useMemo(
     () =>
@@ -363,14 +434,20 @@ export const ProductionIssueRequests: React.FC = () => {
       else {
         byProduct.set(plan.productId, {
           productId: plan.productId,
-          productName: productNameById.get(plan.productId) || plan.productId,
+          productName: resolveProductDisplayName(
+            plan.productId,
+            capacityRow?.productName,
+            capacityRow?.productCode,
+            productNameById.get(plan.productId),
+            productCodeById.get(plan.productId),
+          ),
           remaining,
           capacity: capacityRow,
         });
       }
     });
     return [...byProduct.values()].sort((a, b) => b.remaining - a.remaining);
-  }, [openPlans, capacity, productNameById]);
+  }, [openPlans, capacity, productNameById, productCodeById]);
 
   const partialCoverageAlerts = useMemo(() => {
     const rows: Array<{
@@ -394,7 +471,13 @@ export const ProductionIssueRequests: React.FC = () => {
       } else {
         rows.push({
           productId: plan.productId,
-          productName: productNameById.get(plan.productId) || plan.productId,
+          productName: resolveProductDisplayName(
+            plan.productId,
+            capacityRow.productName,
+            capacityRow.productCode,
+            productNameById.get(plan.productId),
+            productCodeById.get(plan.productId),
+          ),
           remaining,
           maxAssemblable: max,
           capacity: capacityRow,
@@ -402,7 +485,7 @@ export const ProductionIssueRequests: React.FC = () => {
       }
     });
     return rows.sort((a, b) => (b.remaining - b.maxAssemblable) - (a.remaining - a.maxAssemblable));
-  }, [openPlans, capacity, productNameById]);
+  }, [openPlans, capacity, productNameById, productCodeById]);
 
   const shortageReportSections = useMemo((): MissingComponentsReportSection[] => {
     const noneSections: MissingComponentsReportSection[] = noComponentAlerts.map((row) => {
@@ -580,6 +663,7 @@ export const ProductionIssueRequests: React.FC = () => {
         estimatedCost: 0,
         actualCost: 0,
         acceptsProductionFromReports: true,
+        requiresProductionIssue: true,
         status: 'planned',
         createdBy: uid,
       }, { path: PRODUCTION_PLAN_CREATE_PATHS.productionIssueRequests });
@@ -692,7 +776,11 @@ export const ProductionIssueRequests: React.FC = () => {
     return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية طلب صرف الإنتاج.</p>;
   }
 
-  const planProductName = productNameById.get(planProductId) || planProductId;
+  const planProductName = resolveProductDisplayName(
+    planProductId,
+    productNameById.get(planProductId),
+    productCodeById.get(planProductId),
+  );
 
   return (
     <ModuleOpsPageShell
@@ -958,7 +1046,14 @@ export const ProductionIssueRequests: React.FC = () => {
                   return (
                     <div key={row.productId} className="rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[var(--color-card)] overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-                        <span className="font-medium text-[var(--color-text)]">{row.productName}</span>
+                        <div className="min-w-0">
+                          <span className="font-medium text-[var(--color-text)]">{row.productName}</span>
+                          {(row.capacity?.productCode || productCodeById.get(row.productId)) ? (
+                            <p className="text-xs font-mono text-[var(--color-text-muted)]">
+                              {row.capacity?.productCode || productCodeById.get(row.productId)}
+                            </p>
+                          ) : null}
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold text-[rgb(var(--color-danger))] tabular-nums">
                             متبقي خطط {formatNumber(row.remaining)} · متاح تجميع 0
@@ -1063,7 +1158,14 @@ export const ProductionIssueRequests: React.FC = () => {
                   return (
                     <div key={row.productId} className="rounded-lg border border-[rgb(var(--color-warning)/0.25)] bg-[var(--color-card)] overflow-hidden">
                       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm">
-                        <span className="font-medium text-[var(--color-text)]">{row.productName}</span>
+                        <div className="min-w-0">
+                          <span className="font-medium text-[var(--color-text)]">{row.productName}</span>
+                          {(row.capacity.productCode || productCodeById.get(row.productId)) ? (
+                            <p className="text-xs font-mono text-[var(--color-text-muted)]">
+                              {row.capacity.productCode || productCodeById.get(row.productId)}
+                            </p>
+                          ) : null}
+                        </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-bold text-[rgb(var(--color-warning))] tabular-nums">
                             متاح {formatNumber(row.maxAssemblable)} / متبقي {formatNumber(row.remaining)}
@@ -1310,7 +1412,11 @@ export const ProductionIssueRequests: React.FC = () => {
                   {sourceKind === 'production_plan'
                     ? openPlans.map((plan) => {
                       const remaining = planRemaining(plan);
-                      const name = productNameById.get(plan.productId) || plan.productId;
+                      const name = resolveProductDisplayName(
+                        plan.productId,
+                        productNameById.get(plan.productId),
+                        productCodeById.get(plan.productId),
+                      );
                       return (
                         <option key={plan.id} value={plan.id}>
                           {name} — متبقي {remaining}
@@ -1318,7 +1424,11 @@ export const ProductionIssueRequests: React.FC = () => {
                       );
                     })
                     : openWorkOrders.map((wo) => {
-                      const name = productNameById.get(wo.productId) || wo.productId;
+                      const name = resolveProductDisplayName(
+                        wo.productId,
+                        productNameById.get(wo.productId),
+                        productCodeById.get(wo.productId),
+                      );
                       return (
                         <option key={wo.id} value={wo.id || ''}>
                           {wo.workOrderNumber} — {name} — كمية {wo.quantity}

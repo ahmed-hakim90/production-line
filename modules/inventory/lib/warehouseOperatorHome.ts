@@ -46,7 +46,7 @@ export function resolveWarehouseRolePrimaryPath(
     case 'final_product':
       return '/inventory/transfer-approvals';
     case 'production_floor':
-      return '/inventory/production-floor';
+      return '/production/floor';
     default:
       return `/inventory/warehouses/${id}`;
   }

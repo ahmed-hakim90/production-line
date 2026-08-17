@@ -16,12 +16,15 @@ import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { Material } from '../../manufacturing/types';
 import { resolveReportType } from '../../production/utils/reportTypes';
+import { resolveRequiresProductionIssueOnReport } from '../../production/lib/requiresProductionIssue';
 import { httpsCallable } from 'firebase/functions';
 import { functionsClient, isConfigured } from '../../auth/services/firebase';
 import { rawMaterialService } from './rawMaterialService';
 import { stockService as baseStockService } from './stockService';
 import { transferApprovalService as baseTransferApprovalService } from './transferApprovalService';
 import { productionIssueService } from './productionIssueService';
+import { productionPlanService } from '../../production/services/productionPlanService';
+import { workOrderService } from '../../production/services/workOrderService';
 import type {
   CreateStockMovementInput,
   InventoryItemType,
@@ -626,7 +629,19 @@ export const productionInventoryService = {
     });
 
     if (!isComponentInjection && producedQty > 0) {
-      if (routing.requireIssuedProductionIssueOnReport && !hasIssuedProductionComponents) {
+      const linkedWorkOrder = report.workOrderId
+        ? await workOrderService.getById(report.workOrderId).catch(() => null)
+        : null;
+      const linkedPlanId = report.productionPlanId || linkedWorkOrder?.planId || undefined;
+      const linkedPlan = linkedPlanId
+        ? await productionPlanService.getById(linkedPlanId).catch(() => null)
+        : null;
+      const requiresIssue = resolveRequiresProductionIssueOnReport({
+        companyRequire: routing.requireIssuedProductionIssueOnReport,
+        workOrderRequiresProductionIssue: linkedWorkOrder?.requiresProductionIssue,
+        planRequiresProductionIssue: linkedPlan?.requiresProductionIssue,
+      });
+      if (requiresIssue && !hasIssuedProductionComponents) {
         throw new Error(
           'لا يمكن ترحيل مخزون تقرير الإنتاج قبل اعتماد وإصدار إذن صرف إنتاج لأمر الشغل/الخطة. التقرير لا ينفّذ صرفاً تلقائياً — استخدم صفحة «صرف إنتاج» ثم أعد الترحيل.',
         );

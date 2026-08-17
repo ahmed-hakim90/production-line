@@ -883,7 +883,7 @@ export const ProductionIssues: React.FC = () => {
         >
           {selectedOrder && (
             <>
-              <div className="flex flex-wrap gap-2 p-4 border-b">
+              <div className="ops-action-strip p-4 border-b">
                 {isProductionRequestFlow ? (
                   <>
                     <label className="flex items-center gap-2 text-xs font-bold text-[var(--color-text-muted)]">

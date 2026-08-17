@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,6 +61,7 @@ const EMPTY_FORM = {
 
 export const Customers: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const navigate = useTenantNavigate();
   const customerPerms = useResourcePermission('customers');
   const canView = customerPerms.canView;
   const canCreate = customerPerms.canCreate;
@@ -199,26 +202,37 @@ export const Customers: React.FC = () => {
       eyebrow="العملاء"
       rangeLabel="ماستر بيانات العملاء (مستهلك / تاجر) — المرجع لكل الموديولات"
       actions={(
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" asChild>
-            <Link to={withTenantPath(tenantSlug, '/customers/kpi')}>لوحة العملاء</Link>
-          </Button>
-          {canImport && (
-            <>
-              <Button type="button" variant="outline" onClick={() => downloadCustomersTemplate()}>
-                قالب Excel
-              </Button>
-              <Button type="button" variant="outline" asChild>
-                <Link to={withTenantPath(tenantSlug, '/customers/import')}>استيراد</Link>
-              </Button>
-            </>
-          )}
-          {canCreate && (
+        <>
+          {canCreate ? (
             <Button type="button" onClick={openCreate}>
               عميل جديد
             </Button>
-          )}
-        </div>
+          ) : null}
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'لوحة العملاء',
+                icon: 'analytics',
+                group: 'عرض',
+                onClick: () => navigate('/customers/kpi'),
+              },
+              {
+                label: 'قالب Excel',
+                icon: 'file_download',
+                group: 'استيراد',
+                hidden: !canImport,
+                onClick: () => downloadCustomersTemplate(),
+              },
+              {
+                label: 'استيراد',
+                icon: 'upload',
+                group: 'استيراد',
+                hidden: !canImport,
+                onClick: () => navigate('/customers/import'),
+              },
+            ]}
+          />
+        </>
       )}
     >
       <OpsDashPanel title="قائمة العملاء" accent="customers" bodyClassName="p-0">

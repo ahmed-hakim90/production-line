@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { PrintTemplateSettings } from '@/types'
+import { PRINT_FONT_WEIGHT_BOLD, PRINT_FONT_WEIGHT_HEADING } from '@/utils/print/printFont'
 import { lightenHex } from '@/utils/imageExportTheme'
 import { getPrintThemePalette, resolvePrintAccentHex } from '@/utils/printTheme'
 
@@ -48,7 +49,7 @@ export function FactoryPrintTable({
   const borderColor = printSettings?.borderColor || palette.border
   const altRowBg = printSettings?.tableRowAltBgColor || palette.tableRowAltBg
   const cellPad = dense ? '6px' : '8px'
-  const fontSize = dense ? 10 : 11
+  const fontSize = dense ? 'var(--print-font-size, 9pt)' : 'var(--print-table-size, 11pt)'
   const blankPad = dense ? '10px 6px' : '12px 8px'
 
   const borderStyle: CSSProperties = { borderColor }
@@ -73,7 +74,7 @@ export function FactoryPrintTable({
                 letterSpacing: 'normal',
                 padding: cellPad,
                 fontSize,
-                fontWeight: 800,
+                fontWeight: PRINT_FONT_WEIGHT_HEADING,
                 textAlign: col.align === 'center' ? 'center' : col.align === 'left' ? 'left' : 'right',
               }}
             >
@@ -119,7 +120,8 @@ export function FactoryPrintTable({
                     letterSpacing: 'normal',
                     padding: cellPad,
                     fontSize,
-                    fontWeight: 600,
+                    fontWeight: PRINT_FONT_WEIGHT_BOLD,
+                    lineHeight: 1.45,
                     wordBreak: 'break-word',
                     textAlign: col.align === 'center' ? 'center' : col.align === 'left' ? 'left' : 'right',
                   }}
@@ -147,7 +149,7 @@ export function FactoryPrintTableAccentValue({
 }) {
   return (
     <span
-      className={cn('font-black tabular-nums', className)}
+      className={cn('font-extrabold tabular-nums', className)}
       style={{ color: accent, letterSpacing: 'normal' }}
     >
       {children}

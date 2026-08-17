@@ -203,6 +203,7 @@ import {
   DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
   productionIssueRequiredMessage,
 } from '../modules/production/lib/reportSaveFeedback';
+import { resolveRequiresProductionIssueOnReport } from '../modules/production/lib/requiresProductionIssue';
 import { buildAggregateCostDeltas } from '../modules/production/lib/reportAggregateCostReconciliation';
 import {
   PRODUCTION_REPORT_CREATE_PATHS,
@@ -4320,7 +4321,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (reportType === 'finished_product' && Number(savePayload.quantityProduced || 0) > 0) {
         const inventoryRouting = await resolveInventoryRoutingV1Async(systemSettings);
-        if (inventoryRouting.requireIssuedProductionIssueOnReport) {
+        const requiresIssue = resolveRequiresProductionIssueOnReport({
+          workOrderRequiresProductionIssue: activeWO?.requiresProductionIssue,
+          planRequiresProductionIssue: activePlan?.requiresProductionIssue,
+          companyRequire: inventoryRouting.requireIssuedProductionIssueOnReport,
+        });
+        if (requiresIssue) {
           const hasIssuedProductionComponents = await productionIssueService.hasIssuedForProduction({
             workOrderId: activeWO?.id || savePayload.workOrderId || undefined,
             productionPlanId: activePlan?.id || undefined,
@@ -5242,14 +5248,28 @@ export const useAppStore = create<AppState>((set, get) => ({
         && Number(finalMergedReport.quantityProduced || 0) > 0
       ) {
         const routing = await resolveInventoryRoutingV1Async(get().systemSettings);
-        if (routing.requireIssuedProductionIssueOnReport) {
+        const linkedWorkOrder = finalMergedReport.workOrderId
+          ? (get().workOrders.find((wo) => wo.id === finalMergedReport.workOrderId)
+            ?? await workOrderService.getById(finalMergedReport.workOrderId).catch(() => null))
+          : null;
+        const linkedPlanId = finalMergedReport.productionPlanId || linkedWorkOrder?.planId || undefined;
+        const linkedPlan = linkedPlanId
+          ? (get().productionPlans.find((p) => p.id === linkedPlanId)
+            ?? await productionPlanService.getById(linkedPlanId).catch(() => null))
+          : null;
+        const requiresIssue = resolveRequiresProductionIssueOnReport({
+          workOrderRequiresProductionIssue: linkedWorkOrder?.requiresProductionIssue,
+          planRequiresProductionIssue: linkedPlan?.requiresProductionIssue,
+          companyRequire: routing.requireIssuedProductionIssueOnReport,
+        });
+        if (requiresIssue) {
           const hasIssuedProductionComponents = await productionIssueService.hasIssuedForProduction({
             workOrderId: finalMergedReport.workOrderId || undefined,
-            productionPlanId: finalMergedReport.productionPlanId || undefined,
+            productionPlanId: finalMergedReport.productionPlanId || linkedPlanId || undefined,
           });
           if (!hasIssuedProductionComponents) {
             throw new Error(productionIssueRequiredMessage(Boolean(
-              finalMergedReport.workOrderId || finalMergedReport.productionPlanId,
+              finalMergedReport.workOrderId || finalMergedReport.productionPlanId || linkedPlanId,
             )));
           }
         }

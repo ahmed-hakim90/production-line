@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -61,6 +61,14 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
   const [note, setNote] = useState('');
   const [materials, setMaterials] = useState<Material[]>([]);
   const [draftLines, setDraftLines] = useState<DraftLine[]>(emptyReplenishmentLines());
+  const [draftItemFocusIndex, setDraftItemFocusIndex] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (draftItemFocusIndex == null) return;
+    const el = document.getElementById(`repair-replenish-draft-item-${draftItemFocusIndex}`);
+    if (!el) return;
+    el.focus();
+    setDraftItemFocusIndex(null);
+  }, [draftItemFocusIndex, draftLines.length]);
 
   const replenishmentDraftValue = useMemo<ReplenishmentFormDraft>(() => ({
     note,
@@ -199,6 +207,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
                 <div className="min-w-0 flex-1 space-y-1 sm:min-w-[180px]">
                   <Label>القطعة</Label>
                   <VoucherItemCombobox
+                    id={`repair-replenish-draft-item-${index}`}
                     options={materialPicker.options}
                     catalog={materialPicker.catalog}
                     value={line.itemId}
@@ -240,12 +249,14 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
                         toast.error('أدخل صنفاً وكمية أكبر من صفر قبل فتح بند جديد.');
                         return;
                       }
+                      const nextIndex = index + 1;
                       if (index >= draftLines.length - 1) {
                         setDraftLines((prev) => [
                           ...prev,
                           { key: String(Date.now()), itemId: '', quantity: '1' },
                         ]);
                       }
+                      setDraftItemFocusIndex(nextIndex);
                     }}
                   />
                 </div>

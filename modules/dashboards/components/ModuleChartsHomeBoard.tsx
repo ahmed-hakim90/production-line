@@ -229,10 +229,12 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
   return (
     <div className="erp-dashboard-theme ops-dash-board ops-dash-board--data-first">
       {showEyebrow ? (
-        <p className="ops-dash-eyebrow">
-          {title}
-          {subtitle?.trim() ? ` · ${subtitle}` : ''}
-        </p>
+        <header className="ops-dash-page-head">
+          <div className="ops-dash-page-head__title">
+            <h1 className="ops-dash-page-title">{title}</h1>
+            {subtitle?.trim() ? <p className="ops-dash-page-subtitle">{subtitle}</p> : null}
+          </div>
+        </header>
       ) : null}
 
       <div className="ops-dash-kpi-grid">

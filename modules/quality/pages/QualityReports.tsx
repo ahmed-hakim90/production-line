@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -287,58 +288,63 @@ export const QualityReports: React.FC = () => {
           : `التقارير: ${filteredQualityReportRows.length} / ${qualityReportRows.length}`
       }
       actions={(
-        <div className="flex flex-wrap items-center gap-2">
-          {canPrint && selectedWorkOrder && (
+        <>
+          {canPrint && selectedWorkOrder ? (
             <Button variant="primary" onClick={() => handlePrint()}>
               طباعة
             </Button>
-          )}
-          {canPrint && selectedWorkOrder?.id && (
-            <Button
-              variant="secondary"
-              title="تصدير PDF"
-              onClick={async () => {
-                if (!printRef.current) return;
-                try {
-                  await qualityPrintService.exportDocumentPdf(
-                    printRef.current,
-                    `quality-kpi-${selectedWorkOrder?.workOrderNumber ?? 'snapshot'}`,
-                    'quality_kpi',
-                    selectedWorkOrder?.id,
-                    { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
-                  );
-                  toast.success('تم تصدير تقرير KPI بنجاح.');
-                } catch (error) {
-                  toast.error('تعذر تصدير تقرير KPI.');
-                }
-              }}
-            >
-              PDF KPI
-            </Button>
-          )}
-          {canPrint && selectedWorkOrder?.id && (
-            <Button
-              variant="secondary"
-              onClick={async () => {
-                if (!defectsPrintRef.current || !selectedWorkOrder?.id) return;
-                try {
-                  await qualityPrintService.exportDocumentPdf(
-                    defectsPrintRef.current,
-                    `quality-defects-${selectedWorkOrder.workOrderNumber ?? 'snapshot'}`,
-                    'defects',
-                    selectedWorkOrder.id,
-                    { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
-                  );
-                  toast.success('تم تصدير تقرير العيوب بنجاح.');
-                } catch (error) {
-                  toast.error('تعذر تصدير تقرير العيوب.');
-                }
-              }}
-            >
-              PDF العيوب
-            </Button>
-          )}
-        </div>
+          ) : null}
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'PDF KPI',
+                icon: 'picture_as_pdf',
+                group: 'تصدير',
+                hidden: !(canPrint && selectedWorkOrder?.id),
+                onClick: () => {
+                  void (async () => {
+                    if (!printRef.current) return;
+                    try {
+                      await qualityPrintService.exportDocumentPdf(
+                        printRef.current,
+                        `quality-kpi-${selectedWorkOrder?.workOrderNumber ?? 'snapshot'}`,
+                        'quality_kpi',
+                        selectedWorkOrder?.id,
+                        { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
+                      );
+                      toast.success('تم تصدير تقرير KPI بنجاح.');
+                    } catch {
+                      toast.error('تعذر تصدير تقرير KPI.');
+                    }
+                  })();
+                },
+              },
+              {
+                label: 'PDF العيوب',
+                icon: 'picture_as_pdf',
+                group: 'تصدير',
+                hidden: !(canPrint && selectedWorkOrder?.id),
+                onClick: () => {
+                  void (async () => {
+                    if (!defectsPrintRef.current || !selectedWorkOrder?.id) return;
+                    try {
+                      await qualityPrintService.exportDocumentPdf(
+                        defectsPrintRef.current,
+                        `quality-defects-${selectedWorkOrder.workOrderNumber ?? 'snapshot'}`,
+                        'defects',
+                        selectedWorkOrder.id,
+                        { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
+                      );
+                      toast.success('تم تصدير تقرير العيوب بنجاح.');
+                    } catch {
+                      toast.error('تعذر تصدير تقرير العيوب.');
+                    }
+                  })();
+                },
+              },
+            ]}
+          />
+        </>
       )}
     >
       <OpsDashPanel title="اختيار أمر الشغل" accent="quality" bodyClassName="p-3 sm:p-4">

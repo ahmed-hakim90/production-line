@@ -298,6 +298,8 @@ const EXACT: Record<string, ButtonLook> = {
   'تحميل نموذج التقارير': { icon: 'download', tone: 'export' },
   'تحميل قالب الاستيراد': { icon: 'download', tone: 'export' },
   'تحميل القالب': { icon: 'download', tone: 'export' },
+  'اختيار الملف': { icon: 'upload_file', tone: 'submit' },
+  'اختيار ملف آخر': { icon: 'upload_file', tone: 'submit' },
   'تحميل القالب (مع اللوكيشن)': { icon: 'download', tone: 'export' },
   'حساب جديد': { icon: 'person_add', tone: 'submit' },
   المزيد: { icon: 'more_horiz', tone: 'neutral' },

@@ -368,6 +368,11 @@ export const Products: React.FC = () => {
     MANUFACTURING_OPERATION_KEYS.bomUpsert,
     BOM_UPSERT_PATHS.productsComponentsImport,
   );
+  const componentProductPackingImportEnabled = productPerms.canEdit && isOperationPathEnabled(
+    systemSettings,
+    PRODUCT_OPERATION_KEYS.update,
+    PRODUCT_UPDATE_PATHS.productsImport,
+  );
   const navigate = useTenantNavigate();
 
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -1435,6 +1440,7 @@ export const Products: React.FC = () => {
         bomGroups: [],
         stockMovements: [],
         materialsToCreate: [],
+        productUpdates: [],
         fileErrors: ['فشل تحليل الملف.'],
       });
     } finally {
@@ -1493,7 +1499,8 @@ export const Products: React.FC = () => {
     if (
       componentsImportResult.bomGroupCount === 0 &&
       componentsImportResult.stockMovementCount === 0 &&
-      componentsImportResult.newMaterialCount === 0
+      componentsImportResult.newMaterialCount === 0 &&
+      componentsImportResult.productUpdates.length === 0
     ) {
       setSaveMsg({
         type: 'error',
@@ -1513,6 +1520,7 @@ export const Products: React.FC = () => {
       items: g.items.map((item) => ({ ...item })),
     }));
     const stockMovements = componentsImportResult.stockMovements.map((m) => ({ ...m }));
+    const productUpdates = componentsImportResult.productUpdates.map((u) => ({ ...u }));
     if (materialsToCreate.length > 0 && !componentMaterialImportEnabled) {
       toast.error('مسار إنشاء المواد من استيراد المكونات متوقف من إعدادات النظام.');
       return;
@@ -1525,12 +1533,16 @@ export const Products: React.FC = () => {
       toast.error('مسار تسوية أرصدة المكونات بالاستيراد متوقف من إعدادات النظام.');
       return;
     }
+    if (productUpdates.length > 0 && !componentProductPackingImportEnabled) {
+      toast.error('مسار تحديث قطع/كرتونة على المنتج متوقف أو غير مصرح.');
+      return;
+    }
     const bomGroupCount = componentsImportResult.bomGroupCount;
     const stockMovementCount = componentsImportResult.stockMovementCount;
     const newMaterialCount = materialsToCreate.length;
     const fallbackWarehouseId = componentsFallbackWarehouseId;
     const fallbackWarehouse = warehouses.find((w) => w.id === fallbackWarehouseId);
-    const totalSteps = materialsToCreate.length + bomGroups.length + stockMovements.length;
+    const totalSteps = materialsToCreate.length + bomGroups.length + productUpdates.length + stockMovements.length;
     const jobId = addJob({
       fileName: componentsImportFileName || 'product_components.xlsx',
       jobType: 'Product Components Import',
@@ -1564,12 +1576,13 @@ export const Products: React.FC = () => {
         const { id } = await materialService.createOrGetByCode({
           code: material.code,
           name: material.name,
-          type: 'raw_material',
+          type: material.type || 'raw_material',
           baseUnit: 'piece',
           purchaseCost: material.purchaseCost,
           wastePercent: 0,
           conversionRate: 1,
           isActive: true,
+          availableForSpareParts: material.type === 'packaging' ? false : undefined,
           linkedCostCenterIds: [],
         }, { path: MATERIAL_CREATE_PATHS.productsComponentsImport });
         createdMaterialIds.set(material.code.toUpperCase(), id);
@@ -1626,6 +1639,33 @@ export const Products: React.FC = () => {
         processedRows: done,
         totalRows: totalSteps,
         statusText: 'Saving BOM...',
+        status: 'processing',
+      });
+    }
+
+    for (const packing of productUpdates) {
+      if (isBackgroundJobCancelled(jobId)) {
+        failJob(jobId, 'Cancelled by user', 'Cancelled');
+        setComponentsImportSaving(false);
+        setSaveMsg({ type: 'error', text: 'تم إلغاء استيراد المكونات.' });
+        return;
+      }
+      try {
+        await updateProduct(
+          packing.productId,
+          { unitsPerCarton: packing.unitsPerCarton },
+          { path: PRODUCT_UPDATE_PATHS.productsImport },
+        );
+      } catch (error) {
+        failed++;
+        console.error('[components-import] Failed packing qty for product', packing.productCode, error);
+      }
+      done++;
+      setComponentsImportProgress({ done, total: totalSteps });
+      setJobProgress(jobId, {
+        processedRows: done,
+        totalRows: totalSteps,
+        statusText: 'Updating units per carton...',
         status: 'processing',
       });
     }
@@ -3671,9 +3711,9 @@ export const Products: React.FC = () => {
                     <div className="bg-[rgb(var(--color-primary)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-primary))]">
                       منتجات BOM: {componentsImportResult.bomGroupCount}
                     </div>
-                    {componentsImportResult.newMaterialCount > 0 && (
+                    {componentsImportResult.productUpdates.length > 0 && (
                       <div className="bg-[rgb(var(--color-primary)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-primary))]">
-                        مواد جديدة: {componentsImportResult.newMaterialCount}
+                        قطع/كرتونة: {componentsImportResult.productUpdates.length}
                       </div>
                     )}
                     <div className="bg-[rgb(var(--color-secondary)/0.1)] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-[rgb(var(--color-secondary))]">
@@ -3751,6 +3791,7 @@ export const Products: React.FC = () => {
                           <th className="erp-th">المنتج</th>
                           <th className="erp-th">المادة</th>
                           <th className="erp-th">كمية BOM</th>
+                          <th className="erp-th">قطع/كرتونة</th>
                           <th className="erp-th">تكلفة</th>
                           <th className="erp-th">اللوكيشن</th>
                           <th className="erp-th">سابق</th>
@@ -3806,7 +3847,14 @@ export const Products: React.FC = () => {
                                 {row.matchedMaterialCode || row.materialCode || '—'}
                               </div>
                             </td>
-                            <td className="px-3 py-2.5 font-mono">{row.quantityUsed || '—'}</td>
+                            <td className="px-3 py-2.5 font-mono">
+                              {row.quantityDerivedFromUnitsPerCarton && row.unitsPerCarton > 0
+                                ? `1/${row.unitsPerCarton}`
+                                : row.quantityUsed || '—'}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono">
+                              {row.unitsPerCartonProvided ? row.unitsPerCarton : '—'}
+                            </td>
                             <td className="px-3 py-2.5 font-mono">{row.unitCost || '—'}</td>
                             <td className="px-3 py-2.5 font-mono">{row.locationCode || '—'}</td>
                             <td className="px-3 py-2.5 font-mono text-[var(--color-text-muted)]">

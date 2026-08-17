@@ -132,9 +132,12 @@ const ensurePrintFontLoaded = async (fontFamilyHint?: string) => {
     await Promise.all([
       fonts.load(`400 13px ${primary}`),
       fonts.load(`600 13px ${primary}`),
-      fonts.load(`700 18px ${primary}`),
+      fonts.load(`700 13px ${primary}`),
+      fonts.load(`800 16px ${primary}`),
       fonts.load('400 13px Cairo'),
-      fonts.load('700 18px Cairo'),
+      fonts.load('600 13px Cairo'),
+      fonts.load('700 13px Cairo'),
+      fonts.load('800 16px Cairo'),
     ]);
   } catch {
     /* ignore */

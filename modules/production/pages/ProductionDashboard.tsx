@@ -457,6 +457,11 @@ export const ProductionDashboard: React.FC = () => {
               <GhostButton iconName="fact_check" tone="approve">طلبات الصرف</GhostButton>
             </Link>
           )}
+          {can('inventory.view') && (
+            <Link to={tenantPath('/production/floor')}>
+              <GhostButton iconName="precision_manufacturing" tone="view">مساحة صالة الإنتاج</GhostButton>
+            </Link>
+          )}
           {(can('productionHandover.approve')
             || can('inventory.transfers.approve')
             || can('reports.packaging.create')
@@ -522,7 +527,7 @@ export const ProductionDashboard: React.FC = () => {
           type="button"
           className="ops-module-charts__qty text-start"
           onClick={() => {
-            if (can('inventory.view')) navigate('/inventory/production-floor');
+            if (can('inventory.view')) navigate('/production/floor');
             else if (can('plans.view')) drill('plans');
           }}
         >

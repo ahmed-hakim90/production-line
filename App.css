@@ -3253,7 +3253,7 @@ label[class*="text-[12"] {
 /* Phone + tablet: stack title above actions so buttons stay on-screen */
 @media (max-width: 1023px) {
   .erp-page-head {
-    align-items: flex-start;
+    align-items: stretch;
     flex-direction: column;
     gap: 10px;
   }
@@ -3261,15 +3261,26 @@ label[class*="text-[12"] {
     width: 100%;
   }
   .erp-page-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
     max-width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
+    justify-content: stretch;
     gap: 8px;
   }
+  .erp-page-actions:has(> :only-child) {
+    grid-template-columns: 1fr;
+  }
   .erp-page-actions .btn,
-  .erp-page-actions > button {
-    white-space: nowrap;
+  .erp-page-actions > button,
+  .erp-page-actions a.btn,
+  .erp-page-actions [role='button'] {
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.25;
   }
 }
 
@@ -3521,6 +3532,10 @@ input[type="radio"] {
   gap: 0.7rem;
 }
 
+.ops-dash-board--data-first .ops-dash-page-head {
+  order: 0;
+}
+
 .ops-dash-board--data-first .ops-dash-kpi-grid {
   order: 1;
 }
@@ -3574,6 +3589,12 @@ input[type="radio"] {
   flex: 1 1 12rem;
 }
 
+.ops-dash-page-head__actions {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .ops-dash-page-title {
   margin: 0;
   font-size: 1.05rem;
@@ -3590,10 +3611,6 @@ input[type="radio"] {
   font-weight: 600;
   line-height: 1.4;
   color: var(--color-text-muted);
-}
-
-.ops-dash-page-head__actions {
-  flex: 0 1 auto;
 }
 
 .ops-dash-toolbar {
@@ -3655,6 +3672,8 @@ input[type="radio"] {
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
   white-space: normal;
+  overflow-wrap: break-word;
+  min-width: 0;
   max-width: min(28rem, 100%);
   text-align: end;
 }
@@ -3675,6 +3694,14 @@ input[type="radio"] {
   gap: 0.35rem;
   min-width: 0;
   width: 100%;
+}
+
+/* In-panel workflow actions (approve / reject / print) — same 2-col phone grid */
+.ops-action-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
 }
 
 .ops-dash-toolbar__meta .ops-dash-toolbar__actions {
@@ -3810,20 +3837,126 @@ input[type="radio"] {
   font-weight: 700;
 }
 
-@media (max-width: 639px) {
-  .ops-dash-toolbar__meta {
-    justify-content: flex-start;
-    flex: 1 1 100%;
+@media (max-width: 767px) {
+  .ops-dash-page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
   }
 
-  .ops-dash-toolbar__range {
-    text-align: start;
+  .ops-dash-page-head__title,
+  .ops-dash-page-head__actions {
+    flex: 1 1 auto;
+    width: 100%;
     max-width: 100%;
   }
 
-  .ops-dash-toolbar__actions,
-  .ops-dash-toolbar__actions > div {
+  .ops-dash-page-subtitle {
+    max-width: 100%;
+  }
+
+  .ops-dash-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ops-dash-toolbar__meta {
+    flex-direction: column;
+    align-items: stretch;
     justify-content: flex-start;
+    flex: 1 1 auto;
+    width: 100%;
+  }
+
+  .ops-dash-toolbar__range {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    text-align: start;
+  }
+
+  .ops-dash-toolbar__actions,
+  .ops-dash-toolbar__actions > div:not(.ops-toolbar-seg),
+  .ops-dash-page-head__actions,
+  .ops-dash-page-head__actions > div:not(.ops-toolbar-seg) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* Single child (one button, or a wrapper that itself grids) must span full width */
+  .ops-dash-toolbar__actions:has(> :only-child),
+  .ops-dash-page-head__actions:has(> :only-child),
+  .ops-dash-toolbar__actions > div:not(.ops-toolbar-seg):has(> :only-child),
+  .ops-dash-page-head__actions > div:not(.ops-toolbar-seg):has(> :only-child) {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-dash-toolbar__actions .btn,
+  .ops-dash-toolbar__actions > button,
+  .ops-dash-toolbar__actions > div:not(.ops-toolbar-seg) > button,
+  .ops-dash-toolbar__actions > div:not(.ops-toolbar-seg) > .btn,
+  .ops-dash-page-head__actions .btn,
+  .ops-dash-page-head__actions > button {
+    width: 100%;
+    min-width: 0;
+    height: auto !important;
+    min-height: var(--control-height) !important;
+    white-space: normal;
+    text-align: center;
+    justify-content: center;
+    padding-block: 0.45rem !important;
+    line-height: 1.25;
+  }
+
+  .ops-dash-toolbar__actions .ops-toolbar-seg > button,
+  .ops-dash-page-head__actions .ops-toolbar-seg > button {
+    width: var(--control-height) !important;
+    height: var(--control-height-sm) !important;
+    min-height: var(--control-height-sm) !important;
+    padding: 0 !important;
+    white-space: nowrap;
+  }
+
+  .ops-dash-toolbar__actions .ops-toolbar-seg,
+  .ops-dash-page-head__actions .ops-toolbar-seg {
+    grid-column: 1 / -1;
+    display: inline-flex;
+    width: max-content;
+    max-width: 100%;
+    justify-self: start;
+  }
+
+  .ops-action-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .ops-action-strip:has(> :only-child) {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-action-strip > label {
+    grid-column: 1 / -1;
+  }
+
+  .ops-action-strip > .btn,
+  .ops-action-strip > button,
+  .ops-action-strip > a,
+  .ops-action-strip > a > .btn,
+  .ops-action-strip > a > button {
+    width: 100%;
+    min-width: 0;
+    height: auto !important;
+    min-height: var(--control-height) !important;
+    white-space: normal;
+    text-align: center;
+    justify-content: center;
+    line-height: 1.25;
   }
 }
 
@@ -4051,6 +4184,38 @@ input[type="radio"] {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem;
+}
+
+@media (max-width: 767px) {
+  .ops-dash-kpi-grid,
+  .ops-dash-kpi-grid--dense {
+    gap: 0.5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-dash-kpi-grid:has(> :only-child),
+  .ops-dash-kpi-grid--dense:has(> :only-child) {
+    grid-template-columns: 1fr;
+  }
+
+  /* Three KPIs: one even row instead of a 2+orphan stack */
+  .ops-dash-kpi-grid:has(> :nth-child(3):last-child),
+  .ops-dash-kpi-grid--dense:has(> :nth-child(3):last-child) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ops-dash-kpi-card {
+    min-height: 84px;
+    padding: 0.65rem 0.7rem;
+  }
+
+  .ops-dash-kpi-card__label {
+    font-size: 0.68rem;
+  }
+
+  .ops-dash-kpi-card__value {
+    font-size: 1.35rem;
+  }
 }
 
 @media (min-width: 768px) {

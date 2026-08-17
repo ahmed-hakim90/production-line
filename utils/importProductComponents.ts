@@ -5,6 +5,11 @@
 import * as XLSX from 'xlsx';
 import type { FirestoreProduct } from '../types';
 import {
+  MATERIAL_TYPE_LABELS,
+  type MaterialType,
+} from '../modules/manufacturing/types';
+import { normalizeCategoryName } from '../modules/catalog/lib/categoryTree';
+import {
   resolveProductImportMaterial,
   type ProductImportMaterialCatalogItem,
 } from './importProducts';
@@ -38,6 +43,12 @@ export interface ParsedProductComponentRow {
   /** True when «رصيد المكون» cell was filled (including 0). */
   balanceProvided: boolean;
   balanceQty: number;
+  /** Pieces packed in one outer carton — written onto the product card. */
+  unitsPerCartonProvided: boolean;
+  unitsPerCarton: number;
+  /** True when BOM qty was filled as 1÷unitsPerCarton because الكمية المستخدمة was empty. */
+  quantityDerivedFromUnitsPerCarton?: boolean;
+  materialType?: MaterialType;
   matchedMaterialId?: string;
   matchedMaterialName?: string;
   matchedMaterialUnit?: string;
@@ -56,6 +67,7 @@ export interface ProductComponentMaterialToCreate {
   code: string;
   name: string;
   purchaseCost: number;
+  type: MaterialType;
 }
 
 export interface ProductComponentStockMovementPlan {
@@ -93,6 +105,14 @@ export interface ProductComponentBomGroup {
   }>;
 }
 
+export interface ProductComponentProductUpdate {
+  productId: string;
+  productCode: string;
+  productName: string;
+  unitsPerCarton: number;
+  sourceRowIndexes: number[];
+}
+
 export interface ProductComponentsImportResult {
   rows: ParsedProductComponentRow[];
   totalRows: number;
@@ -109,6 +129,7 @@ export interface ProductComponentsImportResult {
   bomGroups: ProductComponentBomGroup[];
   stockMovements: ProductComponentStockMovementPlan[];
   materialsToCreate: ProductComponentMaterialToCreate[];
+  productUpdates: ProductComponentProductUpdate[];
   fileErrors: string[];
 }
 
@@ -178,6 +199,13 @@ export function applySkipExistingProductComponents(
 
     if (!(Number(row.quantityUsed) > 0)) {
       skipNotes.push('بدون كمية استخدام — كتالوج قطع للصيانة فقط');
+    }
+    if (row.unitsPerCartonProvided && row.unitsPerCarton >= 1) {
+      skipNotes.push(
+        row.quantityDerivedFromUnitsPerCarton
+          ? `قطع/كرتونة ${row.unitsPerCarton} على المنتج — استهلاك الكرتونة 1/${row.unitsPerCarton} لكل قطعة`
+          : `قطع/كرتونة ${row.unitsPerCarton} على المنتج`,
+      );
     }
 
     if (materialRef && !materialRef.startsWith('pending:') && row.productId) {
@@ -383,6 +411,7 @@ export function applySkipExistingProductComponents(
     bomGroups,
     stockMovements,
     materialsToCreate,
+    productUpdates: buildProductUpdates(actionable),
   };
 }
 
@@ -418,6 +447,14 @@ const HEADER_MAP: Record<string, string> = {
   'تكلفة': 'unitCost',
   'سعر الوحدة': 'unitCost',
   'unit cost': 'unitCost',
+  'عدد الوحدات في الكرتونة': 'unitsPerCarton',
+  'وحدات/كرتونة': 'unitsPerCarton',
+  'وحدات الكرتونة': 'unitsPerCarton',
+  'قطع لكل كرتونة': 'unitsPerCarton',
+  'قطع/كرتونة': 'unitsPerCarton',
+  'العدد': 'unitsPerCarton',
+  'نوع المادة': 'materialType',
+  'النوع': 'materialType',
   'كود اللوكيشن': 'locationCode',
   'كود الموقع': 'locationCode',
   'اللوكيشن': 'locationCode',
@@ -484,6 +521,9 @@ function mapHeader(raw: string): string | undefined {
   if (/^كمية$|^qty$|^quantity$/.test(norm)) {
     return 'quantityUsed';
   }
+  if (/كرتون/.test(norm) && /عدد|وحدات|قطع|units/.test(norm)) {
+    return 'unitsPerCarton';
+  }
   return undefined;
 }
 
@@ -529,6 +569,56 @@ function pendingMaterialRef(code: string): string {
   return `pending:${code.trim().toUpperCase()}`;
 }
 
+function parseMaterialType(value: unknown): MaterialType | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) return null;
+  const key = raw.toLowerCase();
+  if (key in MATERIAL_TYPE_LABELS) return key as MaterialType;
+  const byLabel = (Object.entries(MATERIAL_TYPE_LABELS) as [MaterialType, string][]).find(
+    ([, label]) => normalizeCategoryName(label) === normalizeCategoryName(raw),
+  );
+  return byLabel?.[0] ?? null;
+}
+
+function cartonBomQtyPerPiece(unitsPerCarton: number): number {
+  return 1 / unitsPerCarton;
+}
+
+function buildProductUpdates(rows: ParsedProductComponentRow[]): ProductComponentProductUpdate[] {
+  const byProduct = new Map<string, ProductComponentProductUpdate>();
+  const conflictIds = new Set<string>();
+  for (const row of rows) {
+    if (row.errors.length > 0 || !row.unitsPerCartonProvided || !row.productId) continue;
+    const existing = byProduct.get(row.productId);
+    if (!existing) {
+      byProduct.set(row.productId, {
+        productId: row.productId,
+        productCode: row.productCode,
+        productName: row.productName,
+        unitsPerCarton: row.unitsPerCarton,
+        sourceRowIndexes: [row.rowIndex],
+      });
+      continue;
+    }
+    existing.sourceRowIndexes.push(row.rowIndex);
+    if (existing.unitsPerCarton !== row.unitsPerCarton) {
+      conflictIds.add(row.productId);
+    }
+  }
+  for (const productId of conflictIds) {
+    const plan = byProduct.get(productId);
+    if (!plan) continue;
+    const msg = `عدد الوحدات في الكرتونة متعارض لنفس المنتج (صفوف ${plan.sourceRowIndexes.join('، ')})`;
+    for (const row of rows) {
+      if (plan.sourceRowIndexes.includes(row.rowIndex) && !row.errors.includes(msg)) {
+        row.errors.push(msg);
+      }
+    }
+    byProduct.delete(productId);
+  }
+  return Array.from(byProduct.values());
+}
+
 export function parseProductComponentsFromBuffer(
   data: ArrayBuffer | Uint8Array,
   products: Pick<FirestoreProduct, 'id' | 'name' | 'code'>[],
@@ -554,6 +644,7 @@ export function parseProductComponentsFromBuffer(
       bomGroups: [],
       stockMovements: [],
       materialsToCreate: [],
+      productUpdates: [],
       fileErrors: ['الملف لا يحتوي على شيت صالح.'],
     };
   }
@@ -578,6 +669,7 @@ export function parseProductComponentsFromBuffer(
       bomGroups: [],
       stockMovements: [],
       materialsToCreate: [],
+      productUpdates: [],
       fileErrors: [],
     };
   }
@@ -657,6 +749,16 @@ export function parseProductComponentsFromBuffer(
     const quantityRaw = get('quantityUsed');
     const quantityEmpty = quantityRaw === undefined || String(quantityRaw).trim() === '';
     let quantityUsed = quantityEmpty ? 0 : parseNumericCell(quantityRaw);
+    const unitsPerCartonRaw = get('unitsPerCarton');
+    const unitsPerCartonEmpty =
+      unitsPerCartonRaw === undefined || String(unitsPerCartonRaw).trim() === '';
+    const unitsPerCarton = unitsPerCartonEmpty ? 0 : parseNumericCell(unitsPerCartonRaw);
+    const unitsPerCartonProvided = !unitsPerCartonEmpty;
+    let quantityDerivedFromUnitsPerCarton = false;
+    const materialTypeRaw = get('materialType');
+    const materialTypeEmpty =
+      materialTypeRaw === undefined || String(materialTypeRaw).trim() === '';
+    const parsedMaterialType = materialTypeEmpty ? undefined : parseMaterialType(materialTypeRaw);
     const unitCostRaw = get('unitCost');
     const unitCost =
       unitCostRaw === undefined || String(unitCostRaw).trim() === ''
@@ -704,10 +806,20 @@ export function parseProductComponentsFromBuffer(
       }
     }
 
+    if (unitsPerCartonProvided && (!Number.isFinite(unitsPerCarton) || unitsPerCarton < 1)) {
+      errors.push('عدد الوحدات في الكرتونة إن وُجد يجب أن يكون 1 أو أكبر.');
+    }
+    if (!materialTypeEmpty && !parsedMaterialType) {
+      errors.push('نوع المادة غير معروف.');
+    }
+
     // Empty/zero qty is allowed for spare-parts catalog lines (non-consuming BOM).
     if (!quantityEmpty && (!Number.isFinite(quantityUsed) || quantityUsed < 0)) {
       errors.push('الكمية المستخدمة غير صالحة.');
       quantityUsed = 0;
+    } else if (quantityEmpty && unitsPerCartonProvided && Number.isFinite(unitsPerCarton) && unitsPerCarton >= 1) {
+      quantityUsed = cartonBomQtyPerPiece(unitsPerCarton);
+      quantityDerivedFromUnitsPerCarton = true;
     } else if (!Number.isFinite(quantityUsed) || quantityUsed < 0) {
       quantityUsed = 0;
     }
@@ -781,6 +893,10 @@ export function parseProductComponentsFromBuffer(
       previousLocationWarehouseName,
       balanceProvided,
       balanceQty: Number.isFinite(balanceQty) ? balanceQty : 0,
+      unitsPerCartonProvided,
+      unitsPerCarton: Number.isFinite(unitsPerCarton) ? unitsPerCarton : 0,
+      quantityDerivedFromUnitsPerCarton,
+      materialType: parsedMaterialType || undefined,
       matchedMaterialId: matchedMaterial?.id,
       matchedMaterialName: matchedMaterial?.name || materialName,
       matchedMaterialUnit: matchedMaterial?.baseUnit || (willCreateMaterial ? 'piece' : undefined),
@@ -798,8 +914,23 @@ export function parseProductComponentsFromBuffer(
     const name = (row.matchedMaterialName || row.materialName).trim();
     if (!code || !name) continue;
     const existing = materialsToCreateMap.get(code);
+    const type = row.materialType || 'raw_material';
     if (existing && existing.name !== name) {
       const msg = `كود المادة "${code}" له أكثر من اسم لإنشاء مادة جديدة`;
+      for (const r of rows) {
+        if (
+          r.willCreateMaterial &&
+          (r.matchedMaterialCode || r.materialCode).trim().toUpperCase() === code &&
+          !r.errors.includes(msg)
+        ) {
+          r.errors.push(msg);
+        }
+      }
+      materialsToCreateMap.delete(code);
+      continue;
+    }
+    if (existing && existing.type !== type) {
+      const msg = `كود المادة "${code}" له أكثر من نوع لإنشاء مادة جديدة`;
       for (const r of rows) {
         if (
           r.willCreateMaterial &&
@@ -817,6 +948,7 @@ export function parseProductComponentsFromBuffer(
         code,
         name,
         purchaseCost: Number(row.unitCost || 0),
+        type,
       });
     }
   }
@@ -866,6 +998,8 @@ export function parseProductComponentsFromBuffer(
   for (const key of stockConflictKeys) {
     stockByKey.delete(key);
   }
+
+  buildProductUpdates(rows);
 
   const validRows = rows.filter((r) => r.errors.length === 0);
   for (const code of Array.from(materialsToCreateMap.keys())) {
@@ -936,6 +1070,7 @@ export function parseProductComponentsFromBuffer(
     bomGroups: Array.from(bomMap.values()),
     stockMovements,
     materialsToCreate,
+    productUpdates: buildProductUpdates(validRows),
     fileErrors,
   };
 }

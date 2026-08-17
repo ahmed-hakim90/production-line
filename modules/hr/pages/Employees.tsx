@@ -53,6 +53,7 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { productionWorkerService } from '@/modules/production/services/productionWorkerService';
@@ -950,41 +951,43 @@ export const Employees: React.FC = () => {
         { key: 'pending', label: 'في انتظار الموافقة', value: summaryKpis.pending },
       ]}
       actions={(
-        <div className="flex flex-wrap items-center gap-2">
+        <>
           {can('employees.create') ? (
             <Button onClick={openCreate} data-modal-key={MODAL_KEYS.EMPLOYEES_CREATE}>
               <span className="material-icons-round text-sm">add</span>
               إضافة موظف
             </Button>
           ) : null}
-          {canExportFromPage && (tenantEmployeeCount ?? 0) > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                void (async () => {
-                  const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
-                  const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
-                  const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
-                  const all = await employeeService.getAll();
-                  exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
-                    getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
-                    getManagerName: getEffectiveManagerName,
-                  });
-                })();
-              }}
-            >
-              <span className="material-icons-round text-sm">download</span>
-              تصدير Excel
-            </Button>
-          ) : null}
-          {canImportFromPage ? (
-            <Button type="button" variant="outline" onClick={() => navigate('/hr/employees/import')}>
-              <span className="material-icons-round text-sm">upload_file</span>
-              استيراد Excel
-            </Button>
-          ) : null}
-        </div>
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'تصدير Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: !(canExportFromPage && (tenantEmployeeCount ?? 0) > 0),
+                onClick: () => {
+                  void (async () => {
+                    const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
+                    const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
+                    const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
+                    const all = await employeeService.getAll();
+                    exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
+                      getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
+                      getManagerName: getEffectiveManagerName,
+                    });
+                  })();
+                },
+              },
+              {
+                label: 'استيراد Excel',
+                icon: 'upload',
+                group: 'استيراد',
+                hidden: !canImportFromPage,
+                onClick: () => navigate('/hr/employees/import'),
+              },
+            ]}
+          />
+        </>
       )}
     >
       <p className="text-xs text-[var(--color-text-muted)] px-1">

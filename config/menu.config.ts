@@ -302,6 +302,20 @@ export const MENU_CONFIG: MenuGroup[] = [
         activePatterns: ['/production/issue-requests'],
       },
       {
+        key: 'production-floor',
+        label: 'مساحة صالة الإنتاج',
+        icon: 'precision_manufacturing',
+        path: '/production/floor',
+        permission: 'inventory.view',
+        excludeRoleKeys: [
+          'repair_reception',
+          'repair_technician',
+          'spare_parts_central_warehouse',
+          'maintenance_center_warehouse',
+        ],
+        activePatterns: ['/production/floor', '/inventory/production-floor'],
+      },
+      {
         key: 'packaging-control',
         label: 'تحكم التغليف',
         icon: 'package_2',
@@ -377,7 +391,7 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'warehouse',
     children: [
       // نظرة عامة ومساحات
-      { key: 'inv-dashboard', label: 'لوحة المخازن', icon: 'inventory', path: '/inventory', permission: 'inventory.view' },
+      { key: 'inv-dashboard', label: 'لوحة المخازن', icon: 'inventory', path: '/inventory', permission: 'inventory.view', exact: true },
       {
         key: 'inv-warehouses',
         label: 'كل المخازن ومساحاتها',
@@ -401,7 +415,6 @@ export const MENU_CONFIG: MenuGroup[] = [
         permission: 'inventory.view',
         badgeSource: badgeSources.rawMaterialWarehouseAlerts,
       },
-      { key: 'inv-production-floor', label: 'مساحة صالة الإنتاج', icon: 'precision_manufacturing', path: '/inventory/production-floor', permission: 'inventory.view' },
       {
         key: 'inv-spare-parts-replenishment',
         label: 'إذن صرف للمراكز (تموين)',

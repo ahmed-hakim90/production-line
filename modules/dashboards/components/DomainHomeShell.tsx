@@ -19,7 +19,7 @@ export type DomainHomeHeroKpi = {
 };
 
 type Props = {
-  /** Tiny label only — keep titles out of the first viewport. */
+  /** Compact module label shown as the page title. */
   eyebrow?: string;
   hero: DomainHomeHeroKpi[];
   /** Dense KPI grid (more columns) for ops boards with many metrics. */
@@ -41,7 +41,8 @@ type Props = {
 
 /**
  * Shared data-first shell for repair / inventory (and similar) home boards:
- * hero KPIs → compact period tools → content → optional secondary actions.
+ * title + subtitle → hero KPIs → compact period tools → content.
+ * `rangeLabel` is the subtitle — never squeezed beside period chips on phones.
  */
 export const DomainHomeShell: React.FC<Props> = ({
   eyebrow,
@@ -61,7 +62,7 @@ export const DomainHomeShell: React.FC<Props> = ({
   className,
   dir,
 }) => {
-  const showToolbar = Boolean(periods?.length || onRefresh || periodExtra || rangeLabel);
+  const showToolbar = Boolean(periods?.length || onRefresh || periodExtra);
 
   return (
     <div
@@ -71,7 +72,14 @@ export const DomainHomeShell: React.FC<Props> = ({
       )}
       dir={dir}
     >
-      {eyebrow ? <p className="ops-dash-eyebrow">{eyebrow}</p> : null}
+      {eyebrow || rangeLabel ? (
+        <header className="ops-dash-page-head">
+          <div className="ops-dash-page-head__title">
+            {eyebrow ? <h1 className="ops-dash-page-title">{eyebrow}</h1> : null}
+            {rangeLabel ? <p className="ops-dash-page-subtitle">{rangeLabel}</p> : null}
+          </div>
+        </header>
+      ) : null}
 
       <div className={cn('ops-dash-kpi-grid', denseHero && 'ops-dash-kpi-grid--dense')}>
         {hero.map((card) => {
@@ -128,7 +136,6 @@ export const DomainHomeShell: React.FC<Props> = ({
             {periodExtra}
           </div>
           <div className="ops-dash-toolbar__meta">
-            {rangeLabel ? <span className="ops-dash-toolbar__range">{rangeLabel}</span> : null}
             {onRefresh ? (
               <div className="ops-dash-refresh">
                 <button

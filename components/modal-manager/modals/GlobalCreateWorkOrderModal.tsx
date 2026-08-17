@@ -20,6 +20,11 @@ import {
 } from '../../../modules/system/lib/operationPathSettings';
 import { filterProductionProducts } from '../../../modules/production/utils/isProductionProduct';
 import {
+  defaultRequiresProductionIssueFromCompany,
+  resolveRequiresProductionIssueOnReport,
+} from '../../../modules/production/lib/requiresProductionIssue';
+import { resolveInventoryRoutingV1 } from '@/modules/inventory/services/inventoryRoutingService';
+import {
   loadInjectionComponentOptions,
   type InjectionComponentOption,
 } from '../../../modules/production/utils/injectionComponentOptions';
@@ -64,9 +69,10 @@ type WorkOrderFormState = {
   breakStartTime: string;
   breakEndTime: string;
   workdayEndTime: string;
+  requiresProductionIssue: boolean;
 };
 
-const emptyForm = (): WorkOrderFormState => ({
+const emptyForm = (requiresProductionIssue = true): WorkOrderFormState => ({
   planId: '',
   workOrderType: 'finished_product',
   productId: '',
@@ -82,6 +88,7 @@ const emptyForm = (): WorkOrderFormState => ({
   breakStartTime: DEFAULT_BREAK_START,
   breakEndTime: DEFAULT_BREAK_END,
   workdayEndTime: DEFAULT_WORKDAY_END,
+  requiresProductionIssue,
 });
 
 export const GlobalCreateWorkOrderModal: React.FC = () => {
@@ -104,7 +111,15 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const injectionCategoryKeywords = systemSettings.planSettings?.injectionRawMaterialCategoryKeywords
     ?? DEFAULT_PLAN_SETTINGS.injectionRawMaterialCategoryKeywords;
-  const [form, setForm] = useState<WorkOrderFormState>(emptyForm());
+  const companyRequiresProductionIssue = defaultRequiresProductionIssueFromCompany(
+    resolveInventoryRoutingV1(systemSettings).requireIssuedProductionIssueOnReport,
+  );
+  const inheritRequiresFromPlan = (plan: typeof plans[number] | null | undefined): boolean =>
+    resolveRequiresProductionIssueOnReport({
+      companyRequire: companyRequiresProductionIssue,
+      planRequiresProductionIssue: plan?.requiresProductionIssue,
+    });
+  const [form, setForm] = useState<WorkOrderFormState>(() => emptyForm(true));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -184,6 +199,30 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     if (form.workOrderType !== 'component_injection') return lines;
     return lines.filter((line) => line.id && injectionLineIds.has(line.id));
   }, [form.workOrderType, lines, injectionLineIds]);
+
+  const lineOptions = useMemo(
+    () => selectableLines
+      .filter((line) => Boolean(line.id))
+      .map((line) => ({
+        value: line.id!,
+        label: line.name,
+        keywords: line.code || '',
+        scanKeys: line.code ? [line.code] : undefined,
+      })),
+    [selectableLines],
+  );
+
+  const supervisorOptions = useMemo(
+    () => supervisors
+      .filter((supervisor) => Boolean(supervisor.id))
+      .map((supervisor) => ({
+        value: supervisor.id!,
+        label: supervisor.name,
+        keywords: [supervisor.code, supervisor.phone].filter(Boolean).join(' '),
+        scanKeys: supervisor.code ? [supervisor.code] : undefined,
+      })),
+    [supervisors],
+  );
 
   useEffect(() => {
     if (!form.productId) return;
@@ -287,7 +326,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     if (mode !== 'edit' || !workOrderId) {
       setEditingId(null);
       setLoadingEdit(false);
-      const base = emptyForm();
+      const base = emptyForm(companyRequiresProductionIssue);
       const payloadPlanId = payload && typeof payload.planId === 'string' ? payload.planId.trim() : '';
       const payloadProductId = payload && typeof payload.productId === 'string' ? payload.productId.trim() : '';
       const selectedPayloadPlan = payloadPlanId ? plans.find((p) => p.id === payloadPlanId) : null;
@@ -312,6 +351,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         startDate: planStartDate,
         targetDate: planTargetDate,
         durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
+        requiresProductionIssue: inheritRequiresFromPlan(selectedPayloadPlan),
       };
       setForm(prefilled);
       setError(null);
@@ -346,6 +386,9 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         breakStartTime: wo.breakStartTime || DEFAULT_BREAK_START,
         breakEndTime: wo.breakEndTime || DEFAULT_BREAK_END,
         workdayEndTime: wo.workdayEndTime || DEFAULT_WORKDAY_END,
+        requiresProductionIssue: typeof wo.requiresProductionIssue === 'boolean'
+          ? wo.requiresProductionIssue
+          : inheritRequiresFromPlan(plans.find((p) => p.id === wo.planId) ?? null),
       });
     });
 
@@ -429,9 +472,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
           workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
           ...(form.planId ? { planId: form.planId } : {}),
+          requiresProductionIssue: form.requiresProductionIssue,
         }, { path: WORK_ORDER_UPDATE_PATHS.workOrderModal });
         showAppToast('success', t('modalManager.createWorkOrder.editSuccess'));
-        setForm(emptyForm());
+        setForm(emptyForm(companyRequiresProductionIssue));
         setSaving(false);
         close();
         return;
@@ -470,11 +514,12 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
         breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
         workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
+        requiresProductionIssue: form.requiresProductionIssue,
         createdBy: uid || '',
       }, { path: createEntryPath });
       if (!createdId) throw new Error('Failed create');
       showAppToast('success', t('modalManager.createWorkOrder.createSuccess'));
-      setForm(emptyForm());
+      setForm(emptyForm(companyRequiresProductionIssue));
       setSaving(false);
       close();
     } catch {
@@ -539,6 +584,9 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                   startDate: planStartDate,
                   targetDate: planTargetDate,
                   durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
+                  requiresProductionIssue: plan
+                    ? inheritRequiresFromPlan(plan)
+                    : companyRequiresProductionIssue,
                 }));
               }}
               placeholder="اختر خطة أو اتركه بدون خطة"
@@ -626,31 +674,25 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           {(!selectedPlan || !selectedPlan.lineId) && (
               <div>
                 <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productionLineRequired')}</label>
-                <select
+                <SearchableSelect
+                  options={lineOptions}
                   value={form.lineId}
-                  onChange={(e) => setForm((f) => ({ ...f, lineId: e.target.value }))}
-                  className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
-                >
-                  <option value="">{t('modalManager.createWorkOrder.selectLine')}</option>
-                  {selectableLines.map((l) => (
-                    <option key={l.id} value={l.id!}>{l.name}</option>
-                  ))}
-                </select>
+                  onChange={(value) => setForm((f) => ({ ...f, lineId: value }))}
+                  placeholder={t('modalManager.createWorkOrder.selectLine')}
+                  className="bg-[var(--color-card)]"
+                />
               </div>
           )}
 
           <div>
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.supervisorRequired')}</label>
-            <select
+            <SearchableSelect
+              options={supervisorOptions}
               value={form.supervisorId}
-              onChange={(e) => setForm((f) => ({ ...f, supervisorId: e.target.value }))}
-              className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
-            >
-              <option value="">{t('modalManager.createWorkOrder.selectSupervisor')}</option>
-              {supervisors.map((s) => (
-                <option key={s.id} value={s.id!}>{s.name}</option>
-              ))}
-            </select>
+              onChange={(value) => setForm((f) => ({ ...f, supervisorId: value }))}
+              placeholder={t('modalManager.createWorkOrder.selectSupervisor')}
+              className="bg-[var(--color-card)]"
+            />
           </div>
 
           <div className="grid grid-cols-3 gap-4">
@@ -759,6 +801,20 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           <p className="text-[11px] text-[var(--color-text-muted)]">
             {t('modalManager.createWorkOrder.dailyTimeHint')}
           </p>
+          <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-primary/15 bg-primary/5 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.requiresProductionIssue}
+              onChange={(e) => setForm((f) => ({ ...f, requiresProductionIssue: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/30"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm font-black text-[var(--color-text)]">تحتاج صرف إنتاج؟</span>
+              <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
+                عند اختيار خطة يُنسخ الخيار منها تلقائياً. يمكن تعديله لأمر الشغل.
+              </span>
+            </span>
+          </label>
           {missingRequiredFields.length > 0 && (
             <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-3 py-2 text-xs font-bold text-[rgb(var(--color-warning))]">
               لاستكمال الإنشاء أدخل: {missingRequiredFields.join('، ')}

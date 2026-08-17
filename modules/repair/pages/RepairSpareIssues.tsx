@@ -302,7 +302,7 @@ export const RepairSpareIssues: React.FC = () => {
             </p>
           ) : (
             <>
-              <div className="sticky top-0 z-10 flex flex-wrap gap-2 border-b bg-card/95 p-3 backdrop-blur sm:p-4">
+              <div className="ops-action-strip sticky top-0 z-10 border-b bg-card/95 p-3 backdrop-blur sm:p-4">
                 {canCreate && canSubmitRepairSpareIssue(selected.status, selected.approvalMode) && (
                   <Button
                     type="button"

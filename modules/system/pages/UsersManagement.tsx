@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button, LoadingSkeleton } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -533,30 +534,30 @@ export const UsersManagement: React.FC = () => {
       rangeLabel="إنشاء المستخدمين يدوياً وربطهم بالموظفين وتعيين الدور والتحكم في التفعيل والحذف النهائي"
       hero={loading ? undefined : usersHero}
       actions={(
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="ghost"
-            className="font-medium border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]"
-            onClick={() => exportHRData(exportRows, 'المستخدمون', `المستخدمون-${new Date().toISOString().slice(0, 10)}`)}
-            disabled={rows.length === 0}
-          >
-            <span className="material-icons-round [font-size:var(--font-size-base)]">download</span>
-            تصدير
-          </Button>
-          <Button
-            variant="ghost"
-            className="font-medium border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]"
-            onClick={openImportUsersModal}
-            data-modal-key={MODAL_KEYS.SYSTEM_USERS_IMPORT}
-          >
-            <span className="material-icons-round [font-size:var(--font-size-base)]">upload_file</span>
-            استيراد
-          </Button>
+        <>
           <Button variant="primary" onClick={openCreateUserModal} data-modal-key={MODAL_KEYS.SYSTEM_USERS_CREATE}>
             <span className="material-icons-round [font-size:var(--font-size-base)]">add</span>
             إنشاء مستخدم
           </Button>
-        </div>
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'تصدير',
+                icon: 'download',
+                group: 'تصدير',
+                disabled: rows.length === 0,
+                onClick: () => exportHRData(exportRows, 'المستخدمون', `المستخدمون-${new Date().toISOString().slice(0, 10)}`),
+              },
+              {
+                label: 'استيراد',
+                icon: 'upload',
+                group: 'استيراد',
+                dataModalKey: MODAL_KEYS.SYSTEM_USERS_IMPORT,
+                onClick: openImportUsersModal,
+              },
+            ]}
+          />
+        </>
       )}
     >
       {msg && (

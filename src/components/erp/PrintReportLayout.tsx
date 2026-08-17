@@ -6,6 +6,12 @@ import {
 import { resolvePrintAccentHex } from "@/utils/printTheme"
 import { PRINT_SURFACE } from "@/utils/print/printSurface"
 import {
+  PRINT_FONT_LINE_HEIGHT,
+  PRINT_FONT_WEIGHT_BODY,
+  PRINT_FONT_WEIGHT_BOLD,
+  PRINT_FONT_WEIGHT_HEADING,
+} from "@/utils/print/printFont"
+import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from "./FactoryPrintShell"
@@ -180,8 +186,9 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                         className="print-kv-label"
                         style={{
                           margin: "0 0 6px",
-                          fontSize: 10,
-                          fontWeight: 700,
+                          fontSize: "var(--print-caption-size, 0.85em)",
+                          fontWeight: PRINT_FONT_WEIGHT_BOLD,
+                          lineHeight: PRINT_FONT_LINE_HEIGHT,
                           color: PRINT_SURFACE.muted,
                         }}
                       >
@@ -210,8 +217,9 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                       className="print-kv-label"
                       style={{
                         margin: 0,
-                        fontSize: 11,
-                        fontWeight: 600,
+                        fontSize: "var(--print-label-size, 1em)",
+                        fontWeight: PRINT_FONT_WEIGHT_BODY,
+                        lineHeight: PRINT_FONT_LINE_HEIGHT,
                         color: PRINT_SURFACE.muted,
                         paddingTop: 2,
                       }}
@@ -221,8 +229,9 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                     <div
                       className="print-kv-value"
                       style={{
-                        fontSize: 13,
-                        fontWeight: row.highlight ? 800 : 700,
+                        fontSize: "var(--print-meta-size, 1.1em)",
+                        fontWeight: row.highlight ? PRINT_FONT_WEIGHT_HEADING : PRINT_FONT_WEIGHT_BOLD,
+                        lineHeight: PRINT_FONT_LINE_HEIGHT,
                         color: row.highlight ? accent : PRINT_SURFACE.text,
                         minWidth: 0,
                       }}
@@ -246,7 +255,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                 >
                   <p
                     className="print-kv-label"
-                    style={{ margin: 0, fontSize: 11, fontWeight: 600, color: PRINT_SURFACE.muted }}
+                    style={{ margin: 0, fontSize: "var(--print-label-size, 1em)", fontWeight: PRINT_FONT_WEIGHT_BODY, lineHeight: PRINT_FONT_LINE_HEIGHT, color: PRINT_SURFACE.muted }}
                   >
                     {section.progress.label}
                   </p>
@@ -273,8 +282,8 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                     </div>
                     <span
                       style={{
-                        fontSize: 12,
-                        fontWeight: 800,
+                        fontSize: "var(--print-label-size, 1em)",
+                        fontWeight: PRINT_FONT_WEIGHT_HEADING,
                         fontVariantNumeric: "tabular-nums",
                         minWidth: 32,
                         textAlign: "right",

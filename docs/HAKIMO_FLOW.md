@@ -24,9 +24,9 @@ Defined in `src/index.css` `:root` and `DEFAULT_THEME` (`utils/dashboardConfig.t
 ## Shells
 
 - **Domain homes:** `DomainHomeShell` — KPI hero → period chips → panels → secondary actions
-- **Ops lists:** `ModuleOpsPageShell` — same chrome without huge secondary panel
+- **Ops lists:** `ModuleOpsPageShell` — title + subtitle, optional KPI strip, then action strip (no huge secondary panel). `rangeLabel` is always the page subtitle, never toolbar chrome beside buttons.
 - **Panels:** `OpsDashPanel` with module `accent`
-- **Action strip:** page CTAs go in shell `actions` (separate toolbar row). Compact pill buttons via `.ops-dash-toolbar__actions`. Use `OpsMoreActionsMenu` when overflow > ~4 secondary actions. Segmented toggles use `.ops-toolbar-seg`.
+- **Action strip:** page CTAs go in shell `actions` (separate toolbar row). Compact pill buttons via `.ops-dash-toolbar__actions`. In-panel workflow buttons (اعتماد / رفض / طباعة) use `.ops-action-strip`. Use `OpsMoreActionsMenu` when overflow > ~4 secondary actions. Segmented toggles use `.ops-toolbar-seg`. On narrow viewports the head stacks: title, even KPI grid, then a 2-column action strip.
 - **Modals:** mount via `ManagedModalPortal` / `#erp-modal-root` (or Radix `getRootPortalContainer`). Never put `z-index` on `.ops-dash-toolbar` / `.ops-dash-domain-body` — it traps page-local fixed overlays under the toolbar border.
 - **Content width:** AppLayout applies theme `contentMaxWidth` (+ optional `pageLayoutOverrides`). Authenticated pages must use `w-full min-w-0` — do not nest `max-w-6xl mx-auto` (or similar) on `ModuleOpsPageShell` / detail pages. Keep hard max-width only for modals, public portals, or intentional phone-operator flows (e.g. routing execution).
 

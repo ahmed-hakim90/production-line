@@ -297,7 +297,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
               })
             )
             && (
-              i.key !== 'packaging-control'
+              (i.key !== 'packaging-control' && i.key !== 'production-floor')
               || isFactoryProductionMenuVisibleForWarehouseScope({
                 accessibleWarehouseRoles,
                 warehouseScoped,

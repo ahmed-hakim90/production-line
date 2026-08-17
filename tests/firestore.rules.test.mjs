@@ -1171,6 +1171,20 @@ await seed();
       status: 'pending',
       createdAt,
     });
+    await adb.collection('production_issue_orders').doc('issue-source-a').set({
+      tenantId: 'tenantA',
+      sourceWarehouseId: 'whA',
+      targetWarehouseId: 'whB',
+      status: 'requested',
+      createdAt,
+    });
+    await adb.collection('production_issue_orders').doc('issue-source-b').set({
+      tenantId: 'tenantA',
+      sourceWarehouseId: 'whB',
+      targetWarehouseId: 'whA',
+      status: 'draft',
+      createdAt,
+    });
   });
 
   const boundDb = testEnv.authenticatedContext('userAWarehouseBound').firestore();
@@ -1290,6 +1304,50 @@ await seed();
     updatedAt: createdAt,
   }));
   await assertSucceeds(unboundAdminDb.collection('stock_items').doc('whB__material__item1').get());
+  await assertSucceeds(
+    unboundAdminDb.collection('stock_items')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertSucceeds(
+    unboundAdminDb.collection('stock_transactions')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertSucceeds(
+    unboundAdminDb.collection('stock_items')
+      .where('tenantId', '==', 'tenantA')
+      .where('warehouseId', '==', 'whB')
+      .get(),
+  );
+  await assertSucceeds(
+    boundDb.collection('stock_items')
+      .where('tenantId', '==', 'tenantA')
+      .where('warehouseId', '==', 'whA')
+      .get(),
+  );
+  await assertFails(
+    boundDb.collection('stock_items')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertSucceeds(
+    unboundAdminDb.collection('production_issue_orders')
+      .where('tenantId', '==', 'tenantA')
+      .where('sourceWarehouseId', '==', 'whA')
+      .get(),
+  );
+  await assertSucceeds(
+    boundDb.collection('production_issue_orders')
+      .where('tenantId', '==', 'tenantA')
+      .where('sourceWarehouseId', '==', 'whA')
+      .get(),
+  );
+  await assertFails(
+    boundDb.collection('production_issue_orders')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
 
   // Bound user cannot clear their own inventoryWarehouseId (needs users.manage).
   await assertFails(boundDb.collection('users').doc('userAWarehouseBound').update({

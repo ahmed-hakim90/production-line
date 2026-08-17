@@ -166,7 +166,7 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
               تلقائي
             </span>
           </div>
-          {toggle('إلزام صرف إنتاج معتمد قبل تقرير الإنتاج', savingIssueRequirement ? 'جار حفظ التغيير...' : 'تشغيله يمنع حفظ تقرير المنتج التام قبل إصدار إذن صرف إنتاج. إقفاله يسمح بالحفظ بدون إذن صرف.', routing.requireIssuedProductionIssueOnReport !== false, () => void handleRequireIssuedProductionIssueToggle(), savingIssueRequirement)}
+          {toggle('إلزام صرف إنتاج معتمد قبل تقرير الإنتاج', savingIssueRequirement ? 'جار حفظ التغيير...' : 'افتراضي للخطط وأوامر الشغل التي لم يُحدَّد فيها خيار «تحتاج صرف إنتاج». تشغيله يمنع حفظ تقرير المنتج التام قبل إصدار إذن صرف إنتاج. إقفاله يسمح بالحفظ بدون إذن صرف عند غياب التحديد على الخطة/الأمر.', routing.requireIssuedProductionIssueOnReport !== false, () => void handleRequireIssuedProductionIssueToggle(), savingIssueRequirement)}
           {toggle('خصم BOM تلقائي عند حفظ التقرير', 'مطفأ افتراضياً. لا تستخدمه مع مسار صرف الإنتاج.', Boolean(routing.autoConsumeBomOnProductionReport), () => patchRouting({ autoConsumeBomOnProductionReport: !routing.autoConsumeBomOnProductionReport }))}
           {toggle('تأثير تقرير التغليف على المخزون', 'عند التفعيل، كل تقرير تغليف ينشئ حركة تحويل مباشرة من مخزن التغليف المصدر إلى الوجهة.', Boolean(localPlanSettings.enablePackagingStockTransfer), () => patchPlan({ enablePackagingStockTransfer: !localPlanSettings.enablePackagingStockTransfer }))}
           {toggle('مطابقة إنتاج العمال لكمية التقرير', 'عند التشغيل يجب أن يساوي مجموع إنتاج العمال كمية تقرير المنتج التام.', Boolean(localProductionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty), () => setLocalProductionWorkerSettings((prev) => ({

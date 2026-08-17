@@ -33,8 +33,9 @@ type Props = {
  * List / ops pages — same ops-dash chrome as DomainHomeShell
  * without forcing a full home-board secondary panel.
  *
- * When there are no hero KPIs, renders a compact page head (title + subtitle +
- * actions) instead of empty dashboard toolbar strips.
+ * Title + subtitle always sit in the page head. Hero KPIs (if any) follow,
+ * then period tools / actions. `rangeLabel` is the subtitle — never squeezed
+ * beside buttons (that wrapped into a vertical strip on phones).
  */
 export const ModuleOpsPageShell: React.FC<Props> = ({
   eyebrow,
@@ -55,10 +56,7 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
 }) => {
   const hasHero = Boolean(hero && hero.length > 0);
   const hasPeriodTools = Boolean(periods?.length || onRefresh || periodExtra);
-  /** Dashboard chrome: period chips / refresh keep rangeLabel in the toolbar. */
-  const showContextToolbar = hasHero
-    ? Boolean(hasPeriodTools || rangeLabel)
-    : hasPeriodTools;
+  const showContextToolbar = hasPeriodTools;
   const showActionsToolbar = hasHero && Boolean(actions);
 
   return (
@@ -70,19 +68,15 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
       )}
       dir={dir}
     >
-      {hasHero ? (
-        <p className="ops-dash-eyebrow">{eyebrow}</p>
-      ) : (
-        <header className="ops-dash-page-head">
-          <div className="ops-dash-page-head__title">
-            <h1 className="ops-dash-page-title">{eyebrow}</h1>
-            {rangeLabel ? <p className="ops-dash-page-subtitle">{rangeLabel}</p> : null}
-          </div>
-          {actions ? (
-            <div className="ops-dash-page-head__actions ops-dash-toolbar__actions">{actions}</div>
-          ) : null}
-        </header>
-      )}
+      <header className="ops-dash-page-head">
+        <div className="ops-dash-page-head__title">
+          <h1 className="ops-dash-page-title">{eyebrow}</h1>
+          {rangeLabel ? <p className="ops-dash-page-subtitle">{rangeLabel}</p> : null}
+        </div>
+        {!hasHero && actions ? (
+          <div className="ops-dash-page-head__actions ops-dash-toolbar__actions">{actions}</div>
+        ) : null}
+      </header>
 
       {hasHero ? (
         <div className={cn('ops-dash-kpi-grid', denseHero && 'ops-dash-kpi-grid--dense')}>
@@ -146,9 +140,6 @@ export const ModuleOpsPageShell: React.FC<Props> = ({
             {periodExtra}
           </div>
           <div className="ops-dash-toolbar__meta">
-            {hasHero && rangeLabel ? (
-              <span className="ops-dash-toolbar__range">{rangeLabel}</span>
-            ) : null}
             {onRefresh ? (
               <div className="ops-dash-refresh">
                 <button

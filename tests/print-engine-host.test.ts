@@ -20,6 +20,8 @@ import { PRINT_ENGINE_IFRAME_CSS } from '../utils/print/printSurface.ts';
   const style = buildGlobalPrintPageStyle(DEFAULT_PRINT_TEMPLATE);
   assert.match(style, /@page/);
   assert.match(style, /print-brand-header/);
+  assert.match(style, /line-height: 1.5/);
+  assert.match(style, /Cairo/);
   assert.ok(style.includes(PRINT_ENGINE_IFRAME_CSS.trim().slice(0, 40)));
 }
 

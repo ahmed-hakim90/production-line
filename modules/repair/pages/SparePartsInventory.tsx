@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,9 +11,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { withTenantPath } from '@/lib/tenantPaths';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePrintEngine } from '../../../utils/printManager';
@@ -59,7 +59,7 @@ import {
 
 export const SparePartsInventory: React.FC = () => {
   const { dir } = useAppDirection();
-  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
@@ -491,7 +491,7 @@ export const SparePartsInventory: React.FC = () => {
       ]}
       onRefresh={() => { void load({ force: true }); }}
       actions={(
-        <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto">
+        <>
           {(canManageAllBranches || branchOptions.length > 1) && (
             <div className="w-full sm:w-[220px]">
               <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
@@ -508,30 +508,7 @@ export const SparePartsInventory: React.FC = () => {
               </Select>
             </div>
           )}
-          <Link to={withTenantPath(tenantSlug, '/repair')}>
-            <Button variant="outline" size="sm">لوحة الصيانة</Button>
-          </Link>
-          {activeWarehouseId ? (
-            <Link
-              to={withTenantPath(
-                tenantSlug,
-                `/repair/warehouses/${encodeURIComponent(activeWarehouseId)}`,
-              )}
-            >
-              <Button variant="outline" size="sm">مساحة مخزن المركز</Button>
-            </Link>
-          ) : null}
-          {can('repairSpareIssues.view') && (
-            <Link to={withTenantPath(tenantSlug, '/repair/spare-issues')}>
-              <Button variant="outline" size="sm">سندات الصرف</Button>
-            </Link>
-          )}
-          {canViewReplenishment && (
-            <Link to={withTenantPath(tenantSlug, '/repair/parts-replenishment')}>
-              <Button variant="outline" size="sm">متابعة التموين</Button>
-            </Link>
-          )}
-          {canCreateReplenishment && (
+          {canCreateReplenishment ? (
             <Button
               type="button"
               size="sm"
@@ -540,24 +517,54 @@ export const SparePartsInventory: React.FC = () => {
             >
               طلب تموين
             </Button>
-          )}
-          {canSyncCatalog && activeWarehouseId ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void syncFromWarehouseBalances()}
-              disabled={syncingFromBalances}
-            >
-              {syncingFromBalances ? 'جاري المزامنة…' : 'مزامنة من أرصدة المخزن'}
-            </Button>
           ) : null}
-          {canManagePricing && (
-            <Link to={withTenantPath(tenantSlug, '/manufacturing/materials')}>
-              <Button variant="secondary" size="sm">تسعير القطع (الماستر)</Button>
-            </Link>
-          )}
-        </div>
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'لوحة الصيانة',
+                icon: 'handyman',
+                group: 'تنقل',
+                onClick: () => navigate('/repair'),
+              },
+              {
+                label: 'مساحة مخزن المركز',
+                icon: 'warehouse',
+                group: 'تنقل',
+                hidden: !activeWarehouseId,
+                onClick: () => navigate(`/repair/warehouses/${encodeURIComponent(activeWarehouseId)}`),
+              },
+              {
+                label: 'سندات الصرف',
+                icon: 'receipt_long',
+                group: 'تنقل',
+                hidden: !can('repairSpareIssues.view'),
+                onClick: () => navigate('/repair/spare-issues'),
+              },
+              {
+                label: 'متابعة التموين',
+                icon: 'local_shipping',
+                group: 'تنقل',
+                hidden: !canViewReplenishment,
+                onClick: () => navigate('/repair/parts-replenishment'),
+              },
+              {
+                label: syncingFromBalances ? 'جاري المزامنة…' : 'مزامنة من أرصدة المخزن',
+                icon: 'sync',
+                group: 'مخزون',
+                hidden: !(canSyncCatalog && activeWarehouseId),
+                disabled: syncingFromBalances,
+                onClick: () => { void syncFromWarehouseBalances(); },
+              },
+              {
+                label: 'تسعير القطع (الماستر)',
+                icon: 'price_check',
+                group: 'مخزون',
+                hidden: !canManagePricing,
+                onClick: () => navigate('/manufacturing/materials'),
+              },
+            ]}
+          />
+        </>
       )}
     >
       {!branchId && (

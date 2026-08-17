@@ -34,6 +34,14 @@ const PackagingControl = lazyNamed(
   () => import('../pages/PackagingControl'),
   'PackagingControl',
 );
+const ProductionFloorStock = lazyNamed(
+  () => import('../../inventory/pages/ProductionFloorStock'),
+  'ProductionFloorStock',
+);
+const ProductionFloorProductDetail = lazyNamed(
+  () => import('../../inventory/pages/ProductionFloorProductDetail'),
+  'ProductionFloorProductDetail',
+);
 
 const RoutingPlansPage = lazyNamed(() => import('../routing/pages/RoutingPlansPage'), 'RoutingPlansPage');
 const PlanBuilderPage = lazyNamed(() => import('../routing/pages/PlanBuilderPage'), 'PlanBuilderPage');
@@ -82,6 +90,18 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
       'adminDashboard.view',
     ],
     component: PackagingControl,
+    skeleton: 'dashboard',
+  },
+  {
+    path: '/production/floor',
+    permission: 'inventory.view',
+    component: ProductionFloorStock,
+    skeleton: 'dashboard',
+  },
+  {
+    path: '/production/floor/:productId',
+    permission: 'inventory.view',
+    component: ProductionFloorProductDetail,
     skeleton: 'dashboard',
   },
   { path: '/work-orders', permission: 'workOrders.view', component: WorkOrders },

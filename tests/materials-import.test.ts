@@ -110,6 +110,7 @@ describe('parseMaterialsFromBuffer', () => {
     const result = parseMaterialsFromBuffer(data, existing);
     expect(result.errorCount).toBe(1);
     expect(result.rows[0].errors.some((e) => /مصدر المادة مطلوب/.test(e))).toBe(true);
+    expect(result.rows[0].type).toBe('raw_material');
   });
 
   it('clears purchasing fields for internally manufactured materials', () => {

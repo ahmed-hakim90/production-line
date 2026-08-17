@@ -143,7 +143,8 @@ assert.equal(
     scoped: true,
     accessibleWarehouseRoles: ['production_floor'],
   }),
-  true,
+  false,
+  'مساحة صالة الإنتاج moved under الإنتاج — not an inventory scoped key',
 );
 
 assert.equal(

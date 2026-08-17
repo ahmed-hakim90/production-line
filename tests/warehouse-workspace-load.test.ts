@@ -28,6 +28,7 @@ assert.doesNotMatch(workspaceSrc, /loadWarehouseCountLocationLabels/);
 
 assert.match(workspaceSrc, /detailsLoading/);
 assert.match(workspaceSrc, /loading=\{detailsLoading\}/);
+assert.match(workspaceSrc, /WarehouseItemSearchPanel/);
 assert.match(stockSrc, /BULK_PAGE_SIZE = 500/);
 assert.match(stockSrc, /warehouseId \? BULK_PAGE_SIZE : MAX_PAGE_SIZE/);
 

@@ -36,6 +36,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { isRepairTreasuryMonthClosedStatus } from '../lib/repairTreasuryMonthlyClose';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { RepairTreasuryMonthlyPrint } from '../components/RepairTreasuryMonthlyPrint';
 import { usePrintEngine } from '../../../utils/printManager';
 import { exportToPDF } from '../../../utils/reportExport';
@@ -407,37 +408,44 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
       onRefresh={() => { void reloadReport(); }}
       refreshing={loading}
       actions={(
-        <div className="flex flex-wrap gap-2">
+        <>
           <Button type="button" variant="outline" size="sm" onClick={() => navigate('/repair/treasury')}>
             العودة للخزينة
           </Button>
-          {report ? (
-            <>
-              <Button type="button" variant="outline" size="sm" onClick={handleExport}>
-                تصدير Excel
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => handlePrint()}>
-                طباعة
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={exportingPdf}
-                onClick={() => {
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'تصدير Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: !report,
+                onClick: handleExport,
+              },
+              {
+                label: 'طباعة',
+                icon: 'print',
+                group: 'تصدير',
+                hidden: !report,
+                onClick: () => handlePrint(),
+              },
+              {
+                label: exportingPdf ? 'جارٍ التصدير...' : 'PDF',
+                icon: 'picture_as_pdf',
+                group: 'تصدير',
+                hidden: !report,
+                disabled: exportingPdf,
+                onClick: () => {
                   if (!printRef.current) return;
                   setExportingPdf(true);
                   void exportToPDF(printRef.current, `treasury-${month}`)
                     .then(() => toast.success('تم تصدير PDF بنجاح.'))
                     .catch(() => toast.error('تعذر تصدير PDF.'))
                     .finally(() => setExportingPdf(false));
-                }}
-              >
-                {exportingPdf ? 'جارٍ التصدير...' : 'PDF'}
-              </Button>
-            </>
-          ) : null}
-        </div>
+                },
+              },
+            ]}
+          />
+        </>
       )}
     >
       {canManage && (

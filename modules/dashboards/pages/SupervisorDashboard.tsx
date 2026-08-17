@@ -787,7 +787,7 @@ export const SupervisorDashboard: React.FC = () => {
         <button
           type="button"
           className="ops-module-charts__qty text-start"
-          onClick={() => navigate('/inventory/production-floor')}
+          onClick={() => navigate('/production/floor')}
         >
           <p className="ops-module-charts__qty-label">WIP</p>
           <p className="ops-module-charts__qty-value">

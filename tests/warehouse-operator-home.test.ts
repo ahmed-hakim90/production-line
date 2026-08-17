@@ -44,5 +44,9 @@ assert.equal(
   resolveWarehouseRolePrimaryPath('wh-1', 'general'),
   '/inventory/warehouses/wh-1',
 );
+assert.equal(
+  resolveWarehouseRolePrimaryPath('wh-1', 'production_floor'),
+  '/production/floor',
+);
 
 console.log('warehouse-operator-home tests passed');

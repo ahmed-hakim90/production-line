@@ -7,8 +7,10 @@ import {
 import { resolvePrintDocumentConfig } from '../utils/print/resolvePrintDocumentConfig.ts';
 import {
   clampPrintFontSizePt,
+  classifyPrintKpiValue,
   normalizePrintFontFamily,
   resolvePrintFont,
+  resolvePrintKpiTypography,
 } from '../utils/print/printFont.ts';
 import { PRINT_DOCUMENT_TYPE_IDS, getPrintDocumentEntry } from '../utils/print/printDocumentRegistry.ts';
 import { PRINT_ENGINE_IFRAME_CSS } from '../utils/print/printSurface.ts';
@@ -116,6 +118,26 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   assert.match(font.fontFamily, /Tajawal/);
   assert.equal(font.fontSize, '12pt');
   assert.equal(font.denseFontSize, '10pt');
+  assert.equal(font.lineHeight, 1.5);
+  assert.equal(font.scale.kpiText, '13pt');
+  assert.equal(font.scale.kpiMetric, '17pt');
+  assert.equal(classifyPrintKpiValue(2340), 'metric');
+  assert.equal(classifyPrintKpiValue('2,340'), 'metric');
+  assert.equal(classifyPrintKpiValue('050530'), 'metric');
+  assert.equal(classifyPrintKpiValue('SK-999N'), 'code');
+  assert.equal(
+    classifyPrintKpiValue('SK-999N Sokany Stainless Blender 6000W 2.5L'),
+    'text',
+  );
+  const longKpi = resolvePrintKpiTypography(
+    'SK-999N Sokany Stainless Blender 6000W 2.5L',
+    font.scale,
+  );
+  assert.equal(longKpi.fontSize, font.scale.kpiText);
+  assert.equal(longKpi.lineHeight, 1.5);
+  assert.ok((longKpi.fontWeight as number) <= 800);
+  const qtyKpi = resolvePrintKpiTypography('2,340', font.scale);
+  assert.equal(qtyKpi.fontSize, font.scale.kpiMetric);
 }
 
 {
@@ -176,6 +198,9 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   assert.match(PRINT_ENGINE_IFRAME_CSS, /print-kv-row/);
   assert.match(PRINT_ENGINE_IFRAME_CSS, /print-info-grid/);
   assert.match(PRINT_ENGINE_IFRAME_CSS, /print-sign-grid/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /--print-font-family/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /line-height: var\(--print-line-height/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /font-synthesis: none/);
 }
 
 console.log('print-document-config.test.ts: ok');

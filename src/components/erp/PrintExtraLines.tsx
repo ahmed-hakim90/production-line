@@ -28,7 +28,7 @@ export function PrintExtraLines({
           key={`${index}-${line.slice(0, 24)}`}
           style={{
             margin: index === 0 ? 0 : '0.35rem 0 0',
-            fontSize: dense ? '8pt' : '11px',
+            fontSize: dense ? '0.85em' : 'var(--print-label-size, 1em)',
             fontWeight: 700,
             letterSpacing: 'normal',
             lineHeight: 1.45,

@@ -843,7 +843,7 @@ export const SuppliesReceipt: React.FC = () => {
         >
           {selectedOrder ? (
             <>
-              <div className="flex flex-wrap gap-2 border-b p-4">
+              <div className="ops-action-strip border-b p-4">
                 {selectedOrder.status === 'draft' && (
                   <ToneActionButton
                     action="submit"

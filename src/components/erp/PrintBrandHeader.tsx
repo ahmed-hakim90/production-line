@@ -95,8 +95,9 @@ export function PrintBrandHeader({
               height: dense ? 44 : 56,
               width: dense ? 44 : 56,
               borderRadius: 6,
-              fontSize: dense ? 13 : 16,
+              fontSize: dense ? '1.15em' : '1.2em',
               fontWeight: 800,
+              lineHeight: 1.2,
               background: palette.badgeBg,
               color: palette.badgeText,
               border: `1px solid ${palette.primarySoft}`,
@@ -112,9 +113,9 @@ export function PrintBrandHeader({
             className="print-brand-name"
             style={{
               margin: 0,
-              fontSize: dense ? 15 : 18,
+              fontSize: dense ? '1.35em' : 'var(--print-heading-size, 1.4em)',
               fontWeight: 800,
-              lineHeight: 1.35,
+              lineHeight: 1.4,
               color: '#0f172a',
               letterSpacing: 'normal',
               wordBreak: 'break-word',
@@ -141,9 +142,9 @@ export function PrintBrandHeader({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: dense ? 11 : 12,
+            fontSize: dense ? '0.95em' : 'var(--print-label-size, 1em)',
             fontWeight: 800,
-            lineHeight: 1.35,
+            lineHeight: 1.4,
             padding: dense ? '4px 8px' : '5px 10px',
             borderRadius: 6,
             background: palette.badgeBg,
@@ -156,7 +157,7 @@ export function PrintBrandHeader({
         </span>
         <span
           style={{
-            fontSize: dense ? 10 : 11,
+            fontSize: dense ? '0.85em' : 'var(--print-caption-size, 0.85em)',
             color: '#64748b',
             letterSpacing: 'normal',
           }}

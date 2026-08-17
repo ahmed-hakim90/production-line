@@ -44,7 +44,7 @@
 | inv-transfer-approvals | اعتماد التحويلات | `/inventory/transfer-approvals` | `inventory.view` |
 | inv-counts | الجرد والمطابقة | `/inventory/counts` | `inventory.counts.manage` |
 | inv-production-issues | صرف إنتاج | `/inventory/production-issues` | `inventory.view` |
-| inv-production-floor | مخزون صالة الإنتاج | `/inventory/production-floor` | `inventory.view` |
+| production-floor | مساحة صالة الإنتاج (تحت الإنتاج) | `/production/floor` | `inventory.view` |
 | — | اعتمادات الإنتاج | `/inventory/production-approvals` | `inventory.view` |
 | — | سجلات مكونات الإنتاج | `/inventory/production-component-records` | `inventory.view` |
 | — | تحليل استهلاك الإنتاج | `/inventory/production-consumption-analysis` | `inventory.view` |
@@ -67,7 +67,7 @@
 | `/inventory/transfer-approvals` | اعتماد تحويلات | يجب فصل صلاحيات approve/receive |
 | `/inventory/production-handover` | تسليم إنتاج→تعبئة | مسار خاص؛ جزء منه على CF |
 | `/inventory/packaging-control` | استلام نهائي + فروقات | مربوط بـ operation path |
-| `/inventory/production-floor` | رصيد صالة | مربوط بـ `productionFloorWarehouseId` |
+| `/production/floor` | كروت منتجات الصالة + صفحة تفاصيل الخطة/التقارير | مربوط بـ `productionFloorWarehouseId`؛ المسار القديم `/inventory/production-floor` يعيد التوجيه |
 | `/inventory/raw-materials/*` | تحكم/تنبيهات خام | نطاق المخزن UI فقط حاليًا |
 | `/inventory/department-consumables` | مستهلكات أقسام | وضع موافقة من إعدادات القسم |
 | `/inventory/counts` | جرد | صلاحية أدق موجودة |

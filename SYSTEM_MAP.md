@@ -103,6 +103,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Warehouses hub (filters, no sidebar spam) | `/inventory/warehouses` |
 | Shelf locations | `/inventory/locations` |
 | Production issue | `/inventory/production-issues` |
+| Production floor stock | `/production/floor` (`inventory.view`; legacy `/inventory/production-floor` redirects) |
 | Department consumable issues (print before/after issue) | `/inventory/department-consumables` |
 | Catalog home board (KPIs + readiness) | `/catalog` |
 | Products (factory tag filter) | `/products` |

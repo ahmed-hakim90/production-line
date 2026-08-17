@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   updateDoc,
   where,
@@ -284,11 +285,58 @@ async function resolveProductionFloorWarehouse(): Promise<Warehouse> {
   return warehouse;
 }
 
+const OPEN_ISSUE_STATUSES = new Set<ProductionIssueOrder['status']>([
+  'draft',
+  'submitted',
+  'requested',
+]);
+
 export const productionIssueService = {
   async getAll(): Promise<ProductionIssueOrder[]> {
     if (!isConfigured) return [];
     const rows = await loadWarehouseScopedIssueOrders(orderBy('createdAt', 'desc'));
     return rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  },
+
+  /**
+   * Issued orders that landed on a production-floor warehouse.
+   * Bounded recent scan — the floor page groups these into product cards.
+   */
+  async listIssuedForTargetWarehouse(warehouseId: string): Promise<ProductionIssueOrder[]> {
+    if (!isConfigured) return [];
+    const id = String(warehouseId || '').trim();
+    if (!id) return [];
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (boundWarehouseId && boundWarehouseId !== id) return [];
+    const snap = await getDocs(tenantQuery(
+      db,
+      COLLECTION,
+      where('targetWarehouseId', '==', id),
+      orderBy('createdAt', 'desc'),
+      limit(200),
+    ));
+    return snap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as ProductionIssueOrder))
+      .filter((row) => row.status === 'issued');
+  },
+
+  /** Recent open issues sourced from one warehouse — control/alerts badges, not a full scan. */
+  async listOpenForSourceWarehouse(warehouseId: string): Promise<ProductionIssueOrder[]> {
+    if (!isConfigured) return [];
+    const id = String(warehouseId || '').trim();
+    if (!id) return [];
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (boundWarehouseId && boundWarehouseId !== id) return [];
+    const snap = await getDocs(tenantQuery(
+      db,
+      COLLECTION,
+      where('sourceWarehouseId', '==', id),
+      orderBy('createdAt', 'desc'),
+      limit(100),
+    ));
+    return snap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as ProductionIssueOrder))
+      .filter((row) => OPEN_ISSUE_STATUSES.has(row.status));
   },
 
   async getById(id: string): Promise<ProductionIssueOrder | null> {

@@ -12,6 +12,12 @@ import { warehouseService } from '../services/warehouseService';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { Material } from '../../manufacturing/types';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  isPageDataCacheFresh,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 import { warehouseRackService } from '../services/warehouseRackService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { defaultItemLocationService } from '../services/defaultItemLocationService';
@@ -54,6 +60,16 @@ type ImportPreviewRow = {
 
 const normalizeHeader = (value: unknown) => String(value || '').trim().toLowerCase().replace(/\s+/g, '');
 const normalizeCode = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '-');
+const LOCATIONS_CACHE_KEY = 'inventory:warehouse-locations';
+const LOCATIONS_CACHE_MAX_AGE_MS = 45_000;
+
+type WarehouseLocationsPageData = {
+  warehouses: Warehouse[];
+  racks: WarehouseRack[];
+  locations: WarehouseLocation[];
+  balances: StockLocationBalance[];
+  defaults: DefaultItemLocation[];
+};
 const getCell = (row: Record<string, unknown>, keys: string[]) => {
   const entries = Object.entries(row);
   for (const key of keys) {
@@ -98,11 +114,12 @@ export const WarehouseLocations: React.FC = () => {
     () => (inventoryRouting.decomposedWarehouseId || inventoryRouting.rawMaterialWarehouseId || '').trim(),
     [inventoryRouting],
   );
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [racks, setRacks] = useState<WarehouseRack[]>([]);
-  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
-  const [defaults, setDefaults] = useState<DefaultItemLocation[]>([]);
-  const [balances, setBalances] = useState<StockLocationBalance[]>([]);
+  const initialLocations = peekPageDataCache<WarehouseLocationsPageData>(LOCATIONS_CACHE_KEY);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() => initialLocations?.warehouses ?? []);
+  const [racks, setRacks] = useState<WarehouseRack[]>(() => initialLocations?.racks ?? []);
+  const [locations, setLocations] = useState<WarehouseLocation[]>(() => initialLocations?.locations ?? []);
+  const [defaults, setDefaults] = useState<DefaultItemLocation[]>(() => initialLocations?.defaults ?? []);
+  const [balances, setBalances] = useState<StockLocationBalance[]>(() => initialLocations?.balances ?? []);
   const [warehouseId, setWarehouseId] = useState(
     () => searchParams.get('warehouseId') || scopedWarehouseId || suppliesWarehouseId || '',
   );
@@ -164,35 +181,60 @@ export const WarehouseLocations: React.FC = () => {
   }, [rawProducts, materials]);
 
 
-  const load = async (nextWarehouseId = warehouseId) => {
-    try {
-      const [whs] = await Promise.all([warehouseService.getActiveWarehouses()]);
-      const visibleWarehouses = filterWarehouses(whs);
-      const fromQuery = searchParams.get('warehouseId') || '';
-      const resolvedSuppliesId = resolveSuppliesWarehouseId(inventoryRouting, visibleWarehouses);
-      const resolvedWarehouseId = resolveScopedWarehouseId(
-        nextWarehouseId || warehouseId,
-        [fromQuery, scopedWarehouseId, suppliesWarehouseId, resolvedSuppliesId, visibleWarehouses[0]?.id || ''],
-      );
-      await warehouseLocationService.migrateLegacyLocationsToRacks();
-    const [rackRows, locRows, bals, defs] = await Promise.all([
-      warehouseRackService.getAll(),
-      warehouseLocationService.getAll(),
-      stockService.getLocationBalances(),
-      defaultItemLocationService.getAll(),
-    ]);
-      setWarehouses(visibleWarehouses);
-      setRacks(rackRows);
-      setLocations(locRows);
-    setBalances(bals);
-    setDefaults(defs);
+  const applyLocationsData = (data: WarehouseLocationsPageData, nextWarehouseId = warehouseId) => {
+    const visibleWarehouses = filterWarehouses(data.warehouses);
+    const fromQuery = searchParams.get('warehouseId') || '';
+    const resolvedSuppliesId = resolveSuppliesWarehouseId(inventoryRouting, visibleWarehouses);
+    const resolvedWarehouseId = resolveScopedWarehouseId(
+      nextWarehouseId || warehouseId,
+      [fromQuery, scopedWarehouseId, suppliesWarehouseId, resolvedSuppliesId, visibleWarehouses[0]?.id || ''],
+    );
+    setWarehouses(visibleWarehouses);
+    setRacks(data.racks);
+    setLocations(data.locations);
+    setBalances(data.balances);
+    setDefaults(data.defaults);
     if ((!warehouseId || (scoped && !warehouseIds.includes(warehouseId))) && resolvedWarehouseId) {
       setWarehouseId(resolvedWarehouseId);
     }
-      if (!selectedRackId) {
-        const firstRack = rackRows.find((rack) => rack.warehouseId === resolvedWarehouseId && rack.isActive !== false);
-        if (firstRack?.id) setSelectedRackId(firstRack.id);
-      }
+    if (!selectedRackId) {
+      const firstRack = data.racks.find(
+        (rack) => rack.warehouseId === resolvedWarehouseId && rack.isActive !== false,
+      );
+      if (firstRack?.id) setSelectedRackId(firstRack.id);
+    }
+  };
+
+  const load = async (nextWarehouseId = warehouseId, force = false) => {
+    const cached = peekPageDataCache<WarehouseLocationsPageData>(LOCATIONS_CACHE_KEY);
+    if (cached) applyLocationsData(cached, nextWarehouseId);
+    if (!force && cached && isPageDataCacheFresh(LOCATIONS_CACHE_KEY, LOCATIONS_CACHE_MAX_AGE_MS)) {
+      return;
+    }
+    try {
+      const { data } = await fetchCachedPageData(
+        LOCATIONS_CACHE_KEY,
+        async () => {
+          const [whs] = await Promise.all([warehouseService.getActiveWarehouses()]);
+          const visibleWarehouses = filterWarehouses(whs);
+          await warehouseLocationService.migrateLegacyLocationsToRacks();
+          const [rackRows, locRows, bals, defs] = await Promise.all([
+            warehouseRackService.getAll(),
+            warehouseLocationService.getAll(),
+            stockService.getLocationBalances(),
+            defaultItemLocationService.getAll(),
+          ]);
+          return {
+            warehouses: visibleWarehouses,
+            racks: rackRows,
+            locations: locRows,
+            balances: bals,
+            defaults: defs,
+          };
+        },
+        { force, maxAgeMs: LOCATIONS_CACHE_MAX_AGE_MS },
+      );
+      applyLocationsData(data, nextWarehouseId);
     } catch (error: any) {
       const raw = String(error?.message || '');
       toast.error(
@@ -201,6 +243,11 @@ export const WarehouseLocations: React.FC = () => {
           : (raw || 'تعذر تحميل اللوكيشنات.'),
       );
     }
+  };
+
+  const reloadLocations = async (nextWarehouseId = warehouseId) => {
+    invalidatePageDataCache(LOCATIONS_CACHE_KEY);
+    await load(nextWarehouseId, true);
   };
 
   useEffect(() => {
@@ -303,7 +350,7 @@ export const WarehouseLocations: React.FC = () => {
       setRackCode('');
       toast.success('تم إنشاء الراك.');
       setModal(null);
-      await load();
+      await reloadLocations();
     } catch (error: any) {
       toast.error(error?.message || 'تعذر إنشاء الراك.');
     } finally {
@@ -334,7 +381,7 @@ export const WarehouseLocations: React.FC = () => {
       setRackName('');
       setRackCode('');
       setModal(null);
-      await load();
+      await reloadLocations();
     } catch (error: any) {
       toast.error(error?.message || 'تعذر تعديل الراك.');
     } finally {
@@ -365,7 +412,7 @@ export const WarehouseLocations: React.FC = () => {
       } else {
         toast.success(`تم إنشاء ${createdIds.length} رف.`);
       }
-      await load();
+      await reloadLocations();
       return true;
     } catch (error: any) {
       toast.error(error?.message || 'تعذر إنشاء الأرفف.');
@@ -378,13 +425,13 @@ export const WarehouseLocations: React.FC = () => {
   const toggleRack = async (rack: WarehouseRack) => {
     if (!rack.id) return;
     await warehouseRackService.update(rack.id, { isActive: rack.isActive === false });
-    await load();
+    await reloadLocations();
   };
 
   const toggleLocation = async (loc: WarehouseLocation) => {
     if (!loc.id) return;
     await warehouseLocationService.update(loc.id, { isActive: loc.isActive === false });
-    await load();
+    await reloadLocations();
   };
 
   const deleteLocation = async (loc: WarehouseLocation) => {
@@ -398,7 +445,7 @@ export const WarehouseLocations: React.FC = () => {
     try {
       await warehouseLocationService.remove(loc.id);
       toast.success(`تم حذف الرف ${label}.`);
-      await load();
+      await reloadLocations();
     } catch (error: any) {
       toast.error(error?.message || 'تعذر حذف الرف.');
     } finally {
@@ -421,7 +468,7 @@ export const WarehouseLocations: React.FC = () => {
       locationCode: loc.code,
     });
     toast.success('تم حفظ الرف الافتراضي للصنف.');
-    await load();
+    await reloadLocations();
   };
 
   const closeModal = () => {
@@ -628,7 +675,7 @@ export const WarehouseLocations: React.FC = () => {
           `تم استيراد اللوكيشنات: ${added} مضاف، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}.`,
         );
       }
-      await load();
+      await reloadLocations();
     } catch (error: any) {
       failJob(jobId, error?.message || 'تعذر استيراد اللوكيشنات', 'Failed');
       toast.error('تعذر استيراد اللوكيشنات.');
@@ -1032,7 +1079,7 @@ export const WarehouseLocations: React.FC = () => {
         initialWarehouseId={warehouseId}
         warehouseSelectLocked={warehouseSelectLocked}
         canMoveStock={can('inventory.transactions.create')}
-        onApplied={() => void load()}
+        onApplied={() => void reloadLocations()}
       />
     </ModuleOpsPageShell>
   );

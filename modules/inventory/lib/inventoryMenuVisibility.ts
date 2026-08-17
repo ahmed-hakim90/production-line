@@ -35,7 +35,6 @@ const MENU_KEYS_BY_WAREHOUSE_ROLE: Record<WarehouseRole, readonly string[]> = {
   ],
   production_floor: [
     ...SCOPED_SHARED_MENU_KEYS,
-    'inv-production-floor',
     'inv-production-issues',
     'inv-production-component-records',
   ],

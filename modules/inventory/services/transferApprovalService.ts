@@ -305,6 +305,40 @@ export const transferApprovalService = {
     return rows;
   },
 
+  /** Pending transfers touching one warehouse — control/alerts badges, not a tenant-wide scan. */
+  async getPendingForWarehouse(warehouseId: string): Promise<InventoryTransferRequest[]> {
+    if (!isConfigured) return [];
+    const id = String(warehouseId || '').trim();
+    if (!id) return [];
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (boundWarehouseId && boundWarehouseId !== id) return [];
+    const pageSize = MAX_PAGE_SIZE;
+    const [sourceSnap, destinationSnap] = await Promise.all([
+      getDocs(tenantQuery(
+        db,
+        COLLECTION,
+        where('fromWarehouseId', '==', id),
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize),
+      )),
+      getDocs(tenantQuery(
+        db,
+        COLLECTION,
+        where('toWarehouseId', '==', id),
+        where('status', '==', 'pending'),
+        orderBy('createdAt', 'desc'),
+        limit(pageSize),
+      )),
+    ]);
+    const docsById = new Map(
+      [...sourceSnap.docs, ...destinationSnap.docs].map((row) => [row.id, row]),
+    );
+    return [...docsById.values()]
+      .sort((a, b) => String(b.data().createdAt || '').localeCompare(String(a.data().createdAt || '')))
+      .map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+  },
+
   /** Sidebar badge: pending transfer / production-entry requests visible to the actor. */
   async countPending(): Promise<number> {
     if (!isConfigured) return 0;

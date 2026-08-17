@@ -25,6 +25,7 @@ import {
   assertOperationPathEnabledServer,
   isOperationPathEnabledServer,
 } from './operationPathGuard.js';
+import { resolveRequiresProductionIssueOnReport } from './requiresProductionIssue.js';
 
 const REPORT_CREATE_OPERATION_KEY = 'production.report.create';
 const REPORT_DELETE_OPERATION_KEY = 'production.report.delete';
@@ -38,6 +39,8 @@ const PRODUCTS = 'products';
 const MATERIALS = 'materials';
 const RAW_MATERIALS = 'raw_materials';
 const ORDERS = 'production_issue_orders';
+const WORK_ORDERS = 'work_orders';
+const PRODUCTION_PLANS = 'production_plans';
 const STOCK_ITEMS = 'stock_items';
 const STOCK_TX = 'stock_transactions';
 const REQUESTS = 'inventory_transfer_requests';
@@ -1097,7 +1100,48 @@ export async function applyProductionReportInventoryInternal(
       productionPlanId: report.productionPlanId,
     });
 
-    if (routing.requireIssuedProductionIssueOnReport && !issued) {
+    const workOrderId = String(report.workOrderId || '').trim();
+    let workOrderRequiresProductionIssue: boolean | null | undefined;
+    let planRequiresProductionIssue: boolean | null | undefined;
+    let planId = String(report.productionPlanId || '').trim();
+
+    if (workOrderId) {
+      const woSnap = await db.collection(WORK_ORDERS).doc(workOrderId).get();
+      if (woSnap.exists) {
+        const wo = woSnap.data() as {
+          tenantId?: string;
+          planId?: string;
+          productionPlanId?: string;
+          requiresProductionIssue?: boolean;
+        };
+        if (String(wo.tenantId || '') === actor.tenantId) {
+          workOrderRequiresProductionIssue = wo.requiresProductionIssue;
+          if (!planId) {
+            planId = String(wo.planId || wo.productionPlanId || '').trim();
+          }
+        }
+      }
+    }
+    if (planId) {
+      const planSnap = await db.collection(PRODUCTION_PLANS).doc(planId).get();
+      if (planSnap.exists) {
+        const plan = planSnap.data() as {
+          tenantId?: string;
+          requiresProductionIssue?: boolean;
+        };
+        if (String(plan.tenantId || '') === actor.tenantId) {
+          planRequiresProductionIssue = plan.requiresProductionIssue;
+        }
+      }
+    }
+
+    const requiresIssue = resolveRequiresProductionIssueOnReport({
+      companyRequire: routing.requireIssuedProductionIssueOnReport,
+      workOrderRequiresProductionIssue,
+      planRequiresProductionIssue,
+    });
+
+    if (requiresIssue && !issued) {
       throw new HttpsError(
         'failed-precondition',
         'لا يمكن ترحيل مخزون تقرير الإنتاج قبل اعتماد وإصدار إذن صرف إنتاج.',

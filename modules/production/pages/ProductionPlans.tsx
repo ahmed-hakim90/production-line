@@ -26,6 +26,8 @@ import { calculateOperationalPeriodDailyTarget } from '../lib/operationalPeriod'
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { productionPlanService } from '../services/productionPlanService';
+import { defaultRequiresProductionIssueFromCompany } from '../lib/requiresProductionIssue';
+import { resolveInventoryRoutingV1 } from '@/modules/inventory/services/inventoryRoutingService';
 import { filterProductionProducts } from '../utils/isProductionProduct';
 import {
   loadInjectionComponentOptions,
@@ -40,6 +42,7 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { ManagedModalPortal } from '../../../components/modal-manager/ManagedModalPortal';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
@@ -206,6 +209,9 @@ export const ProductionPlans: React.FC = () => {
   const canImport = can('import');
   const canCreateReport = can('reports.create') || can('reports.componentInjection.manage');
   const planSettings = systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS;
+  const companyRequiresProductionIssue = defaultRequiresProductionIssueFromCompany(
+    resolveInventoryRoutingV1(systemSettings).requireIssuedProductionIssueOnReport,
+  );
 
   // â”€â”€ View / Filter state â”€â”€
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -236,10 +242,15 @@ export const ProductionPlans: React.FC = () => {
   const [formPriority, setFormPriority] = useState<PlanPriority>('medium');
   const [formPlanType, setFormPlanType] = useState<'finished_product' | 'component_injection'>('finished_product');
   const [formAcceptsProductionFromReports, setFormAcceptsProductionFromReports] = useState(true);
+  const [formRequiresProductionIssue, setFormRequiresProductionIssue] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(!!searchParams.get('productId'));
   const [injectionComponents, setInjectionComponents] = useState<InjectionComponentOption[]>([]);
   const injectionCategoryKeywords = planSettings.injectionRawMaterialCategoryKeywords;
+
+  useEffect(() => {
+    setFormRequiresProductionIssue(companyRequiresProductionIssue);
+  }, [companyRequiresProductionIssue]);
 
   useEffect(() => {
     if (!can('plans.create') && canManageComponentInjectionPlans) {
@@ -281,6 +292,7 @@ export const ProductionPlans: React.FC = () => {
     startDate: '',
     priority: 'medium' as PlanPriority,
     acceptsProductionFromReports: true,
+    requiresProductionIssue: true,
   });
   const [editSaving, setEditSaving] = useState(false);
 
@@ -784,6 +796,7 @@ export const ProductionPlans: React.FC = () => {
         estimatedCost: calculations.estimatedCost,
         actualCost: 0,
         acceptsProductionFromReports: formAcceptsProductionFromReports,
+        requiresProductionIssue: formRequiresProductionIssue,
         status: 'planned',
         createdBy: uid,
       }, { path: PRODUCTION_PLAN_CREATE_PATHS.plansPage });
@@ -797,6 +810,7 @@ export const ProductionPlans: React.FC = () => {
       setFormPriority('medium');
       setFormPlanType('finished_product');
       setFormAcceptsProductionFromReports(true);
+      setFormRequiresProductionIssue(companyRequiresProductionIssue);
       setFormOpen(false);
       setCapacityWarning({ show: false, load: 0, capacity: 0 });
       showAppToast('success', 'تم حفظ خطة الإنتاج');
@@ -824,6 +838,7 @@ export const ProductionPlans: React.FC = () => {
         plannedEndDate: durationDays > 0 ? addDaysToDate(editForm.startDate, durationDays) : editPlan.plannedEndDate,
         priority: editForm.priority,
         acceptsProductionFromReports: editForm.acceptsProductionFromReports,
+        requiresProductionIssue: editForm.requiresProductionIssue,
       }, { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageEdit });
       setEditPlan(null);
       showAppToast('success', 'تم حفظ تعديلات الخطة');
@@ -987,7 +1002,7 @@ export const ProductionPlans: React.FC = () => {
       rangeLabel="إدارة وتتبع خطط الإنتاج الرسمية"
       hero={planHero}
       actions={(
-        <div className="flex flex-wrap items-center gap-2">
+        <>
           {canCreate ? (
             <Button variant="primary" onClick={() => setFormOpen(true)}>
               <span className="material-icons-round text-sm">add</span>
@@ -1008,25 +1023,32 @@ export const ProductionPlans: React.FC = () => {
               </button>
             ))}
           </div>
-          {can('productionIssue.request') ? (
-            <Button type="button" variant="outline" onClick={() => navigate('/production/issue-requests')}>
-              <span className="material-icons-round text-sm">fact_check</span>
-              طلب صرف إنتاج
-            </Button>
-          ) : null}
-          {canExport && filteredPlans.length > 0 ? (
-            <Button type="button" variant="outline" onClick={handleExportPlans}>
-              <span className="material-icons-round text-sm">download</span>
-              تصدير الخطط
-            </Button>
-          ) : null}
-          {canImport && canCreatePermission && planImportEnabled ? (
-            <Button type="button" variant="outline" onClick={() => openModal(MODAL_KEYS.PRODUCTION_PLANS_IMPORT)}>
-              <span className="material-icons-round text-sm">upload</span>
-              استيراد الخطط
-            </Button>
-          ) : null}
-        </div>
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'طلب صرف إنتاج',
+                icon: 'fact_check',
+                group: 'تشغيل',
+                hidden: !can('productionIssue.request'),
+                onClick: () => navigate('/production/issue-requests'),
+              },
+              {
+                label: 'تصدير الخطط',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: !canExport || filteredPlans.length === 0,
+                onClick: handleExportPlans,
+              },
+              {
+                label: 'استيراد الخطط',
+                icon: 'upload',
+                group: 'استيراد',
+                hidden: !(canImport && canCreatePermission && planImportEnabled),
+                onClick: () => openModal(MODAL_KEYS.PRODUCTION_PLANS_IMPORT),
+              },
+            ]}
+          />
+        </>
       )}
     >
       <Dialog open={canCreate && formOpen} onOpenChange={(open) => setFormOpen(open)}>
@@ -1134,6 +1156,22 @@ export const ProductionPlans: React.FC = () => {
                 </span>
                 <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
                   عند التفعيل تُحسب التقارير المرتبطة بالخطة، والتقارير المباشرة غير المرتبطة بأمر شغل، ضمن إنجاز الخطة. عند الإيقاف تبقى كميات أوامر الشغل والتقارير منفصلة ولا تغير تقدم الخطة.
+                </span>
+              </span>
+            </label>
+            <label className="lg:col-span-3 flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-primary/15 bg-primary/5 p-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formRequiresProductionIssue}
+                onChange={(e) => setFormRequiresProductionIssue(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/30"
+              />
+              <span className="space-y-1">
+                <span className="block text-sm font-black text-[var(--color-text)]">
+                  تحتاج صرف إنتاج؟
+                </span>
+                <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
+                  عند التفعيل يلزم إذن صرف إنتاج صادر قبل حفظ تقرير منتج تام على هذه الخطة. عند الإيقاف يُسمح بالحفظ بدون صرف حتى لو كان إعداد الشركة مفعّلاً.
                 </span>
               </span>
             </label>
@@ -1556,7 +1594,7 @@ export const ProductionPlans: React.FC = () => {
 
               <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-2">
                 {canEdit && planEditEnabled && (
-                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, priority: activeDrawerPlan.priority || 'medium', acceptsProductionFromReports: activeDrawerPlan.acceptsProductionFromReports !== false }); setActiveDrawerPlanId(null); }}>
+                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, priority: activeDrawerPlan.priority || 'medium', acceptsProductionFromReports: activeDrawerPlan.acceptsProductionFromReports !== false, requiresProductionIssue: typeof activeDrawerPlan.requiresProductionIssue === 'boolean' ? activeDrawerPlan.requiresProductionIssue : companyRequiresProductionIssue }); setActiveDrawerPlanId(null); }}>
                       تعديل
                     </Button>
                 )}
@@ -1659,6 +1697,22 @@ export const ProductionPlans: React.FC = () => {
                   </span>
                   <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
                     أوقف هذا الخيار عندما تكون كميات أوامر الشغل منفصلة عن الخطة ولا تريدها أن تغير تقدم الخطة.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-primary/15 bg-primary/5 p-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editForm.requiresProductionIssue}
+                  onChange={(e) => setEditForm({ ...editForm, requiresProductionIssue: e.target.checked })}
+                  className="mt-1 h-4 w-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/30"
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-black text-[var(--color-text)]">
+                    تحتاج صرف إنتاج؟
+                  </span>
+                  <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
+                    عند التفعيل يلزم إذن صرف إنتاج صادر قبل حفظ تقرير منتج تام على هذه الخطة.
                   </span>
                 </span>
               </label>
@@ -1998,7 +2052,7 @@ export const ProductionPlans: React.FC = () => {
                                 <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                                   {canEdit && planEditEnabled && (
                                       <button
-                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, priority: plan.priority || 'medium', acceptsProductionFromReports: plan.acceptsProductionFromReports !== false }); }}
+                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, priority: plan.priority || 'medium', acceptsProductionFromReports: plan.acceptsProductionFromReports !== false, requiresProductionIssue: typeof plan.requiresProductionIssue === 'boolean' ? plan.requiresProductionIssue : companyRequiresProductionIssue }); }}
                                         className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
                                         <span className="material-icons-round text-sm">edit</span>
                                       </button>

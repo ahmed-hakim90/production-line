@@ -84,13 +84,19 @@ export async function countRawMaterialWarehouseAlerts(): Promise<number> {
     settings.planSettings?.inventoryExceptionManualThreshold || DEFAULT_MANUAL_THRESHOLD,
   );
 
-  const [balances, transactions, pending, issues, planAlerts] = await Promise.all([
-    stockService.getBalances(warehouseId),
-    stockService.getTransactions(warehouseId),
-    transferApprovalService.getByStatus('pending'),
-    productionIssueService.getAll(),
-    listPlanIssueAlerts(warehouseId),
-  ]);
+  const [balancesResult, transactionsResult, pendingResult, issuesResult, planAlertsResult] =
+    await Promise.allSettled([
+      stockService.getBalances(warehouseId),
+      stockService.getTransactions(warehouseId),
+      transferApprovalService.getPendingForWarehouse(warehouseId),
+      productionIssueService.listOpenForSourceWarehouse(warehouseId),
+      listPlanIssueAlerts(warehouseId),
+    ]);
+  const balances = balancesResult.status === 'fulfilled' ? balancesResult.value : [];
+  const transactions = transactionsResult.status === 'fulfilled' ? transactionsResult.value : [];
+  const pending = pendingResult.status === 'fulfilled' ? pendingResult.value : [];
+  const issues = issuesResult.status === 'fulfilled' ? issuesResult.value : [];
+  const planAlerts = planAlertsResult.status === 'fulfilled' ? planAlertsResult.value : [];
 
   let count = 0;
 

@@ -1,6 +1,7 @@
 import { flushSync } from 'react-dom';
 import type { PrintTemplateSettings } from '../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../dashboardConfig';
+import { resolvePrintFont } from './printFont';
 import { PRINT_ENGINE_IFRAME_CSS, PRINT_SURFACE } from './printSurface';
 
 const PAPER_LABELS: Record<string, string> = {
@@ -52,6 +53,7 @@ export const buildGlobalPrintPageStyle = (settings?: PrintTemplateSettings): str
   const mr = clampMm(ps.marginRightMm);
   const mb = clampMm(ps.marginBottomMm);
   const ml = clampMm(ps.marginLeftMm);
+  const font = resolvePrintFont(ps);
   const colorAdjust = 'exact';
   const rootVars = collectPrintCssVars();
 
@@ -60,6 +62,17 @@ export const buildGlobalPrintPageStyle = (settings?: PrintTemplateSettings): str
       ${rootVars}
       background: ${PRINT_SURFACE.card} !important;
       color: ${PRINT_SURFACE.text} !important;
+    }
+    .print-root,
+    .print-report,
+    .arabic-export-root {
+      font-family: ${font.fontFamily};
+      font-size: ${font.fontSize};
+      line-height: ${font.lineHeight};
+      font-weight: 600;
+      font-synthesis: none;
+      letter-spacing: normal;
+      word-spacing: normal;
     }
     @page {
       size: ${pageSize} ${orientation};

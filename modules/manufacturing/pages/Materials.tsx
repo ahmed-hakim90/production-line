@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { MaterialCategoryTreeSelect } from '../components/MaterialCategoryTreeSelect';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -94,6 +95,7 @@ import { repairPartsPricingService } from '../../repair/services/repairPartsPric
 import { normalizeRepairSalePrice } from '../../repair/utils/sparePartPricing';
 
 const BULK_SPARE_UPDATE_CHUNK = 8;
+const IMPORT_PREVIEW_LIMIT = 80;
 
 const arNum = (n: number) =>
   n.toLocaleString('ar-EG', {
@@ -204,6 +206,7 @@ export const Materials: React.FC = () => {
   const queryClient = useQueryClient();
   const { create, update, remove } = useMaterialMutations();
   const importInputRef = useRef<HTMLInputElement>(null);
+  const importSessionRef = useRef(0);
   const categoryCodeRequestRef = useRef(0);
 
   const [search, setSearch] = useState('');
@@ -873,8 +876,31 @@ export const Materials: React.FC = () => {
     );
   };
 
+  const resetImportModalState = () => {
+    importSessionRef.current += 1;
+    setImportResult(null);
+    setImportParsing(false);
+    setImportFileName('');
+    setImportSkipUpdates(true);
+    setImportExistingMaterials([]);
+    if (importInputRef.current) importInputRef.current.value = '';
+  };
+
+  const openImportModal = () => {
+    if (!canImportFromPage || importSaving) return;
+    resetImportModalState();
+    setShowImportModal(true);
+  };
+
+  const closeImportModal = () => {
+    if (importSaving) return;
+    resetImportModalState();
+    setShowImportModal(false);
+  };
+
   const handleImportFile = async (file: File) => {
     if (!canImportFromPage) return;
+    const session = ++importSessionRef.current;
     setImportParsing(true);
     setImportResult(null);
     setImportFileName(file.name);
@@ -884,6 +910,7 @@ export const Materials: React.FC = () => {
         materialCategoryService.getAll(),
         materialService.getAll(),
       ]);
+      if (importSessionRef.current !== session) return;
       setImportExistingMaterials(existingMaterials);
       const categoryOpts = categories
         .filter((c) => c.id)
@@ -898,8 +925,10 @@ export const Materials: React.FC = () => {
           .filter((p) => p.id && p.code)
           .map((p) => ({ id: p.id!, code: p.code })),
       });
+      if (importSessionRef.current !== session) return;
       setImportResult(result);
     } catch (e) {
+      if (importSessionRef.current !== session) return;
       setImportResult({
         rows: [],
         totalRows: 0,
@@ -910,7 +939,9 @@ export const Materials: React.FC = () => {
         fileErrors: [e instanceof Error ? e.message : 'تعذر قراءة الملف'],
       });
     } finally {
-      setImportParsing(false);
+      if (importSessionRef.current === session) {
+        setImportParsing(false);
+      }
     }
   };
 
@@ -1058,55 +1089,55 @@ export const Materials: React.FC = () => {
       eyebrow="المواد التصنيعية"
       rangeLabel="الخطوة 1 من الاستيراد — ثم المنتجات — ثم المكونات. تسعير قطع الغيار (المكونات) من هنا"
       actions={(
-        <div className="flex flex-wrap items-center gap-2">
+        <>
           {canManage ? (
             <Button type="button" size="sm" onClick={openCreate}>
               إضافة مادة
             </Button>
           ) : null}
-          {canExportFromPage && sorted.length > 0 ? (
-            <Button type="button" size="sm" variant="outline" onClick={() => { void handleExportExcel(); }}>
-              <span className="material-icons-round text-sm">download</span>
-              تصدير بيانات المواد (للاستيراد)
-            </Button>
-          ) : null}
-          {canImportFromPage ? (
-            <>
-              <Button type="button" size="sm" variant="outline" onClick={() => downloadMaterialsTemplate()}>
-                <span className="material-icons-round text-sm">file_download</span>
-                تحميل قالب بيانات المواد
-              </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => importInputRef.current?.click()}>
-                <span className="material-icons-round text-sm">upload</span>
-                رفع/تحديث بيانات المواد
-              </Button>
-            </>
-          ) : null}
-          {canManage ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void handleDisableSpareVisibilityForAll()}
-              disabled={bulkBusy}
-            >
-              <span className="material-icons-round text-sm">hide_source</span>
-              {disablingSpareVisibility ? 'جاري الإيقاف...' : 'إيقاف الكل من قطع الغيار'}
-            </Button>
-          ) : null}
-          {canManage ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void handleMigrate()}
-              disabled={bulkBusy}
-            >
-              <span className="material-icons-round text-sm">refresh</span>
-              {migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم'}
-            </Button>
-          ) : null}
-        </div>
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'تصدير بيانات المواد (للاستيراد)',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: !(canExportFromPage && sorted.length > 0),
+                onClick: () => { void handleExportExcel(); },
+              },
+              {
+                label: 'تحميل قالب بيانات المواد',
+                icon: 'file_download',
+                group: 'استيراد',
+                hidden: !canImportFromPage,
+                onClick: () => downloadMaterialsTemplate(),
+              },
+              {
+                label: 'رفع/تحديث بيانات المواد',
+                icon: 'upload',
+                group: 'استيراد',
+                hidden: !canImportFromPage,
+                disabled: importSaving,
+                onClick: () => openImportModal(),
+              },
+              {
+                label: disablingSpareVisibility ? 'جاري الإيقاف...' : 'إيقاف الكل من قطع الغيار',
+                icon: 'warning',
+                group: 'صيانة',
+                hidden: !canManage,
+                disabled: bulkBusy,
+                onClick: () => { void handleDisableSpareVisibilityForAll(); },
+              },
+              {
+                label: migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم',
+                icon: 'refresh',
+                group: 'صيانة',
+                hidden: !canManage,
+                disabled: bulkBusy,
+                onClick: () => { void handleMigrate(); },
+              },
+            ]}
+          />
+        </>
       )}
     >
 
@@ -1122,18 +1153,6 @@ export const Materials: React.FC = () => {
           />
         </OpsDashPanel>
       ) : null}
-
-      <input
-        ref={importInputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (file) void handleImportFile(file);
-        }}
-      />
 
       <OpsDashPanel title="كتالوج المواد" accent="production" bodyClassName="p-0">
         <SmartFilterBar
@@ -1958,34 +1977,76 @@ export const Materials: React.FC = () => {
 
       {showImportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
+        <div
+          className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="materials-import-title"
+        >
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-card shadow-lg">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <div>
-                <h3 className="text-lg font-bold">رفع/تحديث بيانات المواد</h3>
+                <h3 id="materials-import-title" className="text-lg font-bold">رفع/تحديث بيانات المواد</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   ماستر المواد فقط — الربط بالمنتجات من شاشة المنتجات ← مكونات
                 </p>
-                {importFileName && (
-                  <p className="text-xs text-muted-foreground">{importFileName}</p>
-                )}
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 disabled={importSaving}
-                onClick={() => {
-                  if (importSaving) return;
-                  setShowImportModal(false);
-                  setImportResult(null);
-                }}
+                onClick={closeImportModal}
+                aria-label="إغلاق"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5">
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.target.value = '';
+                  if (file) void handleImportFile(file);
+                }}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={importSaving || importParsing}
+                  onClick={() => downloadMaterialsTemplate()}
+                >
+                  تحميل القالب
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={importSaving || importParsing}
+                  onClick={() => importInputRef.current?.click()}
+                >
+                  {importFileName ? 'اختيار ملف آخر' : 'اختيار الملف'}
+                </Button>
+                {importFileName ? (
+                  <span className="text-xs text-muted-foreground">{importFileName}</span>
+                ) : null}
+              </div>
+
+              {!importParsing && !importResult ? (
+                <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-8 text-center">
+                  <p className="text-sm font-medium">حمّل القالب أو اختر ملف Excel لمعاينة الصفوف قبل الحفظ.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    الصيغة: .xlsx / .xls — عمود «كود المادة» للمطابقة فقط ولا يُغيَّر عبر الاستيراد.
+                  </p>
+                </div>
+              ) : null}
+
               {importParsing && (
                 <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
                   <Loader2 className="h-5 w-5 animate-spin" />
@@ -2053,7 +2114,7 @@ export const Materials: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {importResult.rows.map((row) => (
+                        {importResult.rows.slice(0, IMPORT_PREVIEW_LIMIT).map((row) => (
                           <tr key={row.rowIndex} className={row.errors.length ? 'bg-destructive/5' : ''}>
                             <td className="px-2 py-1.5 tabular-nums">{row.rowIndex}</td>
                             <td className="px-2 py-1.5">
@@ -2077,6 +2138,11 @@ export const Materials: React.FC = () => {
                       </tbody>
                     </table>
                   </div>
+                  {importResult.rows.length > IMPORT_PREVIEW_LIMIT ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      عرض أول {IMPORT_PREVIEW_LIMIT} صف للمعاينة — عند الحفظ تُطبَّق كل الصفوف الصالحة.
+                    </p>
+                  ) : null}
                   <p className="text-[11px] text-muted-foreground">
                     عمود «كود المادة» للمطابقة فقط ولا يُغيَّر عبر الاستيراد. الأعمدة الفاضية لا تمس القيم الأصلية.
                   </p>
@@ -2089,10 +2155,7 @@ export const Materials: React.FC = () => {
                 type="button"
                 variant="ghost"
                 disabled={importSaving}
-                onClick={() => {
-                  setShowImportModal(false);
-                  setImportResult(null);
-                }}
+                onClick={closeImportModal}
               >
                 إلغاء
               </Button>

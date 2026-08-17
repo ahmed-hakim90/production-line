@@ -72,6 +72,36 @@ function testPackagingMenuAndMaterialsRoleFilter() {
   );
 
   const allowAll = () => true;
+  const floor = productionGroup?.children.find((c) => c.key === 'production-floor');
+  assert.ok(floor);
+  assert.equal(floor?.label, 'مساحة صالة الإنتاج');
+  assert.equal(floor?.path, '/production/floor');
+  assert.equal(floor?.permission, 'inventory.view');
+  assert.deepEqual(floor?.excludeRoleKeys, [
+    'repair_reception',
+    'repair_technician',
+    'spare_parts_central_warehouse',
+    'maintenance_center_warehouse',
+  ]);
+  assert.equal(
+    inventoryGroup?.children.some((c) => c.key === 'inv-production-floor' || c.path?.includes('/production-floor')),
+    false,
+  );
+  assert.equal(canAccessMenuItem(allowAll, floor!, null), true);
+  assert.equal(canAccessMenuItem(allowAll, floor!, 'repair_reception'), false);
+  assert.equal(canAccessMenuItem(allowAll, floor!, 'spare_parts_central_warehouse'), false);
+  assert.equal(canAccessMenuItem(allowAll, floor!, 'factory_manager'), true);
+  assert.equal(canAccessMenuItem(allowAll, floor!, 'materials_warehouse'), true);
+  assert.equal(
+    canAccessMenuItem((p) => p === 'plans.view' || p === 'quickAction.view', floor!, 'supervisor'),
+    false,
+    'line supervisor without inventory.view must not open مساحة صالة الإنتاج',
+  );
+  assert.equal(
+    canAccessMenuItem((p) => p === 'inventory.view', floor!, 'hall_supervisor'),
+    true,
+  );
+
   assert.equal(canAccessMenuItem(allowAll, packaging!, null), true);
   assert.equal(canAccessMenuItem(allowAll, packaging!, 'materials_warehouse'), false);
   assert.equal(canAccessMenuItem(allowAll, packaging!, 'repair_reception'), false);

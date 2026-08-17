@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '../../components/UI';
 import { toast } from '../../../../components/Toast';
@@ -782,7 +783,7 @@ export const WorkOrders: React.FC = () => {
         { key: 'overdue', label: 'متأخر', value: kpis.overdue, accent: kpis.overdue > 0 },
       ]}
       actions={(
-        <div className="flex flex-wrap items-center gap-2">
+        <>
           {canCreateWorkOrder ? (
             <Button variant="primary" onClick={handleOpenCreate} data-modal-key={MODAL_KEYS.WORK_ORDERS_CREATE}>
               <span className="material-icons-round text-sm">add</span>
@@ -795,19 +796,25 @@ export const WorkOrders: React.FC = () => {
               طلب صرف إنتاج
             </Button>
           ) : null}
-          {visibleRowViews.length > 0 ? (
-            <Button type="button" variant="outline" onClick={handleExport}>
-              <span className="material-icons-round text-sm">download</span>
-              تصدير أوامر الشغل Excel
-            </Button>
-          ) : null}
-          {canCreateWorkOrder ? (
-            <Button type="button" variant="outline" onClick={handleImport}>
-              <span className="material-icons-round text-sm">file_download</span>
-              استيراد أوامر الشغل
-            </Button>
-          ) : null}
-        </div>
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'تصدير أوامر الشغل Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: visibleRowViews.length === 0,
+                onClick: handleExport,
+              },
+              {
+                label: 'استيراد أوامر الشغل',
+                icon: 'upload',
+                group: 'استيراد',
+                hidden: !canCreateWorkOrder,
+                onClick: handleImport,
+              },
+            ]}
+          />
+        </>
       )}
     >
       <OpsDashPanel title="قائمة أوامر الشغل" accent="production" bodyClassName="p-0 overflow-hidden">

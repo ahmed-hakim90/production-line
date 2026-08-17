@@ -31,6 +31,7 @@ import { productService } from '../../production/services/productService';
 import type { Product } from '../../../types';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { WarehouseItemSearchPanel } from '../components/WarehouseItemSearchPanel';
 
 const ASSEMBLE_PAGE_SIZE = 20;
 const RM_CONTROL_CACHE_PREFIX = 'inventory:raw-material-control';
@@ -122,30 +123,29 @@ export const RawMaterialWarehouseControl: React.FC = () => {
           assemblableError: null,
         };
       }
-      // Core board only — assemblable capacity loads in a follow-up effect so the shell
-      // is not blocked by BOM/product scans.
-      const [bals, txs, pending, issues] = await Promise.all([
+      // Balances are required for KPIs. Transfers / issues / recent txs are badges and
+      // a side panel — a permission or index failure there must not blank the board.
+      const [balsResult, txsResult, pendingResult, issuesResult] = await Promise.allSettled([
         stockService.getBalances(warehouseId),
-        stockService.getTransactions(warehouseId),
-        transferApprovalService.getByStatus('pending'),
-        productionIssueService.getAll(),
+        stockService.getTransactionsPaged({ warehouseId, limit: 8 }),
+        transferApprovalService.getPendingForWarehouse(warehouseId),
+        productionIssueService.listOpenForSourceWarehouse(warehouseId),
       ]);
+      if (balsResult.status === 'rejected') {
+        throw balsResult.reason;
+      }
+      const pending = pendingResult.status === 'fulfilled' ? pendingResult.value : [];
+      const issues = issuesResult.status === 'fulfilled' ? issuesResult.value : [];
       return {
-        balances: bals,
-        transactions: txs.slice(0, 8),
-        pendingTransfers: pending.filter(
-          (row) => row.fromWarehouseId === warehouseId || row.toWarehouseId === warehouseId,
-        ).length,
-        pendingIssues: issues.filter(
-          (row) =>
-            row.sourceWarehouseId === warehouseId &&
-            (row.status === 'draft' || row.status === 'submitted' || row.status === 'requested'),
-        ).length,
+        balances: balsResult.value,
+        transactions: txsResult.status === 'fulfilled' ? txsResult.value.items : [],
+        pendingTransfers: pending.length,
+        pendingIssues: issues.length,
         assemblableRows: [],
         assemblableError: null,
       };
     },
-    { maxAgeMs: 45_000 },
+    { maxAgeMs: 45_000, enabled: Boolean(warehouseId) },
   );
 
   const balances = controlData?.balances ?? [];
@@ -570,35 +570,15 @@ export const RawMaterialWarehouseControl: React.FC = () => {
     );
   }
 
-  if (loading && balances.length === 0 && transactions.length === 0) {
+  if (loading && balances.length === 0 && transactions.length === 0 && !controlLoadError) {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
-  }
-
-  if (controlLoadError && balances.length === 0) {
-    return (
-      <ModuleOpsPageShell
-        eyebrow="تحكم مخزن المستلزمات"
-        rangeLabel={warehouseName || 'مخزن المستلزمات'}
-        onRefresh={() => void loadData()}
-        refreshing={loading}
-      >
-        <OpsDashPanel accent="inventory">
-          <div className="py-10 text-center space-y-4">
-            <p className="text-sm text-[rgb(var(--color-danger))]">تعذر تحميل بيانات مخزن المستلزمات. حاول مرة أخرى.</p>
-            <GhostButton iconName="refresh" onClick={() => void loadData()}>
-              إعادة المحاولة
-            </GhostButton>
-          </div>
-        </OpsDashPanel>
-      </ModuleOpsPageShell>
-    );
   }
 
   return (
     <ModuleOpsPageShell
       eyebrow="تحكم مخزن المستلزمات"
       rangeLabel={`تشغيل يومي بسيط: ${warehouseName}`}
-      hero={warehouseHero}
+      hero={controlLoadError && balances.length === 0 ? undefined : warehouseHero}
       onRefresh={() => void loadData()}
       refreshing={loading}
       actions={(
@@ -628,6 +608,17 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         </div>
       )}
     >
+      {controlLoadError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] px-4 py-3">
+          <p className="text-sm font-medium text-[rgb(var(--color-danger))]">
+            تعذر تحميل بيانات مخزن المستلزمات. يمكنك متابعة خطوات التشغيل ثم إعادة المحاولة.
+          </p>
+          <GhostButton iconName="refresh" onClick={() => void loadData()}>
+            إعادة المحاولة
+          </GhostButton>
+        </div>
+      )}
+
       {kpis.negative > 0 && (
         <p className="text-sm font-medium text-[rgb(var(--color-danger))] bg-[rgb(var(--color-danger)/0.1)] border border-[rgb(var(--color-danger)/0.25)] rounded-lg px-4 py-3">
           يوجد {kpis.negative} رصيد سالب في مخزن المستلزمات. راجع شاشة التنبيهات.
@@ -639,6 +630,15 @@ export const RawMaterialWarehouseControl: React.FC = () => {
           {countCardMessage}
         </p>
       )}
+
+      {warehouseId ? (
+        <WarehouseItemSearchPanel
+          pageId={`raw-material-control-items:${warehouseId}`}
+          warehouseId={warehouseId}
+          balances={balances}
+          loading={loading && balances.length === 0}
+        />
+      ) : null}
 
       <OpsDashPanel
         title="خطوات التشغيل اليومية"

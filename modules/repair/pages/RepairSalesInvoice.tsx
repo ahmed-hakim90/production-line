@@ -37,6 +37,7 @@ import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { RepairSalesInvoicePrint } from '../components/RepairSalesInvoicePrint';
@@ -911,46 +912,54 @@ export const RepairSalesInvoicePage: React.FC = () => {
         { key: 'sum', label: 'إجمالي المرحّل', value: fmt(listStats.sum), meta: 'ج.م' },
       ]}
       actions={(
-        <div className="flex flex-wrap gap-2 no-print">
+        <>
           {canCreate ? (
             <Button type="button" size="sm" onClick={handleCreateNewInvoice}>
               فاتورة جديدة
             </Button>
           ) : null}
-          {printableInvoice ? (
-            <>
-              <Button type="button" variant="outline" size="sm" onClick={() => handlePrint()}>
-                طباعة A4
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isExportingPdf}
-                onClick={() => { void exportPrintableInvoicePdf(); }}
-              >
-                {isExportingPdf ? 'جارٍ تصدير PDF...' : 'تصدير PDF'}
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={handleShareWhatsAppText}>
-                واتساب (نص)
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isExportingPdf}
-                onClick={() => { void handleShareWhatsAppWithPdfHint(); }}
-              >
-                واتساب + PDF
-              </Button>
-            </>
-          ) : null}
-          {filteredInvoices.length > 0 ? (
-            <Button type="button" variant="outline" size="sm" onClick={handleExportInvoicesExcel}>
-              تصدير Excel
-            </Button>
-          ) : null}
-        </div>
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: 'طباعة A4',
+                icon: 'print',
+                group: 'مشاركة',
+                hidden: !printableInvoice,
+                onClick: () => handlePrint(),
+              },
+              {
+                label: isExportingPdf ? 'جارٍ تصدير PDF...' : 'تصدير PDF',
+                icon: 'picture_as_pdf',
+                group: 'مشاركة',
+                hidden: !printableInvoice,
+                disabled: isExportingPdf,
+                onClick: () => { void exportPrintableInvoicePdf(); },
+              },
+              {
+                label: 'واتساب (نص)',
+                icon: 'share',
+                group: 'مشاركة',
+                hidden: !printableInvoice,
+                onClick: handleShareWhatsAppText,
+              },
+              {
+                label: 'واتساب + PDF',
+                icon: 'share',
+                group: 'مشاركة',
+                hidden: !printableInvoice,
+                disabled: isExportingPdf,
+                onClick: () => { void handleShareWhatsAppWithPdfHint(); },
+              },
+              {
+                label: 'تصدير Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: filteredInvoices.length === 0,
+                onClick: handleExportInvoicesExcel,
+              },
+            ]}
+          />
+        </>
       )}
     >
       <div className="grid items-start gap-4 xl:grid-cols-12">

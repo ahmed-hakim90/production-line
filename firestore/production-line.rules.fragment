@@ -403,7 +403,10 @@
 
     function pl_canReadWarehouseIdField() {
       return pl_sameTenantOrLegacyRead()
-        && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
+        && (
+          !pl_isInventoryWarehouseBound()
+          || pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''))
+        );
     }
 
     function pl_canWriteWarehouseIdField() {
@@ -420,7 +423,8 @@
     function pl_canReadTransferWarehouses() {
       return pl_sameTenantOrLegacyRead()
         && (
-          pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
+          !pl_isInventoryWarehouseBound()
+          || pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
           || pl_canAccessInventoryWarehouse(resource.data.get('toWarehouseId', ''))
         );
     }
@@ -448,7 +452,8 @@
     function pl_canReadIssueWarehouses() {
       return pl_sameTenantOrLegacyRead()
         && (
-          pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
+          !pl_isInventoryWarehouseBound()
+          || pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
           || pl_canAccessInventoryWarehouse(resource.data.get('targetWarehouseId', ''))
         );
     }
@@ -467,7 +472,8 @@
     function pl_canReadDisassemblyWarehouses() {
       return pl_sameTenantOrLegacyRead()
         && (
-          pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
+          !pl_isInventoryWarehouseBound()
+          || pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
           || pl_canAccessInventoryWarehouse(resource.data.get('targetWarehouseId', ''))
         );
     }

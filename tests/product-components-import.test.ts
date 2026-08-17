@@ -118,6 +118,7 @@ describe('parseProductComponentsFromBuffer', () => {
       code: 'MAT-NEW',
       name: 'خامة جديدة',
       purchaseCost: 12,
+      type: 'raw_material',
     });
     expect(result.bomGroups[0].items[0].willCreateMaterial).toBe(true);
   });
@@ -370,5 +371,52 @@ describe('parseProductComponentsFromBuffer', () => {
 
     expect(result.errorCount).toBe(1);
     expect(result.rows[0].errors.some((e) => e.includes('اللوكيشن الجديد'))).toBe(true);
+  });
+
+  it('writes pieces-per-carton onto the product and derives carton BOM qty as 1÷N', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'اسم المادة', 'عدد الوحدات في الكرتونة', 'نوع المادة', 'رصيد المكون'],
+      ['SK-999N', 'CTN-999', 'كرتون خارجي 999', 6, 'تعبئة وتغليف', 200],
+    ]);
+
+    const result = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    expect(result.errorCount).toBe(0);
+    expect(result.rows[0].unitsPerCartonProvided).toBe(true);
+    expect(result.rows[0].unitsPerCarton).toBe(6);
+    expect(result.rows[0].quantityDerivedFromUnitsPerCarton).toBe(true);
+    expect(result.rows[0].quantityUsed).toBe(1 / 6);
+    expect(result.rows[0].materialType).toBe('packaging');
+    expect(result.productUpdates).toHaveLength(1);
+    expect(result.productUpdates[0]).toMatchObject({
+      productId: 'p1',
+      unitsPerCarton: 6,
+    });
+    expect(result.materialsToCreate[0]).toMatchObject({
+      code: 'CTN-999',
+      type: 'packaging',
+    });
+    expect(result.bomGroups[0].items[0].quantityUsed).toBe(1 / 6);
+    expect(result.stockMovements[0].quantity).toBe(200);
+  });
+
+  it('errors when the same product has two different pieces-per-carton values', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'اسم المادة', 'عدد الوحدات في الكرتونة'],
+      ['SK-999N', 'CTN-A', 'كرتون أ', 6],
+      ['SK-999N', 'CTN-B', 'كرتون ب', 12],
+    ]);
+
+    const result = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    expect(result.errorCount).toBe(2);
+    expect(result.productUpdates).toHaveLength(0);
+    expect(result.rows[0].errors.some((e) => e.includes('عدد الوحدات في الكرتونة متعارض'))).toBe(true);
   });
 });

@@ -57,7 +57,7 @@
 | كارت الصنف | `/inventory/item-card` | تاريخ حركة صنف واحد |
 | حركات كل المخازن | `/inventory/transactions` | دفتر الحركات |
 | مواقع الأرفف | `/inventory/locations` | مواقع التخزين داخل المخزن |
-| مساحة صالة الإنتاج | `/inventory/production-floor` | متابعة رصيد الصالة (مرتبط بصرفك) |
+| مساحة صالة الإنتاج | `/production/floor` | كارت لكل منتج → صفحة تفاصيل الخطة والتقارير والمكونات |
 | سجلات مكونات الإنتاج | `/inventory/production-component-records` | سجل ما صُرف للإنتاج |
 | تفكيك عكسي | `/inventory/disassembly` | إرجاع منتج لمكونات (إن لزم) |
 | تحليلات المخازن | `/inventory/analytics` | نظرة تحليلية |
@@ -256,7 +256,7 @@
 /inventory/item-card
 /inventory/department-consumables
 /inventory/locations
-/inventory/production-floor
+/production/floor
 /manufacturing/planning-run
 /manufacturing/purchase-gap
 /supply-cycles

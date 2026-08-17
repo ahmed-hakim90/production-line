@@ -99,6 +99,11 @@ import {
 } from '../utils/lineAssignmentWorkersCount';
 import { getPresenceLabel, summarizeWorkerPresenceDays, summarizeWorkerPresenceRows } from '../utils/workerPresence';
 import { reportService, type FirestoreCursor, REPORT_LIST_MAX_PAGES } from '@/modules/production/services/reportService';
+import {
+  buildReportRangeLoadKey,
+  matchesProductionReportSearchQuery,
+  shouldLoadFullRangeForClientSearch,
+} from '@/modules/production/lib/productionReportSearch';
 import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
 import {
@@ -529,6 +534,7 @@ type FactoryGeneralRow = {
   lineName: string;
   supervisorName: string;
   productName: string;
+  productCodeSnapshot?: string;
   totalProducedQty: number;
   productionWorkers: number;
   avgWorkersPerReport: number;
@@ -1320,6 +1326,7 @@ export const Reports: React.FC = () => {
 
   const reportsFilterEffectPrimed = useRef(false);
   const skipNextRangeFilterEffectRef = useRef(false);
+  const searchRangeLoadKeyRef = useRef('');
   const loadRangeReportsRef = useRef(loadRangeReports);
   loadRangeReportsRef.current = loadRangeReports;
   const loadFullRangeReportsRef = useRef(loadFullRangeReports);
@@ -1687,44 +1694,32 @@ export const Reports: React.FC = () => {
     [form.reportType, form.packagingLines, getUnitsPerCarton],
   );
 
-  const normalizeSearchText = useCallback((s: string) => {
-    return String(s || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[٠-٩]/g, (digit) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(digit)));
-  }, []);
-
   /** جدول التقارير + التجميع: يطبّق نص البحث على كود التقرير والمنتج والخط والمشرف والكود والكمية… */
   const searchFilteredReports = useMemo(() => {
     const q = factorySearch.trim();
     if (!q) return displayedReports;
-    const nq = normalizeSearchText(q);
     return displayedReports.filter((r) => {
-      if (normalizeSearchText(String(r.reportCode || '')).includes(nq)) return true;
-      if (normalizeSearchText(getLineName(r.lineId)).includes(nq)) return true;
-      if (normalizeSearchText(getEmployeeName(r.employeeId)).includes(nq)) return true;
-      if (normalizeSearchText(getProductName(r.productId, r.reportType, r.productNameSnapshot)).includes(nq)) return true;
-      if (r.reportType === 'component_injection') {
-        const m = rawMaterialOptions.find((x) => x.id === r.productId);
-        if (m) {
-          if (normalizeSearchText(m.code || '').includes(nq)) return true;
-          if (normalizeSearchText(String(m.id || '')).includes(nq)) return true;
-        }
-      } else {
-        const p = _rawProducts.find((x) => x.id === r.productId);
-        if (p) {
-          if (normalizeSearchText(String(p.code || '')).includes(nq)) return true;
-          if (normalizeSearchText(String(p.id || '')).includes(nq)) return true;
-        }
-      }
-      if (normalizeSearchText(String(r.quantityProduced ?? '')).includes(nq)) return true;
-      if (normalizeSearchText(String(r.workHours ?? '')).includes(nq)) return true;
-      return false;
+      const catalog = r.reportType === 'component_injection'
+        ? rawMaterialOptions.find((x) => x.id === r.productId)
+        : _rawProducts.find((x) => x.id === r.productId);
+      return matchesProductionReportSearchQuery(q, [
+        r.reportCode,
+        r.productId,
+        r.productCodeSnapshot,
+        r.productNameSnapshot,
+        r.notes,
+        r.quantityProduced,
+        r.workHours,
+        getLineName(r.lineId),
+        getEmployeeName(r.employeeId),
+        getProductName(r.productId, r.reportType, r.productNameSnapshot),
+        catalog?.code,
+        catalog?.id,
+      ]);
     });
   }, [
     displayedReports,
     factorySearch,
-    normalizeSearchText,
     getLineName,
     getEmployeeName,
     getProductName,
@@ -1792,6 +1787,7 @@ export const Reports: React.FC = () => {
       supervisorId: string;
       productId: string;
       productNameSnapshot?: string;
+      productCodeSnapshot?: string;
       reportType: ProductionReport['reportType'];
       totalProducedQty: number;
       totalProductionWorkers: number;
@@ -1812,6 +1808,7 @@ export const Reports: React.FC = () => {
         supervisorId,
         productId,
         productNameSnapshot: report.productNameSnapshot,
+        productCodeSnapshot: report.productCodeSnapshot,
         reportType,
         totalProducedQty: 0,
         totalProductionWorkers: 0,
@@ -1832,6 +1829,9 @@ export const Reports: React.FC = () => {
       current.reportsCount += 1;
       if (report.date) current.dates.add(report.date);
       current.totalCost += produced * unitCost;
+      if (!current.productCodeSnapshot && report.productCodeSnapshot) {
+        current.productCodeSnapshot = report.productCodeSnapshot;
+      }
       grouped.set(key, current);
     });
 
@@ -1851,6 +1851,7 @@ export const Reports: React.FC = () => {
         lineName: getLineName(row.lineId),
         supervisorName: getEmployeeName(row.supervisorId),
         productName: getProductName(row.productId, row.reportType, row.productNameSnapshot),
+        productCodeSnapshot: row.productCodeSnapshot,
         totalProducedQty: row.totalProducedQty,
         productionWorkers: row.totalProductionWorkers,
         avgWorkersPerReport: row.reportsCount > 0 ? row.totalWorkersCount / row.reportsCount : 0,
@@ -1864,13 +1865,17 @@ export const Reports: React.FC = () => {
       };
     });
 
-    const query = factorySearch.trim().toLowerCase();
+    const query = factorySearch.trim();
     const filtered = !query
       ? rows
       : rows.filter((row) =>
-          row.lineName.toLowerCase().includes(query)
-          || row.supervisorName.toLowerCase().includes(query)
-          || row.productName.toLowerCase().includes(query)
+          matchesProductionReportSearchQuery(query, [
+            row.lineName,
+            row.supervisorName,
+            row.productName,
+            row.productId,
+            row.productCodeSnapshot,
+          ])
         );
 
     return filtered;
@@ -2152,11 +2157,18 @@ export const Reports: React.FC = () => {
     const start = new Date(end.getFullYear(), end.getMonth(), 1);
     const startStr = toDateInputValue(start);
     const endStr = toDateInputValue(end);
+    skipNextRangeFilterEffectRef.current = true;
     resetPeriodFilters();
     setStartDate(startStr);
     setEndDate(endStr);
-    await fetchReports(startStr, endStr);
     setViewMode('range');
+    searchRangeLoadKeyRef.current = buildReportRangeLoadKey({
+      startDate: startStr,
+      endDate: endStr,
+      lineId: '',
+      employeeId: myEmployeeId ?? '',
+    });
+    await loadFullRangeReports(startStr, endStr, { lineId: '', employeeId: '' });
   };
 
   const openGeneralMonthlyDialog = useCallback(() => {
@@ -2254,6 +2266,38 @@ export const Reports: React.FC = () => {
     setRangeCursor(previous.nextCursor);
     setRangeHasMore(previous.hasMore);
   };
+
+  useEffect(() => {
+    const rangeKey = buildReportRangeLoadKey({
+      startDate,
+      endDate,
+      lineId: filterLineId,
+      employeeId: myEmployeeId ?? filterEmployeeId,
+    });
+    if (!shouldLoadFullRangeForClientSearch({
+      viewMode,
+      query: factorySearch,
+      hasMore: rangeHasMore,
+      loading: rangeLoading,
+      alreadyLoadedKey: searchRangeLoadKeyRef.current,
+      rangeKey,
+    })) {
+      return;
+    }
+    searchRangeLoadKeyRef.current = rangeKey;
+    void loadFullRangeReports(startDate, endDate);
+  }, [
+    viewMode,
+    factorySearch,
+    rangeHasMore,
+    rangeLoading,
+    startDate,
+    endDate,
+    filterLineId,
+    filterEmployeeId,
+    myEmployeeId,
+    loadFullRangeReports,
+  ]);
 
   const reportsFilterBar = (
     <SmartFilterBar
@@ -4058,6 +4102,17 @@ export const Reports: React.FC = () => {
     lookups,
   ]);
 
+  const reportsListEmptyTitle = rangeLoading
+    ? 'جاري تحميل التقارير…'
+    : factorySearch.trim()
+      ? 'لا توجد تقارير مطابقة للبحث'
+      : `لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`;
+  const reportsListEmptySubtitle = rangeLoading
+    ? ''
+    : factorySearch.trim()
+      ? 'امسح البحث أو غيّر الفترة. البحث يطابق كود المنتج واسمه داخل الفترة المحددة.'
+      : (reportsPageCreateEnabled && can('reports.create') ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً');
+
   const reportTableFooter = (
     <div className="px-6 py-4 bg-[var(--color-bg)]/50 border-t border-[var(--color-border)] flex flex-wrap items-center justify-between gap-2">
       <span className="text-sm text-[var(--color-text-muted)] font-bold">
@@ -4508,9 +4563,7 @@ export const Reports: React.FC = () => {
                   loadingLabel="جاري تحميل التقارير…"
                 >
                   <div className="py-16 text-center text-[var(--color-text-muted)]">
-                    {rangeLoading
-                      ? 'جاري تحميل التقارير…'
-                      : `لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
+                    {reportsListEmptyTitle}
                   </div>
                 </OpsDashPanel>
               ) : groupedReports.map((group) => (
@@ -4543,8 +4596,8 @@ export const Reports: React.FC = () => {
                       setReportDrawerTab('summary');
                     }}
                     emptyIcon="bar_chart"
-                    emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-                    emptySubtitle={reportsPageCreateEnabled && can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+                    emptyTitle={reportsListEmptyTitle}
+                    emptySubtitle={reportsListEmptySubtitle}
                   />
                 </OpsDashPanel>
               ))}
@@ -4573,12 +4626,8 @@ export const Reports: React.FC = () => {
                 setReportDrawerTab('summary');
               }}
               emptyIcon="bar_chart"
-              emptyTitle={rangeLoading
-                ? 'جاري تحميل التقارير…'
-                : `لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-              emptySubtitle={rangeLoading
-                ? ''
-                : (reportsPageCreateEnabled && can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً')}
+              emptyTitle={reportsListEmptyTitle}
+              emptySubtitle={reportsListEmptySubtitle}
               footer={reportTableFooter}
             />
             </OpsDashPanel>

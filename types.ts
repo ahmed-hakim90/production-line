@@ -782,6 +782,12 @@ export interface ProductionPlan {
   achievementPercent?: number;
   /** Missing means legacy/default behavior: the plan accepts direct unlinked report production. */
   acceptsProductionFromReports?: boolean;
+  /**
+   * When true, finished-product reports for this plan need an issued production issue.
+   * When false, reports may save without an issue even if the company setting requires it.
+   * When missing, inherit `planSettings.inventoryRouting.requireIssuedProductionIssueOnReport`.
+   */
+  requiresProductionIssue?: boolean;
   achievementExcluded?: boolean;
   achievementExclusionReason?: string;
   stopReason?: string;
@@ -838,6 +844,12 @@ export interface WorkOrder {
   estimatedCost: number;
   actualCost: number;
   workOrderType?: "finished_product" | "component_injection";
+  /**
+   * When true, finished-product reports for this work order need an issued production issue.
+   * When false, reports may save without an issue even if the company/plan setting requires it.
+   * When missing, inherit the linked plan flag, then the company routing setting.
+   */
+  requiresProductionIssue?: boolean;
   status: WorkOrderStatus;
   notes?: string;
   breakStartTime?: string; // HH:mm

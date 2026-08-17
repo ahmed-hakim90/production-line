@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/UI';
 import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
@@ -110,6 +110,14 @@ export const SparePartsReplenishment: React.FC = () => {
   const [toWarehouseId, setToWarehouseId] = useState(searchParams.get('toWarehouseId') || '');
   const [note, setNote] = useState('');
   const [draftLines, setDraftLines] = useState<DraftLine[]>([{ itemId: '', quantity: '1' }]);
+  const [draftItemFocusIndex, setDraftItemFocusIndex] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    if (draftItemFocusIndex == null) return;
+    const el = document.getElementById(`replenish-draft-item-${draftItemFocusIndex}`);
+    if (!el) return;
+    el.focus();
+    setDraftItemFocusIndex(null);
+  }, [draftItemFocusIndex, draftLines.length]);
   /** Editable prepare quantities keyed by lineId (approved requests only). */
   const [prepareQtyByLineId, setPrepareQtyByLineId] = useState<Record<string, string>>({});
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
@@ -573,6 +581,7 @@ export const SparePartsReplenishment: React.FC = () => {
             {draftLines.map((line, idx) => (
               <div key={idx} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_120px_auto]">
                 <VoucherItemCombobox
+                  id={`replenish-draft-item-${idx}`}
                   options={materialPicker.options}
                   catalog={materialPicker.catalog}
                   value={line.itemId}
@@ -613,9 +622,11 @@ export const SparePartsReplenishment: React.FC = () => {
                       toast.error('أدخل صنفاً وكمية أكبر من صفر قبل فتح بند جديد.');
                       return;
                     }
+                    const nextIndex = idx + 1;
                     if (idx >= draftLines.length - 1) {
                       setDraftLines((prev) => [...prev, { itemId: '', quantity: '1' }]);
                     }
+                    setDraftItemFocusIndex(nextIndex);
                   }}
                 />
                 <Button
@@ -716,7 +727,7 @@ export const SparePartsReplenishment: React.FC = () => {
             </p>
           ) : (
             <>
-              <div className="sticky top-0 z-10 flex flex-wrap gap-2 border-b bg-[var(--color-card)]/95 p-3 backdrop-blur sm:p-4">
+              <div className="ops-action-strip sticky top-0 z-10 border-b bg-[var(--color-card)]/95 p-3 backdrop-blur sm:p-4">
                 {selectedRequest.status !== 'cancelled' && selectedRequest.status !== 'rejected' ? (
                   <Button
                     size="sm"

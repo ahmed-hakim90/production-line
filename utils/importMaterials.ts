@@ -135,6 +135,13 @@ const TYPE_BY_LABEL: Record<string, MaterialType> = Object.fromEntries(
   ]),
 ) as Record<string, MaterialType>;
 
+/** Older sheets used «مادة خام» before the catalog label became «مكون». */
+const TYPE_LABEL_ALIASES: Record<string, MaterialType> = {
+  [normalizeCategoryName('مادة خام')]: 'raw_material',
+  [normalizeCategoryName('مواد خام')]: 'raw_material',
+  [normalizeCategoryName('خام')]: 'raw_material',
+};
+
 const UNIT_BY_LABEL: Record<string, MaterialUnit> = Object.fromEntries(
   (Object.entries(MATERIAL_UNIT_LABELS) as [MaterialUnit, string][]).map(([k, v]) => [
     normalizeCategoryName(v),
@@ -207,7 +214,9 @@ function parseType(v: unknown): MaterialType | null {
   if (!raw) return null;
   const key = raw.toLowerCase().replace(/-/g, '_');
   if (key in MATERIAL_TYPE_LABELS) return key as MaterialType;
-  return TYPE_BY_LABEL[normalizeCategoryName(raw)] ?? null;
+  return TYPE_BY_LABEL[normalizeCategoryName(raw)]
+    ?? TYPE_LABEL_ALIASES[normalizeCategoryName(raw)]
+    ?? null;
 }
 
 function parseUnit(v: unknown): MaterialUnit | null {

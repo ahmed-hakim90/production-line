@@ -353,7 +353,7 @@ export const RepairPartsReplenishment: React.FC = () => {
                 </p>
               ) : (
                 <>
-                  <div className="sticky top-0 z-10 flex flex-wrap gap-2 border-b bg-card/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:p-4">
+                  <div className="ops-action-strip sticky top-0 z-10 border-b bg-card/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:p-4">
                     {selectedRequest.status !== 'cancelled' && selectedRequest.status !== 'rejected' ? (
                       <Button
                         type="button"

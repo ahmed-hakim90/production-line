@@ -33,12 +33,20 @@ import { ProductBomCountCardPreviewModal } from '../../production/components/Pro
 import { buildProductBomCountCards } from '../../production/lib/buildProductBomCountCards';
 import type { ProductBomCountCard } from '../../production/components/ProductBomCountCardPrint';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import {
+  invalidatePageDataCache,
+  isPageDataCacheFresh,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 
 const PAGE_SIZE = 40;
+const ITEM_CARD_CACHE_PREFIX = 'inventory:item-card';
+const ITEM_CARD_CACHE_MAX_AGE_MS = 45_000;
 
 type CatalogOption = {
   id: string;
@@ -59,6 +67,19 @@ type MovementCachedPage = {
   cursorState: MovementCursorState;
   hasNext: boolean;
 };
+
+type ItemCardPageData = {
+  balances: StockItemBalance[];
+  locationBalances: StockLocationBalance[];
+  bomLines: ItemCardBomLine[];
+  movements: StockTransaction[];
+  cursorState: MovementCursorState;
+  hasNext: boolean;
+};
+
+function itemCardCacheKey(itemType: InventoryItemType, itemId: string, warehouseId: string): string {
+  return `${ITEM_CARD_CACHE_PREFIX}:${itemType}:${itemId}:${warehouseId || 'all'}`;
+}
 
 function itemMovementTypes(itemType: InventoryItemType): InventoryItemType[] {
   return itemType === 'finished_good'
@@ -101,7 +122,14 @@ export const ItemCard: React.FC = () => {
   );
   const [itemId, setItemId] = useState(() => searchParams.get('itemId') || '');
   const [warehouseId, setWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
-  const [loading, setLoading] = useState(false);
+  const initialCard = itemId
+    ? peekPageDataCache<ItemCardPageData>(itemCardCacheKey(
+      (searchParams.get('itemType') as InventoryItemType) || 'finished_good',
+      itemId,
+      searchParams.get('warehouseId') || '',
+    ))
+    : null;
+  const [loading, setLoading] = useState(() => Boolean(itemId) && !initialCard);
 
   const { data: warehouseRows, loading: warehousesLoading } = useCachedPageLoad<Warehouse[]>(
     canView ? 'inventory:active-warehouses' : null,
@@ -115,17 +143,22 @@ export const ItemCard: React.FC = () => {
   );
   const warehouses = warehouseRows ?? [];
   const materials = catalog ?? [];
-  const [balances, setBalances] = useState<StockItemBalance[]>([]);
-  const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
-  const [bomLines, setBomLines] = useState<ItemCardBomLine[]>([]);
-  const [movements, setMovements] = useState<StockTransaction[]>([]);
-  const [hasMoreMovements, setHasMoreMovements] = useState(false);
-  const [movementPages, setMovementPages] = useState<MovementCachedPage[]>([]);
+  const [balances, setBalances] = useState<StockItemBalance[]>(() => initialCard?.balances ?? []);
+  const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>(
+    () => initialCard?.locationBalances ?? [],
+  );
+  const [bomLines, setBomLines] = useState<ItemCardBomLine[]>(() => initialCard?.bomLines ?? []);
+  const [movements, setMovements] = useState<StockTransaction[]>(() => initialCard?.movements ?? []);
+  const [hasMoreMovements, setHasMoreMovements] = useState(() => initialCard?.hasNext ?? false);
+  const [movementPages, setMovementPages] = useState<MovementCachedPage[]>(() =>
+    initialCard
+      ? [{ rows: initialCard.movements, cursorState: initialCard.cursorState, hasNext: initialCard.hasNext }]
+      : [],
+  );
   const [movementPageIndex, setMovementPageIndex] = useState(0);
-  const movementCursorStateRef = useRef<MovementCursorState>({
-    byType: {},
-    hasMoreByType: {},
-  });
+  const movementCursorStateRef = useRef<MovementCursorState>(
+    initialCard?.cursorState ?? { byType: {}, hasMoreByType: {} },
+  );
 
   const [countCards, setCountCards] = useState<ProductBomCountCard[]>([]);
   const [countPreviewOpen, setCountPreviewOpen] = useState(false);
@@ -231,14 +264,36 @@ export const ItemCard: React.FC = () => {
 
   const loadCard = useCallback(async (resetMovements = true) => {
     if (!canView || !itemId) return;
-    setLoading(true);
-    try {
-      const nextParams = new URLSearchParams();
-      nextParams.set('itemType', itemType);
-      nextParams.set('itemId', itemId);
-      if (warehouseId) nextParams.set('warehouseId', warehouseId);
-      setSearchParams(nextParams, { replace: true });
+    const cacheKey = itemCardCacheKey(itemType, itemId, warehouseId);
+    const cached = peekPageDataCache<ItemCardPageData>(cacheKey);
+    if (cached && resetMovements) {
+      setBalances(cached.balances);
+      setLocationBalances(cached.locationBalances);
+      setBomLines(cached.bomLines);
+      setMovements(cached.movements);
+      setHasMoreMovements(cached.hasNext);
+      movementCursorStateRef.current = cached.cursorState;
+      setMovementPages([{
+        rows: cached.movements,
+        cursorState: cached.cursorState,
+        hasNext: cached.hasNext,
+      }]);
+      setMovementPageIndex(0);
+      setLoading(false);
+    }
 
+    const nextParams = new URLSearchParams();
+    nextParams.set('itemType', itemType);
+    nextParams.set('itemId', itemId);
+    if (warehouseId) nextParams.set('warehouseId', warehouseId);
+    setSearchParams(nextParams, { replace: true });
+
+    if (resetMovements && cached && isPageDataCacheFresh(cacheKey, ITEM_CARD_CACHE_MAX_AGE_MS)) {
+      return;
+    }
+
+    if (!cached) setLoading(true);
+    try {
       const selectedOption = catalogOptions.find((opt) => opt.id === itemId);
       const ownerType = itemType === 'finished_good' ? 'product' : 'material';
       const movementTypes = itemMovementTypes(itemType);
@@ -324,6 +379,14 @@ export const ItemCard: React.FC = () => {
         setHasMoreMovements(firstHasNext);
         setMovementPages([{ rows: firstRows, cursorState: nextState, hasNext: firstHasNext }]);
         setMovementPageIndex(0);
+        setPageDataCache(cacheKey, {
+          balances: allBalances,
+          locationBalances: locBalances,
+          bomLines: lines,
+          movements: firstRows,
+          cursorState: nextState,
+          hasNext: firstHasNext,
+        });
       }
 
       if (!selectedOption) {

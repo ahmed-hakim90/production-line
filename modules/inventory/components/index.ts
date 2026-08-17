@@ -8,4 +8,5 @@ export * from './LocationBarcodeLabelPrint';
 export * from './BarcodeLabelPrintEngineModal';
 export * from './ThermalBarcodeLabelCard';
 export * from './WarehousePartInquiry';
+export * from './WarehouseItemSearchPanel';
 export * from './Code128Barcode';

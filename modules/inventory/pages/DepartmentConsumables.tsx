@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -597,37 +598,46 @@ export const DepartmentConsumables: React.FC = () => {
       eyebrow="صرف مستهلكات الأقسام"
       rangeLabel="تعريف مستهلكات وإضافتها للمخزن وصرفها نهائياً للأقسام مع تقرير شهري"
       actions={(
-        <div className="flex flex-wrap gap-2">
-          {(canExport || canView) && (
-            <Button
-              variant="secondary"
-              onClick={() => void exportBalancesSheet()}
-              disabled={exportingBalances || loading}
-            >
-              {exportingBalances ? 'جاري التصدير...' : 'تصدير أرصدة Excel'}
-            </Button>
-          )}
-          {canImportSheet && (
-            <Button variant="secondary" onClick={() => setActiveModal('importSheet')}>
-              رفع شيت مستهلكات
-            </Button>
-          )}
-          {canDefine && (
-            <Button variant="secondary" onClick={() => setShowDefine(true)}>
-              تعريف مستهلك
-            </Button>
-          )}
-          {canAddStock && (
-            <Button variant="secondary" onClick={() => setActiveModal('addStock')}>
-              إضافة للمخزن
-            </Button>
-          )}
-          {canCreate && (
+        <>
+          {canCreate ? (
             <Button onClick={() => setActiveModal('createIssue')}>
               سند صرف جديد
             </Button>
-          )}
-        </div>
+          ) : null}
+          <OpsMoreActionsMenu
+            items={[
+              {
+                label: exportingBalances ? 'جاري التصدير...' : 'تصدير أرصدة Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: !(canExport || canView),
+                disabled: exportingBalances || loading,
+                onClick: () => { void exportBalancesSheet(); },
+              },
+              {
+                label: 'رفع شيت مستهلكات',
+                icon: 'upload',
+                group: 'استيراد',
+                hidden: !canImportSheet,
+                onClick: () => setActiveModal('importSheet'),
+              },
+              {
+                label: 'تعريف مستهلك',
+                icon: 'add',
+                group: 'كتالوج',
+                hidden: !canDefine,
+                onClick: () => setShowDefine(true),
+              },
+              {
+                label: 'إضافة للمخزن',
+                icon: 'inventory_2',
+                group: 'كتالوج',
+                hidden: !canAddStock,
+                onClick: () => setActiveModal('addStock'),
+              },
+            ]}
+          />
+        </>
       )}
     >
       <div className="flex flex-wrap gap-2">

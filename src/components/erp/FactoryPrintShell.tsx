@@ -1,4 +1,4 @@
-import { forwardRef, type ReactNode } from 'react'
+import { forwardRef, type CSSProperties, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Factory_DEFAULT_FOOTER_TAGLINE,
@@ -9,6 +9,16 @@ import { resolvePrintAccentHex } from '@/utils/printTheme'
 import { PrintBrandHeader } from './PrintBrandHeader'
 import { PrintExtraLines } from './PrintExtraLines'
 import { PRINT_SURFACE } from '@/utils/print/printSurface'
+import {
+  PRINT_FONT_LINE_HEIGHT,
+  PRINT_FONT_WEIGHT_BODY,
+  PRINT_FONT_WEIGHT_BOLD,
+  PRINT_FONT_WEIGHT_HEADING,
+  buildPrintFontScale,
+  parsePrintFontSizePt,
+  printFontCssVars,
+  resolvePrintKpiTypography,
+} from '@/utils/print/printFont'
 
 export type FactoryPrintMetaCard = {
   label: string
@@ -130,6 +140,7 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
     const kpiList = kpis ?? []
     const customLines = extraLines ?? []
     const resolvedFontSize = fontSize ?? (dense ? '9pt' : '10pt')
+    const fontScale = buildPrintFontScale(parsePrintFontSizePt(resolvedFontSize), dense)
 
     return (
       <div
@@ -146,6 +157,9 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
         style={{
           fontFamily,
           fontSize: resolvedFontSize,
+          fontWeight: PRINT_FONT_WEIGHT_BODY,
+          lineHeight: PRINT_FONT_LINE_HEIGHT,
+          fontSynthesis: 'none',
           letterSpacing: 'normal',
           wordSpacing: 'normal',
           width: resolvedWidth,
@@ -157,7 +171,13 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
           flexShrink: 0,
           color: PRINT_SURFACE.text,
           background: PRINT_SURFACE.card,
-        }}
+          ...printFontCssVars({
+            fontFamily,
+            fontSize: resolvedFontSize,
+            lineHeight: PRINT_FONT_LINE_HEIGHT,
+            scale: fontScale,
+          }),
+        } as CSSProperties}
       >
         <PrintBrandHeader
           companyName={companyName}
@@ -192,12 +212,12 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
                   borderInlineEnd: i < meta.length - 1 ? `1px solid ${PRINT_SURFACE.border}` : undefined,
                 }}
               >
-                <p className="print-meta-label" style={{ margin: '0 0 4px', fontSize: 9, fontWeight: 800, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
+                <p className="print-meta-label" style={{ margin: '0 0 4px', fontSize: fontScale.caption, fontWeight: PRINT_FONT_WEIGHT_BOLD, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
                   {item.label}
                 </p>
                 <p
                   className="print-meta-value"
-                  style={{ margin: 0, fontSize: 11, fontWeight: 800, lineHeight: 1.3, wordBreak: 'break-word', color: PRINT_SURFACE.text }}
+                  style={{ margin: 0, fontSize: fontScale.meta, fontWeight: PRINT_FONT_WEIGHT_BOLD, lineHeight: PRINT_FONT_LINE_HEIGHT, wordBreak: 'break-word', color: PRINT_SURFACE.text }}
                 >
                   {item.value}
                 </p>
@@ -242,24 +262,25 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
                     textAlign: 'center',
                   }}
                 >
-                  <div dir="rtl" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'center', columnGap: 4 }}>
+                  <div dir="rtl" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'center', columnGap: 4, maxWidth: '100%' }}>
                     <span
                       style={{
-                        fontWeight: 900,
-                        fontVariantNumeric: 'tabular-nums',
-                        fontSize: dense ? 18 : 20,
-                        lineHeight: 1.15,
+                        ...resolvePrintKpiTypography(kpi.value, fontScale),
                         color: kpiValueColor(kpi.tone, accent),
                         letterSpacing: 'normal',
+                        overflowWrap: 'anywhere',
+                        wordBreak: 'break-word',
+                        textAlign: 'center',
+                        maxWidth: '100%',
                       }}
                     >
                       {typeof kpi.value === 'number' ? kpi.value.toLocaleString('ar-EG') : kpi.value}
                     </span>
                     {kpi.unit ? (
-                      <span style={{ fontSize: 12, fontWeight: 600, color: PRINT_SURFACE.muted }}>{kpi.unit}</span>
+                      <span style={{ fontSize: fontScale.label, fontWeight: PRINT_FONT_WEIGHT_BODY, color: PRINT_SURFACE.muted }}>{kpi.unit}</span>
                     ) : null}
                   </div>
-                  <p style={{ margin: '6px 0 0', fontSize: 11, fontWeight: 700, lineHeight: 1.35, color: PRINT_SURFACE.muted }}>{kpi.label}</p>
+                  <p style={{ margin: '6px 0 0', fontSize: fontScale.label, fontWeight: PRINT_FONT_WEIGHT_BOLD, lineHeight: PRINT_FONT_LINE_HEIGHT, color: PRINT_SURFACE.muted }}>{kpi.label}</p>
                 </div>
               </div>
             ))}
@@ -275,9 +296,9 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
           >
             {signatures.map((sig) => (
               <div key={sig.title} className="print-sign-slot" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <p style={{ margin: '0 0 32px', fontSize: 12, fontWeight: 800, color: PRINT_SURFACE.text }}>{sig.title}</p>
+                <p style={{ margin: '0 0 32px', fontSize: fontScale.meta, fontWeight: PRINT_FONT_WEIGHT_HEADING, color: PRINT_SURFACE.text }}>{sig.title}</p>
                 <div style={{ width: '100%', borderTop: `1px solid ${PRINT_SURFACE.border}`, paddingTop: 4, textAlign: 'center' }}>
-                  <p style={{ margin: 0, fontSize: 10, color: PRINT_SURFACE.muted }}>{sig.detail || 'الاسم / التوقيع'}</p>
+                  <p style={{ margin: 0, fontSize: fontScale.caption, color: PRINT_SURFACE.muted }}>{sig.detail || 'الاسم / التوقيع'}</p>
                 </div>
               </div>
             ))}
@@ -285,12 +306,12 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
         ) : null}
 
         <footer style={{ marginTop: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderTop: `1px solid ${PRINT_SURFACE.border}`, paddingTop: 12 }}>
-          <p style={{ margin: 0, fontSize: 10, minWidth: 0, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
+          <p style={{ margin: 0, fontSize: fontScale.caption, minWidth: 0, letterSpacing: 'normal', lineHeight: PRINT_FONT_LINE_HEIGHT, color: PRINT_SURFACE.muted }}>
             {footerTagline} — {printDate}
           </p>
           {showVersion && version ? (
             <p
-              style={{ margin: 0, fontSize: 9, fontWeight: 600, flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: '#94a3b8', letterSpacing: 'normal' }}
+              style={{ margin: 0, fontSize: fontScale.caption, fontWeight: PRINT_FONT_WEIGHT_BODY, flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: '#94a3b8', letterSpacing: 'normal' }}
               title="إصدار النظام"
             >
               v{version}
@@ -315,7 +336,7 @@ export function FactoryPrintSectionTitle({
   return (
     <div className="print-section-head" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '4px 0 8px' }}>
       <div className="print-section-bar" style={{ height: 12, width: 3, flexShrink: 0, borderRadius: 999, backgroundColor: accent }} />
-      <p className="print-section-title" style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
+      <p className="print-section-title" style={{ margin: 0, fontSize: 'var(--print-label-size, 1em)', fontWeight: 800, letterSpacing: 'normal', color: PRINT_SURFACE.muted }}>
         {title}
       </p>
     </div>

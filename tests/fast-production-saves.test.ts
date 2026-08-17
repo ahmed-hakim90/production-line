@@ -242,6 +242,16 @@ assert.match(
   /workOrderNumber:\s*woNumber/,
   'GlobalCreateWorkOrderModal must defer numbering to the store',
 );
+assert.match(
+  createWorkOrderModalSource,
+  /<SearchableSelect[\s\S]*?options=\{lineOptions\}/,
+  'Create work order modal must use SearchableSelect for production lines',
+);
+assert.match(
+  createWorkOrderModalSource,
+  /<SearchableSelect[\s\S]*?options=\{supervisorOptions\}/,
+  'Create work order modal must use SearchableSelect for supervisors',
+);
 
 assert.match(plansPageSource, /showAppToast\('success',\s*'تم حفظ خطة الإنتاج'\)/);
 assert.doesNotMatch(
