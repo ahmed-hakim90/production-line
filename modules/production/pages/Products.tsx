@@ -3806,10 +3806,10 @@ export const Products: React.FC = () => {
                             className={
                               row.errors.length > 0
                                 ? 'bg-[rgb(var(--color-danger)/0.1)]/50 dark:bg-[rgb(var(--color-danger)/0.15)]'
-                                : row.skipStock
-                                  ? 'bg-[rgb(var(--color-warning)/0.1)]/40 dark:bg-[rgb(var(--color-warning)/0.15)]'
-                                  : row.skipNotes && row.skipNotes.length > 0
-                                    ? 'bg-[rgb(var(--color-primary)/0.1)]/30 dark:bg-[rgb(var(--color-primary)/0.15)]'
+                                : row.skipNotes && row.skipNotes.length > 0
+                                  ? 'bg-[rgb(var(--color-primary)/0.1)]/30 dark:bg-[rgb(var(--color-primary)/0.15)]'
+                                  : row.skipStock
+                                    ? 'bg-[rgb(var(--color-warning)/0.1)]/40 dark:bg-[rgb(var(--color-warning)/0.15)]'
                                     : ''
                             }
                           >
@@ -3819,13 +3819,13 @@ export const Products: React.FC = () => {
                                 <span className="inline-flex items-center gap-1 text-[rgb(var(--color-danger))] text-xs font-bold">
                                   <ProductIcon name="error" className="text-sm" /> خطأ
                                 </span>
-                              ) : row.skipStock ? (
-                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-warning))] text-xs font-bold">
-                                  <ProductIcon name="remove_done" className="text-sm" /> رصيد مطابق
-                                </span>
                               ) : row.skipNotes && row.skipNotes.length > 0 ? (
                                 <span className="inline-flex items-center gap-1 text-[rgb(var(--color-primary))] text-xs font-bold">
                                   <ProductIcon name="sync" className="text-sm" /> تحديث
+                                </span>
+                              ) : row.skipStock ? (
+                                <span className="inline-flex items-center gap-1 text-[rgb(var(--color-warning))] text-xs font-bold">
+                                  <ProductIcon name="remove_done" className="text-sm" /> رصيد مطابق
                                 </span>
                               ) : row.willCreateMaterial ? (
                                 <span className="inline-flex items-center gap-1 text-[rgb(var(--color-primary))] text-xs font-bold">

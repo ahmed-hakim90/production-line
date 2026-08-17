@@ -753,10 +753,14 @@ export function SmartFilterBar({
               <Search className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-text-muted)]" aria-hidden />
               {onSearchChange != null ? (
                 <input
-                  type="text"
+                  type="search"
                   value={searchValue}
                   onChange={(event) => onSearchChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') event.preventDefault();
+                  }}
                   placeholder={resolvedSearchPlaceholder}
+                  autoComplete="off"
                   className="min-w-[120px] flex-1"
                 />
               ) : (

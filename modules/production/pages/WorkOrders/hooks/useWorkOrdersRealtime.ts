@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   collection,
-  documentId,
   getDocs,
   limit,
   onSnapshot,
-  orderBy,
   query,
   startAfter,
   where,
@@ -15,20 +13,23 @@ import {
 } from 'firebase/firestore';
 
 import { db, isConfigured } from '../../../../auth/services/firebase';
-import type { WorkOrder, WorkOrderStatus } from '../../../../../types';
-import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
+import type { WorkOrder } from '../../../../../types';
+import {
+  isWorkOrderRealtimeIndexError,
+  makeBaseConstraints,
+  resolveWorkOrderRealtimeSearchKey,
+  type WorkOrderRealtimeFilters,
+} from './workOrderRealtimeQuery';
+
+export {
+  isWorkOrderRealtimeIndexError,
+  makeBaseConstraints,
+  resolveWorkOrderRealtimeSearchKey,
+  type WorkOrderRealtimeFilters,
+};
 
 const COLLECTION_NAME = 'work_orders';
 const DEFAULT_PAGE_SIZE = 20;
-
-export interface WorkOrderRealtimeFilters {
-  tenantId?: string | null;
-  status?: WorkOrderStatus | 'all' | null;
-  lineId?: string | 'all' | null;
-  supervisorId?: string | null;
-  dateRange?: { from?: string | null; to?: string | null } | null;
-  search?: string | null;
-}
 
 interface CachedWorkOrderPage {
   orders: WorkOrder[];
@@ -47,27 +48,6 @@ interface UseWorkOrdersRealtimeResult {
   loadMore: () => Promise<void>;
   loadPrevious: () => void;
 }
-
-const makeBaseConstraints = (filters: WorkOrderRealtimeFilters): QueryConstraint[] => {
-  const constraints: QueryConstraint[] = [];
-  let hasTargetDateRange = false;
-  if (filters.status && filters.status !== 'all') constraints.push(where('status', '==', filters.status));
-  if (filters.lineId && filters.lineId !== 'all') constraints.push(where('lineId', '==', filters.lineId));
-  if (filters.supervisorId) constraints.push(where('supervisorId', '==', filters.supervisorId));
-  const search = normalizeFirestoreSearch(filters.search);
-  if (search.length >= 2) constraints.push(where('searchPrefixes', 'array-contains', search));
-  if (filters.dateRange?.from) {
-    constraints.push(where('targetDate', '>=', filters.dateRange.from));
-    hasTargetDateRange = true;
-  }
-  if (filters.dateRange?.to) {
-    constraints.push(where('targetDate', '<=', filters.dateRange.to));
-    hasTargetDateRange = true;
-  }
-  if (hasTargetDateRange) constraints.push(orderBy('targetDate', 'asc'));
-  constraints.push(orderBy('createdAt', 'desc'), orderBy(documentId()));
-  return constraints;
-};
 
 const toWorkOrder = (docSnap: QueryDocumentSnapshot<DocumentData>): WorkOrder => ({
   id: docSnap.id,
@@ -97,7 +77,10 @@ export function useWorkOrdersRealtime(
   const [error, setError] = useState<string | null>(null);
   const pagesRef = useRef<CachedWorkOrderPage[]>([]);
   const pageIndexRef = useRef(0);
+  const activeConstraintsRef = useRef<QueryConstraint[]>([]);
+  const loadedCountRef = useRef(0);
   pageIndexRef.current = pageIndex;
+  loadedCountRef.current = orders.length;
 
   const safePageSize = Math.max(1, Math.min(pageSize, 50));
   const tenantId = filters.tenantId ?? null;
@@ -107,14 +90,22 @@ export function useWorkOrdersRealtime(
   const dateFrom = filters.dateRange?.from ?? null;
   const dateTo = filters.dateRange?.to ?? null;
   const search = filters.search ?? '';
-  const baseConstraints = useMemo(() => makeBaseConstraints({
+  const searchKey = resolveWorkOrderRealtimeSearchKey(search);
+  const filterSnapshot = useMemo(() => ({
     status, lineId, supervisorId, dateRange: { from: dateFrom, to: dateTo }, search,
   }), [status, lineId, supervisorId, dateFrom, dateTo, search]);
+  const baseConstraints = useMemo(
+    () => makeBaseConstraints(filterSnapshot),
+    [filterSnapshot],
+  );
+  const fallbackConstraints = useMemo(
+    () => makeBaseConstraints(filterSnapshot, { includeSearch: false }),
+    [filterSnapshot],
+  );
 
   useEffect(() => {
     pagesRef.current = [];
     setPageIndex(0);
-    setOrders([]);
     setHasMore(false);
     setError(null);
     if (!isConfigured || !db) {
@@ -127,31 +118,58 @@ export function useWorkOrdersRealtime(
       setLoading(true);
       return;
     }
-    setLoading(true);
-    const firstPageQuery = query(
-      collection(db, COLLECTION_NAME),
-      where('tenantId', '==', tenantId),
-      ...baseConstraints,
-      limit(safePageSize + 1),
-    );
-    return onSnapshot(firstPageQuery, { includeMetadataChanges: true }, (snap) => {
-      const page = toPage(snap.docs, safePageSize);
-      pagesRef.current[0] = page;
-      if (pageIndexRef.current === 0) {
-        setOrders(page.orders);
-        setHasMore(page.hasNext);
-      }
-      // Firestore may emit an empty cache snapshot before the server result.
-      // Do not present that provisional state as a confirmed empty list.
-      if (!snap.metadata.fromCache || page.orders.length > 0) {
+    // Keep the current rows visible while a new filter/search query attaches.
+    setLoading((current) => current || loadedCountRef.current === 0);
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+    let usedSearchFallback = false;
+
+    const listen = (constraints: QueryConstraint[]) => {
+      if (!db) return;
+      activeConstraintsRef.current = constraints;
+      const firstPageQuery = query(
+        collection(db, COLLECTION_NAME),
+        where('tenantId', '==', tenantId),
+        ...constraints,
+        limit(safePageSize + 1),
+      );
+      unsubscribe = onSnapshot(firstPageQuery, { includeMetadataChanges: true }, (snap) => {
+        if (cancelled) return;
+        const page = toPage(snap.docs, safePageSize);
+        pagesRef.current[0] = page;
+        if (pageIndexRef.current === 0) {
+          setOrders(page.orders);
+          setHasMore(page.hasNext);
+        }
+        // Firestore may emit an empty cache snapshot before the server result.
+        // Do not present that provisional state as a confirmed empty list.
+        if (!snap.metadata.fromCache || page.orders.length > 0) {
+          setLoading(false);
+        }
+      }, (snapshotError) => {
+        if (cancelled) return;
+        const canFallbackToClientSearch = Boolean(searchKey)
+          && !usedSearchFallback
+          && isWorkOrderRealtimeIndexError(snapshotError);
+        if (canFallbackToClientSearch) {
+          usedSearchFallback = true;
+          unsubscribe?.();
+          listen(fallbackConstraints);
+          return;
+        }
+        console.error('useWorkOrdersRealtime snapshot error:', snapshotError);
+        setError('تعذر تحميل أوامر الشغل في الوقت الحقيقي.');
         setLoading(false);
-      }
-    }, (snapshotError) => {
-      console.error('useWorkOrdersRealtime snapshot error:', snapshotError);
-      setError('تعذر تحميل أوامر الشغل في الوقت الحقيقي.');
-      setLoading(false);
-    });
-  }, [baseConstraints, safePageSize, tenantId]);
+      });
+    };
+
+    listen(baseConstraints);
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [baseConstraints, fallbackConstraints, safePageSize, searchKey, tenantId]);
 
   const loadMore = useCallback(async () => {
     if (!isConfigured || !db || !tenantId || loadingMore || !hasMore) return;
@@ -171,7 +189,7 @@ export function useWorkOrdersRealtime(
       const nextQuery = query(
         collection(db, COLLECTION_NAME),
         where('tenantId', '==', tenantId),
-        ...baseConstraints,
+        ...activeConstraintsRef.current,
         startAfter(current.nextCursor),
         limit(safePageSize + 1),
       );
@@ -187,7 +205,7 @@ export function useWorkOrdersRealtime(
     } finally {
       setLoadingMore(false);
     }
-  }, [baseConstraints, hasMore, loadingMore, pageIndex, safePageSize, tenantId]);
+  }, [hasMore, loadingMore, pageIndex, safePageSize, tenantId]);
 
   const loadPrevious = useCallback(() => {
     if (loadingMore || pageIndex === 0) return;

@@ -198,14 +198,14 @@ export function applySkipExistingProductComponents(
         : '');
 
     if (!(Number(row.quantityUsed) > 0)) {
-      skipNotes.push('بدون كمية استخدام — كتالوج قطع للصيانة فقط');
-    }
-    if (row.unitsPerCartonProvided && row.unitsPerCarton >= 1) {
       skipNotes.push(
-        row.quantityDerivedFromUnitsPerCarton
-          ? `قطع/كرتونة ${row.unitsPerCarton} على المنتج — استهلاك الكرتونة 1/${row.unitsPerCarton} لكل قطعة`
-          : `قطع/كرتونة ${row.unitsPerCarton} على المنتج`,
+        row.unitsPerCartonProvided && row.unitsPerCarton >= 1
+          ? `ربط الكرتونة على المنتج — ${row.unitsPerCarton} قطعة داخل الكرتونة (العدد الداخلي). الرصيد لا يُقسم`
+          : 'بدون كمية استخدام — كتالوج قطع للصيانة فقط',
       );
+    }
+    if (row.unitsPerCartonProvided && row.unitsPerCarton >= 1 && Number(row.quantityUsed) > 0) {
+      skipNotes.push(`قطع/كرتونة ${row.unitsPerCarton} على بطاقة المنتج`);
     }
 
     if (materialRef && !materialRef.startsWith('pending:') && row.productId) {
@@ -236,22 +236,34 @@ export function applySkipExistingProductComponents(
     }
 
     if (row.balanceProvided && materialRef && !materialRef.startsWith('pending:')) {
-      const currentQty = resolveCurrentStockQty(
-        existing,
-        materialRef,
-        row.locationId,
-        row.locationWarehouseId,
-      );
-      const delta = Number(row.balanceQty) - currentQty;
-      if (delta === 0) {
-        if (!previousNeedsZero) {
+      const hasTargetPlace = Boolean(row.locationId || row.locationWarehouseId);
+      if (!hasTargetPlace) {
+        if (Number(row.balanceQty) === 0) {
           skipStock = true;
+          skipNotes.push('الجرد 0 — لا حركة رصيد. المكون نفسه هيتربط الآن');
+        } else {
+          skipNotes.push(
+            `الرصيد ${row.balanceQty} كرتونة كما هو — يُرحَّل على المخزن المختار عند الحفظ (لا يُقسم على العدد)`,
+          );
         }
-        skipNotes.push('الرصيد على اللوكيشن الجديد مطابق — لا تسوية هناك');
       } else {
-        skipNotes.push(
-          `تسوية رصيد إلى ${row.balanceQty} (الحالي ${currentQty}، فرق ${delta > 0 ? '+' : ''}${delta})`,
+        const currentQty = resolveCurrentStockQty(
+          existing,
+          materialRef,
+          row.locationId,
+          row.locationWarehouseId,
         );
+        const delta = Number(row.balanceQty) - currentQty;
+        if (delta === 0) {
+          if (!previousNeedsZero) {
+            skipStock = true;
+          }
+          skipNotes.push('الرصيد الحالي يساوي الجرد — لا حركة مخزون (المكون يُربط/يُحدَّث)');
+        } else {
+          skipNotes.push(
+            `تسوية رصيد إلى ${row.balanceQty} (الحالي ${currentQty}، فرق ${delta > 0 ? '+' : ''}${delta})`,
+          );
+        }
       }
     }
 
@@ -532,10 +544,16 @@ function parseNumericCell(value: unknown): number {
   const raw = String(value ?? '')
     .trim()
     .replace(/,/g, '')
-    .replace(/٬/g, '')
-    .replace(/[^\d.\-]/g, '');
-  if (!raw) return NaN;
-  return Number(raw);
+    .replace(/٬/g, '');
+  const fraction = raw.match(/^(-?\d+(?:\.\d+)?)\s*\/\s*(-?\d+(?:\.\d+)?)$/);
+  if (fraction) {
+    const denominator = Number(fraction[2]);
+    if (!Number.isFinite(denominator) || denominator === 0) return NaN;
+    return Number(fraction[1]) / denominator;
+  }
+  const cleaned = raw.replace(/[^\d.\-]/g, '');
+  if (!cleaned) return NaN;
+  return Number(cleaned);
 }
 
 /** Normalize location codes so 20–01–0 / 20-01-0 / 20 - 01 - 0 all match. */
@@ -817,8 +835,14 @@ export function parseProductComponentsFromBuffer(
     if (!quantityEmpty && (!Number.isFinite(quantityUsed) || quantityUsed < 0)) {
       errors.push('الكمية المستخدمة غير صالحة.');
       quantityUsed = 0;
-    } else if (quantityEmpty && unitsPerCartonProvided && Number.isFinite(unitsPerCarton) && unitsPerCarton >= 1) {
-      quantityUsed = cartonBomQtyPerPiece(unitsPerCarton);
+    } else if (
+      unitsPerCartonProvided &&
+      Number.isFinite(unitsPerCarton) &&
+      unitsPerCarton >= 1 &&
+      Number.isFinite(quantityUsed) &&
+      quantityUsed > 0 &&
+      Math.abs(quantityUsed - cartonBomQtyPerPiece(unitsPerCarton)) < 1e-9
+    ) {
       quantityDerivedFromUnitsPerCarton = true;
     } else if (!Number.isFinite(quantityUsed) || quantityUsed < 0) {
       quantityUsed = 0;

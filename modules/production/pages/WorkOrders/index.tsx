@@ -763,7 +763,7 @@ export const WorkOrders: React.FC = () => {
     toast.info('ميزة استيراد أوامر الشغل ستتوفر قريباً.');
   };
 
-  if (loading && liveOrders.length === 0) {
+  if (loading && liveOrders.length === 0 && !error) {
     return <PageContentSkeleton variant="list" showFilters tableRows={10} />;
   }
 

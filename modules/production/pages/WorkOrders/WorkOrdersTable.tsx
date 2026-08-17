@@ -84,7 +84,7 @@ export function WorkOrdersTable({
 }: WorkOrdersTableProps) {
   const grouped = groupRows(rows, groupBy);
 
-  if (loading) {
+  if (loading && rows.length === 0) {
     return (
       <div className="p-4">
         <TableSkeleton rows={10} columns={8} />

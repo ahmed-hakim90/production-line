@@ -373,7 +373,25 @@ describe('parseProductComponentsFromBuffer', () => {
     expect(result.rows[0].errors.some((e) => e.includes('اللوكيشن الجديد'))).toBe(true);
   });
 
-  it('writes pieces-per-carton onto the product and derives carton BOM qty as 1÷N', () => {
+  it('parses carton BOM qty written as a 1/N fraction', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'اسم المادة', 'الكمية المستخدمة', 'عدد الوحدات في الكرتونة'],
+      ['SK-999N', 'CTN-999', 'كرتون خارجي 999', '1/24', 24],
+    ]);
+
+    const result = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    expect(result.errorCount).toBe(0);
+    expect(result.rows[0].quantityUsed).toBe(1 / 24);
+    expect(result.rows[0].unitsPerCarton).toBe(24);
+    expect(result.rows[0].quantityDerivedFromUnitsPerCarton).toBe(true);
+    expect(result.bomGroups[0].items[0].quantityUsed).toBe(1 / 24);
+  });
+
+  it('writes inner packing count onto the product without dividing stock or filling BOM qty', () => {
     const data = makeBuffer([
       ['كود المنتج', 'كود المادة', 'اسم المادة', 'عدد الوحدات في الكرتونة', 'نوع المادة', 'رصيد المكون'],
       ['SK-999N', 'CTN-999', 'كرتون خارجي 999', 6, 'تعبئة وتغليف', 200],
@@ -387,8 +405,8 @@ describe('parseProductComponentsFromBuffer', () => {
     expect(result.errorCount).toBe(0);
     expect(result.rows[0].unitsPerCartonProvided).toBe(true);
     expect(result.rows[0].unitsPerCarton).toBe(6);
-    expect(result.rows[0].quantityDerivedFromUnitsPerCarton).toBe(true);
-    expect(result.rows[0].quantityUsed).toBe(1 / 6);
+    expect(result.rows[0].quantityUsed).toBe(0);
+    expect(result.rows[0].quantityDerivedFromUnitsPerCarton).toBeFalsy();
     expect(result.rows[0].materialType).toBe('packaging');
     expect(result.productUpdates).toHaveLength(1);
     expect(result.productUpdates[0]).toMatchObject({
@@ -399,8 +417,32 @@ describe('parseProductComponentsFromBuffer', () => {
       code: 'CTN-999',
       type: 'packaging',
     });
-    expect(result.bomGroups[0].items[0].quantityUsed).toBe(1 / 6);
+    expect(result.bomGroups[0].items[0].quantityUsed).toBe(0);
     expect(result.stockMovements[0].quantity).toBe(200);
+    expect(result.needsFallbackWarehouse).toBe(true);
+  });
+
+  it('does not treat empty-location zero stock as already uploaded', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'اسم المادة', 'عدد الوحدات في الكرتونة', 'رصيد المكون'],
+      ['SK-999N', 'MAT-001', 'كرتون خارجي', 4, 0],
+    ]);
+
+    const parsed = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+    const filtered = applySkipExistingProductComponents(parsed, {
+      bomKeys: new Set(),
+      stockQtyByKey: new Map(),
+    });
+
+    expect(filtered.rows[0].skipStock).toBe(true);
+    expect(filtered.bomGroupCount).toBe(1);
+    expect(filtered.rows[0].skipNotes?.some((n) => n.includes('المكون نفسه هيتربط'))).toBe(true);
+    expect(filtered.rows[0].skipNotes?.some((n) => n.includes('مطابق'))).toBe(false);
+    expect(filtered.rows[0].unitsPerCarton).toBe(4);
+    expect(filtered.stockMovementCount).toBe(0);
   });
 
   it('errors when the same product has two different pieces-per-carton values', () => {
