@@ -5,7 +5,7 @@ import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPag
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import type { QualityCAPA } from '@/types';
 import { qualityInspectionService } from '../services/qualityInspectionService';
 import { qualityNotificationService } from '../services/qualityNotificationService';
@@ -36,7 +36,16 @@ export const CAPA: React.FC = () => {
   const [rows, setRows] = useState<QualityCAPA[]>([]);
   const [reasons, setReasons] = useState<{ code: string; labelAr: string }[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
+  const { printDocument } = usePrintEngine();
+  const handlePrint = () => {
+    printDocument({
+      documentTitle: 'تقرير-CAPA',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <SingleCAPAPrint ref={ref} rows={printRows} printSettings={printTemplate} />
+      ),
+    });
+  };
   const [form, setForm] = useState({
     workOrderId: '',
     defectId: '',

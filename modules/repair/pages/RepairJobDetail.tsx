@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { exportToPDF } from '../../../utils/reportExport';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -232,24 +232,59 @@ export const RepairJobDetail: React.FC = () => {
     () => ({ ...DEFAULT_PRINT_TEMPLATE, ...printTemplate, paperSize: 'a5' as const }),
     [printTemplate],
   );
+  const { printDocument } = usePrintEngine();
   /** إيصال × نسختين (مركز + عميل) ثم كارت داخلي — كلها A5. */
-  const handlePrintIntakeBundle = useManagedPrint({
-    contentRef: intakeBundlePrintRef,
-    printSettings: intakeBundlePrintSettings,
-    documentTitle: job ? `ايصال-نسختين-وكارت-${job.receiptNo}` : 'ايصال-نسختين-وكارت',
-  });
-  const handlePrintDeliveryAuthorization = useManagedPrint({
-    contentRef: deliveryAuthorizationPrintRef,
-    printSettings: printTemplate,
-    documentTitle: job ? `اذن-تسليم-${job.deliveryAuthorizationNo || job.receiptNo}` : 'اذن-تسليم',
-  });
-  const handlePrintPaymentAccount = useManagedPrint({
-    contentRef: paymentAccountPrintRef,
-    printSettings: printTemplate,
-    documentTitle: job
-      ? `تفصيل-حساب-${paymentAuthorization?.authorizationNo || job.receiptNo}`
-      : 'تفصيل-حساب-صيانة',
-  });
+  const handlePrintIntakeBundle = () => {
+    if (!job) return;
+    printDocument({
+      documentTitle: `ايصال-نسختين-وكارت-${job.receiptNo}`,
+      printSettings: intakeBundlePrintSettings,
+      render: (ref) => (
+        <RepairJobIntakePrintBundle
+          ref={ref}
+          job={financialJob}
+          branch={branch}
+          products={jobProducts}
+          trackUrl={trackUrl}
+          workUrl={internalWorkUrl}
+          printSettings={intakeBundlePrintSettings}
+          statusMap={repairSettings.statusMap}
+        />
+      ),
+    });
+  };
+  const handlePrintDeliveryAuthorization = () => {
+    if (!job) return;
+    printDocument({
+      documentTitle: `اذن-تسليم-${job.deliveryAuthorizationNo || job.receiptNo}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <DeliveryReceiptPDF
+          ref={ref}
+          job={financialJob}
+          branch={branch}
+          products={jobProducts}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  };
+  const handlePrintPaymentAccount = () => {
+    if (!job) return;
+    printDocument({
+      documentTitle: `تفصيل-حساب-${paymentAuthorization?.authorizationNo || job.receiptNo}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <RepairPaymentPrint
+          ref={ref}
+          authorization={paymentAuthorization}
+          job={job}
+          branch={branch}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  };
   const printDeliveryAuthorizationRef = useRef(handlePrintDeliveryAuthorization);
   printDeliveryAuthorizationRef.current = handlePrintDeliveryAuthorization;
 

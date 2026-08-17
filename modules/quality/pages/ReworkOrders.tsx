@@ -5,7 +5,7 @@ import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPag
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import type { QualityReworkOrder } from '@/types';
 import { qualityInspectionService } from '../services/qualityInspectionService';
 import { qualityNotificationService } from '../services/qualityNotificationService';
@@ -40,7 +40,16 @@ export const ReworkOrders: React.FC = () => {
   const [rows, setRows] = useState<QualityReworkOrder[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
+  const { printDocument } = usePrintEngine();
+  const handlePrint = () => {
+    printDocument({
+      documentTitle: 'تقرير-إعادة-التشغيل',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <ReworkOrdersPrint ref={ref} rows={printRows} printSettings={printTemplate} />
+      ),
+    });
+  };
   const displayRows = useMemo(() => rows.map((row) => {
     const workOrder = workOrders.find((w) => w.id === row.workOrderId);
     return {

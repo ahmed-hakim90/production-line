@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Button } from "@/components/ui/button";
@@ -21,17 +21,12 @@ import {
   formatAccountingMoney,
 } from "../lib/accountingUi";
 import { useAppStore } from "@/store/useAppStore";
-import { useManagedPrint } from "@/utils/printManager";
+import { usePrintEngine } from "@/utils/printManager";
 
 export const AccountingTrialBalance: React.FC = () => {
   const { accounts, journals, loading, reload } = useAccountingBaseData();
   const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: "ميزان-المراجعة",
-  });
+  const { printDocument } = usePrintEngine();
   const [from, setFrom] = useState(accountingMonthStart());
   const [to, setTo] = useState(accountingToday());
   const [search, setSearch] = useState("");
@@ -62,6 +57,50 @@ export const AccountingTrialBalance: React.FC = () => {
     }),
     [trial],
   );
+
+  const handlePrint = () => {
+    printDocument({
+      documentTitle: "ميزان-المراجعة",
+      printSettings: printTemplate,
+      render: (ref) => (
+        <AccountingReportPrint
+          ref={ref}
+          title="ميزان المراجعة"
+          subtitle={`${from} ← ${to}`}
+          metaCards={[
+            { label: "من", value: from },
+            { label: "إلى", value: to },
+            { label: "عدد الحسابات", value: String(visible.length) },
+            { label: "الفرق", value: formatAccountingMoney(totals.debit - totals.credit) },
+          ]}
+          kpis={[
+            { label: "إجمالي المدين", value: formatAccountingMoney(totals.debit), tone: "indigo" },
+            { label: "إجمالي الدائن", value: formatAccountingMoney(totals.credit), tone: "green" },
+            {
+              label: "الفرق",
+              value: formatAccountingMoney(totals.debit - totals.credit),
+              tone: Math.abs(totals.debit - totals.credit) > 0.009 ? "red" : "default",
+            },
+          ]}
+          columns={[
+            { key: "code", label: "الكود", width: "16%", mono: true },
+            { key: "name", label: "الحساب", width: "36%" },
+            { key: "debit", label: "مدين", width: "16%", align: "center", mono: true },
+            { key: "credit", label: "دائن", width: "16%", align: "center", mono: true },
+            { key: "balance", label: "الرصيد", width: "16%", align: "center", mono: true },
+          ]}
+          rows={visible.map((row) => ({
+            code: row.code,
+            name: row.name,
+            debit: formatAccountingMoney(row.debit),
+            credit: formatAccountingMoney(row.credit),
+            balance: formatAccountingMoney(row.balance),
+          }))}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  };
 
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -247,43 +286,6 @@ export const AccountingTrialBalance: React.FC = () => {
           itemLabel="حساب"
         />
       </OpsDashPanel>
-      <div className="fixed left-[-10000px] top-0" aria-hidden>
-        <AccountingReportPrint
-          ref={printRef}
-          title="ميزان المراجعة"
-          subtitle={`${from} ← ${to}`}
-          metaCards={[
-            { label: "من", value: from },
-            { label: "إلى", value: to },
-            { label: "عدد الحسابات", value: String(visible.length) },
-            { label: "الفرق", value: formatAccountingMoney(totals.debit - totals.credit) },
-          ]}
-          kpis={[
-            { label: "إجمالي المدين", value: formatAccountingMoney(totals.debit), tone: "indigo" },
-            { label: "إجمالي الدائن", value: formatAccountingMoney(totals.credit), tone: "green" },
-            {
-              label: "الفرق",
-              value: formatAccountingMoney(totals.debit - totals.credit),
-              tone: Math.abs(totals.debit - totals.credit) > 0.009 ? "red" : "default",
-            },
-          ]}
-          columns={[
-            { key: "code", label: "الكود", width: "16%", mono: true },
-            { key: "name", label: "الحساب", width: "36%" },
-            { key: "debit", label: "مدين", width: "16%", align: "center", mono: true },
-            { key: "credit", label: "دائن", width: "16%", align: "center", mono: true },
-            { key: "balance", label: "الرصيد", width: "16%", align: "center", mono: true },
-          ]}
-          rows={visible.map((row) => ({
-            code: row.code,
-            name: row.name,
-            debit: formatAccountingMoney(row.debit),
-            credit: formatAccountingMoney(row.credit),
-            balance: formatAccountingMoney(row.balance),
-          }))}
-          printSettings={printTemplate}
-        />
-      </div>
     </ModuleOpsPageShell>
   );
 };

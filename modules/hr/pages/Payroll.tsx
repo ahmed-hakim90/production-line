@@ -18,7 +18,6 @@ import {
   lockPayroll,
   payrollAuditService,
 } from '../payroll';
-import type { PayslipData } from '../utils/payslipGenerator';
 import { PayslipPrint } from '../components/PayslipPrint';
 import { CombinedPayslipsPrint } from '../components/CombinedPayslipsPrint';
 import { getDocs, query, where } from 'firebase/firestore';
@@ -333,22 +332,7 @@ export const Payroll: React.FC = () => {
   // State
   const [month, setMonth] = useState(getCurrentMonth());
   const PAYROLL_CACHE_KEY = `hr:payroll:${month}`;
-  const printRef = useRef<HTMLDivElement>(null);
-  const combinedPrintRef = useRef<HTMLDivElement>(null);
-  const [singlePayslip, setSinglePayslip] = useState<PayslipData | null>(null);
-  const [combinedPayslips, setCombinedPayslips] = useState<PayslipData[]>([]);
-  const handleSinglePayslipPrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: singlePayslip?.record.employeeName
-      ? `كشف-راتب-${singlePayslip.record.employeeName}`
-      : 'كشف-راتب',
-  });
-  const handleCombinedPayslipPrint = useManagedPrint({
-    contentRef: combinedPrintRef,
-    printSettings: printTemplate,
-    documentTitle: `كشوفات-رواتب-${month}`,
-  });
+  const { printDocument } = usePrintEngine();
   const initialPayrollCache = peekPageDataCache<PayrollMonthPageData>(PAYROLL_CACHE_KEY);
   const initialEmployeesCache = peekPageDataCache<PayrollEmployeeData[]>(PAYROLL_EMPLOYEES_CACHE_KEY);
 
@@ -581,20 +565,28 @@ export const Payroll: React.FC = () => {
       setError('تصدير الكشوفات PDF متاح فقط بعد قفل الشهر.');
       return;
     }
-    setCombinedPayslips(records.map((record) => ({ record, month })));
-    window.setTimeout(() => {
-      void handleCombinedPayslipPrint();
-    }, 50);
-  }, [isLocked, records, month, handleCombinedPayslipPrint]);
+    const items = records.map((record) => ({ record, month }));
+    printDocument({
+      documentTitle: `كشوفات-رواتب-${month}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <CombinedPayslipsPrint ref={ref} items={items} printSettings={printTemplate} />
+      ),
+    });
+  }, [isLocked, records, month, printDocument, printTemplate]);
 
   const handlePrintSinglePayslip = useCallback(
     (record: FirestorePayrollRecord) => {
-      setSinglePayslip({ record, month });
-      window.setTimeout(() => {
-        void handleSinglePayslipPrint();
-      }, 50);
+      const data = { record, month };
+      printDocument({
+        documentTitle: record.employeeName ? `كشف-راتب-${record.employeeName}` : 'كشف-راتب',
+        printSettings: printTemplate,
+        render: (ref) => (
+          <PayslipPrint ref={ref} data={data} printSettings={printTemplate} />
+        ),
+      });
     },
-    [month, handleSinglePayslipPrint],
+    [month, printDocument, printTemplate],
   );
 
   const handleDistributePayroll = useCallback(async () => {
@@ -1053,15 +1045,6 @@ export const Payroll: React.FC = () => {
         canPrintPayslip={isLocked}
         onPrint={handlePrintSinglePayslip}
       />
-
-      <PrintOffscreenHost>
-        <PayslipPrint ref={printRef} data={singlePayslip} printSettings={printTemplate} />
-        <CombinedPayslipsPrint
-          ref={combinedPrintRef}
-          items={combinedPayslips}
-          printSettings={printTemplate}
-        />
-      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

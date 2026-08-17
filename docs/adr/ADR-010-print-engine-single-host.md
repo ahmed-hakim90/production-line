@@ -24,4 +24,7 @@ Print lived on each page: local `useReactToPrint`, off-screen trees (`opacity: 0
 
 - Print iframe CSS (`PRINT_ENGINE_IFRAME_CSS`) and `@page` always come from `buildGlobalPrintPageStyle` unless a job passes `pageStyle` (thermal barcode labels).
 - Pages outside `PrintEngineProvider` cannot print (`useManagedPrint` toasts; `usePrintEngine` throws).
-- Inventory and repair voucher/count prints mount on demand via `printDocument`. Local `PrintOffscreenHost` in those modules is reserved for PDF/image capture (quick transfer export).
+- Inventory and repair voucher/count prints, work orders, payslips, catalog product detail, supervisor reports, accounting reports, quality reports, production reports, and repair job/payment/treasury prints mount on demand via `printDocument`.
+- Local `PrintOffscreenHost` is reserved for PDF/image capture (quick transfer export) and the engine host itself.
+- On-screen print previews (settings, barcode labels, BOM count card, product drawer, sales invoice preview) keep `useManagedPrint` → `printFromRef` because the document is already visible.
+- Dual-use pages may still mount a capture tree for PDF/WhatsApp **export**; browser **طباعة** uses `printDocument`.

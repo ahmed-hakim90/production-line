@@ -6,7 +6,7 @@ import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPag
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import { qualityInspectionService } from '../services/qualityInspectionService';
 import { qualityPrintService } from '../services/qualityPrintService';
 import { workOrderService } from '@/modules/production/services/workOrderService';
@@ -47,7 +47,7 @@ export const QualityReports: React.FC = () => {
   const [deletingWorkOrderId, setDeletingWorkOrderId] = useState<string | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const defectsPrintRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
+  const { printDocument } = usePrintEngine();
 
   const selectedWorkOrder = useMemo(
     () => workOrders.find((wo) => wo.id === selectedWorkOrderId) ?? null,
@@ -220,6 +220,26 @@ export const QualityReports: React.FC = () => {
       })),
     [defects],
   );
+
+  const handlePrint = () => {
+    printDocument({
+      documentTitle: selectedWorkOrder
+        ? `تقرير-جودة-${selectedWorkOrder.workOrderNumber}`
+        : 'تقرير-الجودة',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <QualityReportPrint
+          ref={ref}
+          title="تقرير الجودة"
+          subtitle={printSubtitle}
+          workOrderNumber={selectedWorkOrder?.workOrderNumber}
+          summary={summary}
+          topDefects={topDefectReasons}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  };
 
   const handleDeleteQualityReport = async (workOrderId: string, workOrderNumber: string) => {
     if (!canDeleteQualityReports || !workOrderId) return;

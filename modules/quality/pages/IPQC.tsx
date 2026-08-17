@@ -4,7 +4,7 @@ import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPag
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import type { FileAttachmentMeta, QualityInspectionStatus, QualityReasonCatalogItem } from '@/types';
 import { qualityInspectionService } from '../services/qualityInspectionService';
 import { createQualityInspection } from '../usecases/createQualityInspection';
@@ -57,7 +57,7 @@ export const IPQC: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
+  const { printDocument } = usePrintEngine();
 
   useEffect(() => {
     qualitySettingsService.getReasons(true).then(setReasonCatalog);
@@ -111,6 +111,18 @@ export const IPQC: React.FC = () => {
     () => `QR-${selectedWorkOrder?.workOrderNumber ?? 'NA'}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}`,
     [selectedWorkOrder?.workOrderNumber],
   );
+
+  const handlePrint = () => {
+    printDocument({
+      documentTitle: selectedWorkOrder
+        ? `IPQC-${selectedWorkOrder.workOrderNumber}`
+        : 'تقرير-IPQC',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <SingleIPQCPrint ref={ref} data={printData} printSettings={printTemplate} />
+      ),
+    });
+  };
 
   const onSubmit = async (printAfterSave = false) => {
     if (!selectedWorkOrder || !inspectorId || !canInspect) return;

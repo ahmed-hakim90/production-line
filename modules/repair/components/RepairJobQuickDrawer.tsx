@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { useAppStore } from '@/store/useAppStore';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import type { RepairJob } from '../types';
 import { buildRepairTrackPublicUrl } from '../lib/repairPublicLinks';
 import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
@@ -39,12 +39,7 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
   showWorkshopLink = false,
 }) => {
   const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: job?.receiptNo ? `طلب-صيانة-${job.receiptNo}` : 'طلب-صيانة',
-  });
+  const { printDocument } = usePrintEngine();
 
   const trackUrl = React.useMemo(() => {
     if (!job) return '';
@@ -95,7 +90,37 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap pt-1">
-            <Button type="button" variant="outline" onClick={() => handlePrint()}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                printDocument({
+                  documentTitle: job.receiptNo ? `طلب-صيانة-${job.receiptNo}` : 'طلب-صيانة',
+                  printSettings: printTemplate,
+                  render: (ref) => (
+                    <RepairJobPrint
+                      ref={ref}
+                      job={job}
+                      branch={
+                        branchName
+                          ? {
+                              tenantId: '',
+                              name: branchName,
+                              address: '',
+                              phone: '',
+                              isMain: false,
+                              createdAt: job.createdAt || new Date().toISOString(),
+                            }
+                          : null
+                      }
+                      trackUrl={trackUrl || undefined}
+                      printSettings={printTemplate}
+                      copyKind="customer"
+                    />
+                  ),
+                });
+              }}
+            >
               طباعة
             </Button>
             <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
@@ -115,28 +140,6 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
               {trackUrl}
             </div>
           ) : null}
-        </div>
-
-        <div className="fixed left-[-10000px] top-0" aria-hidden>
-          <RepairJobPrint
-            ref={printRef}
-            job={job}
-            branch={
-              branchName
-                ? {
-                    tenantId: '',
-                    name: branchName,
-                    address: '',
-                    phone: '',
-                    isMain: false,
-                    createdAt: job.createdAt || new Date().toISOString(),
-                  }
-                : null
-            }
-            trackUrl={trackUrl || undefined}
-            printSettings={printTemplate}
-            copyKind="customer"
-          />
         </div>
       </DialogContent>
     </Dialog>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
@@ -14,7 +14,7 @@ import {
 import { formatNumber, getTodayDateString, addDaysToDate, calculateEstimatedDays } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { productionIssueService } from '../../inventory/services/productionIssueService';
 import { createProductionIssueRequest } from '../usecases/createProductionIssueRequest';
 import { unwrapOrThrow } from '@/shared/usecases';
@@ -244,14 +244,7 @@ export const ProductionIssueRequests: React.FC = () => {
   const [compBusy, setCompBusy] = useState(false);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [expandedShortageProductId, setExpandedShortageProductId] = useState<string | null>(null);
-  const [printSections, setPrintSections] = useState<MissingComponentsReportSection[]>([]);
-  const [printSubtitle, setPrintSubtitle] = useState('كل المنتجات ذات النقص مقابل الخطط المفتوحة');
-  const shortagePrintRef = useRef<HTMLDivElement>(null);
-  const handleShortagePrint = useManagedPrint({
-    contentRef: shortagePrintRef,
-    printSettings: printTemplate,
-    documentTitle: 'تقرير المكونات الناقصة',
-  });
+  const { printDocument } = usePrintEngine();
 
   const actor = userDisplayName || userEmail || 'Current User';
 
@@ -451,7 +444,7 @@ export const ProductionIssueRequests: React.FC = () => {
     return [...noneSections, ...partialSections];
   }, [noComponentAlerts, partialCoverageAlerts]);
 
-  const printShortageReport = async (
+  const printShortageReport = (
     sections: MissingComponentsReportSection[],
     subtitle: string,
   ) => {
@@ -459,16 +452,19 @@ export const ProductionIssueRequests: React.FC = () => {
       setMessage('لا توجد مكونات ناقصة للطباعة حالياً.');
       return;
     }
-    setPrintSections(sections);
-    setPrintSubtitle(subtitle);
-    // Wait for React commit + layout so the off-screen print tree includes all product lines.
-    await new Promise<void>((resolve) => {
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => resolve());
-      });
+    printDocument({
+      documentTitle: 'تقرير المكونات الناقصة',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <MissingComponentsReportPrint
+          ref={ref}
+          sections={sections}
+          subtitle={subtitle}
+          warehouseName={suppliesWarehouseName || undefined}
+          printSettings={printTemplate}
+        />
+      ),
     });
-    await new Promise((resolve) => window.setTimeout(resolve, 50));
-    handleShortagePrint();
   };
 
   const reload = useCallback(async () => {
@@ -1483,29 +1479,6 @@ export const ProductionIssueRequests: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div
-        style={{
-          position: 'fixed',
-          left: '-10000px',
-          top: 0,
-          width: '210mm',
-          maxWidth: 'none',
-          overflow: 'hidden',
-          pointerEvents: 'none',
-          direction: 'rtl',
-          zIndex: -1,
-        }}
-        aria-hidden
-      >
-        <MissingComponentsReportPrint
-          ref={shortagePrintRef}
-          sections={printSections}
-          subtitle={printSubtitle}
-          warehouseName={suppliesWarehouseName || undefined}
-          printSettings={printTemplate}
-        />
-      </div>
     </ModuleOpsPageShell>
   );
 };

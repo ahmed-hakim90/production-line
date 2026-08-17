@@ -225,12 +225,7 @@ export const ProductDetails: React.FC = () => {
   const [detailTab, setDetailTab] = useState<"overview" | "bom">("overview");
   const uid = useAppStore((s) => s.uid) || "";
   const printTemplate = useAppStore((s) => s.systemSettings?.printTemplate);
-  const printRef = useRef<HTMLDivElement>(null);
-  const handleManagedPrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: data?.header?.name ? `تفاصيل-منتج-${data.header.name}` : "تفاصيل-منتج",
-  });
+  const { printDocument } = usePrintEngine();
 
   useEffect(() => {
     if (!canViewBom && detailTab === "bom") setDetailTab("overview");
@@ -515,7 +510,23 @@ export const ProductDetails: React.FC = () => {
 
   const onExport = () => {
     if (!data) return;
-    void handleManagedPrint();
+    printDocument({
+      documentTitle: data.header?.name ? `تفاصيل-منتج-${data.header.name}` : "تفاصيل-منتج",
+      printSettings: printTemplate,
+      render: (ref) => (
+        <CatalogProductDetailPrint
+          ref={ref}
+          productId={data.id}
+          productName={data.header.name}
+          productCode={data.header.code}
+          category={data.header.category}
+          periodLabel={`${fromDate || "—"} إلى ${toDate || "—"}`}
+          kpis={displayKpis}
+          rows={filteredReports}
+          printSettings={printTemplate}
+        />
+      ),
+    });
   };
 
   const onExcel = () => {
@@ -1140,22 +1151,6 @@ export const ProductDetails: React.FC = () => {
       </OpsDashPanel>
       </>
       )}
-
-      <PrintOffscreenHost>
-        {data ? (
-          <CatalogProductDetailPrint
-            ref={printRef}
-            productId={data.id}
-            productName={data.header.name}
-            productCode={data.header.code}
-            category={data.header.category}
-            periodLabel={`${fromDate || "—"} إلى ${toDate || "—"}`}
-            kpis={displayKpis}
-            rows={filteredReports}
-            printSettings={printTemplate}
-          />
-        ) : null}
-      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

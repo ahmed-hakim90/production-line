@@ -109,15 +109,7 @@ export const EmployeeSelfService: React.FC = () => {
   const { can } = usePermission();
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const printTemplate = useAppStore((s) => s.systemSettings?.printTemplate);
-  const printRef = useRef<HTMLDivElement>(null);
-  const [payslipPrintData, setPayslipPrintData] = useState<PayslipData | null>(null);
-  const handleManagedPayslipPrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: payslipPrintData?.record.employeeName
-      ? `كشف-راتب-${payslipPrintData.record.employeeName}`
-      : 'كشف-راتب',
-  });
+  const { printDocument } = usePrintEngine();
   const uid = useAppStore((s) => s.uid);
   const permissions = useAppStore((s) => s.userPermissions);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -301,13 +293,19 @@ export const EmployeeSelfService: React.FC = () => {
   const canAccessPayroll = can('payroll.view');
   const handlePrintLockedPayslip = () => {
     if (!lockedPayslip) return;
-    setPayslipPrintData({
+    const data = {
       record: lockedPayslip.record,
       month: lockedPayslip.month,
+    };
+    printDocument({
+      documentTitle: lockedPayslip.record.employeeName
+        ? `كشف-راتب-${lockedPayslip.record.employeeName}`
+        : 'كشف-راتب',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <PayslipPrint ref={ref} data={data} printSettings={printTemplate} />
+      ),
     });
-    window.setTimeout(() => {
-      void handleManagedPayslipPrint();
-    }, 50);
   };
 
   if (!currentEmployee || !currentEmployee.hasSystemAccess) {
@@ -1045,9 +1043,6 @@ export const EmployeeSelfService: React.FC = () => {
         </OpsDashPanel>
       )}
       </OpsDashPanel>
-      <PrintOffscreenHost>
-        <PayslipPrint ref={printRef} data={payslipPrintData} printSettings={printTemplate} />
-      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

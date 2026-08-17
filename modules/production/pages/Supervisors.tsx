@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import { KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../components/SelectableTable';
 import { ProductionReportPrint, mapReportsToPrintRows, computePrintTotals } from '../components/ProductionReportPrint';
@@ -205,16 +205,7 @@ export const Supervisors: React.FC = () => {
   const [detailDrawerSupervisorId, setDetailDrawerSupervisorId] = useState<string | null>(null);
   const [hoveredSupervisor, setHoveredSupervisor] = useState<string | null>(null);
   const hoverTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const [bulkPrintReports, setBulkPrintReports] = useState<ProductionReport[] | null>(null);
-  const bulkPrintRef = useRef<HTMLDivElement>(null);
-  const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
-  const [singleSupervisorPrintData, setSingleSupervisorPrintData] = useState<SupervisorPerformancePrintData | null>(null);
-  const singleSupervisorPrintRef = useRef<HTMLDivElement>(null);
-  const handleSingleSupervisorPrint = useManagedPrint({
-    contentRef: singleSupervisorPrintRef,
-    printSettings: printTemplate,
-    documentTitle: ' ',
-  });
+  const { printDocument } = usePrintEngine();
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'supervisors'),
     [exportImportSettings]
@@ -334,12 +325,6 @@ export const Supervisors: React.FC = () => {
       return n > 0 ? n : undefined;
     },
   }), [productionLines, products, employees]);
-
-  const printRows = useMemo(
-    () => mapReportsToPrintRows(bulkPrintReports ?? [], lookups),
-    [bulkPrintReports, lookups]
-  );
-  const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
 
   const weekStart = useMemo(() => getWeekStart(), []);
   const lastWeek = useMemo(() => getLastWeekRange(), []);
@@ -634,9 +619,23 @@ export const Supervisors: React.FC = () => {
 
   const printSelected = useCallback((items: SupervisorRow[]) => {
     const allSelectedReports = items.flatMap((s) => s.reports);
-    setBulkPrintReports(allSelectedReports);
-    setTimeout(() => handleBulkPrint(), 100);
-  }, [handleBulkPrint]);
+    const rows = mapReportsToPrintRows(allSelectedReports, lookups);
+    const totals = computePrintTotals(rows);
+    printDocument({
+      documentTitle: 'تقرير المشرفين',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <ProductionReportPrint
+          ref={ref}
+          title="تقرير المشرفين"
+          subtitle={`${filtered.length} مشرف — ${today}`}
+          rows={rows}
+          totals={totals}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  }, [filtered.length, lookups, printDocument, printTemplate, today]);
 
   const buildSupervisorLineRows = useCallback((sup: SupervisorRow): SupervisorLinePerformancePrintRow[] => {
     const byLine = new Map<string, { produced: number; waste: number; reports: number; workers: number; hours: number }>();
@@ -744,7 +743,7 @@ export const Supervisors: React.FC = () => {
     const lineUtilizationRatio = Number(((sup.activeDays / Math.max(sup.totalDaysInRange, 1)) * 100).toFixed(1));
     const lineUtilizationHigh = lineUtilizationRatio >= 70;
 
-    setSingleSupervisorPrintData({
+    const data: SupervisorPerformancePrintData = {
       supervisorName: sup.name,
       supervisorCode: sup.code,
       departmentName: getDepartmentName(sup.departmentId ?? ''),
@@ -773,8 +772,14 @@ export const Supervisors: React.FC = () => {
       recommendations: appreciation.recommendations,
       productRows,
       lineRows,
+    };
+    printDocument({
+      documentTitle: ' ',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <SupervisorPerformancePrint ref={ref} data={data} printSettings={printTemplate} />
+      ),
     });
-    setTimeout(() => handleSingleSupervisorPrint(), 120);
   }, [
     buildSupervisorLineRows,
     buildSupervisorProductRows,
@@ -782,7 +787,8 @@ export const Supervisors: React.FC = () => {
     endDate,
     getDepartmentName,
     getJobPositionTitle,
-    handleSingleSupervisorPrint,
+    printDocument,
+    printTemplate,
     startDate,
     today,
     viewMode,
@@ -1548,26 +1554,6 @@ export const Supervisors: React.FC = () => {
           </ManagedModalPortal>
         );
       })()}
-
-      {/* Hidden print template */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <ProductionReportPrint
-          ref={bulkPrintRef}
-          title="تقرير المشرفين"
-          subtitle={`${filtered.length} مشرف — ${today}`}
-          rows={printRows}
-          totals={printTotals}
-          printSettings={printTemplate}
-        />
-      </div>
-
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <SupervisorPerformancePrint
-          ref={singleSupervisorPrintRef}
-          data={singleSupervisorPrintData}
-          printSettings={printTemplate}
-        />
-      </div>
         </>
       )}
     </ModuleOpsPageShell>

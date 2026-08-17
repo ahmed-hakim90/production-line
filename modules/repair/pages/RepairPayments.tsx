@@ -35,7 +35,7 @@ import { SmartFilterBar } from "@/src/components/erp/SmartFilterBar";
 import { StatusBadge as ErpStatusBadge } from "@/src/components/erp/StatusBadge";
 import { toast } from "../../../components/Toast";
 import { usePermission } from "../../../utils/permissions";
-import { useManagedPrint } from "../../../utils/printManager";
+import { usePrintEngine } from "../../../utils/printManager";
 import { exportToPDF } from "../../../utils/reportExport";
 import { useAppStore } from "../../../store/useAppStore";
 import { withTenantPath } from "@/lib/tenantPaths";
@@ -133,12 +133,7 @@ export const RepairPayments: React.FC = () => {
   const [printPayment, setPrintPayment] = useState<RepairPayment | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings,
-    documentTitle:
-      printPayment?.paymentNo || printAuth?.authorizationNo || "اذن-دفع-صيانة",
-  });
+  const { printDocument } = usePrintEngine();
 
   const canViewAllBranches = can("repair.branches.manage");
   const branchIds = useMemo(
@@ -470,11 +465,21 @@ export const RepairPayments: React.FC = () => {
     auth: RepairPaymentAuthorization,
     payment?: RepairPayment,
   ) => {
-    flushSync(() => {
-      setPrintAuth(auth);
-      setPrintPayment(payment || null);
+    printDocument({
+      documentTitle:
+        payment?.paymentNo || auth.authorizationNo || "اذن-دفع-صيانة",
+      printSettings,
+      render: (ref) => (
+        <RepairPaymentPrint
+          ref={ref}
+          authorization={auth}
+          payment={payment || null}
+          job={jobById.get(auth.jobId) || null}
+          branch={branchById.get(auth.branchId) || null}
+          printSettings={printSettings}
+        />
+      ),
     });
-    handlePrint();
   };
 
   const exportDocument = (

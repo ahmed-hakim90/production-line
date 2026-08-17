@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
@@ -25,7 +25,7 @@ import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter"
 import { SmartFilterBar } from "@/src/components/erp/SmartFilterBar";
 import { useAppStore } from "@/store/useAppStore";
 import { usePermission } from "@/utils/permissions";
-import { useManagedPrint } from "@/utils/printManager";
+import { usePrintEngine } from "@/utils/printManager";
 import { AccountingReportPrint } from "../components/AccountingReportPrint";
 import { useAccountingBaseData } from "../hooks/useAccountingBaseData";
 import {
@@ -48,14 +48,9 @@ export const AccountingJournals: React.FC = () => {
   const { can } = usePermission();
   const costCenters = useAppStore((state) => state.costCenters);
   const printTemplate = useAppStore((state) => state.systemSettings)?.printTemplate;
-  const printRef = useRef<HTMLDivElement>(null);
+  const { printDocument } = usePrintEngine();
   const { accounts, journals, settings, loading, busy, run } =
     useAccountingBaseData();
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: "القيود-اليومية",
-  });
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [from, setFrom] = useState("");
@@ -144,7 +139,53 @@ export const AccountingJournals: React.FC = () => {
               قيد جديد
             </Button>
           ) : null}
-          <Button size="sm" variant="outline" onClick={() => handlePrint()} disabled={!filtered.length}>
+          <Button size="sm" variant="outline" onClick={() => {
+            printDocument({
+              documentTitle: "القيود-اليومية",
+              printSettings: printTemplate,
+              render: (ref) => (
+                <AccountingReportPrint
+                  ref={ref}
+                  title="القيود اليومية"
+                  subtitle={[
+                    sourceFilter !== "all" ? SOURCE_LABEL[sourceFilter] || sourceFilter : "كل المصادر",
+                    from || to ? `${from || "…"} ← ${to || "…"}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" | ")}
+                  metaCards={[
+                    { label: "المصدر", value: sourceFilter === "all" ? "الكل" : SOURCE_LABEL[sourceFilter] || sourceFilter },
+                    { label: "من", value: from || "—" },
+                    { label: "إلى", value: to || "—" },
+                    { label: "عدد القيود", value: String(filtered.length) },
+                  ]}
+                  columns={[
+                    { key: "date", label: "التاريخ", width: "12%", align: "center" },
+                    { key: "referenceNo", label: "المرجع", width: "16%", mono: true },
+                    { key: "source", label: "المصدر", width: "14%" },
+                    { key: "description", label: "البيان", width: "30%" },
+                    { key: "status", label: "الحالة", width: "12%", align: "center" },
+                    { key: "amount", label: "المبلغ", width: "16%", align: "center", mono: true },
+                  ]}
+                  rows={filtered.map((row) => {
+                    const amount = (row.lines || []).reduce(
+                      (sum, line) => sum + Number(line.debit || 0),
+                      0,
+                    );
+                    return {
+                      date: String(row.date || row.postedAt || row.createdAt || "").slice(0, 10),
+                      referenceNo: row.referenceNo || "—",
+                      source: SOURCE_LABEL[row.source] || row.source,
+                      description: row.description || "—",
+                      status: row.status === "posted" ? "مرحّل" : row.status || "—",
+                      amount: formatAccountingMoney(amount),
+                    };
+                  })}
+                  printSettings={printTemplate}
+                />
+              ),
+            });
+          }} disabled={!filtered.length}>
             طباعة
           </Button>
           <Button
@@ -567,47 +608,6 @@ export const AccountingJournals: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <div className="fixed left-[-10000px] top-0" aria-hidden>
-        <AccountingReportPrint
-          ref={printRef}
-          title="القيود اليومية"
-          subtitle={[
-            sourceFilter !== "all" ? SOURCE_LABEL[sourceFilter] || sourceFilter : "كل المصادر",
-            from || to ? `${from || "…"} ← ${to || "…"}` : "",
-          ]
-            .filter(Boolean)
-            .join(" | ")}
-          metaCards={[
-            { label: "المصدر", value: sourceFilter === "all" ? "الكل" : SOURCE_LABEL[sourceFilter] || sourceFilter },
-            { label: "من", value: from || "—" },
-            { label: "إلى", value: to || "—" },
-            { label: "عدد القيود", value: String(filtered.length) },
-          ]}
-          columns={[
-            { key: "date", label: "التاريخ", width: "12%", align: "center" },
-            { key: "referenceNo", label: "المرجع", width: "16%", mono: true },
-            { key: "source", label: "المصدر", width: "14%" },
-            { key: "description", label: "البيان", width: "30%" },
-            { key: "status", label: "الحالة", width: "12%", align: "center" },
-            { key: "amount", label: "المبلغ", width: "16%", align: "center", mono: true },
-          ]}
-          rows={filtered.map((row) => {
-            const amount = (row.lines || []).reduce(
-              (sum, line) => sum + Number(line.debit || 0),
-              0,
-            );
-            return {
-              date: String(row.date || row.postedAt || row.createdAt || "").slice(0, 10),
-              referenceNo: row.referenceNo || "—",
-              source: SOURCE_LABEL[row.source] || row.source,
-              description: row.description || "—",
-              status: row.status === "posted" ? "مرحّل" : row.status || "—",
-              amount: formatAccountingMoney(amount),
-            };
-          })}
-          printSettings={printTemplate}
-        />
-      </div>
     </ModuleOpsPageShell>
   );
 };

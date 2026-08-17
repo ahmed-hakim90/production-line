@@ -167,7 +167,6 @@ for (const file of files) {
   const rel = path.relative(root, file).replace(/\\/g, '/');
   if (PRINT_OFFSCREEN_HOST_ALLOW.has(rel)) continue;
   if (rel.startsWith('tests/')) continue;
-  if (!rel.startsWith('modules/inventory/') && !rel.startsWith('modules/repair/')) continue;
   const content = fs.readFileSync(file, 'utf8');
   if (/\bPrintOffscreenHost\b/.test(content)) {
     printHostOffenders.push(rel);
@@ -175,7 +174,7 @@ for (const file of files) {
 }
 if (printHostOffenders.length > 0) {
   failed = true;
-  console.error('\nInventory/repair print must use PrintEngineHost (PrintOffscreenHost only allowed in the engine + quick-transfer export):\n');
+  console.error('\nPrintOffscreenHost is only allowed in the print engine and quick-transfer export capture:\n');
   for (const file of printHostOffenders) {
     console.error(`- ${file}`);
   }

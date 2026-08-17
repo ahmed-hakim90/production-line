@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { DetailPageStickyHeader, SectionSkeleton, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
 import { KPIBox, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { workOrderService } from '@/modules/production/services/workOrderService';
@@ -228,9 +228,6 @@ export const SupervisorDetails: React.FC = () => {
   const [chartTab, setChartTab] = useState<ChartTab>('production');
   const [period, setPeriod] = useState<Period>('all');
 
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
-
   useEffect(() => {
     const lookupId = id ? decodeURIComponent(String(id)).trim() : String(uid || '').trim();
     if (!lookupId || !supervisorCacheKey) { setLoading(false); return; }
@@ -370,6 +367,24 @@ export const SupervisorDetails: React.FC = () => {
 
   const printRows = useMemo(() => mapReportsToPrintRows(reports, lookups), [reports, lookups]);
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
+  const { printDocument } = usePrintEngine();
+  const handlePrint = () => {
+    if (!employee) return;
+    printDocument({
+      documentTitle: `تقارير-المشرف-${employee.name}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <ProductionReportPrint
+          ref={ref}
+          title={`تقارير المشرف: ${employee.name}`}
+          subtitle={`${getDepartmentName(employee.departmentId)} — ${getJobPositionTitle(employee.jobPositionId)}`}
+          rows={printRows}
+          totals={printTotals}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  };
 
   // â”€â”€ Core metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1652,18 +1667,6 @@ export const SupervisorDetails: React.FC = () => {
         </div>
       </OpsDashPanel>
       </OpsDashPanel>
-
-      {/* Hidden print template */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <ProductionReportPrint
-          ref={printRef}
-          title={`تقارير المشرف: ${employee.name}`}
-          subtitle={`${getDepartmentName(employee.departmentId)} — ${getJobPositionTitle(employee.jobPositionId)}`}
-          rows={printRows}
-          totals={printTotals}
-          printSettings={printTemplate}
-        />
-      </div>
     </ModuleOpsPageShell>
   );
 };

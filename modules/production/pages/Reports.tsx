@@ -36,7 +36,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
 import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
@@ -870,8 +870,6 @@ export const Reports: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Single-report print state
-  const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
-  const singlePrintRef = useRef<HTMLDivElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
   const [shareCardRow, setShareCardRow] = useState<ReportPrintRow | null>(null);
   const [sharingReportId, setSharingReportId] = useState<string | null>(null);
@@ -882,7 +880,6 @@ export const Reports: React.FC = () => {
   const bulkPrintRef = useRef<HTMLDivElement>(null);
   /** Blocks duplicate shareToWhatsApp (rapid taps / menu + row action). */
   const shareWhatsAppLockRef = useRef(false);
-  const [bulkPrintSource, setBulkPrintSource] = useState<ProductionReport[] | null>(null);
   const [bulkDeleteItems, setBulkDeleteItems] = useState<ProductionReport[] | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
 
@@ -1957,15 +1954,14 @@ export const Reports: React.FC = () => {
   // â”€â”€ Bulk print data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const printRows = useMemo(
-    () => mapReportsToPrintRows(bulkPrintSource ?? displayedReports, lookups, canViewCosts ? reportCosts : undefined),
-    [bulkPrintSource, displayedReports, lookups, canViewCosts, reportCosts]
+    () => mapReportsToPrintRows(displayedReports, lookups, canViewCosts ? reportCosts : undefined),
+    [displayedReports, lookups, canViewCosts, reportCosts]
   );
   const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
-
-  // â”€â”€ Print handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
-  const handleSinglePrint = useManagedPrint({ contentRef: singlePrintRef, printSettings: printTemplate });
+  const { printDocument } = usePrintEngine();
+  const bulkPrintTitle = viewMode === 'today'
+    ? `تقارير إنتاج اليوم — ${getOperationalDateString(reportBehavior.operationalDayStartHour)}`
+    : `تقارير الإنتاج — ${startDate} إلى ${endDate}`;
 
   const buildReportRow = useCallback(
     (report: ProductionReport | typeof emptyForm): ReportPrintRow => {
@@ -2009,21 +2005,35 @@ export const Reports: React.FC = () => {
   );
 
   const triggerSinglePrint = useCallback(
-    async (report: ProductionReport) => {
+    (report: ProductionReport) => {
       const row = buildReportRow(report);
-      setPrintReport(row);
-      await waitForExportPaint(150);
-      if (!singlePrintRef.current) return;
-      handleSinglePrint();
-      setTimeout(() => setPrintReport(null), 1000);
+      printDocument({
+        documentTitle: row.reportCode || 'تقرير-إنتاج',
+        printSettings: printTemplate,
+        render: (ref) => (
+          <SingleReportPrint ref={ref} report={row} printSettings={printTemplate} />
+        ),
+      });
     },
-    [buildReportRow, handleSinglePrint]
+    [buildReportRow, printDocument, printTemplate]
   );
 
-  const triggerBulkPrint = useCallback(async () => {
-    if (!bulkPrintRef.current) return;
-    handleBulkPrint();
-  }, [handleBulkPrint]);
+  const triggerBulkPrint = useCallback(() => {
+    printDocument({
+      documentTitle: 'تقارير-الإنتاج',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <ProductionReportPrint
+          ref={ref}
+          title={bulkPrintTitle}
+          subtitle={`${printRows.length} تقرير`}
+          rows={printRows}
+          totals={printTotals}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  }, [bulkPrintTitle, printDocument, printRows, printTemplate, printTotals]);
 
   const showShareFeedback = useCallback((result: ShareResult) => {
     const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
@@ -3805,12 +3815,24 @@ export const Reports: React.FC = () => {
     routingProductTargetUnitSecondsByProduct,
   ]);
 
-  const handleBulkPrintSelected = useCallback(async (items: ProductionReport[]) => {
-    setBulkPrintSource(items);
-    await waitForExportPaint(150);
-    await triggerBulkPrint();
-    setTimeout(() => setBulkPrintSource(null), 1000);
-  }, [triggerBulkPrint]);
+  const handleBulkPrintSelected = useCallback((items: ProductionReport[]) => {
+    const rows = mapReportsToPrintRows(items, lookups, canViewCosts ? reportCosts : undefined);
+    const totals = computePrintTotals(rows);
+    printDocument({
+      documentTitle: 'تقارير-الإنتاج',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <ProductionReportPrint
+          ref={ref}
+          title={bulkPrintTitle}
+          subtitle={`${rows.length} تقرير`}
+          rows={rows}
+          totals={totals}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  }, [bulkPrintTitle, canViewCosts, lookups, printDocument, printTemplate, reportCosts]);
 
   const handleBulkPrintSelectedAsSinglePagesPdf = useCallback(async (items: ProductionReport[]) => {
     if (!items.length) return;
@@ -4600,13 +4622,12 @@ export const Reports: React.FC = () => {
       >
         <ProductionReportPrint
           ref={bulkPrintRef}
-          title={viewMode === 'today' ? `تقارير إنتاج اليوم — ${getOperationalDateString(reportBehavior.operationalDayStartHour)}` : `تقارير الإنتاج — ${startDate} إلى ${endDate}`}
+          title={bulkPrintTitle}
           subtitle={`${printRows.length} تقرير`}
           rows={printRows}
           totals={printTotals}
           printSettings={printTemplate}
         />
-        <SingleReportPrint ref={singlePrintRef} report={printReport} printSettings={printTemplate} />
         {bulkSinglePrintRows?.map((row, idx) => (
           <SingleReportPrint
             key={`${row.reportId || row.date}-${idx}`}

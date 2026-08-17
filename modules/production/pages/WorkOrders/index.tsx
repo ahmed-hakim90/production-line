@@ -512,15 +512,6 @@ export const WorkOrders: React.FC = () => {
   const selectedSupervisorName = selectedOrder
     ? (supervisorNameMap.get(selectedOrder.supervisorId || '') || '—')
     : '—';
-  const livePrintData = useMemo(() => {
-    if (!selectedOrder) return printData;
-    return buildWorkOrderPrintData(selectedOrder, {
-      productName: selectedProductName,
-      lineName: selectedLineName,
-      supervisorName: selectedSupervisorName,
-    });
-  }, [printData, selectedLineName, selectedOrder, selectedProductName, selectedSupervisorName]);
-
   const counts = useMemo(() => {
     const byStatus = {
       all: rowViews.length,
@@ -718,9 +709,13 @@ export const WorkOrders: React.FC = () => {
       lineName: lineNameMap.get(order.lineId || '') || '—',
       supervisorName: supervisorNameMap.get(order.supervisorId || '') || '—',
     });
-    commitAndPrint(() => {
-      setPrintData(next);
-    }, handlePrint);
+    printDocument({
+      documentTitle: 'أمر شغل',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <WorkOrderPrint ref={ref} data={next} printSettings={printTemplate} />
+      ),
+    });
   };
 
   const handleExport = () => {
@@ -869,9 +864,6 @@ export const WorkOrders: React.FC = () => {
         onReconcileReports={workOrderReconcileEnabled && (can('workOrders.edit') || can('reports.edit')) ? handleReconcileLinkedReports : undefined}
         reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
       />
-      <PrintOffscreenHost>
-        <WorkOrderPrint ref={woPrintRef} data={livePrintData} printSettings={printTemplate} />
-      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

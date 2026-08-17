@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Button } from "@/components/ui/button";
@@ -16,17 +16,12 @@ import {
   formatAccountingMoney,
 } from "../lib/accountingUi";
 import { useAppStore } from "@/store/useAppStore";
-import { useManagedPrint } from "@/utils/printManager";
+import { usePrintEngine } from "@/utils/printManager";
 
 export const AccountingLedger: React.FC = () => {
   const { accounts, journals, loading, reload } = useAccountingBaseData();
   const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: "دفتر-الأستاذ",
-  });
+  const { printDocument } = usePrintEngine();
   const [from, setFrom] = useState(accountingMonthStart());
   const [to, setTo] = useState(accountingToday());
   const [ledgerAccount, setLedgerAccount] = useState("");
@@ -57,6 +52,47 @@ export const AccountingLedger: React.FC = () => {
   );
 
   const selected = accounts.find((row) => row.code === ledgerAccount);
+
+  const handlePrint = () => {
+    printDocument({
+      documentTitle: "دفتر-الأستاذ",
+      printSettings: printTemplate,
+      render: (ref) => (
+        <AccountingReportPrint
+          ref={ref}
+          title="دفتر الأستاذ"
+          subtitle={
+            selected
+              ? `${selected.code} — ${selected.name} | ${from} ← ${to}`
+              : `${from} ← ${to}`
+          }
+          metaCards={[
+            { label: "الحساب", value: selected ? `${selected.code} — ${selected.name}` : "—" },
+            { label: "من", value: from },
+            { label: "إلى", value: to },
+            { label: "عدد الحركات", value: String(ledger.length) },
+          ]}
+          columns={[
+            { key: "date", label: "التاريخ", width: "14%", align: "center" },
+            { key: "referenceNo", label: "المرجع", width: "16%", mono: true },
+            { key: "description", label: "البيان", width: "30%" },
+            { key: "debit", label: "مدين", width: "13%", align: "center", mono: true },
+            { key: "credit", label: "دائن", width: "13%", align: "center", mono: true },
+            { key: "balance", label: "الرصيد", width: "14%", align: "center", mono: true },
+          ]}
+          rows={ledger.map((row) => ({
+            date: row.date,
+            referenceNo: row.referenceNo,
+            description: row.description,
+            debit: formatAccountingMoney(row.debit),
+            credit: formatAccountingMoney(row.credit),
+            balance: formatAccountingMoney(row.balance),
+          }))}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  };
 
   return (
     <ModuleOpsPageShell
@@ -231,40 +267,6 @@ export const AccountingLedger: React.FC = () => {
           itemLabel="حركة"
         />
       </OpsDashPanel>
-      <div className="fixed left-[-10000px] top-0" aria-hidden>
-        <AccountingReportPrint
-          ref={printRef}
-          title="دفتر الأستاذ"
-          subtitle={
-            selected
-              ? `${selected.code} — ${selected.name} | ${from} ← ${to}`
-              : `${from} ← ${to}`
-          }
-          metaCards={[
-            { label: "الحساب", value: selected ? `${selected.code} — ${selected.name}` : "—" },
-            { label: "من", value: from },
-            { label: "إلى", value: to },
-            { label: "عدد الحركات", value: String(ledger.length) },
-          ]}
-          columns={[
-            { key: "date", label: "التاريخ", width: "14%", align: "center" },
-            { key: "referenceNo", label: "المرجع", width: "16%", mono: true },
-            { key: "description", label: "البيان", width: "30%" },
-            { key: "debit", label: "مدين", width: "13%", align: "center", mono: true },
-            { key: "credit", label: "دائن", width: "13%", align: "center", mono: true },
-            { key: "balance", label: "الرصيد", width: "14%", align: "center", mono: true },
-          ]}
-          rows={ledger.map((row) => ({
-            date: row.date,
-            referenceNo: row.referenceNo,
-            description: row.description,
-            debit: formatAccountingMoney(row.debit),
-            credit: formatAccountingMoney(row.credit),
-            balance: formatAccountingMoney(row.balance),
-          }))}
-          printSettings={printTemplate}
-        />
-      </div>
     </ModuleOpsPageShell>
   );
 };

@@ -37,7 +37,7 @@ import { isRepairTreasuryMonthClosedStatus } from '../lib/repairTreasuryMonthlyC
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { RepairTreasuryMonthlyPrint } from '../components/RepairTreasuryMonthlyPrint';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { exportToPDF } from '../../../utils/reportExport';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(Number(n || 0));
@@ -54,12 +54,26 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
+  const { printDocument } = usePrintEngine();
   const printRef = React.useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: 'تقرير-خزائن-شهري',
-  });
+  const handlePrint = () => {
+    printDocument({
+      documentTitle: 'تقرير-خزائن-شهري',
+      printSettings: printTemplate,
+      render: (ref) => (
+        <RepairTreasuryMonthlyPrint
+          ref={ref}
+          report={report}
+          branchLabel={
+            branchFilter === ALL_BRANCHES_VALUE
+              ? 'كل الفروع المصرح بها'
+              : branchNameMap[branchFilter] || undefined
+          }
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  };
   const [exportingPdf, setExportingPdf] = useState(false);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [month, setMonth] = useState(THIS_MONTH);
