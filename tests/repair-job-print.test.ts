@@ -148,6 +148,14 @@ assert.equal(repairReceiptCopyLabel('center'), 'نسخة المركز');
 assert.equal(repairReceiptCopyLabel('customer'), 'نسخة العميل');
 assert.match(repairCustomerReceiptAcknowledgment(false), /سلّمت المنتجات/);
 assert.match(repairCustomerReceiptAcknowledgment(true), /التكلفة/);
+assert.match(
+  repairCustomerReceiptAcknowledgment(false, { skipCustomerApproval: true }),
+  /داخل الضمان/,
+);
+assert.doesNotMatch(
+  repairCustomerReceiptAcknowledgment(false, { skipCustomerApproval: true }),
+  /موافقة العميل/,
+);
 assert.equal(
   formatRepairPrintProductLabel({
     itemId: '1',

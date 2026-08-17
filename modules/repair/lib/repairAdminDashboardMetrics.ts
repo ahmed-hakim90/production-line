@@ -64,6 +64,7 @@ export function jobHasReadyToIssueParts(
 }
 
 export function isWaitingCustomerApproval(job: Pick<RepairJob, 'status' | 'approvalStatus'>): boolean {
+  if (String(job.approvalStatus || '') === 'not_required') return false;
   const status = String(job.status || '');
   if (status === 'waiting_approval') return true;
   // Stale approvalStatus=pending after work advanced must not inflate the approval queue.

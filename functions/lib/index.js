@@ -1777,38 +1777,21 @@ export const getRepairApprovalPublic = onCall({
         throw new HttpsError('failed-precondition', 'انتهت صلاحية إصدار التقدير أو تم استبداله.');
     }
     const currentAuthorization = authorization;
-    const legacy = buildPublicRepairApprovalView(ctx.job);
-    const serviceLines = Array.isArray(currentAuthorization.serviceLines)
-        ? currentAuthorization.serviceLines : [];
-    const partLines = Array.isArray(currentAuthorization.partLines)
-        ? currentAuthorization.partLines : [];
-    const serviceGross = Number(currentAuthorization.serviceGross || 0);
-    const partsGross = Number(currentAuthorization.partsGross || 0);
+    const view = buildPublicRepairApprovalView(ctx.job, currentAuthorization);
     const netAmount = Number(currentAuthorization.netAmount || 0);
     return {
         ok: true,
         estimate: {
-            ...legacy,
+            ...view,
             revision: approvalRevision,
             authorizationNo: String(currentAuthorization.authorizationNo || authorizationId),
-            productsCost: serviceGross,
-            partsCost: partsGross,
+            productsCost: Number(currentAuthorization.serviceGross || view.productsCost || 0),
+            partsCost: Number(currentAuthorization.partsGross || view.partsCost || 0),
             laborCost: 0,
             serviceOnlyCost: 0,
             grossAmount: Number(currentAuthorization.grossAmount || 0),
             discountAmount: Number(currentAuthorization.discountAmount || 0),
             estimatedTotal: netAmount,
-            products: serviceLines.map((row) => ({
-                name: String(row.name || 'خدمة صيانة'),
-                quantity: Number(row.quantity || 0),
-                lineCost: Number(row.lineTotal || 0),
-            })),
-            parts: partLines.map((row) => ({
-                partName: String(row.name || 'قطعة غيار'),
-                quantity: Number(row.quantity || 0),
-                unitPrice: Number(row.unitPrice || 0),
-                lineTotal: Number(row.lineTotal || 0),
-            })),
         },
     };
 });

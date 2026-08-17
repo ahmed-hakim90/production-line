@@ -4,6 +4,7 @@ import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { Factory_REPAIR_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
+import { PRINT_SURFACE } from '@/utils/print/printSurface';
 import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
@@ -13,10 +14,13 @@ import {
   FactoryPrintTableAccentValue,
 } from '@/src/components/erp/FactoryPrintTable';
 import {
-  manufacturerWarrantyLineLabel,
+  isFullManufacturerWarrantyJob,
   manufacturerWarrantyScopeLabel,
 } from '../lib/repairManufacturerWarranty';
-import { resolveRepairJobPrintProducts } from '../lib/repairJobPrint';
+import {
+  buildRepairPaymentAccountBreakdown,
+  type RepairPaymentWorkLine,
+} from '../lib/repairPaymentProductBreakdown';
 import type { RepairBranch, RepairJob, RepairPayment, RepairPaymentAuthorization } from '../types';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 
@@ -25,6 +29,91 @@ const methodLabel = (method?: string) =>
 
 const money = (value: unknown) =>
   `${Number(value || 0).toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`;
+
+const WORK_COLUMNS = [
+  { key: 'kind', header: 'النوع', width: '14%', align: 'center' as const },
+  { key: 'name', header: 'البيان', width: '38%' },
+  { key: 'qty', header: 'الكمية', width: '12%', align: 'center' as const },
+  { key: 'value', header: 'القيمة', width: '18%', align: 'center' as const },
+  { key: 'customer', header: 'على العميل', width: '18%', align: 'center' as const },
+];
+
+const kindLabel = (kind: RepairPaymentWorkLine['kind']) => (kind === 'part' ? 'قطعة' : 'خدمة');
+
+function PrintInfoGrid({ items }: { items: Array<[string, string]> }) {
+  return (
+    <div
+      className="print-info-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        marginBottom: 16,
+        overflow: 'hidden',
+        borderRadius: 8,
+        border: `1px solid ${PRINT_SURFACE.border}`,
+      }}
+    >
+      {items.map(([label, value], index) => (
+        <div
+          key={`${label}-${index}`}
+          className="print-info-cell"
+          style={{
+            padding: '10px 12px',
+            background: index % 2 === 0 ? PRINT_SURFACE.bg : PRINT_SURFACE.card,
+            borderBottom: index < items.length - 2 ? `1px solid ${PRINT_SURFACE.border}` : undefined,
+            borderInlineEnd: index % 2 === 0 ? `1px solid ${PRINT_SURFACE.border}` : undefined,
+            minWidth: 0,
+          }}
+        >
+          <p
+            style={{
+              margin: '0 0 4px',
+              fontSize: 10,
+              fontWeight: 800,
+              color: PRINT_SURFACE.muted,
+              textAlign: 'right',
+            }}
+          >
+            {label}
+          </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: 13,
+              fontWeight: 800,
+              color: PRINT_SURFACE.text,
+              textAlign: 'right',
+              wordBreak: 'break-word',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {value}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function customerAmountCell(work: Pick<RepairPaymentWorkLine, 'inWarranty' | 'customerTotal'>, accent: string) {
+  if (work.inWarranty || work.customerTotal <= 0) {
+    return work.inWarranty ? 'مجاني' : money(0);
+  }
+  return <FactoryPrintTableAccentValue accent={accent}>{money(work.customerTotal)}</FactoryPrintTableAccentValue>;
+}
+
+function workRows(works: RepairPaymentWorkLine[], keyPrefix: string, accent: string) {
+  return works.map((work, index) => ({
+    key: `${keyPrefix}-${work.kind}-${index}`,
+    cells: {
+      kind: kindLabel(work.kind),
+      name: work.name,
+      qty: work.quantity,
+      value: money(work.catalogTotal),
+      customer: customerAmountCell(work, accent),
+    },
+  }));
+}
 
 export const RepairPaymentPrint = React.forwardRef<
   HTMLDivElement,
@@ -45,7 +134,8 @@ export const RepairPaymentPrint = React.forwardRef<
   const isReceipt = Boolean(payment);
   const isUnpriced =
     Number(authorization.grossAmount || 0) <= 0 && Number(authorization.warrantyGrossAmount || 0) <= 0;
-  const productRows = job ? resolveRepairJobPrintProducts(job) : [];
+  const account = buildRepairPaymentAccountBreakdown(job, authorization);
+  const fullWarranty = Boolean(job && isFullManufacturerWarrantyJob(job));
   const warrantyGross = Number(authorization.warrantyGrossAmount || 0);
   const billableGross = Number(authorization.grossAmount || 0);
   const scopeLabel = manufacturerWarrantyScopeLabel(
@@ -116,67 +206,162 @@ export const RepairPaymentPrint = React.forwardRef<
       }
     >
       {doc.isFieldVisible('customerBlock') ? (
-      <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200">
-        {[
-          ['العميل', job?.customerName || '—'],
-          ['الهاتف', job?.customerPhone || '—'],
-          ['إجمالي بدون ضمان', money(billableGross)],
-          ['إجمالي داخل الضمان', money(warrantyGross)],
-          ['إجمالي الخدمات (للتحصيل)', money(authorization.serviceGross)],
-          ['إجمالي قطع الغيار (للتحصيل)', money(authorization.partsGross)],
-          ['الخصم المعتمد', money(authorization.discountAmount)],
-          ['حالة الإذن', statusLabel],
-        ].map(([label, value], index) => (
-          <div
-            key={label}
-            className={`px-3 py-2.5 ${index % 2 === 0 ? 'bg-slate-50' : 'bg-white'} ${index < 6 ? 'border-b border-slate-100' : ''} ${index % 2 === 0 ? 'border-l border-slate-200' : ''}`}
-          >
-            <p className="text-[10px] font-bold text-slate-500">{label}</p>
-            <p className="mt-1 text-[13px] font-extrabold text-slate-900">{value}</p>
-          </div>
-        ))}
-      </div>
+        <PrintInfoGrid
+          items={[
+            ['العميل', job?.customerName || '—'],
+            ['الهاتف', job?.customerPhone || '—'],
+            ['إجمالي بدون ضمان', money(billableGross)],
+            ['إجمالي داخل الضمان', money(warrantyGross)],
+            ['إجمالي الخدمات (للتحصيل)', money(authorization.serviceGross)],
+            ['إجمالي قطع الغيار (للتحصيل)', money(authorization.partsGross)],
+            ['الخصم المعتمد', money(authorization.discountAmount)],
+            ['حالة الإذن', statusLabel],
+          ]}
+        />
       ) : null}
 
-      {doc.isFieldVisible('products') && productRows.length > 0 ? (
-        <section className="mb-4">
-          <FactoryPrintSectionTitle title="تفصيل المنتجات" accent={accent} />
-          <FactoryPrintTable
-            brandAccent={accent}
-            printSettings={ps}
-            columns={[
-              { key: 'idx', header: 'م', width: '10%', align: 'center' },
-              { key: 'product', header: 'المنتج', width: '40%' },
-              { key: 'warranty', header: 'الضمان', width: '25%', align: 'center' },
-              { key: 'cost', header: 'التكلفة', width: '25%', align: 'center' },
-            ]}
-            rows={productRows.map((item, index) => {
-              const lineCost = Number(item.finalCost || item.estimatedCost || 0);
-              return {
-                key: item.itemId || String(index),
-                cells: {
-                  idx: index + 1,
-                  product: item.productName || '—',
-                  warranty: (
-                    <span style={{ color: item.inWarranty ? '#047857' : '#0f172a', fontWeight: 700 }}>
-                      {manufacturerWarrantyLineLabel(item.inWarranty)}
-                    </span>
-                  ),
-                  cost: item.inWarranty ? (
-                    'مجاني'
-                  ) : (
-                    <FactoryPrintTableAccentValue accent={accent}>{money(lineCost)}</FactoryPrintTableAccentValue>
-                  ),
-                },
-              };
-            })}
-          />
+      {doc.isFieldVisible('products') && (account.products.length > 0 || account.unassigned.length > 0) ? (
+        <section style={{ marginBottom: 16 }}>
+          <FactoryPrintSectionTitle title="تفصيل المنتجات — الخدمة والقطعة والتكلفة" accent={accent} />
+          {account.products.map((product) => (
+            <div
+              key={product.itemId}
+              className="print-product-block"
+              style={{
+                marginBottom: 12,
+                overflow: 'hidden',
+                borderRadius: 8,
+                border: `1px solid ${PRINT_SURFACE.border}`,
+              }}
+            >
+              <div
+                className="print-product-head"
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  padding: '8px 12px',
+                  background: PRINT_SURFACE.bg,
+                  borderBottom: `1px solid ${PRINT_SURFACE.border}`,
+                }}
+              >
+                <div style={{ minWidth: 0, textAlign: 'right' }}>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: PRINT_SURFACE.text }}>
+                    {product.productLabel}
+                  </p>
+                  {product.serialNo ? (
+                    <p style={{ margin: '2px 0 0', fontSize: 10, fontWeight: 700, color: PRINT_SURFACE.muted }}>
+                      سيريال: {product.serialNo}
+                    </p>
+                  ) : null}
+                  {product.diagnosis ? (
+                    <p style={{ margin: '2px 0 0', fontSize: 10, fontWeight: 600, color: PRINT_SURFACE.muted }}>
+                      التشخيص: {product.diagnosis}
+                    </p>
+                  ) : null}
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    flexShrink: 0,
+                    fontSize: 10,
+                    fontWeight: 800,
+                    color: product.inWarranty ? '#047857' : PRINT_SURFACE.text,
+                  }}
+                >
+                  {product.warrantyLabel}
+                </p>
+              </div>
+              {product.works.length > 0 ? (
+                <FactoryPrintTable
+                  brandAccent={accent}
+                  printSettings={ps}
+                  dense
+                  columns={WORK_COLUMNS}
+                  rows={[
+                    ...workRows(product.works, product.itemId, accent),
+                    {
+                      key: `${product.itemId}-total`,
+                      cells: {
+                        kind: '',
+                        name: 'إجمالي المنتج',
+                        qty: '',
+                        value: money(product.catalogTotal),
+                        customer: customerAmountCell(product, accent),
+                      },
+                    },
+                  ]}
+                />
+              ) : (
+                <p
+                  style={{
+                    margin: 0,
+                    padding: '10px 12px',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: PRINT_SURFACE.muted,
+                    textAlign: 'right',
+                  }}
+                >
+                  لا توجد خدمة أو قطعة مسجّلة على هذا المنتج.
+                </p>
+              )}
+            </div>
+          ))}
+          {account.unassigned.length > 0 ? (
+            <div
+              className="print-product-block"
+              style={{
+                marginBottom: 8,
+                overflow: 'hidden',
+                borderRadius: 8,
+                border: `1px solid ${PRINT_SURFACE.border}`,
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  padding: '8px 12px',
+                  fontSize: 12,
+                  fontWeight: 800,
+                  color: PRINT_SURFACE.text,
+                  background: PRINT_SURFACE.bg,
+                  borderBottom: `1px solid ${PRINT_SURFACE.border}`,
+                  textAlign: 'right',
+                }}
+              >
+                بنود غير مربوطة بمنتج محدد
+              </p>
+              <FactoryPrintTable
+                brandAccent={accent}
+                printSettings={ps}
+                dense
+                columns={WORK_COLUMNS}
+                rows={workRows(account.unassigned, 'unassigned', accent)}
+              />
+            </div>
+          ) : null}
         </section>
       ) : null}
 
-      <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-[11px] font-bold leading-relaxed text-slate-600">
-        المنتجات داخل الضمان مجانية للعميل. صافي المطلوب يخص المنتجات بدون ضمان فقط بعد أي خصم معتمد.
-        لا يُعد هذا المستند إثبات تحصيل إلا عند وجود رقم إيصال دفعة.
+      <div
+        style={{
+          marginBottom: 8,
+          borderRadius: 8,
+          border: `1px solid ${PRINT_SURFACE.border}`,
+          background: PRINT_SURFACE.bg,
+          padding: '10px 12px',
+          fontSize: 11,
+          fontWeight: 700,
+          lineHeight: 1.6,
+          color: PRINT_SURFACE.muted,
+          textAlign: 'right',
+        }}
+      >
+        {fullWarranty
+          ? 'الطلب داخل الضمان بالكامل — التكلفة على العميل صفر ولا تحتاج موافقة تسعير. القيمة المعروضة للتغطية الداخلية فقط، وهذا المستند ليس إثبات تحصيل.'
+          : 'كل منتج يعرض الخدمات والقطع المسجّلة عليه. المنتجات داخل الضمان مجانية للعميل. صافي المطلوب يخص الخدمات والقطع بدون ضمان فقط بعد أي خصم معتمد. لا يُعد هذا المستند إثبات تحصيل إلا عند وجود رقم إيصال دفعة.'}
       </div>
     </FactoryPrintShell>
   );

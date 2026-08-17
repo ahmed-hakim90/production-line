@@ -31,6 +31,42 @@ export const PRINT_PREVIEW_TRANSFER: StockTransferPrintData = {
   ],
 };
 
+export const PRINT_PREVIEW_STOCK_RECEIPT: StockTransferPrintData = {
+  ...PRINT_PREVIEW_TRANSFER,
+  transferNo: 'INV-DEMO-IN',
+  documentType: 'إذن إضافة',
+  statusLabel: 'إذن إضافة',
+  toWarehouseName: 'وارد للمخزن',
+  items: [
+    {
+      itemName: 'وحدة تحكم RX-606',
+      itemCode: 'SKU-RX606',
+      unitLabel: 'قطعة',
+      quantity: 10,
+      quantityPieces: 10,
+      locationCode: 'A-01',
+    },
+  ],
+};
+
+export const PRINT_PREVIEW_STOCK_ISSUE: StockTransferPrintData = {
+  ...PRINT_PREVIEW_TRANSFER,
+  transferNo: 'INV-DEMO-OUT',
+  documentType: 'إذن منصرف',
+  statusLabel: 'إذن منصرف',
+  toWarehouseName: 'منصرف من المخزن',
+  items: [
+    {
+      itemName: 'ملحق تغليف',
+      itemCode: 'PKG-01',
+      unitLabel: 'قطعة',
+      quantity: 5,
+      quantityPieces: 5,
+      locationCode: 'B-02',
+    },
+  ],
+};
+
 export const PRINT_PREVIEW_REPAIR_INVOICE: RepairSalesInvoice = {
   tenantId: 'preview',
   branchId: 'preview-branch',
@@ -223,6 +259,62 @@ export const PRINT_PREVIEW_REPAIR_PAYMENT_AUTH = {
   paidAmount: 0,
   balanceDue: 1200,
   createdAt: new Date().toISOString(),
+  serviceLines: [
+    { id: 'diagnosis', name: 'تشخيص', quantity: 1, unitPrice: 150, lineTotal: 150 },
+    { id: 'repair', name: 'إصلاح محرك', quantity: 1, unitPrice: 250, lineTotal: 250 },
+  ],
+  partLines: [
+    { id: 'm-gear', name: 'ترس خلاط', quantity: 1, unitPrice: 800, lineTotal: 800 },
+  ],
+} as const;
+
+export const PRINT_PREVIEW_REPAIR_PAYMENT_JOB = {
+  tenantId: 'preview',
+  receiptNo: 'RJ-1001',
+  branchId: 'preview-branch',
+  customerName: 'اونلاين سوكاني',
+  customerPhone: '01000000000',
+  deviceType: 'خلاط',
+  deviceBrand: 'Sokany',
+  deviceModel: 'SK-666N',
+  problemDescription: 'لا يعمل',
+  status: 'ready',
+  warranty: 'none' as const,
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  jobProducts: [
+    {
+      itemId: 'jp-1',
+      productName: 'SK-666N خلاط سوكاني 5000وات',
+      deviceBrand: 'Sokany',
+      deviceModel: 'SK-666N',
+      quantity: 1,
+      serialNo: 'SN-666',
+      diagnosis: 'عطل بالمحرك',
+      inWarranty: false,
+      serviceIds: ['diagnosis', 'repair'],
+      finalCost: 0,
+    },
+    {
+      itemId: 'jp-2',
+      productName: 'SK-7011N كبه سوكاني استانلس',
+      quantity: 1,
+      serialNo: 'SN-7011',
+      inWarranty: false,
+      serviceIds: [],
+      finalCost: 0,
+    },
+  ],
+  partsUsed: [
+    {
+      partId: 'm-gear',
+      materialId: 'm-gear',
+      partName: 'ترس خلاط',
+      quantity: 1,
+      unitCost: 800,
+      productItemId: 'jp-1',
+    },
+  ],
 } as const;
 
 export const PRINT_PREVIEW_REPAIR_SPARE_ISSUE = {

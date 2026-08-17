@@ -18,7 +18,7 @@ import { useLocalFormDraft } from '@/modules/shared/hooks';
 import { useAppStore } from '../../../store/useAppStore';
 import { sparePartsReplenishmentService } from '../../inventory/services/sparePartsReplenishmentService';
 import { materialService } from '../../manufacturing/services/materialService';
-import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
+import { isMaterialOptedInForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import type { Material } from '../../manufacturing/types';
 import { usePermission } from '../../../utils/permissions';
 import type { RepairSparePart } from '../types';
@@ -92,7 +92,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
     if (!open) return;
     void materialService.getAll()
       .then((rows) => setMaterials(rows.filter(
-        (m) => m.isActive !== false && m.id && isMaterialAvailableForSpareParts(m),
+        (m) => m.isActive !== false && m.id && isMaterialOptedInForSpareParts(m),
       )))
       .catch(() => setMaterials([]));
   }, [open]);
@@ -174,7 +174,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
         <DialogHeader>
           <DialogTitle>طلب تموين من المخزن الرئيسي</DialogTitle>
           <DialogDescription>
-            اختر من كل الأصناف المعرفة — لا يشترط إضافتها لكتالوج الفرع أولاً. التجهيز والموافقة تتم في المخزن المركزي، ثم تستلم الرصيد هنا.
+            اختر من الأصناف المفعّلة كقطع غيار فقط. التجهيز والموافقة تتم في المخزن المركزي، ثم تستلم الرصيد هنا.
           </DialogDescription>
         </DialogHeader>
 
@@ -182,7 +182,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
           <p className="text-sm text-muted-foreground">اختر فرعًا مربوطًا بمخزن صيانة أولًا.</p>
         ) : materialPicker.options.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            لا توجد أصناف متاحة. تأكد من وجود مواد نشطة في ماستر المكونات.
+            لا توجد أصناف مفعّلة كقطع غيار. فعّل «متاح لقطع الغيار» من شاشة المواد التصنيعية أولاً.
           </p>
         ) : (
           <div className="space-y-3">
@@ -207,6 +207,15 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
                         prev.map((row, i) => (i === index ? { ...row, itemId } : row)),
                       );
                     }}
+                    onSelected={() => {
+                      window.setTimeout(() => {
+                        const qtyInput = document.querySelector<HTMLInputElement>(
+                          `[data-repair-replenish-draft-qty="${index}"]`,
+                        );
+                        qtyInput?.focus();
+                        qtyInput?.select();
+                      }, 0);
+                    }}
                     placeholder="ابحث بالاسم أو امسح الباركود"
                   />
                 </div>
@@ -216,12 +225,27 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
                     type="number"
                     min={0}
                     step="any"
+                    data-repair-replenish-draft-qty={index}
                     value={line.quantity}
                     onChange={(e) => {
                       const quantity = e.target.value;
                       setDraftLines((prev) =>
                         prev.map((row, i) => (i === index ? { ...row, quantity } : row)),
                       );
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
+                      if (!String(line.itemId || '').trim() || !(Number(line.quantity) > 0)) {
+                        toast.error('أدخل صنفاً وكمية أكبر من صفر قبل فتح بند جديد.');
+                        return;
+                      }
+                      if (index >= draftLines.length - 1) {
+                        setDraftLines((prev) => [
+                          ...prev,
+                          { key: String(Date.now()), itemId: '', quantity: '1' },
+                        ]);
+                      }
                     }}
                   />
                 </div>

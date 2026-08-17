@@ -58,9 +58,10 @@ import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { canManageRepairWorkshopWork } from '../lib/repairJobIntake';
-import { resolveManufacturerWarrantyScope } from '../lib/repairManufacturerWarranty';
+import { isFullManufacturerWarrantyJob, resolveManufacturerWarrantyScope } from '../lib/repairManufacturerWarranty';
 import { resolveRepairSettings, accessoryLabelsFromIds } from '../config/repairSettings';
 import {
+  partsAwaitingFulfillment,
   resolveNextStatusForAction,
   resolveStatusRole,
   statusIdForRole,
@@ -250,11 +251,20 @@ export const RepairJobWorkspace: React.FC = () => {
     () => resolveStatusRole(job?.status || status, repairSettings.workflow.statuses),
     [job?.status, status, repairSettings.workflow.statuses],
   );
+  const skipCustomerApproval = Boolean(job && isFullManufacturerWarrantyJob({
+    warrantyScope: job.warrantyScope,
+    jobProducts: jobProducts.length ? jobProducts : job.jobProducts,
+  }));
   const canMarkRepaired = currentRole === 'in_repair'
     || (currentRole === 'awaiting_parts' && !(job?.partsUsed || []).some((row) =>
       ['pending_supply', 'ready_to_issue'].includes(String(row.fulfillmentStatus || '')),
     ))
-    || currentRole === 'none';
+    || currentRole === 'none'
+    || (skipCustomerApproval && (
+      currentRole === 'estimate_review'
+      || currentRole === 'awaiting_customer'
+      || currentRole === 'diagnosis'
+    ));
   const readyStatusId = statusIdForRole('ready_delivery', repairSettings.workflow.statuses) || 'ready';
   const unrepairableStatusId = statusIdForRole('unrepairable', repairSettings.workflow.statuses) || 'unrepairable';
   const branchWarehouseId = String(branch?.warehouseId || '').trim();
@@ -397,12 +407,18 @@ export const RepairJobWorkspace: React.FC = () => {
     const hasDiagnosis = normalizedProducts.some((item) => String(item.technicianDiagnosis || '').trim());
     const hasService = normalizedProducts.some((item) => (item.serviceIds || []).some((id) => String(id || '').trim()));
     const hasPart = (job.partsUsed || []).some((item) => Number(item.quantity || 0) > 0);
+    const skipCustomerApproval = isFullManufacturerWarrantyJob({
+      warrantyScope: technicalPatch.warrantyScope,
+      jobProducts: normalizedProducts,
+    });
     const nextStatus = resolveNextStatusForAction({
       action: 'diagnosis_saved',
       currentStatus: String(job.status || ''),
       statuses: repairSettings.workflow.statuses,
       hasDiagnosis,
       hasServiceOrPartSignal: hasService || hasPart,
+      waitsForParts: partsAwaitingFulfillment(job.partsUsed),
+      skipCustomerApproval,
     });
     if (technicianMode) {
       await repairTechnicianService.save(job.id, normalizedProducts, serviceOnly);
@@ -469,7 +485,11 @@ export const RepairJobWorkspace: React.FC = () => {
       return;
     }
     if (action === 'repair_done' && !canMarkRepaired) {
-      toast.error('علّم «تم الإصلاح» بعد موافقة العميل ومرحلة الإصلاح.');
+      toast.error(
+        skipCustomerApproval
+          ? 'علّم «تم الإصلاح» بعد حفظ التشخيص واختيار خدمة أو قطعة.'
+          : 'علّم «تم الإصلاح» بعد موافقة العميل ومرحلة الإصلاح.',
+      );
       return;
     }
     setApplyingStatus(true);

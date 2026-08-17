@@ -130,6 +130,9 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('warehouseStockCount'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('productionIssue'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('departmentConsumableIssue'), true);
+  assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('stockReceipt'), true);
+  assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('stockIssue'), true);
+  assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('sparePartsReplenishment'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('itemBarcodeLabel'), true);
   assert.equal(PRINT_DOCUMENT_TYPE_IDS.includes('locationBarcodeLabel'), true);
   for (const id of PRINT_DOCUMENT_TYPE_IDS) {
@@ -171,6 +174,7 @@ import { resolvePrintTemplate } from '../modules/system/lib/resolveSystemSetting
   assert.match(PRINT_ENGINE_IFRAME_CSS, /print-brand-header/);
   assert.match(PRINT_ENGINE_IFRAME_CSS, /print-kpi-card/);
   assert.match(PRINT_ENGINE_IFRAME_CSS, /print-kv-row/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /print-info-grid/);
   assert.match(PRINT_ENGINE_IFRAME_CSS, /print-sign-grid/);
 }
 

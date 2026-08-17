@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/UI';
 import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { SparePartsReplenishmentPrint } from '../components/SparePartsReplenishmentPrint';
 import { buildMaterialVoucherPicker } from '../lib/materialVoucherPicker';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -12,8 +13,11 @@ import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { toast } from '../../../components/Toast';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
+import { usePrintEngine } from '@/utils/printManager';
+import { useAppStore } from '../../../store/useAppStore';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { Material } from '../../manufacturing/types';
+import { isMaterialOptedInForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
 import { sparePartsReplenishmentService } from '../services/sparePartsReplenishmentService';
@@ -30,6 +34,7 @@ import {
   canResponsibleApproveSparePartsRequest,
   isPendingReplenishmentStatus,
   isStockoutDemandLine,
+  validateSparePartsPrepareLines,
 } from '../lib/sparePartsReplenishment';
 import {
   allocateSparePartsReplenishmentFromLocations,
@@ -105,6 +110,10 @@ export const SparePartsReplenishment: React.FC = () => {
   const [toWarehouseId, setToWarehouseId] = useState(searchParams.get('toWarehouseId') || '');
   const [note, setNote] = useState('');
   const [draftLines, setDraftLines] = useState<DraftLine[]>([{ itemId: '', quantity: '1' }]);
+  /** Editable prepare quantities keyed by lineId (approved requests only). */
+  const [prepareQtyByLineId, setPrepareQtyByLineId] = useState<Record<string, string>>({});
+  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const { printDocument } = usePrintEngine();
 
   const {
     data: listData,
@@ -169,7 +178,7 @@ export const SparePartsReplenishment: React.FC = () => {
     [warehouses],
   );
   const activeMaterials = useMemo(
-    () => materials.filter((m) => m.isActive !== false),
+    () => materials.filter((m) => m.isActive !== false && isMaterialOptedInForSpareParts(m)),
     [materials],
   );
   const materialPicker = useMemo(
@@ -226,6 +235,41 @@ export const SparePartsReplenishment: React.FC = () => {
       || null,
     [filtered, rows, selectedId],
   );
+
+  useEffect(() => {
+    if (!selectedRequest || selectedRequest.status !== 'approved') {
+      setPrepareQtyByLineId({});
+      return;
+    }
+    const next: Record<string, string> = {};
+    for (const line of selectedRequest.lines || []) {
+      next[line.lineId] = String(
+        line.preparedQty != null && Number(line.preparedQty) >= 0
+          ? line.preparedQty
+          : line.requestedQty || 0,
+      );
+    }
+    setPrepareQtyByLineId(next);
+  }, [selectedRequest]);
+
+  const printSelectedRequest = useCallback(() => {
+    if (!selectedRequest) return;
+    if (selectedRequest.status === 'cancelled' || selectedRequest.status === 'rejected') {
+      toast.error('لا يمكن طباعة طلب ملغى أو مرفوض.');
+      return;
+    }
+    printDocument({
+      documentTitle: `تموين-${selectedRequest.referenceNo || selectedRequest.id}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <SparePartsReplenishmentPrint
+          ref={ref}
+          request={selectedRequest}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  }, [selectedRequest, printDocument, printTemplate]);
 
   useEffect(() => {
     setListPage(1);
@@ -345,6 +389,25 @@ export const SparePartsReplenishment: React.FC = () => {
   };
 
   const selectedBusy = Boolean(selectedRequest?.id && busyId === selectedRequest.id);
+
+  const submitPrepare = async () => {
+    if (!selectedRequest?.id) return;
+    const lines = (selectedRequest.lines || []).map((line) => ({
+      lineId: line.lineId,
+      preparedQty: Number(prepareQtyByLineId[line.lineId] ?? line.requestedQty ?? 0),
+    }));
+    try {
+      validateSparePartsPrepareLines(lines);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'تعذر التجهيز.');
+      return;
+    }
+    await runAction(
+      String(selectedRequest.id),
+      () => sparePartsReplenishmentService.prepare(String(selectedRequest.id), lines),
+      'تم التجهيز — الطلب جاهز',
+    );
+  };
 
   const submitCreate = async () => {
     if (!fromWarehouseId || !toWarehouseId) {
@@ -504,7 +567,7 @@ export const SparePartsReplenishment: React.FC = () => {
             </label>
           </div>
           <p className="text-xs text-[var(--color-text-muted)] mt-2">
-            المكوّنات غير مربوطة بمنتج طلب صيانة. التكلفة تُلتقط من سعر شراء المادة مركزياً — المركز لا يسعّر.
+            تظهر فقط المواد المفعّلة كقطع غيار (`متاح لقطع الغيار`). التكلفة من سعر شراء المادة مركزياً — المركز لا يسعّر.
           </p>
           <div className="mt-3 space-y-2">
             {draftLines.map((line, idx) => (
@@ -518,6 +581,15 @@ export const SparePartsReplenishment: React.FC = () => {
                       i === idx ? { ...row, itemId: value } : row
                     )));
                   }}
+                  onSelected={() => {
+                    window.setTimeout(() => {
+                      const qtyInput = document.querySelector<HTMLInputElement>(
+                        `[data-replenish-draft-qty="${idx}"]`,
+                      );
+                      qtyInput?.focus();
+                      qtyInput?.select();
+                    }, 0);
+                  }}
                   placeholder={catalogLoading ? 'جاري تحميل الأصناف…' : 'ابحث بالاسم أو امسح الباركود'}
                   disabled={catalogLoading}
                 />
@@ -525,6 +597,7 @@ export const SparePartsReplenishment: React.FC = () => {
                   type="number"
                   min={0.0001}
                   step="any"
+                  data-replenish-draft-qty={idx}
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                   value={line.quantity}
                   onChange={(e) => {
@@ -532,6 +605,17 @@ export const SparePartsReplenishment: React.FC = () => {
                     setDraftLines((prev) => prev.map((row, i) => (
                       i === idx ? { ...row, quantity: value } : row
                     )));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    if (!String(line.itemId || '').trim() || !(Number(line.quantity) > 0)) {
+                      toast.error('أدخل صنفاً وكمية أكبر من صفر قبل فتح بند جديد.');
+                      return;
+                    }
+                    if (idx >= draftLines.length - 1) {
+                      setDraftLines((prev) => [...prev, { itemId: '', quantity: '1' }]);
+                    }
                   }}
                 />
                 <Button
@@ -633,6 +717,16 @@ export const SparePartsReplenishment: React.FC = () => {
           ) : (
             <>
               <div className="sticky top-0 z-10 flex flex-wrap gap-2 border-b bg-[var(--color-card)]/95 p-3 backdrop-blur sm:p-4">
+                {selectedRequest.status !== 'cancelled' && selectedRequest.status !== 'rejected' ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={selectedBusy}
+                    onClick={() => void printSelectedRequest()}
+                  >
+                    طباعة
+                  </Button>
+                ) : null}
                 {canApprove && canApproveSparePartsRequest(selectedRequest) ? (
                   <ToneActionButton
                     action="approve"
@@ -650,13 +744,9 @@ export const SparePartsReplenishment: React.FC = () => {
                   <Button
                     size="sm"
                     disabled={selectedBusy}
-                    onClick={() => void runAction(
-                      String(selectedRequest.id),
-                      () => sparePartsReplenishmentService.prepare(String(selectedRequest.id)),
-                      'تم التجهيز',
-                    )}
+                    onClick={() => void submitPrepare()}
                   >
-                    تجهيز
+                    تأكيد التجهيز
                   </Button>
                 ) : null}
                 {canResponsible && canResponsibleApproveSparePartsRequest(selectedRequest) ? (
@@ -666,10 +756,10 @@ export const SparePartsReplenishment: React.FC = () => {
                     onClick={() => void runAction(
                       String(selectedRequest.id),
                       () => sparePartsReplenishmentService.responsibleApprove(String(selectedRequest.id)),
-                      'تمت موافقة المسؤول',
+                      'تم تأكيد الخروج — بانتظار استلام المركز',
                     )}
                   >
-                    موافقة المسؤول
+                    تأكيد الخروج
                   </Button>
                 ) : null}
                 {canReceive && canReceiveSparePartsRequest(selectedRequest) ? (
@@ -768,12 +858,18 @@ export const SparePartsReplenishment: React.FC = () => {
                       <th className="p-3 text-center">مستلم</th>
                       <th className="p-3 text-start">اللوكيشن</th>
                       <th className="hidden p-3 text-center sm:table-cell">تكلفة وحدة</th>
+                      {canPrepare && canPrepareSparePartsRequest(selectedRequest) ? (
+                        <th className="p-3 text-center">إجراء</th>
+                      ) : null}
                     </tr>
                   </thead>
                   <tbody>
                     {(selectedRequest.lines || []).length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-sm text-[var(--color-text-muted)]">
+                        <td
+                          colSpan={canPrepare && canPrepareSparePartsRequest(selectedRequest) ? 7 : 6}
+                          className="p-8 text-center text-sm text-[var(--color-text-muted)]"
+                        >
                           لا توجد بنود في هذا الطلب.
                         </td>
                       </tr>
@@ -783,8 +879,20 @@ export const SparePartsReplenishment: React.FC = () => {
                         const suggested = suggestedAllocByLineId[line.lineId] || [];
                         const allocations = persisted.length > 0 ? persisted : suggested;
                         const isSuggested = persisted.length === 0 && suggested.length > 0;
+                        const editingPrepare = canPrepare && canPrepareSparePartsRequest(selectedRequest);
+                        const prepareValue = prepareQtyByLineId[line.lineId] ?? String(line.requestedQty || 0);
+                        const preparedDisplay = line.preparedQty != null
+                          ? (Number(line.preparedQty) > 0 ? fmt(line.preparedQty) : 'مستبعد')
+                          : fmt(line.requestedQty);
                         return (
-                          <tr key={line.lineId} className="border-b align-top">
+                          <tr
+                            key={line.lineId}
+                            className={`border-b align-top ${
+                              editingPrepare && !(Number(prepareValue) > 0)
+                                ? 'bg-[rgb(var(--color-warning)/0.06)]'
+                                : ''
+                            }`}
+                          >
                             <td className="p-3">
                               <p className="font-medium">{line.itemName}</p>
                               {line.itemCode ? (
@@ -798,7 +906,25 @@ export const SparePartsReplenishment: React.FC = () => {
                               {fmt(line.requestedQty)}
                             </td>
                             <td className="p-3 text-center tabular-nums">
-                              {fmt(line.preparedQty ?? line.requestedQty)}
+                              {editingPrepare ? (
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="any"
+                                  className="mx-auto w-24 rounded-lg border px-2 py-1.5 text-center text-sm"
+                                  value={prepareValue}
+                                  disabled={selectedBusy}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    setPrepareQtyByLineId((prev) => ({
+                                      ...prev,
+                                      [line.lineId]: value,
+                                    }));
+                                  }}
+                                />
+                              ) : (
+                                preparedDisplay
+                              )}
                             </td>
                             <td className="p-3 text-center tabular-nums">
                               {line.receivedQty != null ? fmt(line.receivedQty) : '—'}
@@ -828,7 +954,9 @@ export const SparePartsReplenishment: React.FC = () => {
                                 <span className="text-[var(--color-text-muted)]">
                                   {selectedRequest.status === 'submitted'
                                     ? 'يُحدد عند التجهيز'
-                                    : 'بدون رفوف'}
+                                    : editingPrepare && !(Number(prepareValue) > 0)
+                                      ? 'مستبعد'
+                                      : 'بدون رفوف'}
                                 </span>
                               )}
                               {line.shortageQty && line.shortageQty > 0 ? (
@@ -840,6 +968,22 @@ export const SparePartsReplenishment: React.FC = () => {
                             <td className="hidden p-3 text-center tabular-nums sm:table-cell">
                               {fmtMoney(line.unitCostSnapshot)}
                             </td>
+                            {editingPrepare ? (
+                              <td className="p-3 text-center">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={selectedBusy}
+                                  onClick={() => setPrepareQtyByLineId((prev) => ({
+                                    ...prev,
+                                    [line.lineId]: '0',
+                                  }))}
+                                >
+                                  استبعاد
+                                </Button>
+                              </td>
+                            ) : null}
                           </tr>
                         );
                       })

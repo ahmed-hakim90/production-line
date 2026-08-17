@@ -22,16 +22,19 @@ import {
 } from '../lib/repairJobPrint';
 import { shouldShowRepairPrintCosts } from '../lib/repairJobIntake';
 import {
+  isFullManufacturerWarrantyJob,
   manufacturerWarrantyLineLabel,
   manufacturerWarrantyScopeLabel,
 } from '../lib/repairManufacturerWarranty';
 import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
-import type { RepairBranch, RepairJob, RepairJobProduct } from '../types';
+import type { RepairBranch, RepairJob, RepairJobProduct, RepairPaymentAuthorization } from '../types';
+import { buildRepairPaymentAccountBreakdown } from '../lib/repairPaymentProductBreakdown';
 
 export type RepairJobPrintProps = {
   job: RepairJob | null;
   branch?: RepairBranch | null;
   products?: RepairJobProduct[];
+  authorization?: RepairPaymentAuthorization | null;
   trackUrl?: string;
   printSettings?: PrintTemplateSettings;
   statusMap?: RepairPrintStatusMap;
@@ -56,7 +59,7 @@ const formatDateTime = (value?: string) => {
 
 /** Compact customer receipt — engine chrome + dense A5 body. */
 export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintProps>(
-  function RepairJobPrint({ job, branch, products, trackUrl, printSettings, statusMap, copyKind = 'customer' }, ref) {
+  function RepairJobPrint({ job, branch, products, authorization, trackUrl, printSettings, statusMap, copyKind = 'customer' }, ref) {
     if (!job) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings, paperSize: 'a5' as const };
@@ -73,10 +76,31 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
     const showQr = Boolean(trackUrl) && doc.isFieldVisible('qrCode');
     const showCosts =
       doc.isFieldVisible('costs') && shouldShowRepairPrintCosts(job, products);
+    const account = showCosts
+      ? buildRepairPaymentAccountBreakdown(
+        { ...job, jobProducts: products && products.length > 0 ? products : job.jobProducts },
+        authorization,
+      )
+      : { products: [], unassigned: [] };
+    const workByItemId = new Map(account.products.map((row) => [row.itemId, row]));
+    const pricedWorkRows = [
+      ...account.products.flatMap((product) => product.works.map((work, index) => ({
+        key: `${product.itemId}-${work.kind}-${index}`,
+        product: product.productLabel,
+        work,
+      }))),
+      ...account.unassigned.map((work, index) => ({
+        key: `unassigned-${work.kind}-${index}`,
+        product: 'غير مربوط بمنتج',
+        work,
+      })),
+    ];
     const decimalPlaces = Math.max(0, Math.min(3, Number(ps.decimalPlaces ?? 0)));
     const brandName = String(doc.headerText || '').trim() || 'مركز الصيانة';
     const documentTitle = repairCustomerReceiptTitle(showCosts);
-    const acknowledgment = repairCustomerReceiptAcknowledgment(showCosts);
+    const acknowledgment = repairCustomerReceiptAcknowledgment(showCosts, {
+      skipCustomerApproval: isFullManufacturerWarrantyJob(job),
+    });
     const branchContact = [branch?.address, branch?.phone].filter(Boolean).join(' — ');
     const totalQty = rows.reduce((sum, row) => sum + Math.max(1, Number(row.quantity || 1)), 0);
     const problemText = String(job.problemDescription || '').trim();
@@ -178,7 +202,12 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                   qty: Math.max(1, Number(item.quantity || 1)),
                   accessories: item.accessories || '—',
                   diagnosis: item.diagnosis || problemText || '—',
-                  cost: item.inWarranty ? 'مجاني' : money(item.finalCost, decimalPlaces),
+                  cost: (() => {
+                    const priced = workByItemId.get(String(item.itemId || ''));
+                    if (item.inWarranty || priced?.inWarranty) return 'مجاني';
+                    const lineCost = priced?.customerTotal ?? Number(item.finalCost || item.estimatedCost || 0);
+                    return money(lineCost, decimalPlaces);
+                  })(),
                 },
               }))}
             />
@@ -194,7 +223,35 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           </div>
         ) : null}
 
-        {parts.length > 0 && showCosts && showParts ? (
+        {showCosts && pricedWorkRows.length > 0 ? (
+          <>
+            <FactoryPrintSectionTitle title="تفصيل الخدمة والقطعة لكل منتج" />
+            <FactoryPrintTable
+              dense
+              brandAccent={accent}
+              printSettings={ps}
+              columns={[
+                { key: 'product', header: 'المنتج', width: '28%' },
+                { key: 'kind', header: 'النوع', width: '12%', align: 'center' },
+                { key: 'name', header: 'البيان', width: '32%' },
+                { key: 'qty', header: 'الكمية', width: '10%', align: 'center' },
+                { key: 'customer', header: 'على العميل', width: '18%', align: 'center' },
+              ]}
+              rows={pricedWorkRows.map((row) => ({
+                key: row.key,
+                cells: {
+                  product: row.product,
+                  kind: row.work.kind === 'part' ? 'قطعة' : 'خدمة',
+                  name: row.work.name,
+                  qty: row.work.quantity,
+                  customer: row.work.inWarranty ? 'مجاني' : money(row.work.customerTotal, decimalPlaces),
+                },
+              }))}
+            />
+          </>
+        ) : null}
+
+        {parts.length > 0 && showCosts && showParts && pricedWorkRows.every((row) => row.work.kind !== 'part') ? (
           <>
             <FactoryPrintSectionTitle title="قطع الغيار المستخدمة" />
             <FactoryPrintTable

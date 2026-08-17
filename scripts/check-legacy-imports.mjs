@@ -134,6 +134,53 @@ if (pageWriteOffenders.length > 0) {
   }
 }
 
+const PRINT_REACT_TO_PRINT_ALLOW = new Set([
+  'utils/print/PrintEngineHost.tsx',
+]);
+const printEngineOffenders = [];
+for (const file of files) {
+  const rel = path.relative(root, file).replace(/\\/g, '/');
+  if (PRINT_REACT_TO_PRINT_ALLOW.has(rel)) continue;
+  if (rel.startsWith('tests/')) continue;
+  const content = fs.readFileSync(file, 'utf8');
+  if (/\buseReactToPrint\b/.test(content)) {
+    printEngineOffenders.push(rel);
+  }
+}
+if (printEngineOffenders.length > 0) {
+  failed = true;
+  console.error('\nuseReactToPrint must live only in utils/print/PrintEngineHost.tsx:\n');
+  for (const file of printEngineOffenders) {
+    console.error(`- ${file}`);
+  }
+}
+
+const PRINT_OFFSCREEN_HOST_ALLOW = new Set([
+  'src/components/erp/PrintOffscreenHost.tsx',
+  'src/components/erp/index.ts',
+  'utils/print/PrintEngineHost.tsx',
+  // PDF/image export still captures a mounted voucher; print itself uses printDocument.
+  'modules/inventory/pages/QuickWarehouseTransfer.tsx',
+]);
+const printHostOffenders = [];
+for (const file of files) {
+  const rel = path.relative(root, file).replace(/\\/g, '/');
+  if (PRINT_OFFSCREEN_HOST_ALLOW.has(rel)) continue;
+  if (rel.startsWith('tests/')) continue;
+  if (!rel.startsWith('modules/inventory/') && !rel.startsWith('modules/repair/')) continue;
+  const content = fs.readFileSync(file, 'utf8');
+  if (/\bPrintOffscreenHost\b/.test(content)) {
+    printHostOffenders.push(rel);
+  }
+}
+if (printHostOffenders.length > 0) {
+  failed = true;
+  console.error('\nInventory/repair print must use PrintEngineHost (PrintOffscreenHost only allowed in the engine + quick-transfer export):\n');
+  for (const file of printHostOffenders) {
+    console.error(`- ${file}`);
+  }
+}
+
 if (!failed) {
   console.log('No forbidden legacy imports or page Firestore writes found.');
   process.exit(0);

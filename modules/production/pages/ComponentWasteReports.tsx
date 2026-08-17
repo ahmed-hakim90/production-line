@@ -3,6 +3,8 @@ import { Loader2 } from 'lucide-react';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button, SearchableSelect, Badge } from '../components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { loadWasteComponentOptions } from '../utils/wasteComponentOptions';
 import { useAppStore } from '../../../store/useAppStore';
 import type { ProductionReport, ReportComponentScrapItem } from '../../../types';
@@ -15,6 +17,8 @@ import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 type MaterialOption = {
   materialId: string;
   materialName: string;
+  materialCode?: string;
+  barcode?: string;
   quantityUsed: number;
 };
 
@@ -135,13 +139,20 @@ export const ComponentWasteReports: React.FC = () => {
     };
   }, [productId]);
 
-  const productOptions = useMemo(
-    () => _rawProducts
-      .filter((product) => Boolean(product.id))
-      .map((product) => ({
-        value: product.id!,
-        label: product.code ? `${product.name} (${product.code})` : product.name,
-      })),
+  const productPicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        _rawProducts
+          .filter((product) => Boolean(product.id))
+          .map((product) => ({
+            value: product.id!,
+            label: product.code ? `${product.name} (${product.code})` : product.name,
+            name: product.name,
+            code: product.code,
+            barcode: product.barcode,
+            stockItemType: 'finished_good' as const,
+          })),
+      ),
     [_rawProducts],
   );
 
@@ -284,7 +295,7 @@ export const ComponentWasteReports: React.FC = () => {
       showAppToast('success', currentStoreError || 'تم حفظ تقرير الهالك وتنفيذ حركة المخزون.');
       setRows([createEmptyRow()]);
       setNotes('');
-      await loadRecentReports();
+      void loadRecentReports();
     } finally {
       setSaving(false);
     }
@@ -369,9 +380,10 @@ export const ComponentWasteReports: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">المنتج</label>
-              <SearchableSelect
-                placeholder="اختر المنتج"
-                options={productOptions}
+              <VoucherItemCombobox
+                placeholder="ابحث بالاسم أو امسح الباركود"
+                options={productPicker.options}
+                catalog={productPicker.catalog}
                 value={productId}
                 onChange={setProductId}
               />
@@ -405,14 +417,20 @@ export const ComponentWasteReports: React.FC = () => {
             <div className="space-y-3">
               {rows.map((row) => {
                 const selectedIds = new Set(rows.filter((r) => r.key !== row.key).map((r) => r.materialId).filter(Boolean));
-                const rowOptions = materialOptions
-                  .filter((opt) => !selectedIds.has(opt.materialId) || opt.materialId === row.materialId)
-                  .map((item) => ({
-                    value: item.materialId,
-                    label: item.quantityUsed > 0
-                      ? `${item.materialName} - ${formatNumber(item.quantityUsed)} / وحدة`
-                      : item.materialName,
-                  }));
+                const rowPicker = buildCodeVoucherPicker(
+                  materialOptions
+                    .filter((opt) => !selectedIds.has(opt.materialId) || opt.materialId === row.materialId)
+                    .map((item) => ({
+                      value: item.materialId,
+                      label: item.quantityUsed > 0
+                        ? `${item.materialName}${item.materialCode ? ` (${item.materialCode})` : ''} - ${formatNumber(item.quantityUsed)} / وحدة`
+                        : `${item.materialName}${item.materialCode ? ` (${item.materialCode})` : ''}`,
+                      name: item.materialName,
+                      code: item.materialCode,
+                      barcode: item.barcode,
+                      stockItemType: 'material' as const,
+                    })),
+                );
 
                 return (
                   <div
@@ -421,9 +439,10 @@ export const ComponentWasteReports: React.FC = () => {
                   >
                     <div>
                       <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">المكون</label>
-                      <SearchableSelect
-                        placeholder={materialsLoading ? 'جاري التحميل...' : 'اختر المكون'}
-                        options={rowOptions}
+                      <VoucherItemCombobox
+                        placeholder={materialsLoading ? 'جاري التحميل...' : 'ابحث بالاسم أو امسح الباركود'}
+                        options={rowPicker.options}
+                        catalog={rowPicker.catalog}
                         value={row.materialId}
                         onChange={(value) => updateRow(row.key, { materialId: value })}
                       />

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Link, useParams } from "react-router-dom";
 import {
   CheckCircle2,
@@ -469,27 +470,29 @@ export const RepairPayments: React.FC = () => {
     auth: RepairPaymentAuthorization,
     payment?: RepairPayment,
   ) => {
-    setPrintAuth(auth);
-    setPrintPayment(payment || null);
-    requestAnimationFrame(() => handlePrint());
+    flushSync(() => {
+      setPrintAuth(auth);
+      setPrintPayment(payment || null);
+    });
+    handlePrint();
   };
 
   const exportDocument = (
     auth: RepairPaymentAuthorization,
     payment?: RepairPayment,
   ) => {
-    setPrintAuth(auth);
-    setPrintPayment(payment || null);
-    setExportingPdf(true);
-    requestAnimationFrame(() => {
-      void exportToPDF(
-        printRef.current,
-        payment?.paymentNo || auth.authorizationNo || "repair-payment",
-      )
-        .then(() => toast.success("تم تنزيل ملف PDF."))
-        .catch(() => toast.error("تعذر إنشاء ملف PDF."))
-        .finally(() => setExportingPdf(false));
+    flushSync(() => {
+      setPrintAuth(auth);
+      setPrintPayment(payment || null);
     });
+    setExportingPdf(true);
+    void exportToPDF(
+      printRef.current,
+      payment?.paymentNo || auth.authorizationNo || "repair-payment",
+    )
+      .then(() => toast.success("تم تنزيل ملف PDF."))
+      .catch(() => toast.error("تعذر إنشاء ملف PDF."))
+      .finally(() => setExportingPdf(false));
   };
 
   const renderAuthStatus = (auth: RepairPaymentAuthorization) => {

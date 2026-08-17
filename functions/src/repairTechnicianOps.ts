@@ -5,8 +5,10 @@ import { decideTechnicianQrClaim, type TechnicianQrClaimDecision } from './repai
 import { recordAssignedJobFullyUnrepairable } from './repairCustomerPortalOps.js';
 import { mapLegacyRepairStatus } from './repairStatusIds.js';
 import { resolveAssignmentStatusPatch } from './repairAssignmentStatus.js';
+import { isFullManufacturerWarrantyJob } from './repairManufacturerWarranty.js';
 import {
   loadTenantWorkflowStatuses,
+  partsAwaitingFulfillment,
   resolveNextStatusForAction,
   resolveStatusRole,
 } from './repairStatusAdvance.js';
@@ -304,12 +306,15 @@ const saveTechnical = async (actor: Actor, data: Record<string, unknown>) => {
   const hasPart = (Array.isArray(job.partsUsed) ? job.partsUsed as Array<Record<string, unknown>> : [])
     .some((row) => Number(row.quantity || 0) > 0);
   const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+  const skipCustomerApproval = warrantyScope === 'manufacturer';
   const nextStatus = resolveNextStatusForAction({
     action: 'diagnosis_saved',
     currentStatus: String(job.status || ''),
     statuses,
     hasDiagnosis,
     hasServiceOrPartSignal: hasService || hasPart,
+    waitsForParts: partsAwaitingFulfillment(job.partsUsed as Array<Record<string, unknown>> | undefined),
+    skipCustomerApproval,
   });
   const prevStatus = mapLegacyRepairStatus(String(job.status || ''));
   const patch: Record<string, unknown> = {
@@ -324,6 +329,12 @@ const saveTechnical = async (actor: Actor, data: Record<string, unknown>) => {
     history.push({ status: nextStatus, at, technicianId: actor.uid, source: 'diagnosis_saved' });
     patch.status = nextStatus;
     patch.statusHistory = history;
+    if (skipCustomerApproval) {
+      const nextRole = resolveStatusRole(nextStatus, statuses);
+      if (nextRole === 'in_repair' || nextRole === 'awaiting_parts') {
+        patch.approvalStatus = 'not_required';
+      }
+    }
   }
   await ref.update(patch);
   if (nextStatus && nextStatus !== prevStatus) {
@@ -384,6 +395,12 @@ const changeTechnicalStatus = async (actor: Actor, data: Record<string, unknown>
       currentStatus: String(job.status || ''),
       statuses,
       waitsForParts,
+      skipCustomerApproval: isFullManufacturerWarrantyJob({
+        warrantyScope: job.warrantyScope,
+        jobProducts: Array.isArray(job.jobProducts)
+          ? job.jobProducts as Array<{ inWarranty?: unknown }>
+          : [],
+      }),
     });
     if (!advanced) {
       throw new HttpsError(

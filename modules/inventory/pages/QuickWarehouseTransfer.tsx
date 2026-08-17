@@ -10,7 +10,8 @@ import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
 import type { RawMaterial, Warehouse, StockItemBalance } from '../types';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedPrint } from '@/utils/printManager';
+import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
+import { usePrintEngine } from '@/utils/printManager';
 import {
   exportToPDF,
   exportAsImage,
@@ -88,7 +89,6 @@ export const QuickWarehouseTransfer: React.FC = () => {
     routingConfigured,
     settingsPath,
   } = useMaterialsWarehouseScope();
-  const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { can } = usePermission();
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -139,12 +139,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
   const transferShareCardRef = useRef<HTMLDivElement>(null);
 
   const [today] = useState(() => getOperationalDateString(8));
-
-  const handleTransferPrint = useManagedPrint({
-    contentRef: transferPrintRef,
-    printSettings: printTemplate,
-    documentTitle: 'stock-transfer',
-  });
+  const { printDocument } = usePrintEngine();
 
   const loadCatalog = useCallback(async () => {
     const cached = peekPageDataCache<QuickTransferCatalog>(QUICK_TRANSFER_CATALOG_CACHE_KEY);
@@ -384,18 +379,15 @@ export const QuickWarehouseTransfer: React.FC = () => {
     setTimeout(() => setShareToast(null), 8000);
   };
 
-  const printTransfer = async (fileName: string) => {
-    await new Promise((r) => setTimeout(r, 200));
-    if (!transferPrintRef.current) return;
-    if (isMobilePrint) {
-      await exportToPDF(transferPrintRef.current, fileName, {
-        paperSize: printTemplate?.paperSize,
-        orientation: printTemplate?.orientation,
-        copies: 1,
-      });
-      return;
-    }
-    handleTransferPrint();
+  const printTransfer = (fileName: string) => {
+    if (!savedPrintData) return;
+    printDocument({
+      documentTitle: fileName,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <StockTransferPrint ref={ref} data={savedPrintData} printSettings={printTemplate} />
+      ),
+    });
   };
 
   const handleSave = async () => {
@@ -971,9 +963,9 @@ export const QuickWarehouseTransfer: React.FC = () => {
         </div>
       )}
 
-      <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
+      <PrintOffscreenHost>
         <StockTransferPrint ref={transferPrintRef} data={hiddenPrintData} printSettings={printTemplate} />
-      </div>
+      </PrintOffscreenHost>
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl', minWidth: 640, width: 'max-content' }}>
         <StockTransferShareCard
           ref={transferShareCardRef}

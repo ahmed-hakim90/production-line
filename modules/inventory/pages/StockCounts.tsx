@@ -63,7 +63,7 @@ export const StockCounts: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
-  const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
+  const { printWarehouseCount, printing } = useWarehouseCountSheetPrint();
 
   const {
     data: listData,
@@ -407,7 +407,6 @@ export const StockCounts: React.FC = () => {
           </div>
         )}
       </OpsDashPanel>
-      {countSheetHost}
       <WarehouseCountSheetPrintModal
         open={printPickerOpen}
         onClose={() => setPrintPickerOpen(false)}

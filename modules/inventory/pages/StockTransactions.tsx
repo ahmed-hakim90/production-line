@@ -16,7 +16,7 @@ import { formatNumber } from '../../../utils/calculations';
 import { exportHRData } from '../../../utils/exportExcel';
 import { usePermission } from '../../../utils/permissions';
 import { StockTransferPrint, StockTransferShareCard, type StockTransferPrintData } from '../components/StockTransferPrint';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { useAppStore } from '../../../store/useAppStore';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import {
@@ -144,7 +144,6 @@ export const StockTransactions: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<'export' | 'delete' | ''>('');
   const [processing, setProcessing] = useState(false);
-  const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const [shareTransferData, setShareTransferData] = useState<StockTransferPrintData | null>(null);
   const [selectedPending, setSelectedPending] = useState<InventoryTransferRequest | null>(null);
   const [selectedApprovedTransfer, setSelectedApprovedTransfer] = useState<{
@@ -163,13 +162,18 @@ export const StockTransactions: React.FC = () => {
   const [editLines, setEditLines] = useState<TransferRequestLine[]>([]);
   const [editNote, setEditNote] = useState('');
   const [shareToast, setShareToast] = useState<string | null>(null);
-  const transferPrintRef = useRef<HTMLDivElement>(null);
   const transferShareCardRef = useRef<HTMLDivElement>(null);
-  const handleTransferPrint = useManagedPrint({
-    contentRef: transferPrintRef,
-    printSettings: printTemplate,
-    documentTitle: 'stock-transfer-from-transactions',
-  });
+  const { printDocument } = usePrintEngine();
+
+  const printVoucherPayload = useCallback((payload: StockTransferPrintData, documentTitle: string) => {
+    printDocument({
+      documentTitle,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <StockTransferPrint ref={ref} data={payload} printSettings={printTemplate} />
+      ),
+    });
+  }, [printDocument, printTemplate]);
 
   const txCacheKey = useMemo(
     () => `${TX_CACHE_PREFIX}:${sourceModuleFilter || 'all'}:${dateFrom || ''}:${dateTo || ''}`,
@@ -455,7 +459,7 @@ export const StockTransactions: React.FC = () => {
       }
 
       const first = rowsForPrint[0];
-      setPrintData({
+      printVoucherPayload({
         transferNo,
         createdAt: first.createdAt || tx.createdAt,
         fromWarehouseName: warehouseMap.get(first.warehouseId) ?? first.warehouseId,
@@ -472,10 +476,7 @@ export const StockTransactions: React.FC = () => {
             unitsPerCarton: Number(row.unitsPerCarton || 0) || undefined,
           };
         }),
-      });
-      await new Promise((r) => setTimeout(r, 250));
-      handleTransferPrint();
-      setTimeout(() => setPrintData(null), 1000);
+      }, `اذن-تحويل-${transferNo}`);
     } catch (error: any) {
       toast.error(error?.message || 'تعذر طباعة التحويلة.');
     } finally {
@@ -495,10 +496,7 @@ export const StockTransactions: React.FC = () => {
         warehouseName: warehouseMap.get(group.warehouseId) ?? group.warehouseId,
         spareContext: spareContext || repairOpsOnly,
       });
-      setPrintData(payload);
-      await new Promise((r) => setTimeout(r, 250));
-      handleTransferPrint();
-      setTimeout(() => setPrintData(null), 1000);
+      printVoucherPayload(payload, `اذن-${payload.transferNo}`);
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'تعذر طباعة الإذن.');
     } finally {
@@ -640,10 +638,7 @@ export const StockTransactions: React.FC = () => {
   });
 
   const printPendingTransfer = async (row: InventoryTransferRequest) => {
-    setPrintData(buildPendingPrintData(row));
-    await new Promise((r) => setTimeout(r, 250));
-    handleTransferPrint();
-    setTimeout(() => setPrintData(null), 1000);
+    printVoucherPayload(buildPendingPrintData(row), `اذن-تحويل-${row.referenceNo || row.id}`);
   };
 
   const sharePendingTransfer = async (row: InventoryTransferRequest) => {
@@ -984,9 +979,6 @@ export const StockTransactions: React.FC = () => {
           />
         )}
       </OpsDashPanel>
-      <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
-        <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
-      </div>
       <div
         style={{
           position: 'fixed',

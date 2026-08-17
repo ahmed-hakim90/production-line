@@ -1,6 +1,6 @@
 import { toast } from '@/components/Toast';
 
-export type AppToastStatus = 'success' | 'error' | 'warning' | 'info';
+export type AppToastStatus = 'success' | 'error' | 'warning' | 'info' | 'loading';
 
 export type AppToastOptions = {
   duration?: number;

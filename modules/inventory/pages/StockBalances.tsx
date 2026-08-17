@@ -180,7 +180,7 @@ export const StockBalances: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
-  const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
+  const { printWarehouseCount, printing } = useWarehouseCountSheetPrint();
   const {
     scoped,
     warehouseId: scopedWarehouseId,
@@ -1046,7 +1046,6 @@ export const StockBalances: React.FC = () => {
           />
         )}
       </OpsDashPanel>
-      {countSheetHost}
       <ImportItemLocationsModal
         open={locationImportOpen}
         onClose={() => setLocationImportOpen(false)}

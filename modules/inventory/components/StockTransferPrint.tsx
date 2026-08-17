@@ -4,7 +4,6 @@ import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import {
   Factory_DEFAULT_FOOTER_TAGLINE,
   Factory_TRANSFER_FOOTER_TAGLINE,
-  resolveImageExportPalette,
 } from '@/utils/imageExportTheme';
 import {
   FactoryPrintSectionTitle,
@@ -83,6 +82,16 @@ function formatArDate(value: string): string {
 
 function formatQty(value: number): string {
   return Number(value || 0).toLocaleString('ar-EG');
+}
+
+/** Resolve registry id for IN/OUT vouchers vs transfer. */
+export function resolveStockVoucherPrintDocId(
+  documentType?: string,
+): 'stockReceipt' | 'stockIssue' | 'stockTransfer' {
+  const title = String(documentType || '').trim();
+  if (title.includes('منصرف')) return 'stockIssue';
+  if (title.includes('إضافة') || title.includes('وارد')) return 'stockReceipt';
+  return 'stockTransfer';
 }
 
 type PermitLayoutModel = {
@@ -187,7 +196,6 @@ const StockTransferPermitDocument: React.FC<{
   paperWidth,
 }) => {
   const accent = model.accent;
-  const palette = resolveImageExportPalette(accent);
   const statusLabel = model.statusLabel;
   const fontFamily = model.fontFamily || "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif";
   const fontSize = model.fontSize || '10pt';
@@ -211,85 +219,26 @@ const StockTransferPermitDocument: React.FC<{
       paperWidth={paperWidth}
       minHeight={minHeight}
       padding={padding}
+      metaCards={[
+        { label: 'رقم التحويل', value: model.transferNo || '—' },
+        { label: 'التاريخ', value: model.movementDate },
+        { label: 'من المخزن', value: model.fromWarehouseName },
+        { label: 'إلى المخزن', value: model.toWarehouseName },
+      ]}
+      kpis={[
+        { label: 'عدد البنود', value: formatQty(model.transferItems.length), tone: 'indigo' },
+        { label: 'إجمالي الكراتين', value: formatQty(model.totalCartons) },
+        { label: 'إجمالي القطع', value: formatQty(model.totalPieces) },
+        ...(statusLabel
+          ? [{ label: 'الحالة', value: statusLabel }]
+          : [{ label: 'المنفذ', value: model.createdBy || '—' }]),
+      ]}
       signatures={
         model.showSignatures !== false
           ? [{ title: 'المنفذ' }, { title: 'المستلم' }, { title: 'المعتمد' }]
           : undefined
       }
     >
-      <section className="mb-4 grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
-        <div
-          className="rounded-lg border border-slate-200 px-3 py-2.5"
-          style={{ background: palette.primarySoft }}
-        >
-          <p className="text-[10px] font-bold text-slate-500">من المخزن</p>
-          <p className="mt-1 text-[14px] font-extrabold leading-snug text-slate-900">
-            {model.fromWarehouseName}
-          </p>
-        </div>
-        <div className="flex items-center justify-center px-1">
-          <span
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-[15px] font-black"
-            style={{ background: palette.primarySoft, color: accent }}
-            aria-hidden
-          >
-            ←
-          </span>
-        </div>
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <p className="text-[10px] font-bold text-slate-500">إلى المخزن</p>
-          <p className="mt-1 text-[14px] font-extrabold leading-snug text-slate-900">
-            {model.toWarehouseName}
-          </p>
-        </div>
-      </section>
-
-      <section className="mb-4 grid grid-cols-3 overflow-hidden rounded-lg border border-slate-200">
-        <div className="min-w-0 bg-slate-50 px-3 py-2.5" style={{ borderLeft: '1px solid #e2e8f0' }}>
-          <p className="text-[10px] font-bold text-slate-500">رقم التحويل</p>
-          <p className="mt-1 break-words text-[12px] font-extrabold leading-snug text-slate-900">
-            {model.transferNo}
-          </p>
-        </div>
-        <div className="min-w-0 bg-slate-50 px-3 py-2.5" style={{ borderLeft: '1px solid #e2e8f0' }}>
-          <p className="text-[10px] font-bold text-slate-500">تاريخ الحركة</p>
-          <p className="mt-1 text-[12px] font-extrabold leading-snug text-slate-900">{model.movementDate}</p>
-          <p className="mt-2 text-[10px] font-bold text-slate-500">المنفذ</p>
-          <p className="mt-0.5 break-words text-[12px] font-extrabold leading-snug text-slate-900">
-            {model.createdBy}
-          </p>
-        </div>
-        <div className="min-w-0 bg-slate-50 px-3 py-2.5">
-          <p className="text-[10px] font-bold text-slate-500">عدد الأصناف</p>
-          <p className="mt-1 text-[12px] font-extrabold leading-snug text-slate-900">
-            {formatQty(model.transferItems.length)}
-          </p>
-        </div>
-      </section>
-
-      <section className={`mb-4 grid gap-2 ${statusLabel ? 'grid-cols-3' : 'grid-cols-2'}`}>
-        {[
-          { label: 'إجمالي الكراتين', value: formatQty(model.totalCartons), color: accent, strip: accent },
-          { label: 'إجمالي القطع', value: formatQty(model.totalPieces), color: '#0f172a', strip: '#cbd5e1' },
-          ...(statusLabel
-            ? [{ label: 'الحالة', value: statusLabel, color: '#047857', strip: '#059669' }]
-            : []),
-        ].map((kpi) => (
-          <div
-            key={kpi.label}
-            className="flex min-h-[72px] overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
-          >
-            <div className="w-[3px] shrink-0 self-stretch" style={{ backgroundColor: kpi.strip }} />
-            <div className="flex min-w-0 flex-1 flex-col items-center justify-center px-2 py-2.5 text-center">
-              <p className="text-[20px] font-black tabular-nums leading-none" style={{ color: kpi.color }}>
-                {kpi.value}
-              </p>
-              <p className="mt-2 text-[11px] font-bold leading-snug text-slate-500">{kpi.label}</p>
-            </div>
-          </div>
-        ))}
-      </section>
-
       <section className="mb-3">
         <FactoryPrintSectionTitle title="تفاصيل الأصناف" accent={accent} />
 
@@ -353,6 +302,140 @@ const StockTransferPermitDocument: React.FC<{
         <section className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
           <p className="text-[10px] font-bold text-slate-500">ملاحظة</p>
           <p className="mt-1 text-[12px] font-bold leading-snug text-slate-800">{model.note}</p>
+        </section>
+      ) : null}
+    </FactoryPrintShell>
+  );
+};
+
+/** إذن إضافة / منصرف — same Factory chrome as production issue (metaCards + table). */
+const StockVoucherInOutDocument: React.FC<{
+  data: StockTransferPrintData;
+  printSettings: PrintTemplateSettings;
+  docId: 'stockReceipt' | 'stockIssue';
+  rootRef?: React.Ref<HTMLDivElement>;
+  rootId?: string;
+  width?: number | string;
+  paperWidth?: string;
+  minHeight?: string;
+  padding?: string;
+}> = ({
+  data,
+  printSettings,
+  docId,
+  rootRef,
+  rootId,
+  width,
+  paperWidth,
+  minHeight,
+  padding = '10mm 12mm',
+}) => {
+  const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+  const doc = resolvePrintDocumentConfig(ps, docId);
+  const font = resolvePrintFont(ps);
+  const accent = resolvePrintAccentHex(ps.primaryColor);
+  const items = resolveTransferItems(data);
+  const totalPieces = items.reduce((sum, item) => sum + Number(item.quantityPieces || 0), 0);
+  const documentType = data.documentType?.trim()
+    || (docId === 'stockIssue' ? 'إذن منصرف' : 'إذن إضافة');
+  const printedAt = new Date().toLocaleString('ar-EG');
+  const isIssue = docId === 'stockIssue';
+
+  return (
+    <FactoryPrintShell
+      ref={rootRef}
+      exportRootId={rootId}
+      companyName={doc.headerText || ps.headerText || 'مخازن الإنتاج'}
+      documentType={documentType}
+      printDate={printedAt}
+      logoUrl={ps.logoUrl}
+      brandAccent={accent}
+      footerTagline={doc.footerText?.trim() || ps.footerText?.trim() || Factory_DEFAULT_FOOTER_TAGLINE}
+      extraLines={doc.customLines}
+      fontFamily={font.fontFamily}
+      fontSize={font.fontSize}
+      width={width}
+      paperWidth={paperWidth}
+      minHeight={minHeight}
+      padding={padding}
+      metaCards={
+        doc.isFieldVisible('meta')
+          ? [
+              { label: 'رقم الإذن', value: data.transferNo || '—' },
+              { label: 'التاريخ', value: formatArDate(data.createdAt) },
+              {
+                label: 'المخزن',
+                value: data.fromWarehouseName || '—',
+              },
+              { label: 'المنفذ', value: data.createdBy || '—' },
+            ]
+          : undefined
+      }
+      kpis={
+        doc.isFieldVisible('kpis')
+          ? [
+              { label: 'عدد البنود', value: formatQty(items.length), tone: 'indigo' as const },
+              { label: 'إجمالي القطع', value: formatQty(totalPieces) },
+              {
+                label: isIssue ? 'جهة الصرف' : 'مصدر الوارد',
+                value: data.toWarehouseName || '—',
+              },
+              ...(data.statusLabel
+                ? [{ label: 'الحالة', value: data.statusLabel }]
+                : []),
+            ]
+          : undefined
+      }
+      signatures={
+        doc.isFieldVisible('signatures')
+          ? [{ title: 'المنفذ' }, { title: 'المستلم' }, { title: 'المعتمد' }]
+          : undefined
+      }
+    >
+      {doc.isFieldVisible('lines') ? (
+        <>
+          <FactoryPrintSectionTitle title={isIssue ? 'بنود المنصرف' : 'بنود الإضافة'} accent={accent} />
+          <FactoryPrintTable
+            brandAccent={accent}
+            printSettings={ps}
+            columns={[
+              { key: 'idx', header: '#', width: '8%', align: 'center' },
+              { key: 'item', header: 'الصنف', width: doc.isFieldVisible('location') ? '36%' : '48%' },
+              ...(doc.isFieldVisible('location')
+                ? [{ key: 'location', header: 'الرف', width: '16%', align: 'center' as const }]
+                : []),
+              { key: 'unit', header: 'الوحدة', width: '12%', align: 'center' },
+              { key: 'qty', header: 'الكمية', width: '14%', align: 'center' },
+              ...(doc.isFieldVisible('quantityPieces')
+                ? [{ key: 'pieces', header: 'قطع', width: '14%', align: 'center' as const }]
+                : []),
+            ]}
+            rows={items.map((item, idx) => ({
+              key: `${item.itemCode}-${idx}`,
+              cells: {
+                idx: idx + 1,
+                item: (
+                  <>
+                    <p className="font-extrabold leading-snug">{item.itemName}</p>
+                    {doc.isFieldVisible('itemCode') ? (
+                      <p className="mt-0.5 font-mono text-[11px] text-slate-600">{item.itemCode || '—'}</p>
+                    ) : null}
+                  </>
+                ),
+                location: item.locationCode || '—',
+                unit: item.unitLabel,
+                qty: formatQty(Number(item.quantity || 0)),
+                pieces: formatQty(Number(item.quantityPieces || 0)),
+              },
+            }))}
+          />
+        </>
+      ) : null}
+
+      {doc.isFieldVisible('notes') && data.note?.trim() ? (
+        <section className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+          <p className="text-[10px] font-bold text-slate-500">ملاحظة</p>
+          <p className="mt-1 text-[12px] font-bold leading-snug text-slate-800">{data.note}</p>
         </section>
       ) : null}
     </FactoryPrintShell>
@@ -453,14 +536,31 @@ export const StockTransferPrint = React.forwardRef<HTMLDivElement, StockTransfer
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
-    const doc = resolvePrintDocumentConfig(ps, 'stockTransfer');
+    const docId = resolveStockVoucherPrintDocId(data.documentType);
     const font = resolvePrintFont(ps);
     const isThermal = ps.paperSize === 'thermal';
+    const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
+
+    if (docId === 'stockReceipt' || docId === 'stockIssue') {
+      return (
+        <StockVoucherInOutDocument
+          data={data}
+          printSettings={ps}
+          docId={docId}
+          rootRef={ref}
+          width={paper.width}
+          paperWidth={paper.width}
+          minHeight={paper.minHeight}
+          padding={isThermal ? '4mm 3mm' : ps.paperSize === 'a5' ? '6mm 8mm' : '10mm 12mm'}
+        />
+      );
+    }
+
+    const doc = resolvePrintDocumentConfig(ps, 'stockTransfer');
     if (isThermal) {
       return <StockTransferThermalPrint data={data} printSettings={ps} rootRef={ref} doc={doc} />;
     }
 
-    const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const model = buildPermitModel(data, {
       companyName: doc.headerText || 'Sokany-eg',
       accent: resolvePrintAccentHex(ps.primaryColor),
@@ -515,6 +615,22 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
     if (!data) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
+    const docId = resolveStockVoucherPrintDocId(data.documentType);
+
+    if (docId === 'stockReceipt' || docId === 'stockIssue') {
+      return (
+        <StockVoucherInOutDocument
+          data={data}
+          printSettings={ps}
+          docId={docId}
+          rootRef={ref}
+          rootId={exportRootId}
+          width={640}
+          padding="28px 32px"
+        />
+      );
+    }
+
     const doc = resolvePrintDocumentConfig(ps, 'stockTransfer');
     const font = resolvePrintFont(ps);
     const model = buildPermitModel(data, {

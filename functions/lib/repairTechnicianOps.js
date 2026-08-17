@@ -5,7 +5,8 @@ import { decideTechnicianQrClaim } from './repairTechnicianClaimPolicy.js';
 import { recordAssignedJobFullyUnrepairable } from './repairCustomerPortalOps.js';
 import { mapLegacyRepairStatus } from './repairStatusIds.js';
 import { resolveAssignmentStatusPatch } from './repairAssignmentStatus.js';
-import { loadTenantWorkflowStatuses, resolveNextStatusForAction, resolveStatusRole, } from './repairStatusAdvance.js';
+import { isFullManufacturerWarrantyJob } from './repairManufacturerWarranty.js';
+import { loadTenantWorkflowStatuses, partsAwaitingFulfillment, resolveNextStatusForAction, resolveStatusRole, } from './repairStatusAdvance.js';
 const db = getDb();
 const requireActor = async (request) => {
     const uid = String(request.auth?.uid || '').trim();
@@ -290,12 +291,15 @@ const saveTechnical = async (actor, data) => {
     const hasPart = (Array.isArray(job.partsUsed) ? job.partsUsed : [])
         .some((row) => Number(row.quantity || 0) > 0);
     const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+    const skipCustomerApproval = warrantyScope === 'manufacturer';
     const nextStatus = resolveNextStatusForAction({
         action: 'diagnosis_saved',
         currentStatus: String(job.status || ''),
         statuses,
         hasDiagnosis,
         hasServiceOrPartSignal: hasService || hasPart,
+        waitsForParts: partsAwaitingFulfillment(job.partsUsed),
+        skipCustomerApproval,
     });
     const prevStatus = mapLegacyRepairStatus(String(job.status || ''));
     const patch = {
@@ -310,6 +314,12 @@ const saveTechnical = async (actor, data) => {
         history.push({ status: nextStatus, at, technicianId: actor.uid, source: 'diagnosis_saved' });
         patch.status = nextStatus;
         patch.statusHistory = history;
+        if (skipCustomerApproval) {
+            const nextRole = resolveStatusRole(nextStatus, statuses);
+            if (nextRole === 'in_repair' || nextRole === 'awaiting_parts') {
+                patch.approvalStatus = 'not_required';
+            }
+        }
     }
     await ref.update(patch);
     if (nextStatus && nextStatus !== prevStatus) {
@@ -366,6 +376,12 @@ const changeTechnicalStatus = async (actor, data) => {
             currentStatus: String(job.status || ''),
             statuses,
             waitsForParts,
+            skipCustomerApproval: isFullManufacturerWarrantyJob({
+                warrantyScope: job.warrantyScope,
+                jobProducts: Array.isArray(job.jobProducts)
+                    ? job.jobProducts
+                    : [],
+            }),
         });
         if (!advanced) {
             throw new HttpsError('failed-precondition', 'لا يمكن تعليم الطلب كـ«تم الإصلاح» قبل مرحلة الإصلاح أو مع قطع ناقصة.');

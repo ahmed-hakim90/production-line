@@ -45,6 +45,8 @@ import { repairBranchService } from './repairBranchService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { stripRepairProductsToIntake, warrantyScopeFromProducts } from '../lib/repairJobIntake';
+import { isFullManufacturerWarrantyJob } from '../lib/repairManufacturerWarranty';
+import { resolveStatusRole } from '../lib/repairStatusAdvance';
 import { repairCustomerOperationsService } from './repairCustomerOperationsService';
 import { computeRepairJobCost, normalizePaymentStatus } from '../utils/repairBusinessLogic';
 import { assertRepairStatusTransition } from '../utils/repairStatusTransitions';
@@ -674,11 +676,13 @@ export const repairJobService = {
     const nextCanon = mapLegacyRepairStatus(input.status);
     const actorUid = String(input.actorUid || 'unknown');
     const actorName = String(input.actorName || 'مستخدم');
+    const skipCustomerApproval = isFullManufacturerWarrantyJob(existing || {});
 
     assertRepairStatusTransition({
       fromStatus: beforeCanon,
       toStatus: nextCanon,
       statuses: settings.workflow.statuses,
+      allowSkipCustomerApproval: skipCustomerApproval,
     });
 
     if (isDeliveredStatus(nextCanon)) {
@@ -750,12 +754,18 @@ export const repairJobService = {
         });
       }
 
+      const skipLive = isFullManufacturerWarrantyJob(job);
+      const nextRole = resolveStatusRole(nextCanon, settings.workflow.statuses);
+      const markApprovalNotRequired = skipLive
+        && (nextRole === 'in_repair' || nextRole === 'awaiting_parts');
+
       // Firestore Transaction.update rejects undefined (e.g. resolutionMinutes without assignedAt).
       tx.update(ref, withDefined({
         status: nextCanon,
         statusHistory: history,
         updatedAt: at,
         technicianId: input.technicianId ?? job.technicianId ?? '',
+        ...(markApprovalNotRequired ? { approvalStatus: 'not_required' } : {}),
         ...(setsAssigned && !job.assignedAt ? { assignedAt: at } : {}),
         ...(isDeliveredStatus(nextCanon)
           ? {

@@ -38,6 +38,8 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { formatNumber, getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import {
@@ -147,6 +149,15 @@ import {
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
 import { resolveReportBehaviorSettings } from '../lib/reportBehaviorSettings';
+import {
+  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
+  REPORT_SAVE_PENDING_MESSAGE,
+  REPORT_SAVE_SUCCESS_MESSAGE,
+  REPORT_SAVE_TOAST_ID,
+  SAVE_ERROR_TOAST_DURATION_MS,
+  describeMissingReportSaveFields,
+  describeSelectedWorkOrderMismatch,
+} from '../lib/reportSaveFeedback';
 import { countsTowardFinishedGoodsProduction, effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
 import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import {
@@ -619,12 +630,12 @@ export const Reports: React.FC = () => {
     'products',
     'lines',
     'employees',
+    'workOrders',
   ]);
   const { dir } = useAppDirection();
   const { openModal } = useGlobalModalManager();
   const location = useLocation();
   const navigate = useTenantNavigate();
-  const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const todayReports = useAppStore((s) => s.todayReports);
   const productionReports = useAppStore((s) => s.productionReports);
   const employees = useAppStore((s) => s.employees);
@@ -634,7 +645,8 @@ export const Reports: React.FC = () => {
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const uid = useAppStore((s) => s.uid);
   const saveErrorFromStore = useAppStore((s) => s.error);
-  const createReport = useAppStore((s) => s.createReport);
+  const queueReportCreate = useAppStore((s) => s.queueReportCreate);
+  const retryQueuedReportCreate = useAppStore((s) => s.retryQueuedReportCreate);
   const updateReport = useAppStore((s) => s.updateReport);
   const deleteReport = useAppStore((s) => s.deleteReport);
   const reapplyReportInventory = useAppStore((s) => s.reapplyReportInventory);
@@ -708,6 +720,7 @@ export const Reports: React.FC = () => {
   const { can, isPackagingOnly } = usePermission();
   const canViewCosts = can('reports.viewCost');
   const canCreateFinishedReportsBase = can('reports.create');
+  const canCreateForAnySupervisor = can('reports.createForAnySupervisor');
   const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
   const forcePackagingOnly = isPackagingOnly;
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
@@ -837,7 +850,7 @@ export const Reports: React.FC = () => {
   const setSaveToast = useCallback((message: string | null) => {
     if (!message) return;
     showAppToast(saveToastTypeRef.current, message, {
-      duration: saveToastTypeRef.current === 'error' ? 5000 : 3500,
+      duration: saveToastTypeRef.current === 'error' ? SAVE_ERROR_TOAST_DURATION_MS : 3500,
     });
   }, []);
   const [syncingMissingTransfers, setSyncingMissingTransfers] = useState(false);
@@ -1024,6 +1037,7 @@ export const Reports: React.FC = () => {
   );
   const isSupervisorReporter = currentEmployee?.level === 2;
   const shouldLockEmployeeToCurrent = Boolean(currentEmployee?.id)
+    && !canCreateForAnySupervisor
     && (isSupervisorReporter || forceInjectionOnly || forcePackagingOnly);
   const shouldRestrictSupervisorLines = isSupervisorReporter && !editId;
 
@@ -2000,45 +2014,16 @@ export const Reports: React.FC = () => {
       setPrintReport(row);
       await waitForExportPaint(150);
       if (!singlePrintRef.current) return;
-      if (isMobilePrint) {
-        setExporting(true);
-        try {
-          const { exportToPDF } = await import('../../../utils/reportExport');
-          await exportToPDF(singlePrintRef.current, `تقرير-إنتاج-${row.lineName}-${row.date}`, {
-            paperSize: printTemplate?.paperSize,
-            orientation: printTemplate?.orientation,
-            copies: 1,
-          });
-        } finally {
-          setExporting(false);
-        }
-      } else {
-        handleSinglePrint();
-      }
+      handleSinglePrint();
       setTimeout(() => setPrintReport(null), 1000);
     },
-    [buildReportRow, handleSinglePrint, isMobilePrint, printTemplate?.orientation, printTemplate?.paperSize]
+    [buildReportRow, handleSinglePrint]
   );
 
   const triggerBulkPrint = useCallback(async () => {
     if (!bulkPrintRef.current) return;
-    if (isMobilePrint) {
-      setExporting(true);
-      try {
-        await waitForExportPaint(150);
-        const { exportToPDF } = await import('../../../utils/reportExport');
-        await exportToPDF(bulkPrintRef.current, `تقارير-الإنتاج-${startDate}`, {
-          paperSize: printTemplate?.paperSize,
-          orientation: printTemplate?.orientation,
-          copies: 1,
-        });
-      } finally {
-        setExporting(false);
-      }
-      return;
-    }
     handleBulkPrint();
-  }, [handleBulkPrint, isMobilePrint, printTemplate?.orientation, printTemplate?.paperSize, startDate]);
+  }, [handleBulkPrint]);
 
   const showShareFeedback = useCallback((result: ShareResult) => {
     const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
@@ -2516,10 +2501,29 @@ export const Reports: React.FC = () => {
   const selectableProducts = useMemo(
     () => (
       form.reportType === 'component_injection'
-        ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
-        : filterProductionProducts(_rawProducts).map((p) => ({ value: p.id!, label: p.name }))
+        ? injectionRawMaterialOptions.map((m) => ({
+            value: m.id,
+            label: m.code ? `${m.name} (${m.code})` : m.name,
+            name: m.name,
+            code: m.code,
+            barcode: (m as { barcode?: string }).barcode,
+            stockItemType: 'material' as const,
+          }))
+        : filterProductionProducts(_rawProducts).map((p) => ({
+            value: p.id!,
+            label: p.code ? `${p.name} (${p.code})` : p.name,
+            name: p.name,
+            code: p.code,
+            barcode: p.barcode,
+            stockItemType: 'finished_good' as const,
+          }))
     ),
     [form.reportType, injectionRawMaterialOptions, _rawProducts],
+  );
+
+  const selectableProductPicker = useMemo(
+    () => buildCodeVoucherPicker(selectableProducts),
+    [selectableProducts],
   );
 
   useEffect(() => {
@@ -2597,28 +2601,51 @@ export const Reports: React.FC = () => {
     const packagingLinesValid = (form.packagingLines || []).filter(
       (l) => String(l.productId || '').trim() && effectivePackagingPieces(l, getUnitsPerCarton) > 0,
     );
-    const packagingQtyOk = form.reportType !== 'packaging'
-      || packagingLinesValid.length > 0;
-    const productQtyOk = !reportBehavior.requirePositiveQuantityOnReports
-      ? Boolean(form.reportType === 'packaging' ? packagingQtyOk : form.productId)
-      : form.reportType === 'packaging'
-      ? packagingQtyOk
-      : Boolean(form.productId && effectiveFormQuantityProduced);
-    if (form.reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(form.shift)) {
+    const missingFieldsMessage = describeMissingReportSaveFields({
+      missingLine: !form.lineId,
+      missingEmployee: !form.employeeId,
+      missingProduct: form.reportType !== 'packaging' && !form.productId,
+      packagingLinesMissing: form.reportType === 'packaging' && packagingLinesValid.length === 0,
+      missingQuantity: reportBehavior.requirePositiveQuantityOnReports && form.reportType !== 'packaging' && !effectiveFormQuantityProduced,
+      missingHours: reportBehavior.requireWorkHoursOnReports && !form.workHours,
+      missingLabor: workersRequired,
+      missingShift: form.reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(form.shift),
+    });
+    if (missingFieldsMessage) {
       setSaveToastType('error');
-      setSaveToast('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
-      setTimeout(() => setSaveToast(null), 3500);
+      setSaveToast(missingFieldsMessage);
       return;
     }
-    if (!form.lineId || !form.employeeId || !productQtyOk || (reportBehavior.requireWorkHoursOnReports && !form.workHours) || workersRequired) {
+    const isDelegatedEntry = Boolean(
+      canCreateForAnySupervisor
+      && currentEmployee?.id
+      && form.employeeId
+      && form.employeeId !== currentEmployee.id,
+    );
+    const selectedWorkOrder = String(form.workOrderId || '').trim()
+      ? workOrders.find((row) => row.id === form.workOrderId) ?? null
+      : null;
+    if (isDelegatedEntry && !selectedWorkOrder) {
       setSaveToastType('error');
-      setSaveToast(requiresWorkers
-        ? (packagingLaborOptional
-          ? 'أكمل الحقول المطلوبة أولاً (الكمية وساعات العمل)'
-          : 'أكمل الحقول المطلوبة أولاً (الكمية، تفاصيل العمالة، وساعات العمل)')
-        : 'أكمل الحقول المطلوبة أولاً (الكمية وساعات العمل)');
-      setTimeout(() => setSaveToast(null), 3500);
+      setSaveToast(DELEGATED_WORK_ORDER_REQUIRED_MESSAGE);
       return;
+    }
+    if (selectedWorkOrder) {
+      const mismatch = describeSelectedWorkOrderMismatch({
+        workOrderSupervisorId: selectedWorkOrder.supervisorId,
+        workOrderLineId: selectedWorkOrder.lineId,
+        workOrderProductId: selectedWorkOrder.productId,
+        employeeId: form.employeeId,
+        lineId: form.lineId,
+        productId: form.reportType === 'packaging'
+          ? packagingLinesValid[0]?.productId || form.productId
+          : form.productId,
+      });
+      if (mismatch) {
+        setSaveToastType('error');
+        setSaveToast(mismatch);
+        return;
+      }
     }
     if (forcePackagingOnly && form.reportType !== 'packaging') {
       setSaveToastType('error');
@@ -2711,29 +2738,31 @@ export const Reports: React.FC = () => {
     if (editId) {
       payload.supplyCycleId = autoSupplyCycleId || '';
     }
-    const duplicated = reportBehavior.preventDuplicateReports && await hasDuplicateLineSupervisorReport(
-      {
-        date: payload.date,
-        lineId: payload.lineId,
-        employeeId: payload.employeeId,
-        productId: payload.productId,
-        workOrderId: payload.workOrderId,
-        reportType: resolveReportType(payload.reportType),
-        shift: resolveReportType(payload.reportType) === 'component_injection' && isInjectionShiftSelected(payload.shift)
-          ? payload.shift
-          : undefined,
-      },
-      editId,
-    );
-    if (duplicated) {
-      setSaveToastType('error');
-      setSaveToast(
-        resolveReportType(payload.reportType) === 'component_injection'
-          ? 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمكون والوردية'
-          : 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف',
+    // Duplicate check only on edit — create path relies on createReport inside the queue.
+    if (editId && reportBehavior.preventDuplicateReports) {
+      const duplicated = await hasDuplicateLineSupervisorReport(
+        {
+          date: payload.date,
+          lineId: payload.lineId,
+          employeeId: payload.employeeId,
+          productId: payload.productId,
+          workOrderId: payload.workOrderId || '',
+          reportType: resolveReportType(payload.reportType),
+          shift: resolveReportType(payload.reportType) === 'component_injection' && isInjectionShiftSelected(payload.shift)
+            ? payload.shift
+            : '',
+        },
+        editId,
       );
-      setTimeout(() => setSaveToast(null), 3500);
-      return;
+      if (duplicated) {
+        setSaveToastType('error');
+        setSaveToast(
+          resolveReportType(payload.reportType) === 'component_injection'
+            ? 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمكون والوردية'
+            : 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف',
+        );
+        return;
+      }
     }
     if (
       productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
@@ -2746,48 +2775,63 @@ export const Reports: React.FC = () => {
     ) {
       setSaveToastType('error');
       setSaveToast('مجموع إنتاج العمال يجب أن يطابق كمية التقرير');
-      setTimeout(() => setSaveToast(null), 3500);
       return;
     }
     setSaving(true);
     setSaveToastType('success');
-    setSaveToast(null);
 
     if (editId) {
-      await updateReport(editId, payload, { path: PRODUCTION_REPORT_UPDATE_PATHS.reportsPage });
-      setSaving(false);
-      setSaveToastType('success');
-      setSaveToast('تم حفظ التعديلات بنجاح');
-      setTimeout(() => setSaveToast(null), 3000);
-      if (printAfterSave && can('print')) {
-        await triggerSinglePrint({ ...payload, id: editId });
-      }
-    } else {
-      const createdId = await createReport(payload, { path: PRODUCTION_REPORT_CREATE_PATHS.reportsPage });
-      if (!createdId) {
+      try {
+        await updateReport(editId, payload, { path: PRODUCTION_REPORT_UPDATE_PATHS.reportsPage });
+        setSaving(false);
+        setSaveToastType('success');
+        setSaveToast('تم حفظ التعديلات بنجاح');
+        if (printAfterSave && can('print')) {
+          await triggerSinglePrint({ ...payload, id: editId });
+        }
+      } catch (error) {
         setSaving(false);
         setSaveToastType('error');
-        setSaveToast(getReportDuplicateMessage(saveErrorFromStore, 'تعذر حفظ التقرير'));
-        setTimeout(() => setSaveToast(null), 4000);
-        return;
+        setSaveToast((error as Error)?.message || 'تعذر حفظ التعديلات');
       }
-      setSaving(false);
-      setForm({
-        ...emptyForm,
-        reportType: resolveReportType(form.reportType),
-        date: form.date,
-        lineId: form.lineId,
-        packagingLines: form.reportType === 'packaging' ? [newEmptyPackagingLine()] : [],
-      });
-      setSaveToastType('success');
-      setSaveToast('تم حفظ التقرير بنجاح');
-      setTimeout(() => setSaveToast(null), 3000);
-      if (printAfterSave && can('print')) {
-        await triggerSinglePrint({
-          ...payload,
-          id: typeof createdId === 'string' ? createdId : undefined,
+    } else {
+      const queued = queueReportCreate(payload, { path: PRODUCTION_REPORT_CREATE_PATHS.reportsPage });
+      showAppToast('loading', REPORT_SAVE_PENDING_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
+      void queued.completion.then(async (createdId) => {
+        if (!createdId) {
+          setSaving(false);
+          showAppToast(
+            'error',
+            getReportDuplicateMessage(useAppStore.getState().error || saveErrorFromStore, 'تعذر حفظ التقرير'),
+            { id: REPORT_SAVE_TOAST_ID, duration: SAVE_ERROR_TOAST_DURATION_MS },
+          );
+          return;
+        }
+        setForm({
+          ...emptyForm,
+          reportType: resolveReportType(form.reportType),
+          date: form.date,
+          lineId: form.lineId,
+          packagingLines: form.reportType === 'packaging' ? [newEmptyPackagingLine()] : [],
         });
-      }
+        setShowModal(false);
+        setEditId(null);
+        setSaving(false);
+        showAppToast('success', REPORT_SAVE_SUCCESS_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
+        if (printAfterSave && can('print')) {
+          await triggerSinglePrint({
+            ...payload,
+            id: createdId,
+          });
+        }
+      }).catch((error) => {
+        setSaving(false);
+        showAppToast(
+          'error',
+          getReportDuplicateMessage(error, 'تعذر حفظ التقرير'),
+          { id: REPORT_SAVE_TOAST_ID, duration: SAVE_ERROR_TOAST_DURATION_MS },
+        );
+      });
     }
   };
 
@@ -2796,16 +2840,12 @@ export const Reports: React.FC = () => {
     setDeleteError(null);
     try {
       await deleteReport(id, { path: PRODUCTION_REPORT_DELETE_PATHS.reportsPage });
-      setSaveToastType('success');
-      setSaveToast('تم حذف التقرير بنجاح');
-      setTimeout(() => setSaveToast(null), 3500);
+      showAppToast('success', 'تم حذف التقرير بنجاح');
       setDeleteConfirmId(null);
     } catch (error: any) {
       const message = error?.message || 'تعذر حذف التقرير الآن.';
-      setSaveToastType('error');
-      setSaveToast(message);
+      showAppToast('error', message, { duration: 5000 });
       setDeleteError(message);
-      setTimeout(() => setSaveToast(null), 5000);
       // Keep confirmation open so user can re-try after resolving dependency issue.
     } finally {
       setDeleteBusy(false);
@@ -3387,9 +3427,10 @@ export const Reports: React.FC = () => {
     let failed = 0;
     for (const row of validRows) {
       try {
-        const created = await createReport(toReportData(row), {
+        const queued = queueReportCreate(toReportData(row), {
           path: PRODUCTION_REPORT_CREATE_PATHS.reportsImport,
         });
+        const created = await queued.completion;
         if (!created) failed++;
       } catch {
         failed++;
@@ -3429,14 +3470,20 @@ export const Reports: React.FC = () => {
         render: (r) => {
           const wo = r.workOrderId ? woMap.get(r.workOrderId) : undefined;
           const hasQuality = !!wo?.qualitySummary || !!wo?.qualityStatus || !!wo?.qualityReportCode;
-          if (!can('quality.reports.view') || !hasQuality) {
-            return (
-              <span className="font-mono text-xs font-bold text-primary">
-                {r.reportCode || '—'}
-              </span>
-            );
-          }
-          return (
+          const clientLabel = r.clientSaveState === 'saving'
+            ? 'جارٍ الحفظ'
+            : r.clientSaveState === 'failed'
+              ? 'فشل الحفظ'
+              : r.processingState === 'pending' || r.processingState === 'processing'
+                ? 'جاري الترحيل'
+                : r.processingState === 'failed'
+                  ? 'تعذر الترحيل'
+                  : null;
+          const codeEl = !can('quality.reports.view') || !hasQuality ? (
+            <span className="font-mono text-xs font-bold text-primary">
+              {r.reportCode || '—'}
+            </span>
+          ) : (
             <button
               type="button"
               onClick={(e) => {
@@ -3448,6 +3495,23 @@ export const Reports: React.FC = () => {
             >
               {r.reportCode || '—'}
             </button>
+          );
+          return (
+            <div className="flex flex-col gap-1 items-start">
+              {codeEl}
+              {clientLabel ? (
+                <span
+                  className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                    r.clientSaveState === 'failed' || r.processingState === 'failed'
+                      ? 'bg-[rgb(var(--color-danger)/0.12)] text-[rgb(var(--color-danger))]'
+                      : 'bg-[rgb(var(--color-warning)/0.12)] text-[rgb(var(--color-warning))]'
+                  }`}
+                  title={r.clientSaveError || r.processingError || undefined}
+                >
+                  {clientLabel}
+                </span>
+              ) : null}
+            </div>
           );
         },
       },
@@ -3872,9 +3936,29 @@ export const Reports: React.FC = () => {
   const renderReportActions = (report: ProductionReport) => {
     const sharingId = report.id || report.reportCode || `${report.date}-${report.lineId}-${report.productId}`;
     const isPreparingShareImage = sharingReportId === sharingId;
+    const canRetryClientSave = report.clientSaveState === 'failed' && Boolean(report.id);
     return (
     <div className="flex min-w-[170px] flex-nowrap items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-      {can("print") && (
+      {canRetryClientSave ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            void retryQueuedReportCreate(String(report.id)).then((createdId) => {
+              if (!createdId) {
+                showAppToast('error', getReportDuplicateMessage(useAppStore.getState().error, 'تعذر إعادة حفظ التقرير'));
+                return;
+              }
+              showAppToast('success', 'تم تأكيد حفظ التقرير، والترحيل مستمر في الخلفية.');
+            });
+          }}
+          className="inline-flex min-h-9 items-center justify-center gap-1 px-2 text-[10px] font-bold text-[rgb(var(--color-warning))] hover:bg-[rgb(var(--color-warning)/0.12)] rounded-[var(--border-radius-base)] transition-all"
+          title={report.clientSaveError || 'إعادة المحاولة'}
+        >
+          إعادة المحاولة
+        </button>
+      ) : null}
+      {can("print") && !report.clientSaveState && (
         <>
           <button onClick={() => triggerSingleShare(report)} className="inline-flex min-h-9 items-center justify-center gap-1.5 px-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-success))] hover:bg-[rgb(var(--color-success)/0.1)] dark:hover:bg-[rgb(var(--color-success))]/10 rounded-[var(--border-radius-base)] transition-all disabled:opacity-60" title={isPreparingShareImage ? 'جاري تجهيز الصورة...' : 'مشاركة عبر واتساب'} disabled={exporting || Boolean(sharingReportId)}>
             {isPreparingShareImage ? (
@@ -3883,17 +3967,14 @@ export const Reports: React.FC = () => {
               <ReportIcon name="share" className="text-lg" />
             )}
           </button>
-          {/* <button onClick={() => triggerSinglePrint(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="طباعة التقرير">
-            <ReportIcon name="print" className="text-lg" />
-          </button> */}
         </>
       )}
-      {reportsUpdateEnabled && can("reports.edit") && (
+      {reportsUpdateEnabled && can("reports.edit") && !report.clientSaveState && (
         <button onClick={() => openEdit(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل التقرير">
           <ReportIcon name="edit" className="text-lg" />
         </button>
       )}
-      {reportsDeleteEnabled && can("reports.delete") && (
+      {reportsDeleteEnabled && can("reports.delete") && !report.clientSaveState && (
         <button type="button" onClick={() => requestDeleteReport(report)} className="p-2 text-[var(--color-text-muted)] hover:text-[rgb(var(--color-danger))] hover:bg-[rgb(var(--color-danger)/0.1)] dark:hover:bg-[rgb(var(--color-danger))]/10 rounded-[var(--border-radius-base)] transition-all" title="حذف التقرير">
           <ReportIcon name="delete" className="text-lg" />
         </button>
@@ -4927,25 +5008,34 @@ export const Reports: React.FC = () => {
                 </div>
               )}
               {/* Work Order Selector */}
-              {!editId && can('workOrders.view') && (() => {
+              {!editId && (can('workOrders.view') || canCreateForAnySupervisor) && (() => {
                 const activeWOs = workOrders.filter((w) => {
                   if (w.status !== 'pending' && w.status !== 'in_progress' && w.status !== 'paused') return false;
                   if (!workOrderMatchesReportType(w, resolveReportType(form.reportType))) return false;
                   if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return true;
                   return w.supervisorId === currentEmployee.id;
                 });
-                if (activeWOs.length === 0) return null;
+                const delegated = Boolean(
+                  canCreateForAnySupervisor
+                  && currentEmployee?.id
+                  && form.employeeId
+                  && form.employeeId !== currentEmployee.id,
+                );
                 return (
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                       <ReportIcon name="assignment" className="text-sm align-middle ml-1 text-primary inline" />
-                      أمر شغل (اختياري)
+                      {delegated ? 'أمر شغل موجّه للمشرف (إلزامي)' : 'أمر شغل (اختياري)'}
                     </label>
                     <Select
-                      value={form.workOrderId || 'none'}
+                      value={form.workOrderId || (delegated ? undefined : 'none')}
                       onValueChange={(value) => {
-                        const selectedWorkOrderId = value === 'none' ? '' : value;
-                        const wo = activeWOs.find((w) => w.id === selectedWorkOrderId);
+                        if (value === 'none') {
+                          if (delegated) return;
+                          setForm({ ...form, workOrderId: '' });
+                          return;
+                        }
+                        const wo = activeWOs.find((w) => w.id === value);
                         if (!wo) {
                           setForm({ ...form, workOrderId: '' });
                           return;
@@ -4961,10 +5051,12 @@ export const Reports: React.FC = () => {
                       }}
                     >
                       <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
-                        <SelectValue placeholder="اختر أمر شغل لتعبئة البيانات تلقائياً" />
+                        <SelectValue placeholder={delegated ? 'اختر أمر شغل موجّه للمشرف' : 'بدون أمر شغل'} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">اختر أمر شغل لتعبئة البيانات تلقائياً</SelectItem>
+                        {!delegated && (
+                          <SelectItem value="none">بدون أمر شغل</SelectItem>
+                        )}
                         {activeWOs.map((wo) => {
                           const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
                           const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
@@ -4977,6 +5069,15 @@ export const Reports: React.FC = () => {
                         })}
                       </SelectContent>
                     </Select>
+                    {delegated ? (
+                      <p className="text-[11px] font-medium text-[rgb(var(--color-warning))]">
+                        {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] font-medium text-[var(--color-text-muted)]">
+                        أمر الشغل اختياري. يمكن الحفظ بدون اختيار أمر شغل.
+                      </p>
+                    )}
                   </div>
                 );
               })()}
@@ -5077,9 +5178,10 @@ export const Reports: React.FC = () => {
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                     {form.reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}
                   </label>
-                  <SearchableSelect
-                    placeholder={form.reportType === 'component_injection' ? 'اختر المكون' : 'اختر المنتج'}
-                    options={selectableProducts}
+                  <VoucherItemCombobox
+                    placeholder={form.reportType === 'component_injection' ? 'ابحث أو امسح كود المكون' : 'ابحث بالاسم أو امسح الباركود'}
+                    options={selectableProductPicker.options}
+                    catalog={selectableProductPicker.catalog}
                     value={form.productId}
                     onChange={(v) => setForm({ ...form, productId: v, workOrderId: '' })}
                   />
@@ -5123,9 +5225,10 @@ export const Reports: React.FC = () => {
                       <div key={idx} className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
                         <div className={cn('space-y-1', productSpan)}>
                           <span className="text-[11px] font-bold text-[var(--color-text-muted)]">المنتج</span>
-                          <SearchableSelect
-                            placeholder="اختر المنتج"
-                            options={selectableProducts}
+                          <VoucherItemCombobox
+                            placeholder="ابحث بالاسم أو امسح الباركود"
+                            options={selectableProductPicker.options}
+                            catalog={selectableProductPicker.catalog}
                             value={row.productId}
                             onChange={(v) => setForm((prev) => {
                               const next = [...(prev.packagingLines || [])];

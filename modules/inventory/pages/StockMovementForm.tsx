@@ -18,13 +18,12 @@ import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { warehouseRackService } from '../services/warehouseRackService';
-import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack, TransferRequestLine } from '../types';
+import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, StockLocationBalance, WarehouseRack, TransferRequestLine } from '../types';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { StockAvailabilityHint } from '../components/StockAvailabilityHint';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import {
-  exportToPDF,
   getShareResultFeedbackMessage,
   shareToWhatsApp,
   waitForExportPaint,
@@ -81,6 +80,12 @@ import {
   resolveManualTransferDestinationLocation,
   resolveManualTransferSourceLocations,
 } from '../lib/manualTransferLocations';
+import {
+  buildVoucherLineLocationOptions,
+  getLocationBalanceQty,
+  pickPreferredVoucherLocationId,
+  type VoucherLocationSelectOption,
+} from '../lib/voucherLineLocations';
 import { defaultItemLocationService } from '../services/defaultItemLocationService';
 import { applyWarehouseBalanceDeltas, type WarehouseBalanceDelta } from '../lib/localBalancePatch';
 import { mapGroupedSequentialParallel } from '../../shared/lib/mapGroupedSequentialParallel';
@@ -141,7 +146,7 @@ function isStockMovementFormDraftEmpty(draft: StockMovementFormDraft): boolean {
 export const StockMovementForm: React.FC = () => {
   const location = useLocation();
   const navigate = useTenantNavigate();
-  const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const { printDocument } = usePrintEngine();
   const { openModal } = useGlobalModalManager();
   const {
     scoped,
@@ -173,6 +178,7 @@ export const StockMovementForm: React.FC = () => {
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
+  const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
 
   const initialSearch = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const initialMovement = initialSearch.get('movementType');
@@ -208,13 +214,7 @@ export const StockMovementForm: React.FC = () => {
   const [previewData, setPreviewData] = useState<StockTransferPrintData | null>(null);
   const [showPrintPreview, setShowPrintPreview] = useState(false);
 
-  const transferPrintRef = useRef<HTMLDivElement>(null);
   const transferShareCardRef = useRef<HTMLDivElement>(null);
-  const handleTransferPrint = useManagedPrint({
-    contentRef: transferPrintRef,
-    printSettings: printTemplate,
-    documentTitle: 'stock-transfer',
-  });
 
   const draftValue = useMemo<StockMovementFormDraft>(
     () => ({
@@ -323,10 +323,15 @@ export const StockMovementForm: React.FC = () => {
   const loadBalancesForWarehouse = useCallback(async (whId: string) => {
     if (!whId) {
       setBalances([]);
+      setLocationBalances([]);
       return;
     }
-    const bals = await stockService.getBalances(whId);
+    const [bals, locBals] = await Promise.all([
+      stockService.getBalances(whId),
+      stockService.getLocationBalances({ warehouseId: whId }).catch(() => [] as StockLocationBalance[]),
+    ]);
     setBalances(bals);
+    setLocationBalances(locBals);
   }, []);
 
   useEffect(() => {
@@ -509,7 +514,12 @@ export const StockMovementForm: React.FC = () => {
         INVENTORY_STOCK_MOVE_PATHS.movementsForm,
       );
   const inactiveRackIds = useMemo(
-    () => new Set(warehouseRacks.filter((rack) => rack.isActive === false).map((rack) => rack.id).filter(Boolean)),
+    () => new Set(
+      warehouseRacks
+        .filter((rack) => rack.isActive === false)
+        .map((rack) => rack.id)
+        .filter((id): id is string => Boolean(id)),
+    ),
     [warehouseRacks],
   );
   const locationSelectOptions = useMemo(
@@ -648,15 +658,53 @@ export const StockMovementForm: React.FC = () => {
     return resolveComponentStockIdentity(component, balances, effectiveWarehouseId, movement);
   };
 
+  const getLineLocationOptions = useCallback(
+    (lineItemId: string): VoucherLocationSelectOption[] => {
+      if (!usesLineLocations || !effectiveWarehouseId) return [];
+      const identity = lineItemId
+        ? resolveLineStockIdentity(lineItemId, movementType === 'OUT' ? 'OUT' : 'IN')
+        : null;
+      return buildVoucherLineLocationOptions({
+        locations: warehouseLocations,
+        locationBalances,
+        warehouseId: effectiveWarehouseId,
+        itemId: identity?.itemId || lineItemId,
+        itemType: identity?.itemType,
+        movementType: movementType === 'OUT' ? 'OUT' : 'IN',
+        inactiveRackIds,
+      });
+    },
+    // resolveLineStockIdentity is recreated each render from stable deps below
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      usesLineLocations,
+      effectiveWarehouseId,
+      warehouseLocations,
+      locationBalances,
+      movementType,
+      inactiveRackIds,
+      balances,
+      componentById,
+      itemType,
+    ],
+  );
+
   const resolvePreferredLineLocation = (itemIdValue: string, currentLocationId?: string) => {
-    const current = String(currentLocationId || '').trim();
-    if (current) return current;
     if (!itemIdValue) return '';
+    const options = getLineLocationOptions(itemIdValue);
     const identity = resolveLineStockIdentity(itemIdValue, movementType === 'OUT' ? 'OUT' : 'IN');
     const linked = defaultLocationsByKey.get(
       defaultItemLocationKey(identity.itemType, identity.itemId),
     );
-    return String(linked?.locationId || '').trim();
+    const preferredDefault = String(linked?.locationId || '').trim();
+    const current = String(currentLocationId || '').trim();
+    if (current && options.some((opt) => opt.value === current)) {
+      return current;
+    }
+    return pickPreferredVoucherLocationId({
+      options,
+      preferredLocationId: preferredDefault,
+    });
   };
 
   const lineQuantityInPieces = (line: TransferLine) =>
@@ -746,21 +794,14 @@ export const StockMovementForm: React.FC = () => {
     createdBy: userDisplayName || 'Current User',
   });
 
-  const printDocument = async (fileName: string) => {
-    if (!transferPrintRef.current) return;
-    if (isMobilePrint) {
-      await exportToPDF(transferPrintRef.current, fileName, {
-        paperSize: printTemplate?.paperSize,
-        orientation: printTemplate?.orientation,
-        copies: 1,
-      });
-      return;
-    }
-    handleTransferPrint();
-  };
-
-  const printTransfer = async (fileName: string) => {
-    await printDocument(fileName);
+  const printVoucher = (data: StockTransferPrintData, fileName: string) => {
+    printDocument({
+      documentTitle: fileName,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <StockTransferPrint ref={ref} data={data} printSettings={printTemplate} />
+      ),
+    });
   };
 
   const handleSubmit = async (afterSaveAction: 'none' | 'print' | 'preview' | 'share' = 'none') => {
@@ -972,6 +1013,28 @@ export const StockMovementForm: React.FC = () => {
             return;
           }
           const lineLocationId = String(line.locationId || locationId || '').trim();
+          if (usesLineLocations && movementType === 'OUT' && lineLocationId) {
+            const locQty = getLocationBalanceQty({
+              locationBalances,
+              warehouseId: effectiveWarehouseId,
+              locationId: lineLocationId,
+              itemId: stockIdentity.itemId,
+              itemType: stockIdentity.itemType,
+            });
+            // Sum other lines on the same shelf+item so we don't over-issue from one location.
+            const otherOnSameShelf = transferItems
+              .filter((x) => x.id !== line.id
+                && String(x.itemId) === String(line.itemId)
+                && String(x.locationId || '').trim() === lineLocationId)
+              .reduce((sum, x) => sum + lineQuantityInPieces(x), 0);
+            if (qty + otherOnSameShelf > locQty) {
+              const code = warehouseLocations.find((loc) => loc.id === lineLocationId)?.code || lineLocationId;
+              toast.error(
+                `الكمية تتجاوز رصيد الرف "${code}" للصنف "${item.name}" (متاح على الرف: ${locQty}).`,
+              );
+              return;
+            }
+          }
           const lineLocation = warehouseLocations.find((loc) => loc.id === lineLocationId);
           prepared.push({
             line,
@@ -1155,10 +1218,7 @@ export const StockMovementForm: React.FC = () => {
           }
           setTimeout(() => setPrintData(null), 1200);
         } else {
-          setPrintData(printPayload);
-          await new Promise((r) => setTimeout(r, 250));
-          await printTransfer(`${printFilePrefix}-${printPayload.transferNo}`);
-          setTimeout(() => setPrintData(null), 1200);
+          printVoucher(printPayload, `${printFilePrefix}-${printPayload.transferNo}`);
         }
       }
       return;
@@ -1178,10 +1238,7 @@ export const StockMovementForm: React.FC = () => {
         : previewData.toWarehouseName?.includes('وارد')
           ? 'اذن-وارد'
           : 'اذن';
-    setPrintData(previewData);
-    await new Promise((r) => setTimeout(r, 250));
-    await printTransfer(`${prefix}-${previewData.transferNo}`);
-    setTimeout(() => setPrintData(null), 1200);
+    printVoucher(previewData, `${prefix}-${previewData.transferNo}`);
   };
 
   const handlePreviewWithoutSave = () => {
@@ -1266,6 +1323,65 @@ export const StockMovementForm: React.FC = () => {
       lineQtyInputRefs.current[lineIndex]?.focus();
       lineQtyInputRefs.current[lineIndex]?.select?.();
     }, 0);
+  };
+
+  type LineGridField = 'item' | 'location' | 'qty';
+
+  const lineGridFields = useCallback(
+    (hasLocations: boolean): LineGridField[] =>
+      hasLocations ? ['item', 'location', 'qty'] : ['item', 'qty'],
+    [],
+  );
+
+  /** Arrow navigation between voucher cells when dropdowns are closed. Returns true if handled. */
+  const handleLineGridKeyDown = (
+    e: React.KeyboardEvent,
+    lineIndex: number,
+    field: LineGridField,
+  ): boolean => {
+    if (movementType !== 'IN' && movementType !== 'OUT') return false;
+    const key = e.key;
+    if (key !== 'ArrowLeft' && key !== 'ArrowRight' && key !== 'ArrowUp' && key !== 'ArrowDown') {
+      return false;
+    }
+    // Let open listboxes keep their own arrow behavior.
+    const target = e.target as HTMLElement | null;
+    if (target?.getAttribute('aria-expanded') === 'true') return false;
+    if (target?.closest('[role="listbox"]')) return false;
+
+    const fields = lineGridFields(usesLineLocations);
+    const fieldIdx = fields.indexOf(field);
+    if (fieldIdx < 0) return false;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (key === 'ArrowUp') {
+      if (lineIndex > 0) focusLineField(lineIndex - 1, field);
+      return true;
+    }
+    if (key === 'ArrowDown') {
+      if (lineIndex < transferItems.length - 1) focusLineField(lineIndex + 1, field);
+      else if (field === 'qty') handleQtyEnterOnLine(lineIndex);
+      return true;
+    }
+
+    // RTL: ArrowRight → previous field, ArrowLeft → next field
+    const step = key === 'ArrowLeft' ? 1 : -1;
+    const nextFieldIdx = fieldIdx + step;
+    if (nextFieldIdx >= 0 && nextFieldIdx < fields.length) {
+      focusLineField(lineIndex, fields[nextFieldIdx]!);
+      return true;
+    }
+    if (step > 0 && lineIndex < transferItems.length - 1) {
+      focusLineField(lineIndex + 1, fields[0]!);
+      return true;
+    }
+    if (step < 0 && lineIndex > 0) {
+      focusLineField(lineIndex - 1, fields[fields.length - 1]!);
+      return true;
+    }
+    return true;
   };
 
   const addVoucherLine = (focusNew = true) => {
@@ -1709,7 +1825,10 @@ export const StockMovementForm: React.FC = () => {
                   const desktopCols = itemType === 'finished_good'
                     ? (usesLineLocations ? '36px 1fr 120px 160px 110px 40px' : '36px 1fr 120px 110px 40px')
                     : (usesLineLocations ? '36px 1fr 170px 110px 40px' : '36px 1fr 110px 40px');
-                  const useCombobox = isVoucherMode;
+                  const useCombobox = isVoucherMode || movementType === 'TRANSFER';
+                  const lineLocationOptions = usesLineLocations
+                    ? (line.itemId ? getLineLocationOptions(line.itemId) : locationSelectOptions.map((o) => ({ ...o, quantity: 0 })))
+                    : [];
                   const lineReady = Boolean(
                     line.itemId
                     && Number(line.quantity || 0) > 0
@@ -1754,6 +1873,7 @@ export const StockMovementForm: React.FC = () => {
                                 )
                               }
                               onSelected={(value) => handleItemSelectedOnLine(idx, value)}
+                              onGridKeyDown={(e) => handleLineGridKeyDown(e, idx, 'item')}
                               placeholder="ابحث بالاسم أو امسح الكود"
                               disabled={saving}
                             />
@@ -1774,6 +1894,7 @@ export const StockMovementForm: React.FC = () => {
                                   ),
                                 )
                               }
+                              onKeyDown={(e) => handleLineGridKeyDown(e, idx, 'item')}
                               placeholder="ابحث واختر الصنف"
                             />
                           )}
@@ -1811,9 +1932,9 @@ export const StockMovementForm: React.FC = () => {
                               ref={(el) => {
                                 lineLocationTriggerRefs.current[idx] = el;
                               }}
-                              options={locationSelectOptions}
+                              options={lineLocationOptions}
                               value={line.locationId || ''}
-                              disabled={saving}
+                              disabled={saving || !line.itemId}
                               openOnFocus
                               onChange={(value) => {
                                 setTransferItems((prev) =>
@@ -1821,7 +1942,8 @@ export const StockMovementForm: React.FC = () => {
                                 );
                                 if (value) focusLineField(idx, 'qty');
                               }}
-                              placeholder="اختر الرف"
+                              onKeyDown={(e) => handleLineGridKeyDown(e, idx, 'location')}
+                              placeholder={line.itemId ? (lineLocationOptions.length ? 'اختر الرف' : 'لا يوجد رصيد على رف') : 'اختر الصنف أولاً'}
                             />
                           </div>
                         ) : null}
@@ -1846,6 +1968,7 @@ export const StockMovementForm: React.FC = () => {
                               )
                             }
                             onKeyDown={(e) => {
+                              if (handleLineGridKeyDown(e, idx, 'qty')) return;
                               if (e.key === 'Enter' && useCombobox) {
                                 e.preventDefault();
                                 handleQtyEnterOnLine(idx);
@@ -1909,6 +2032,7 @@ export const StockMovementForm: React.FC = () => {
                                 )
                               }
                               onSelected={(value) => handleItemSelectedOnLine(idx, value)}
+                              onGridKeyDown={(e) => handleLineGridKeyDown(e, idx, 'item')}
                               placeholder="ابحث بالاسم أو امسح الكود"
                               disabled={saving}
                             />
@@ -1929,6 +2053,7 @@ export const StockMovementForm: React.FC = () => {
                                   ),
                                 )
                               }
+                              onKeyDown={(e) => handleLineGridKeyDown(e, idx, 'item')}
                               placeholder="ابحث واختر الصنف"
                             />
                           )}
@@ -1948,9 +2073,9 @@ export const StockMovementForm: React.FC = () => {
                           <div>
                             <span className={labelClass}>الرف</span>
                             <SearchableSelect
-                              options={locationSelectOptions}
+                              options={lineLocationOptions}
                               value={line.locationId || ''}
-                              disabled={saving}
+                              disabled={saving || !line.itemId}
                               openOnFocus
                               onChange={(value) => {
                                 setTransferItems((prev) =>
@@ -1958,7 +2083,8 @@ export const StockMovementForm: React.FC = () => {
                                 );
                                 if (value) focusLineField(idx, 'qty');
                               }}
-                              placeholder="اختر الرف"
+                              onKeyDown={(e) => handleLineGridKeyDown(e, idx, 'location')}
+                              placeholder={line.itemId ? (lineLocationOptions.length ? 'اختر الرف' : 'لا يوجد رصيد على رف') : 'اختر الصنف أولاً'}
                             />
                           </div>
                         ) : null}
@@ -1993,6 +2119,7 @@ export const StockMovementForm: React.FC = () => {
                                 )
                               }
                               onKeyDown={(e) => {
+                                if (handleLineGridKeyDown(e, idx, 'qty')) return;
                                 if (e.key === 'Enter' && useCombobox) {
                                   e.preventDefault();
                                   handleQtyEnterOnLine(idx);
@@ -2074,10 +2201,6 @@ export const StockMovementForm: React.FC = () => {
       </div>
       </OpsDashPanel>
 
-      {/* Hidden print component */}
-      <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
-        <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
-      </div>
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl', minWidth: 640, width: 'max-content' }}>
         <StockTransferShareCard
           ref={transferShareCardRef}

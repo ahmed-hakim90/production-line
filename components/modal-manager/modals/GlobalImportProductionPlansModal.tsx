@@ -16,6 +16,8 @@ import {
   PRODUCTION_PLAN_OPERATION_KEYS,
   isOperationPathEnabled,
 } from '../../../modules/system/lib/operationPathSettings';
+import { useJobsStore } from '../../background-jobs/useJobsStore';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 export const GlobalImportProductionPlansModal: React.FC = () => {
   const { t } = useTranslation();
@@ -27,6 +29,12 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   const lines = useAppStore((s) => s._rawLines);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
   const importPathEnabled = isOperationPathEnabled(
     systemSettings,
     PRODUCTION_PLAN_OPERATION_KEYS.create,
@@ -35,9 +43,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ProductionPlanImportResult | null>(null);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [message, setMessage] = useState<string | null>(null);
 
   const validRows = useMemo(
@@ -49,10 +55,8 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   if (!can('import') || !can('plans.create') || !importPathEnabled) return null;
 
   const handleClose = () => {
-    if (saving) return;
     setResult(null);
     setMessage(null);
-    setProgress({ done: 0, total: 0 });
     close();
   };
 
@@ -73,74 +77,100 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (!uid) {
       setMessage(t('modalManager.importProductionPlans.cannotImportWithoutActiveUser'));
       return;
     }
     if (validRows.length === 0) return;
-    setSaving(true);
+
+    const rowsToImport = [...validRows];
+    const actorUid = uid;
+    const jobId = addJob({
+      fileName: 'production-plans-import.xlsx',
+      jobType: 'Production Plans Import',
+      totalRows: rowsToImport.length,
+      startedBy: userDisplayName || 'Current User',
+    });
+    startJob(jobId, 'Saving to database...');
+    setResult(null);
     setMessage(null);
-    setProgress({ done: 0, total: validRows.length });
+    close();
+    showAppToast('success', 'بدأ استيراد خطط الإنتاج في الخلفية.');
 
-    let done = 0;
-    let failed = 0;
-    for (const row of validRows) {
-      try {
-        const product = products.find((p) => p.id === row.productId);
-        const productDailyRate = Number(product?.avgDailyProduction || 0);
-        const useOperationalPeriod = planSettings.useOperationalPeriodDailyTarget !== false;
-        const operationalCalc = useOperationalPeriod
-          ? calculateOperationalPeriodDailyTarget({
-              plannedQuantity: row.plannedQuantity,
-              anchorDate: row.startDate,
-              startDay: planSettings.operationalMonthStartDay,
-            })
-          : { dailyTarget: 0, workingDays: 0, period: null as null };
-        const dailyRate = operationalCalc.dailyTarget > 0
-          ? operationalCalc.dailyTarget
-          : productDailyRate;
-        const estimatedDays = operationalCalc.dailyTarget > 0
-          ? operationalCalc.workingDays
-          : calculateEstimatedDays(row.plannedQuantity, dailyRate);
-        const plannedEndDate = operationalCalc.period
-          ? operationalCalc.period.endDateInclusive
-          : estimatedDays > 0
-            ? addDaysToDate(row.startDate, estimatedDays)
-            : '';
-        const avgDailyTarget = dailyRate > 0 ? Math.ceil(dailyRate) : 0;
+    void (async () => {
+      let done = 0;
+      let failed = 0;
+      for (const row of rowsToImport) {
+        try {
+          const product = products.find((p) => p.id === row.productId);
+          const productDailyRate = Number(product?.avgDailyProduction || 0);
+          const useOperationalPeriod = planSettings.useOperationalPeriodDailyTarget !== false;
+          const operationalCalc = useOperationalPeriod
+            ? calculateOperationalPeriodDailyTarget({
+                plannedQuantity: row.plannedQuantity,
+                anchorDate: row.startDate,
+                startDay: planSettings.operationalMonthStartDay,
+              })
+            : { dailyTarget: 0, workingDays: 0, period: null as null };
+          const dailyRate = operationalCalc.dailyTarget > 0
+            ? operationalCalc.dailyTarget
+            : productDailyRate;
+          const estimatedDays = operationalCalc.dailyTarget > 0
+            ? operationalCalc.workingDays
+            : calculateEstimatedDays(row.plannedQuantity, dailyRate);
+          const plannedEndDate = operationalCalc.period
+            ? operationalCalc.period.endDateInclusive
+            : estimatedDays > 0
+              ? addDaysToDate(row.startDate, estimatedDays)
+              : '';
+          const avgDailyTarget = dailyRate > 0 ? Math.ceil(dailyRate) : 0;
 
-        await createProductionPlan({
-          productId: row.productId,
-          ...(row.lineId ? { lineId: row.lineId } : {}),
-          plannedQuantity: row.plannedQuantity,
-          producedQuantity: 0,
-          startDate: row.startDate,
-          plannedStartDate: row.startDate,
-          plannedEndDate,
-          estimatedDurationDays: estimatedDays,
-          avgDailyTarget,
-          priority: row.priority,
-          estimatedCost: 0,
-          actualCost: 0,
-          status: 'planned',
-          createdBy: uid,
-        }, { path: PRODUCTION_PLAN_CREATE_PATHS.globalImport });
-      } catch {
-        failed += 1;
-      } finally {
-        done += 1;
-        setProgress({ done, total: validRows.length });
+          const created = await createProductionPlan({
+            productId: row.productId,
+            ...(row.lineId ? { lineId: row.lineId } : {}),
+            plannedQuantity: row.plannedQuantity,
+            producedQuantity: 0,
+            startDate: row.startDate,
+            plannedStartDate: row.startDate,
+            plannedEndDate,
+            estimatedDurationDays: estimatedDays,
+            avgDailyTarget,
+            priority: row.priority,
+            estimatedCost: 0,
+            actualCost: 0,
+            status: 'planned',
+            createdBy: actorUid,
+          }, { path: PRODUCTION_PLAN_CREATE_PATHS.globalImport });
+          if (!created) failed += 1;
+        } catch {
+          failed += 1;
+        } finally {
+          done += 1;
+          setJobProgress(jobId, {
+            processedRows: done,
+            totalRows: rowsToImport.length,
+            statusText: 'Saving to database...',
+            status: 'processing',
+          });
+        }
       }
-    }
 
-    if (failed === 0) {
-      setMessage(t('modalManager.importProductionPlans.importSuccess', { done }));
-      setResult(null);
-    } else {
-      setMessage(t('modalManager.importProductionPlans.importPartial', { success: done - failed, failed }));
-    }
-    setSaving(false);
+      const addedRows = Math.max(0, done - failed);
+      if (addedRows === 0 && failed > 0) {
+        failJob(
+          jobId,
+          t('modalManager.importProductionPlans.importPartial', { success: 0, failed }),
+          'Failed',
+        );
+      } else {
+        completeJob(jobId, {
+          addedRows,
+          failedRows: failed,
+          statusText: 'Completed',
+        });
+      }
+    })();
   };
 
   return (
@@ -182,7 +212,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
           />
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={parsing || saving}>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={parsing}>
               {parsing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
               {t('modalManager.importProductionPlans.chooseFile')}
             </Button>
@@ -235,18 +265,6 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
             </div>
           )}
 
-          {saving && (
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-300"
-                  style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
-                />
-              </div>
-              <span className="text-sm font-bold text-primary shrink-0">{progress.done}/{progress.total}</span>
-            </div>
-          )}
-
           {message && (
             <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/80 px-3 py-2 text-xs font-bold text-[rgb(var(--color-warning))]">
               {message}
@@ -255,9 +273,8 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
         </div>
 
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose} disabled={saving} iconName="close" tone="neutral">{t('ui.close')}</Button>
-          <Button variant="primary" onClick={handleSave} disabled={saving || validRows.length === 0}>
-            {saving && <Loader2 size={14} className="animate-spin" />}
+          <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.close')}</Button>
+          <Button variant="primary" onClick={handleSave} disabled={validRows.length === 0}>
             <Save size={14} />
             {t('modalManager.importProductionPlans.savePlans', { count: validRows.length })}
           </Button>

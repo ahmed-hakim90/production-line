@@ -42,7 +42,8 @@ function tx(partial: Partial<StockTransaction> & Pick<StockTransaction, 'id' | '
     warehouseName: 'مركزي',
     spareContext: true,
   });
-  assert.equal(printData.statusLabel, 'إذن إضافة');
+  assert.equal(printData.statusLabel, 'إذن إضافة قطع غيار');
+  assert.equal(printData.documentType, 'إذن إضافة قطع غيار');
   assert.equal(printData.items?.length, 2);
 }
 
@@ -55,7 +56,8 @@ function tx(partial: Partial<StockTransaction> & Pick<StockTransaction, 'id' | '
   assert.equal(feed[0]?.kind, 'voucher');
 }
 
-assert.equal(voucherMovementTitle('IN', true), 'إذن إضافة');
+assert.equal(voucherMovementTitle('IN', true), 'إذن إضافة قطع غيار');
+assert.equal(voucherMovementTitle('IN', false), 'إذن إضافة');
 assert.equal(voucherPrintFilePrefix('IN', true), 'اذن-اضافة');
 assert.equal(isRepairStockSource('repair_spare_issue'), true);
 assert.equal(isRepairStockSource('production_issue'), false);

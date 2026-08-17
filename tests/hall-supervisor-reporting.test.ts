@@ -171,7 +171,8 @@ assert.match(backgroundSource, /applyProductionReportInventoryInternal/);
 
 const quickDialogSource = readFileSync(new URL('../modules/dashboards/components/SupervisorWorkOrderQuickReportDialog.tsx', import.meta.url), 'utf8');
 assert.match(quickDialogSource, /queueReportCreate\(payload/);
-assert.match(quickDialogSource, /تمت إضافة التقرير للجدول وجارٍ تأكيد حفظه/);
+assert.match(quickDialogSource, /REPORT_SAVE_PENDING_MESSAGE/);
+assert.match(quickDialogSource, /retryQueuedReportCreate|إعادة المحاولة من الجدول/);
 assert.doesNotMatch(quickDialogSource, /await createReport\(payload/);
 
 const dailyPanelSource = readFileSync(new URL('../modules/dashboards/components/SupervisorDailyReportsPanel.tsx', import.meta.url), 'utf8');

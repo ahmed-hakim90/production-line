@@ -588,7 +588,6 @@ export const ProductionIssueRequests: React.FC = () => {
         createdBy: uid,
       }, { path: PRODUCTION_PLAN_CREATE_PATHS.productionIssueRequests });
       setPlanModalOpen(false);
-      await fetchProductionPlans();
       if (planId) {
         setSourceKind('production_plan');
         setSourceId(planId);

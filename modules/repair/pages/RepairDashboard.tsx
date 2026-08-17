@@ -21,7 +21,7 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { sumManufacturerWarrantyPartsCost } from '../lib/repairManufacturerWarranty';
+import { isFullManufacturerWarrantyJob, sumManufacturerWarrantyPartsCost } from '../lib/repairManufacturerWarranty';
 import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { repairBranchService } from '../services/repairBranchService';
 import {
@@ -276,6 +276,8 @@ const RepairOperationalDashboard: React.FC = () => {
     return !isDeliveredStatus(status) && !isUnrepairableStatus(status) && !isCancelledStatus(status);
   }).length;
   const waitingCustomerCount = jobs.filter((job) => {
+    if (isFullManufacturerWarrantyJob(job)) return false;
+    if (String(job.approvalStatus || '') === 'not_required') return false;
     const status = mapLegacyRepairStatus(job.status);
     return status === 'estimate_ready' || status === 'waiting_approval';
   }).length;

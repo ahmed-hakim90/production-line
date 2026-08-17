@@ -200,11 +200,9 @@ export const Customers: React.FC = () => {
       rangeLabel="ماستر بيانات العملاء (مستهلك / تاجر) — المرجع لكل الموديولات"
       actions={(
         <div className="flex flex-wrap gap-2">
-          {canEdit && (
-            <Button type="button" variant="outline" asChild>
-              <Link to={withTenantPath(tenantSlug, '/customers/repair-link')}>ربط طلبات الصيانة</Link>
-            </Button>
-          )}
+          <Button type="button" variant="outline" asChild>
+            <Link to={withTenantPath(tenantSlug, '/customers/kpi')}>لوحة العملاء</Link>
+          </Button>
           {canImport && (
             <>
               <Button type="button" variant="outline" onClick={() => downloadCustomersTemplate()}>

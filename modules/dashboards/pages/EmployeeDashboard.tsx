@@ -1,11 +1,10 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../production/components/ProductionReportPrint';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
-import { commitAndPrint, useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import { ShiftLifecyclePanel } from '../../../components/EmployeeDashboardWidget';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';

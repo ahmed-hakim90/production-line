@@ -158,13 +158,18 @@ export function resolveNextStatusForAction(input) {
             return null;
         return targetId;
     };
+    const afterCustomerGate = () => (input.waitsForParts ? (pick('awaiting_parts') || pick('in_repair')) : pick('in_repair'));
     switch (input.action) {
         case 'diagnosis_saved': {
             if (!input.hasDiagnosis)
                 return null;
             // Diagnosis text saved → تم الفحص. With part/service already on the job,
             // advance straight to estimate review (still may pass through diagnosed if estimate role missing).
+            // Full warranty skips pricing approval and starts repair (or waits for parts).
             if (input.hasServiceOrPartSignal) {
+                if (input.skipCustomerApproval) {
+                    return afterCustomerGate() || pick('estimate_review') || pick('diagnosis');
+                }
                 return pick('estimate_review') || pick('diagnosis');
             }
             return pick('diagnosis');
@@ -180,7 +185,13 @@ export function resolveNextStatusForAction(input) {
                         return null;
                     return targetId;
                 }
+                if (input.skipCustomerApproval && currentRole === 'awaiting_customer') {
+                    return pick('in_repair');
+                }
                 return null;
+            }
+            if (input.skipCustomerApproval) {
+                return afterCustomerGate() || pick('estimate_review');
             }
             return pick('estimate_review');
         }
@@ -193,9 +204,14 @@ export function resolveNextStatusForAction(input) {
                 return pick('in_repair');
             return null;
         case 'repair_done': {
+            const warrantyMayFinish = Boolean(input.skipCustomerApproval)
+                && (currentRole === 'estimate_review'
+                    || currentRole === 'awaiting_customer'
+                    || currentRole === 'diagnosis');
             if (currentRole !== 'in_repair'
                 && currentRole !== 'awaiting_parts'
-                && currentRole !== 'none') {
+                && currentRole !== 'none'
+                && !warrantyMayFinish) {
                 return null;
             }
             if (currentRole === 'awaiting_parts' && input.waitsForParts)

@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
+import { AlertCircle, Loader2, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { estimateReportCost } from '../../../utils/costCalculations';
@@ -24,6 +26,7 @@ import {
 import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import { ProductionLineStatus } from '../../../types';
 import { PLAN_STATUS_SORT_RANK } from '../../../modules/production/utils/productionPlanReports';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 const LINKABLE_PLAN_STATUSES = new Set(['planned', 'in_progress', 'paused']);
 const PLAN_STATUS_LABEL: Record<string, string> = {
@@ -105,7 +108,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [injectionComponents, setInjectionComponents] = useState<InjectionComponentOption[]>([]);
   const canCreateFinishedWorkOrders = can('workOrders.create');
@@ -144,12 +146,28 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       return injectionComponents.map((m) => ({
         value: m.id,
         label: m.code ? `${m.name} (${m.code})` : m.name,
+        name: m.name,
+        code: m.code,
+        barcode: m.barcode,
+        stockItemType: 'material' as const,
       }));
     }
     return filterProductionProducts(products)
       .filter((p) => Boolean(p.id))
-      .map((p) => ({ value: p.id!, label: `${p.name} (${p.code})` }));
+      .map((p) => ({
+        value: p.id!,
+        label: `${p.name} (${p.code})`,
+        name: p.name,
+        code: p.code,
+        barcode: p.barcode,
+        stockItemType: 'finished_good' as const,
+      }));
   }, [form.workOrderType, injectionComponents, products]);
+
+  const selectableProductPicker = useMemo(
+    () => buildCodeVoucherPicker(selectableProductOptions),
+    [selectableProductOptions],
+  );
 
   const injectionLineIds = useMemo(() => {
     const ids = new Set<string>();
@@ -297,7 +315,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       };
       setForm(prefilled);
       setError(null);
-      setMessage(null);
       return;
     }
 
@@ -305,7 +322,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     let cancelled = false;
     setLoadingEdit(true);
     setError(null);
-    setMessage(null);
 
     void workOrderService.getById(workOrderId).then((wo) => {
       if (cancelled) return;
@@ -376,7 +392,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
 
   const handleClose = () => {
     if (saving) return;
-    setMessage(null);
     setError(null);
     close();
   };
@@ -395,7 +410,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       return;
     }
     setSaving(true);
-    setMessage(null);
     setError(null);
     try {
       if (isEditMode && editingId) {
@@ -416,51 +430,56 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
           ...(form.planId ? { planId: form.planId } : {}),
         }, { path: WORK_ORDER_UPDATE_PATHS.workOrderModal });
-        setMessage(t('modalManager.createWorkOrder.editSuccess'));
-      } else {
-        const woNumber = await workOrderService.generateNextNumber();
-        const est = estimateReportCost(
-          form.maxWorkers,
-          form.workHours,
-          form.quantity,
-          laborSettings?.hourlyRate ?? 0,
-          employees.find((e) => e.id === form.supervisorId)?.hourlyRate ?? 0,
-          form.lineId,
-          form.targetDate,
-          costCenters,
-          costCenterValues,
-          costAllocations,
-        );
-        const createdId = await createWorkOrder({
-          workOrderNumber: woNumber,
-          ...(form.planId ? { planId: form.planId } : {}),
-          workOrderType: form.workOrderType,
-          productId: form.productId,
-          lineId: form.lineId,
-          supervisorId: form.supervisorId,
-          quantity: form.quantity,
-          producedQuantity: 0,
-          maxWorkers: form.maxWorkers,
-          workHours: form.workHours,
-          startDate: form.startDate,
-          targetDate: form.targetDate,
-          estimatedDurationDays: form.durationDays,
-          estimatedCost: est.totalCost,
-          actualCost: 0,
-          status: 'pending',
-          notes: form.notes,
-          breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
-          breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
-          workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
-          createdBy: uid || '',
-        }, { path: createEntryPath });
-        if (!createdId) throw new Error('Failed create');
-        setMessage(t('modalManager.createWorkOrder.createSuccess'));
+        showAppToast('success', t('modalManager.createWorkOrder.editSuccess'));
         setForm(emptyForm());
+        setSaving(false);
+        close();
+        return;
       }
+      const woNumber = '';
+      const est = estimateReportCost(
+        form.maxWorkers,
+        form.workHours,
+        form.quantity,
+        laborSettings?.hourlyRate ?? 0,
+        employees.find((e) => e.id === form.supervisorId)?.hourlyRate ?? 0,
+        form.lineId,
+        form.targetDate,
+        costCenters,
+        costCenterValues,
+        costAllocations,
+      );
+      const createdId = await createWorkOrder({
+        workOrderNumber: woNumber,
+        ...(form.planId ? { planId: form.planId } : {}),
+        workOrderType: form.workOrderType,
+        productId: form.productId,
+        lineId: form.lineId,
+        supervisorId: form.supervisorId,
+        quantity: form.quantity,
+        producedQuantity: 0,
+        maxWorkers: form.maxWorkers,
+        workHours: form.workHours,
+        startDate: form.startDate,
+        targetDate: form.targetDate,
+        estimatedDurationDays: form.durationDays,
+        estimatedCost: est.totalCost,
+        actualCost: 0,
+        status: 'pending',
+        notes: form.notes,
+        breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
+        breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
+        workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
+        createdBy: uid || '',
+      }, { path: createEntryPath });
+      if (!createdId) throw new Error('Failed create');
+      showAppToast('success', t('modalManager.createWorkOrder.createSuccess'));
+      setForm(emptyForm());
+      setSaving(false);
+      close();
     } catch {
+      showAppToast('error', isEditMode ? t('modalManager.createWorkOrder.editError') : t('modalManager.createWorkOrder.createError'));
       setError(isEditMode ? t('modalManager.createWorkOrder.editError') : t('modalManager.createWorkOrder.createError'));
-    } finally {
       setSaving(false);
     }
   };
@@ -485,12 +504,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[var(--border-radius-lg)] bg-[var(--color-card)]/80 backdrop-blur-[2px]">
               <Loader2 size={28} className="animate-spin text-primary" aria-hidden />
               <span className="sr-only">{t('modalManager.createWorkOrder.loadingOrderData')}</span>
-            </div>
-          )}
-          {message && (
-            <div className="erp-alert erp-alert-success">
-              <CheckCircle2 size={16} className="text-[rgb(var(--color-success))]" />
-              <p className="text-sm font-bold text-[rgb(var(--color-success))] flex-1">{message}</p>
             </div>
           )}
           {error && (
@@ -594,13 +607,14 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                     ? 'مكون الحقن *'
                     : t('modalManager.createWorkOrder.productRequired')}
                 </label>
-                <SearchableSelect
-                  options={selectableProductOptions}
+                <VoucherItemCombobox
+                  options={selectableProductPicker.options}
+                  catalog={selectableProductPicker.catalog}
                   value={form.productId}
                   onChange={(value) => setForm((f) => ({ ...f, productId: value }))}
                   placeholder={
                     form.workOrderType === 'component_injection'
-                      ? 'ابحث واختر مكون الحقن...'
+                      ? 'ابحث أو امسح كود مكون الحقن'
                       : t('modalManager.createWorkOrder.searchAndSelectProduct')
                   }
                   className="bg-[var(--color-card)]"

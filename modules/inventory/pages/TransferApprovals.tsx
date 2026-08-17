@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
@@ -19,9 +19,8 @@ import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { StockTransferPrint, type StockTransferPrintData } from '../components/StockTransferPrint';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { toast } from '../../../components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -123,13 +122,7 @@ export const TransferApprovals: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [bulkApproving, setBulkApproving] = useState(false);
   const [processingId, setProcessingId] = useState<string>('');
-  const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
-  const transferPrintRef = useRef<HTMLDivElement>(null);
-  const handleTransferPrint = useManagedPrint({
-    contentRef: transferPrintRef,
-    printSettings: printTemplate,
-    documentTitle: 'pending-transfer-approval',
-  });
+  const { printDocument } = usePrintEngine();
 
   useEffect(() => {
     setWarehouseFilter((prev) =>
@@ -321,11 +314,14 @@ export const TransferApprovals: React.FC = () => {
     }),
   });
 
-  const printRequest = async (row: InventoryTransferRequest) => {
-    setPrintData(buildPrintData(row));
-    await new Promise((r) => setTimeout(r, 250));
-    handleTransferPrint();
-    setTimeout(() => setPrintData(null), 1000);
+  const printRequest = (row: InventoryTransferRequest) => {
+    printDocument({
+      documentTitle: `pending-transfer-${row.referenceNo || row.id}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <StockTransferPrint ref={ref} data={buildPrintData(row)} printSettings={printTemplate} />
+      ),
+    });
   };
 
   const handleApprove = async (requestId?: string) => {
@@ -901,10 +897,6 @@ export const TransferApprovals: React.FC = () => {
           </div>
         )}
       </OpsDashPanel>
-
-      <PrintOffscreenHost>
-        <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
-      </PrintOffscreenHost>
 
     </ModuleOpsPageShell>
   );

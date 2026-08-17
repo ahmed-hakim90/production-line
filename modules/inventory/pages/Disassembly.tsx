@@ -3,6 +3,8 @@ import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPag
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { TableIconAction } from '@/src/components/erp';
 import { Button } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '../lib/materialVoucherPicker';
 import { disassemblyService } from '../services/disassemblyService';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
@@ -42,6 +44,7 @@ export const Disassembly: React.FC = () => {
   } = useMaterialsWarehouseScope();
   const allowedWarehouseIds = useMemo(() => new Set(warehouseIds), [warehouseIds]);
   const products = useAppStore((s) => s.products);
+  const rawProducts = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
   const uid = useAppStore((s) => s.uid);
@@ -151,6 +154,24 @@ export const Disassembly: React.FC = () => {
   const targetWarehouse = warehouses.find((w) => w.id === targetWarehouseId);
   const sourceLocation = sourceLocations.find((loc) => loc.id === sourceLocationId);
 
+  const productPicker = useMemo(() => {
+    const barcodeById = new Map(
+      rawProducts
+        .filter((p) => p.id)
+        .map((p) => [String(p.id), String(p.barcode || '').trim()] as const),
+    );
+    return buildCodeVoucherPicker(
+      products.map((p) => ({
+        value: p.id,
+        label: `${p.name} (${p.code})`,
+        name: p.name,
+        code: p.code,
+        barcode: barcodeById.get(p.id) || undefined,
+        stockItemType: 'finished_good' as const,
+      })),
+    );
+  }, [products, rawProducts]);
+
   const preview = async () => {
     setMessage('');
     try {
@@ -242,10 +263,15 @@ export const Disassembly: React.FC = () => {
 
       <OpsDashPanel title="بيانات التفكيك" accent="inventory">
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3 p-4">
-          <select className="rounded-lg border px-3 py-2 text-sm md:col-span-2" value={productId} onChange={(e) => setProductId(e.target.value)}>
-            <option value="">اختر المنتج</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
-          </select>
+          <div className="md:col-span-2">
+            <VoucherItemCombobox
+              options={productPicker.options}
+              catalog={productPicker.catalog}
+              value={productId}
+              onChange={setProductId}
+              placeholder="ابحث بالاسم أو امسح الباركود"
+            />
+          </div>
           <input className="rounded-lg border px-3 py-2 text-sm" type="number" placeholder="الكمية" value={quantity || ''} onChange={(e) => setQuantity(Number(e.target.value || 0))} />
           <select className="rounded-lg border px-3 py-2 text-sm" value={sourceWarehouseId} disabled={warehouseSelectLocked} onChange={(e) => { setSourceWarehouseId(e.target.value); setSourceLocationId(''); }}>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}

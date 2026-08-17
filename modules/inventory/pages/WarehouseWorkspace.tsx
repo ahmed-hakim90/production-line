@@ -265,7 +265,7 @@ export const WarehouseWorkspace: React.FC = () => {
     || can('sparePartsReplenishment.view')
     || can('inventory.view');
   const canCreateRecall = can('sparePartsRecall.create');
-  const { printWarehouseCount, countSheetHost, printing } = useWarehouseCountSheetPrint();
+  const { printWarehouseCount, printing } = useWarehouseCountSheetPrint();
   const printSettings = useAppStore((s) => s.systemSettings?.printTemplate);
   const [labelEngineOpen, setLabelEngineOpen] = useState(false);
   const [labelEngineSeed, setLabelEngineSeed] = useState<WarehouseLabelEngineSeed>({ mode: 'items' });
@@ -991,7 +991,6 @@ export const WarehouseWorkspace: React.FC = () => {
           onCreated={(sessionId) => void openCreatedCountSession(sessionId)}
         />
       ) : null}
-      {countSheetHost}
       {warehouse.id ? (
         <WarehouseCountSheetPrintModal
           open={printPickerOpen}

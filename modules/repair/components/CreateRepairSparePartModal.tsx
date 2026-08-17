@@ -17,7 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { SearchableSelect } from '@/components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { toast } from '../../../components/Toast';
 import {
   filterCatalogComponentsForSpareParts,
@@ -26,6 +27,7 @@ import {
   type CatalogComponent,
 } from '../../catalog/lib/productComponents';
 import { materialService } from '../../manufacturing/services/materialService';
+import type { Material } from '../../manufacturing/types';
 import { useAppStore } from '../../../store/useAppStore';
 import { sparePartsService } from '../services/sparePartsService';
 import type { RepairSparePart } from '../types';
@@ -71,6 +73,7 @@ export const CreateRepairSparePartModal: React.FC<Props> = ({
   const [busy, setBusy] = useState(false);
   const [catalogComponents, setCatalogComponents] = useState<CatalogComponent[]>([]);
   const [bomComponents, setBomComponents] = useState<CatalogComponent[]>([]);
+  const [materialsById, setMaterialsById] = useState<Map<string, Material>>(new Map());
   const [form, setForm] = useState<FormState>({
     sourceMode: 'all_materials',
     productId: '',
@@ -91,6 +94,16 @@ export const CreateRepairSparePartModal: React.FC<Props> = ({
     void loadSparePartsCatalogMaterials()
       .then(setCatalogComponents)
       .catch(() => setCatalogComponents([]));
+    void materialService.getAll()
+      .then((rows) => {
+        const map = new Map<string, Material>();
+        for (const row of rows) {
+          const id = String(row.id || '').trim();
+          if (id) map.set(id, row);
+        }
+        setMaterialsById(map);
+      })
+      .catch(() => setMaterialsById(new Map()));
   }, [open, defaultMinStock]);
 
   useEffect(() => {
@@ -118,33 +131,45 @@ export const CreateRepairSparePartModal: React.FC<Props> = ({
     return bomComponents;
   }, [bomComponents, catalogComponents, form.sourceMode]);
 
-  const productSelectOptions = useMemo(
+  const productPicker = useMemo(
     () =>
-      products
-        .filter((product) => product.id)
-        .map((product) => ({
-          value: String(product.id),
-          label: [
-            product.name,
-            product.model ? `- ${product.model}` : '',
-            product.code ? `(${product.code})` : '',
-          ]
-            .filter(Boolean)
-            .join(' ')
-            .trim(),
-        })),
+      buildCodeVoucherPicker(
+        products
+          .filter((product) => product.id)
+          .map((product) => ({
+            value: String(product.id),
+            label: [
+              product.name,
+              product.model ? `- ${product.model}` : '',
+              product.code ? `(${product.code})` : '',
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .trim(),
+            name: product.name,
+            code: product.code,
+            barcode: product.barcode,
+            stockItemType: 'finished_good' as const,
+          })),
+      ),
     [products],
   );
 
-  const componentSelectOptions = useMemo(
+  const componentPicker = useMemo(
     () =>
-      selectableComponents.map((material) => ({
-        value: material.materialId,
-        label: material.materialCode
-          ? `${material.materialName} (${material.materialCode})`
-          : material.materialName,
-      })),
-    [selectableComponents],
+      buildCodeVoucherPicker(
+        selectableComponents.map((material) => ({
+          value: material.materialId,
+          label: material.materialCode
+            ? `${material.materialName} (${material.materialCode})`
+            : material.materialName,
+          name: material.materialName,
+          code: material.materialCode,
+          barcode: materialsById.get(material.materialId)?.barcode,
+          stockItemType: 'material' as const,
+        })),
+      ),
+    [selectableComponents, materialsById],
   );
 
   const selectedMaterial = useMemo(
@@ -249,19 +274,21 @@ export const CreateRepairSparePartModal: React.FC<Props> = ({
           {form.sourceMode === 'product_bom' ? (
             <div className="space-y-2">
               <Label>المنتج</Label>
-              <SearchableSelect
-                options={productSelectOptions}
+              <VoucherItemCombobox
+                options={productPicker.options}
+                catalog={productPicker.catalog}
                 value={form.productId}
                 onChange={(value) => setForm((prev) => ({ ...prev, productId: value, materialId: '' }))}
-                placeholder="ابحث واختر المنتج"
+                placeholder="ابحث بالاسم أو امسح الباركود"
               />
             </div>
           ) : null}
 
           <div className="space-y-2">
             <Label>المكون</Label>
-            <SearchableSelect
-              options={componentSelectOptions}
+            <VoucherItemCombobox
+              options={componentPicker.options}
+              catalog={componentPicker.catalog}
               value={form.materialId}
               onChange={applyComponentSelection}
               disabled={form.sourceMode === 'product_bom' && !form.productId}
@@ -270,7 +297,7 @@ export const CreateRepairSparePartModal: React.FC<Props> = ({
                   ? 'اختر المنتج أولًا'
                   : selectableComponents.length === 0
                     ? 'لا توجد مكونات'
-                    : 'ابحث واختر مكونًا'
+                    : 'ابحث بالاسم أو امسح الباركود'
               }
             />
             {selectedMaterial?.materialCode ? (

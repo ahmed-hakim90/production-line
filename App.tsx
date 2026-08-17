@@ -41,6 +41,7 @@ import { auth, onAuthChange } from './services/firebase';
 import { eventBus, registerSystemEventListeners, SystemEvents } from './shared/events';
 import { useTenantTheme } from './core/ui-engine/theme/useTenantTheme';
 import { GlobalModalManagerProvider, useGlobalModalManager } from './components/modal-manager/GlobalModalManager';
+import { PrintEngineProvider } from './utils/print/PrintEngineHost';
 import { MODAL_KEYS } from './components/modal-manager/modalKeys';
 import { ModalHost } from './components/modal-manager/ModalHost';
 import { toast, ToastContainer } from './components/Toast';
@@ -1225,6 +1226,7 @@ const App: React.FC = () => {
 
   return (
     <GlobalModalManagerProvider>
+      <PrintEngineProvider>
       <EnglishDigitsInputGuard />
       <UiDensityBootstrap />
       <AuthUiStateGuard />
@@ -1369,6 +1371,7 @@ const App: React.FC = () => {
         <ToastContainer />
         <div id="erp-modal-root" />
       </BrowserRouter>
+      </PrintEngineProvider>
     </GlobalModalManagerProvider>
   );
 };

@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import {
   Select,
   SelectContent,
@@ -102,7 +104,6 @@ export const RepairReplacements: React.FC = () => {
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState('');
-  const [productSearch, setProductSearch] = useState('');
 
   const [noteAction, setNoteAction] = useState<{ action: NoteAction; row: RepairReplacementRequest } | null>(null);
   const [actionNote, setActionNote] = useState('');
@@ -190,20 +191,28 @@ export const RepairReplacements: React.FC = () => {
     setPage(1);
   }, [search, statusFilter, branchFilter]);
 
-  const filteredProducts = useMemo(() => {
-    const q = productSearch.trim().toLowerCase();
-    if (!q) return products.slice(0, 80);
-    return products
-      .filter((p) => `${p.name} ${p.code}`.toLowerCase().includes(q))
-      .slice(0, 80);
-  }, [products, productSearch]);
+  const productPicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        products
+          .filter((product) => product.id)
+          .map((product) => ({
+            value: String(product.id),
+            label: `${product.name} (${product.code})`,
+            name: product.name,
+            code: product.code,
+            barcode: product.barcode,
+            stockItemType: 'finished_good' as const,
+          })),
+      ),
+    [products],
+  );
 
   const openApprove = (row: RepairReplacementRequest) => {
     setSelected(row);
     setQuantity(Math.max(1, Number(row.requestedQuantity) || 1));
     setProductId('');
     setNote('');
-    setProductSearch('');
     setApproveOpen(true);
   };
 
@@ -543,27 +552,14 @@ export const RepairReplacements: React.FC = () => {
               </div>
             </div>
             <div className="space-y-1">
-              <Label>بحث المنتج البديل</Label>
-              <Input
-                value={productSearch}
-                onChange={(e) => setProductSearch(e.target.value)}
-                placeholder="اسم أو كود المنتج..."
-              />
-            </div>
-            <div className="space-y-1">
               <Label>المنتج الجديد البديل</Label>
-              <Select value={productId} onValueChange={setProductId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="اختر المنتج" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredProducts.map((product) => (
-                    <SelectItem key={product.id} value={String(product.id)}>
-                      {product.name} ({product.code})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <VoucherItemCombobox
+                options={productPicker.options}
+                catalog={productPicker.catalog}
+                value={productId}
+                onChange={setProductId}
+                placeholder="ابحث بالاسم أو امسح الباركود"
+              />
             </div>
             <div className="space-y-1">
               <Label>الكمية</Label>

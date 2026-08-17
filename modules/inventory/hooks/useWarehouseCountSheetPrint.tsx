@@ -1,24 +1,15 @@
-import { useCallback, useRef, useState } from 'react';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
+import { useCallback, useState } from 'react';
 import { toast } from '../../../components/Toast';
 import { useAppStore } from '../../../store/useAppStore';
-import { commitAndPrint, useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { WarehouseCountSheetPrint } from '../components/WarehouseCountSheetPrint';
 import {
   buildCountSheetRowsForScope,
   loadWarehouseCountSheetSource,
-  type WarehouseCountSheetRow,
   type WarehouseCountSheetScope,
 } from '../lib/warehouseCountSheet';
 import { WAREHOUSE_ROLE_LABELS } from '../lib/stockLabels';
 import type { StockItemBalance, WarehouseLocation, WarehouseRack, WarehouseRole } from '../types';
-
-type PrintPayload = {
-  rows: WarehouseCountSheetRow[];
-  warehouseName: string;
-  warehouseRoleLabel: string;
-  scopeLabel: string;
-};
 
 export type PrintWarehouseCountInput = {
   warehouseId: string;
@@ -32,14 +23,8 @@ export type PrintWarehouseCountInput = {
 
 export function useWarehouseCountSheetPrint() {
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
-  const printRef = useRef<HTMLDivElement>(null);
-  const [payload, setPayload] = useState<PrintPayload | null>(null);
+  const { printDocument } = usePrintEngine();
   const [printing, setPrinting] = useState(false);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: 'ورقة جرد مخزن',
-  });
 
   const printWarehouseCount = useCallback(
     async (input: PrintWarehouseCountInput) => {
@@ -81,37 +66,30 @@ export function useWarehouseCountSheetPrint() {
           toast.error('تعذر تجهيز ورقة الجرد لهذا الرف.');
           return;
         }
-        commitAndPrint(() => {
-          setPayload({
-            rows,
-            warehouseName: input.warehouseName || '—',
-            warehouseRoleLabel: input.warehouseRole
-              ? (WAREHOUSE_ROLE_LABELS[input.warehouseRole] || input.warehouseRole)
-              : '—',
-            scopeLabel,
-          });
-        }, handlePrint);
+        printDocument({
+          documentTitle: 'ورقة جرد مخزن',
+          printSettings: printTemplate,
+          render: (ref) => (
+            <WarehouseCountSheetPrint
+              ref={ref}
+              rows={rows}
+              warehouseName={input.warehouseName || '—'}
+              warehouseRoleLabel={input.warehouseRole
+                ? (WAREHOUSE_ROLE_LABELS[input.warehouseRole] || input.warehouseRole)
+                : '—'}
+              scopeLabel={scopeLabel}
+              printSettings={printTemplate}
+            />
+          ),
+        });
       } catch {
         toast.error('تعذر تجهيز ورقة الجرد. حاول مرة أخرى.');
       } finally {
         setPrinting(false);
       }
     },
-    [handlePrint],
+    [printDocument, printTemplate],
   );
 
-  const countSheetHost = (
-    <PrintOffscreenHost>
-      <WarehouseCountSheetPrint
-        ref={printRef}
-        rows={payload?.rows || []}
-        warehouseName={payload?.warehouseName}
-        warehouseRoleLabel={payload?.warehouseRoleLabel}
-        scopeLabel={payload?.scopeLabel}
-        printSettings={printTemplate}
-      />
-    </PrintOffscreenHost>
-  );
-
-  return { printWarehouseCount, countSheetHost, printing };
+  return { printWarehouseCount, printing };
 }

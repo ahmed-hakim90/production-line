@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -28,8 +28,17 @@ import { formatNumber } from '@/utils/calculations';
 import { toast } from 'sonner';
 import { Pencil } from 'lucide-react';
 import { ImportCustomerMetricsModal } from '../components/ImportCustomerMetricsModal';
+import { CustomerBoardRankPanel } from '../components/CustomerBoardRankPanel';
 import type { ParsedCustomerMetricsRow } from '../lib/importCustomerMetricsSheet';
+import {
+  mostFrequentCustomerSizeTier,
+  mostFrequentCustomerType,
+  rankCustomersByDebt,
+  rankCustomersByJobCount,
+  rankCustomersByVolume,
+} from '../lib/customerBoardAnalytics';
 import { customerService } from '../services/customerService';
+import { repairJobService, REPAIR_JOB_LIST_LIMIT } from '@/modules/repair/services/repairJobService';
 import {
   toCustomerListLoadErrorMessage,
   waitForTenantId,
@@ -72,6 +81,7 @@ export const CustomersKPI: React.FC = () => {
   const { can } = usePermission();
   const canEdit = can('customers.edit');
   const canImport = can('customers.import');
+  const canViewRepairJobs = can('repair.view');
   const user = useAppStore((s) => s.userProfile);
 
   const sizeFromQuery = String(searchParams.get('size') || '').trim();
@@ -79,7 +89,9 @@ export const CustomersKPI: React.FC = () => {
   const activeFromQuery = String(searchParams.get('active') || '').trim();
 
   const [rows, setRows] = useState<Customer[]>([]);
+  const [recentJobs, setRecentJobs] = useState<Array<{ customerId?: string | null }>>([]);
   const [loading, setLoading] = useState(true);
+  const [jobsLoading, setJobsLoading] = useState(canViewRepairJobs);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sizeFilter, setSizeFilter] = useState(
@@ -119,28 +131,38 @@ export const CustomersKPI: React.FC = () => {
   const [followUpStatus, setFollowUpStatus] = useState<CustomerFollowUpStatus>('none');
   const [followUpNotes, setFollowUpNotes] = useState('');
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
+    if (canViewRepairJobs) setJobsLoading(true);
     try {
       const tenantId = await waitForTenantId();
       if (!tenantId) {
         toast.error(toCustomerListLoadErrorMessage(new Error('Tenant context not initialised')));
         setRows([]);
+        setRecentJobs([]);
         return;
       }
-      const list = await customerService.listAll({ includeInactive: true });
+      const [list, jobs] = await Promise.all([
+        customerService.listAll({ includeInactive: true }),
+        canViewRepairJobs
+          ? repairJobService.listAllBranches({ limit: REPAIR_JOB_LIST_LIMIT }).catch(() => [])
+          : Promise.resolve([]),
+      ]);
       setRows(list);
+      setRecentJobs(jobs.map((job) => ({ customerId: job.customerId })));
     } catch (error: unknown) {
-      toast.error(toCustomerListLoadErrorMessage(error, 'تعذر تحميل مؤشرات العملاء.'));
+      toast.error(toCustomerListLoadErrorMessage(error, 'تعذر تحميل لوحة العملاء.'));
       setRows([]);
+      setRecentJobs([]);
     } finally {
       setLoading(false);
+      setJobsLoading(false);
     }
-  };
+  }, [canViewRepairJobs]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   useEffect(() => {
     setPage(1);
@@ -202,6 +224,16 @@ export const CustomersKPI: React.FC = () => {
       small,
     };
   }, [rows]);
+
+  const highestVolume = useMemo(() => rankCustomersByVolume(rows, 'desc'), [rows]);
+  const lowestVolume = useMemo(() => rankCustomersByVolume(rows, 'asc'), [rows]);
+  const highestDebt = useMemo(() => rankCustomersByDebt(rows), [rows]);
+  const mostFrequentRepair = useMemo(
+    () => rankCustomersByJobCount(recentJobs, rows),
+    [recentJobs, rows],
+  );
+  const frequentType = useMemo(() => mostFrequentCustomerType(rows), [rows]);
+  const frequentSize = useMemo(() => mostFrequentCustomerSizeTier(rows), [rows]);
 
   const hero = useMemo(
     () => [
@@ -311,7 +343,8 @@ export const CustomersKPI: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      eyebrow="مؤشرات العملاء"
+      eyebrow="لوحة العملاء"
+      rangeLabel="تحليل الأعلى والأقل والأكثر ترددًا — ثم قائمة المتابعة"
       hero={hero}
       onRefresh={() => void load()}
       refreshing={loading}
@@ -334,7 +367,67 @@ export const CustomersKPI: React.FC = () => {
         </p>
       )}
 
-      <OpsDashPanel title="مؤشرات العملاء" accent="customers" bodyClassName="p-0">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <CustomerBoardRankPanel
+          title="أعلى حجم شغل"
+          emptyLabel="لا توجد مؤشرات حجم شغل بعد. استورد المؤشرات من Excel."
+          rows={highestVolume}
+          loading={loading}
+          tenantSlug={tenantSlug}
+        />
+        <CustomerBoardRankPanel
+          title="أقل حجم شغل"
+          emptyLabel="لا توجد مؤشرات حجم شغل للمقارنة."
+          rows={lowestVolume}
+          loading={loading}
+          tenantSlug={tenantSlug}
+        />
+        <CustomerBoardRankPanel
+          title="أعلى مديونية"
+          emptyLabel="لا توجد أرصدة مدينة مسجّلة."
+          rows={highestDebt}
+          loading={loading}
+          tenantSlug={tenantSlug}
+        />
+        <CustomerBoardRankPanel
+          title="أكثر ترددًا في الصيانة"
+          hint={canViewRepairJobs ? `محسوب من آخر ${REPAIR_JOB_LIST_LIMIT} طلب صيانة.` : undefined}
+          emptyLabel={
+            canViewRepairJobs
+              ? 'لا توجد طلبات صيانة مربوطة بعملاء في العينة الحالية.'
+              : 'يحتاج صلاحية عرض طلبات الصيانة لإظهار التردد.'
+          }
+          rows={mostFrequentRepair}
+          loading={jobsLoading}
+          tenantSlug={tenantSlug}
+          valueSuffix="طلب"
+        />
+      </div>
+
+      <OpsDashPanel title="الأكثر ترددًا في التصنيف" accent="customers">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+            <p className="text-xs text-[var(--color-text-muted)]">أكثر نوع</p>
+            <p className="mt-1 text-lg font-bold">{frequentType?.label || '—'}</p>
+            <p className="text-xs tabular-nums text-[var(--color-text-muted)]">
+              {frequentType
+                ? `${formatNumber(frequentType.count)} عميل · ${frequentType.sharePct}%`
+                : 'لا توجد بيانات'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+            <p className="text-xs text-[var(--color-text-muted)]">أكثر تصنيف حجم</p>
+            <p className="mt-1 text-lg font-bold">{frequentSize?.label || '—'}</p>
+            <p className="text-xs tabular-nums text-[var(--color-text-muted)]">
+              {frequentSize
+                ? `${formatNumber(frequentSize.count)} عميل · ${frequentSize.sharePct}%`
+                : 'لا توجد بيانات'}
+            </p>
+          </div>
+        </div>
+      </OpsDashPanel>
+
+      <OpsDashPanel title="متابعة العملاء" accent="customers" bodyClassName="p-0">
         <div className="p-3 sm:p-4 border-b">
           <SmartFilterBar
             pageId="customers-kpi"

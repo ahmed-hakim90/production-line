@@ -8,6 +8,16 @@
 - Operational decision snapshot: tenant-scoped cache key + TTL early-return + `pageDataCache` in-flight dedupe across dashboard mounts.
 - Presence: `presenceService.subscribeAll` / `subscribeOnline` use `tenantQuery`; heartbeats stamp `tenantId`.
 
+## Fast production saves (done — ADR-009)
+
+Contract for production plans, work orders, and reports:
+
+- Await durable write only; upsert local lists; return to UI; background notify/reconcile/cost.
+- Report create: `queueReportCreate` + `modules/production/lib/reportSaveFeedback.ts`.
+- `fetchProductionPlans` does not N+1 `getByProduct`; uses cached reports for `planReports`.
+- Guards: `tests/fast-production-saves.test.ts`, `tests/save-response-speed-guards.test.ts`.
+- Decision record: `docs/adr/ADR-009-fast-production-saves.md`.
+
 ## Deferred: useAppStore bootstrap split
 
 **Not done in this pass** (too risky mid-dirty worktree).

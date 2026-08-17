@@ -1,14 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Button } from '../components/UI';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { exportGenericRows } from '../../../utils/exportExcel';
 import { useAppStore } from '../../../store/useAppStore';
 import { organizationService } from '../../hr/services/organizationService';
@@ -139,21 +138,22 @@ export const DepartmentConsumables: React.FC = () => {
   const [returnIssue, setReturnIssue] = useState<DepartmentConsumableIssue | null>(null);
   const [returnQtyByLine, setReturnQtyByLine] = useState<Record<string, number>>({});
   const [traceItem, setTraceItem] = useState<ConsumableOption | null>(null);
-  const [printIssue, setPrintIssue] = useState<DepartmentConsumableIssue | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
   const printTemplate = systemSettings?.printTemplate;
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: 'صرف مستهلكات الأقسام',
-  });
+  const { printDocument } = usePrintEngine();
 
   const printVoucher = useCallback((order: DepartmentConsumableIssue) => {
-    setPrintIssue(order);
-    window.setTimeout(() => {
-      void handlePrint();
-    }, 50);
-  }, [handlePrint]);
+    printDocument({
+      documentTitle: `صرف مستهلكات-${order.referenceNo || order.id}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <DepartmentConsumableIssuePrint
+          ref={ref}
+          issue={order}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  }, [printDocument, printTemplate]);
 
   const [reportMonth, setReportMonth] = useState(THIS_MONTH);
   const [reportDepartmentId, setReportDepartmentId] = useState('');
@@ -1142,14 +1142,6 @@ export const DepartmentConsumables: React.FC = () => {
         item={traceItem}
         warehouses={warehouses}
       />
-
-      <PrintOffscreenHost>
-        <DepartmentConsumableIssuePrint
-          ref={printRef}
-          issue={printIssue}
-          printSettings={printTemplate}
-        />
-      </PrintOffscreenHost>
     </ModuleOpsPageShell>
   );
 };

@@ -17,7 +17,9 @@ import { withTenantPath } from '@/lib/tenantPaths';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
+import { usePrintEngine } from '@/utils/printManager';
 import { sparePartsReplenishmentService } from '../../inventory/services/sparePartsReplenishmentService';
+import { SparePartsReplenishmentPrint } from '../../inventory/components/SparePartsReplenishmentPrint';
 import {
   SPARE_PARTS_REPLENISHMENT_STATUS_LABELS,
   canCancelSparePartsRequest,
@@ -61,6 +63,7 @@ export const RepairPartsReplenishment: React.FC = () => {
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const repairCtx = useMemo(
     () =>
@@ -85,6 +88,7 @@ export const RepairPartsReplenishment: React.FC = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const detailPanelRef = useRef<HTMLDivElement>(null);
+  const { printDocument } = usePrintEngine();
 
   const activeBranch = useMemo(
     () => branches.find((b) => b.id === selectedBranchId) || null,
@@ -223,6 +227,25 @@ export const RepairPartsReplenishment: React.FC = () => {
 
   const selectedBusy = Boolean(selectedRequest?.id && busyId === String(selectedRequest.id));
 
+  const printSelectedRequest = useCallback(() => {
+    if (!selectedRequest) return;
+    if (selectedRequest.status === 'cancelled' || selectedRequest.status === 'rejected') {
+      toast.error('لا يمكن طباعة طلب ملغى أو مرفوض.');
+      return;
+    }
+    printDocument({
+      documentTitle: `تموين-${selectedRequest.referenceNo || selectedRequest.id}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <SparePartsReplenishmentPrint
+          ref={ref}
+          request={selectedRequest}
+          printSettings={printTemplate}
+        />
+      ),
+    });
+  }, [selectedRequest, printDocument, printTemplate]);
+
   if (!canView) {
     return (
       <RepairOpsPageShell eyebrow="متابعة تموين قطع الغيار" dir={dir}>
@@ -331,6 +354,17 @@ export const RepairPartsReplenishment: React.FC = () => {
               ) : (
                 <>
                   <div className="sticky top-0 z-10 flex flex-wrap gap-2 border-b bg-card/95 p-3 backdrop-blur supports-[backdrop-filter]:bg-card/80 sm:p-4">
+                    {selectedRequest.status !== 'cancelled' && selectedRequest.status !== 'rejected' ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        disabled={selectedBusy}
+                        onClick={() => void printSelectedRequest()}
+                      >
+                        طباعة
+                      </Button>
+                    ) : null}
                     {canReceive && canReceiveSparePartsRequest(selectedRequest) ? (
                       <ToneActionButton
                         action="approve"
@@ -402,7 +436,9 @@ export const RepairPartsReplenishment: React.FC = () => {
                             </td>
                             <td className="px-3 py-2 tabular-nums">{fmt(line.requestedQty)}</td>
                             <td className="px-3 py-2 tabular-nums">
-                              {fmt(line.preparedQty ?? line.requestedQty)}
+                              {line.preparedQty != null
+                                ? (Number(line.preparedQty) > 0 ? fmt(line.preparedQty) : 'مستبعد')
+                                : fmt(line.requestedQty)}
                             </td>
                             <td className="px-3 py-2 tabular-nums">
                               {line.receivedQty != null ? fmt(line.receivedQty) : '—'}

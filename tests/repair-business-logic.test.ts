@@ -129,9 +129,17 @@ const defaultStatuses: ResolvedRepairStatus[] = [
 }
 
 {
-  assertRepairStatusTransition({ fromStatus: 'received', toStatus: 'diagnosing', statuses: defaultStatuses });
-  assertRepairStatusTransition({ fromStatus: 'ready', toStatus: 'delivered', statuses: defaultStatuses });
-  assertRepairStatusTransition({ fromStatus: 'repairing', toStatus: 'cancelled', statuses: defaultStatuses });
+  assertRepairStatusTransition({
+    fromStatus: 'diagnosing',
+    toStatus: 'repairing',
+    statuses: defaultStatuses,
+    allowSkipCustomerApproval: true,
+  });
+  assert.throws(() => assertRepairStatusTransition({
+    fromStatus: 'diagnosing',
+    toStatus: 'repairing',
+    statuses: defaultStatuses,
+  }));
   assert.throws(() => assertRepairStatusTransition({
     fromStatus: 'received',
     toStatus: 'delivered',

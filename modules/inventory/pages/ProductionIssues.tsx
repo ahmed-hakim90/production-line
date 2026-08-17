@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
@@ -33,8 +32,7 @@ import type {
 import type { PaperSize } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedPrint } from '../../../utils/printManager';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
+import { usePrintEngine } from '../../../utils/printManager';
 import { ProductionIssuePrint } from '../components/ProductionIssuePrint';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
@@ -175,7 +173,6 @@ export const ProductionIssues: React.FC = () => {
   const [issueQuantity, setIssueQuantity] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState('');
   const [issuePaperSize, setIssuePaperSize] = useState<PaperSize>('a4');
-  const [printOrder, setPrintOrder] = useState<ProductionIssueOrder | null>(null);
   const [lineAction, setLineAction] = useState<LineActionModal>(null);
   const [shortageRows, setShortageRows] = useState<ProductionIssueShortageRow[]>([]);
   const [shortageModalOpen, setShortageModalOpen] = useState(false);
@@ -190,7 +187,7 @@ export const ProductionIssues: React.FC = () => {
   const [preparingLines, setPreparingLines] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const autoPreparedRequestIdsRef = useRef<Set<string>>(new Set());
-  const printRef = useRef<HTMLDivElement>(null);
+  const { printDocument } = usePrintEngine();
   const issuePrintSettings = useMemo(
     () => ({
       ...printTemplate,
@@ -199,7 +196,6 @@ export const ProductionIssues: React.FC = () => {
     }),
     [printTemplate, issuePaperSize],
   );
-  const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: issuePrintSettings, documentTitle: 'إذن صرف إنتاج' });
   const actor = userDisplayName || userEmail || 'Current User';
 
   const load = async (force = false) => {
@@ -645,12 +641,20 @@ export const ProductionIssues: React.FC = () => {
     }
   };
 
-  const print = async (order: ProductionIssueOrder) => {
-    flushSync(() => {
-      setPrintOrder(order);
+  const print = (order: ProductionIssueOrder) => {
+    printDocument({
+      documentTitle: `إذن صرف إنتاج-${order.referenceNo || order.id}`,
+      printSettings: issuePrintSettings,
+      render: (ref) => (
+        <ProductionIssuePrint
+          ref={ref}
+          order={order}
+          sourceLabel={order.id ? sourceLabelByOrder.get(order.id) : undefined}
+          paperSize={issuePaperSize}
+          printSettings={issuePrintSettings}
+        />
+      ),
     });
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    handlePrint();
   };
 
   const openLineAction = (kind: LineActionKind, order: ProductionIssueOrder, line: ProductionIssueOrderLine) => {
@@ -1151,15 +1155,6 @@ export const ProductionIssues: React.FC = () => {
         </OpsDashPanel>
         </div>
       </div>
-      <PrintOffscreenHost>
-        <ProductionIssuePrint
-          ref={printRef}
-          order={printOrder}
-          sourceLabel={printOrder?.id ? sourceLabelByOrder.get(printOrder.id) : undefined}
-          paperSize={issuePaperSize}
-          printSettings={issuePrintSettings}
-        />
-      </PrintOffscreenHost>
       {shortageModalOpen && shortageRows.length > 0 && (
         <ManagedModalPortal>
         <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setShortageModalOpen(false)}>

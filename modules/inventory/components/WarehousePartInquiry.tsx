@@ -189,32 +189,78 @@ export function WarehousePartInquiry({
       `/inventory/item-card?itemType=${encodeURIComponent(hit.itemType)}&itemId=${encodeURIComponent(hit.itemId)}&warehouseId=${encodeURIComponent(warehouseId)}`,
     );
 
-  const renderItemHit = (hit: WarehouseScanItemHit, key: string) => {
+  const renderItemHit = (hit: WarehouseScanItemHit, key: string, dense = false) => {
     const qty = Number(hit.quantity || 0);
+    const statusLabel = hit.catalogOnly
+      ? 'ماستر فقط'
+      : qty > 0
+        ? 'موجودة'
+        : 'صفر';
+    const statusClass = hit.catalogOnly || qty <= 0
+      ? 'text-[rgb(var(--color-warning))]'
+      : 'text-[rgb(var(--color-success))]';
+    const locSummary = hit.locations.length > 0
+      ? hit.locations
+        .map((loc) => `${loc.locationCode || '—'}: ${fmt(loc.quantity)}`)
+        .join(' · ')
+      : null;
+
+    if (dense) {
+      return (
+        <div
+          key={key}
+          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-2.5 py-2"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-[var(--color-text)]">{hit.itemName}</p>
+            <p className="font-mono text-[12px] text-[var(--color-text-muted)]">
+              {hit.itemCode || '—'}
+              {hit.barcode ? ` · ${hit.barcode}` : ''}
+            </p>
+            {locSummary ? (
+              <p className="mt-0.5 truncate text-[11px] text-[var(--color-text-muted)]">{locSummary}</p>
+            ) : null}
+          </div>
+          <div className="shrink-0 text-end">
+            <p className="text-sm font-bold tabular-nums text-[var(--color-text)]">{fmt(qty)}</p>
+            <p className={`text-[11px] font-bold ${statusClass}`}>{statusLabel}</p>
+          </div>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
+            <Link className="text-[12px] font-bold text-primary underline" to={itemCardPath(hit)}>
+              كارت الصنف
+            </Link>
+            {onOpenLabelEngine ? (
+              <button
+                type="button"
+                className="text-[12px] font-bold text-[var(--color-text-muted)] underline"
+                onClick={() => onOpenLabelEngine({ mode: 'items', itemId: hit.itemId, copies: 1 })}
+              >
+                ملصق
+              </button>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div key={key} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 space-y-2">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <p className="font-bold text-[var(--color-text)]">{hit.itemName}</p>
-            <p className="font-mono text-xs text-[var(--color-text-muted)]">
+            <p className="text-sm font-bold text-[var(--color-text)]">{hit.itemName}</p>
+            <p className="font-mono text-[12px] text-[var(--color-text-muted)]">
               {hit.itemCode || '—'}
               {hit.barcode ? ` · باركود ${hit.barcode}` : ''}
             </p>
           </div>
           <div className="text-end">
-            <p className="text-lg font-black tabular-nums">{fmt(qty)}</p>
-            {hit.catalogOnly ? (
-              <p className="text-xs font-bold text-[rgb(var(--color-warning))]">في الماستر بدون رصيد</p>
-            ) : qty > 0 ? (
-              <p className="text-xs font-bold text-[rgb(var(--color-success))]">موجودة</p>
-            ) : (
-              <p className="text-xs font-bold text-[rgb(var(--color-warning))]">الرصيد صفر</p>
-            )}
+            <p className="text-base font-bold tabular-nums">{fmt(qty)}</p>
+            <p className={`text-[12px] font-bold ${statusClass}`}>{statusLabel}</p>
           </div>
         </div>
 
         {hit.locations.length > 0 ? (
-          <table className="w-full text-xs">
+          <table className="w-full text-[12px]">
             <thead>
               <tr className="text-[var(--color-text-muted)]">
                 <th className="py-1 text-start">اللوكيشن</th>
@@ -233,11 +279,11 @@ export function WarehousePartInquiry({
             </tbody>
           </table>
         ) : (
-          <p className="text-xs text-[var(--color-text-muted)]">لا يوجد تفصيل مواقع لهذه القطعة في هذا المخزن.</p>
+          <p className="text-[12px] text-[var(--color-text-muted)]">لا يوجد تفصيل مواقع لهذه القطعة في هذا المخزن.</p>
         )}
 
         <div className="flex flex-wrap gap-2">
-          <Link className="text-xs font-bold text-primary underline" to={itemCardPath(hit)}>
+          <Link className="text-[12px] font-bold text-primary underline" to={itemCardPath(hit)}>
             كارت الصنف
           </Link>
           {onOpenLabelEngine ? (
@@ -378,17 +424,17 @@ export function WarehousePartInquiry({
       ) : null}
 
       {result.status === 'matches' ? (
-        <div className="mt-3 space-y-2">
-          {result.items.map((hit) => renderItemHit(hit, `${hit.itemType}-${hit.itemId}`))}
+        <div className="mt-3 space-y-1.5">
+          {result.items.map((hit) => renderItemHit(hit, `${hit.itemType}-${hit.itemId}`, true))}
         </div>
       ) : null}
 
       {result.status === 'catalog_only' ? (
-        <div className="mt-3 space-y-2">
+        <div className="mt-3 space-y-1.5">
           <p className="text-sm font-semibold text-[rgb(var(--color-warning))]">
             القطعة في الماستر لكن بدون رصيد في هذا المخزن:
           </p>
-          {result.items.map((hit) => renderItemHit(hit, `cat-${hit.itemId}`))}
+          {result.items.map((hit) => renderItemHit(hit, `cat-${hit.itemId}`, true))}
         </div>
       ) : null}
     </OpsDashPanel>

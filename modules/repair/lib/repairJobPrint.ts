@@ -86,9 +86,15 @@ export function repairReceiptCopyLabel(copyKind: RepairReceiptCopyKind): string 
 }
 
 /** Custody acknowledgment shown above the customer signature. */
-export function repairCustomerReceiptAcknowledgment(showCosts: boolean): string {
+export function repairCustomerReceiptAcknowledgment(
+  showCosts: boolean,
+  options?: { skipCustomerApproval?: boolean },
+): string {
   if (showCosts) {
     return 'أقرّ بصحة بيانات الطلب والتكلفة المدوّنة أعلاه، وأستلم هذا الإيصال كمرجع للمتابعة والتحصيل عند الاستلام.';
+  }
+  if (options?.skipCustomerApproval) {
+    return 'أقرّ أنا الموقع أدناه بأنني سلّمت المنتجات والملحقات الموضحة أعلاه لمركز الصيانة، وأن البيانات صحيحة، وأستلم هذا الإيصال كإثبات استلام. الطلب داخل الضمان بالكامل — التكلفة على العميل صفر ولا تحتاج موافقة تسعير.';
   }
   return 'أقرّ أنا الموقع أدناه بأنني سلّمت المنتجات والملحقات الموضحة أعلاه لمركز الصيانة، وأن البيانات صحيحة، وأستلم هذا الإيصال كإثبات استلام. التكلفة النهائية تُحدد بعد التشخيص وموافقة العميل.';
 }

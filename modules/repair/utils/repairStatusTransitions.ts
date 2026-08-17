@@ -1,10 +1,22 @@
 import type { ResolvedRepairStatus } from '../config/repairSettings';
 import {
+  resolveStatusRole,
+  type RepairStatusRole,
+} from '../lib/repairStatusAdvance';
+import {
   isCancelledStatus,
   isDeliveredStatus,
   isUnrepairableStatus,
   mapLegacyRepairStatus,
 } from './repairWorkflowNormalize';
+
+/** Roles a full-warranty job may skip when jumping to parts/repair (no customer pricing). */
+const CUSTOMER_APPROVAL_SKIP_ROLES: ReadonlySet<RepairStatusRole> = new Set([
+  'diagnosis',
+  'estimate_review',
+  'awaiting_customer',
+  'awaiting_parts',
+]);
 
 /** Match configured row by raw id or legacy alias (inspection↔diagnosing, repair↔repairing). */
 function findEnabledStatusIndex(
@@ -25,6 +37,23 @@ function findEnabledStatus(
   return index >= 0 ? enabled[index] : undefined;
 }
 
+function skippedStatusesAreCustomerApprovalGap(
+  enabled: ResolvedRepairStatus[],
+  fromIndex: number,
+  toIndex: number,
+): boolean {
+  const toRow = enabled[toIndex];
+  const toRole = resolveStatusRole(toRow?.id, enabled);
+  if (toRole !== 'in_repair' && toRole !== 'awaiting_parts') return false;
+  for (let i = fromIndex + 1; i < toIndex; i += 1) {
+    const row = enabled[i];
+    if (!row || row.isTerminal) return false;
+    const role = resolveStatusRole(row.id, enabled);
+    if (!CUSTOMER_APPROVAL_SKIP_ROLES.has(role)) return false;
+  }
+  return true;
+}
+
 /**
  * Allowed status transitions:
  * - forward to next enabled non-terminal status by order
@@ -32,11 +61,14 @@ function findEnabledStatus(
  * - always allow jump to cancelled / unrepairable from non-terminal
  * - delivered only from ready (or last open status before delivered)
  * - no transitions out of terminal statuses
+ * - full-warranty jobs may skip estimate/approval toward parts/repair when flagged
  */
 export function assertRepairStatusTransition(input: {
   fromStatus: string;
   toStatus: string;
   statuses: ResolvedRepairStatus[];
+  /** Full manufacturer warranty may skip estimate/approval statuses toward repair. */
+  allowSkipCustomerApproval?: boolean;
 }): void {
   const from = mapLegacyRepairStatus(input.fromStatus);
   const to = mapLegacyRepairStatus(input.toStatus);
@@ -92,6 +124,14 @@ export function assertRepairStatusTransition(input: {
   const delta = toIndex - fromIndex;
   if (delta >= 1 && delta <= 2 && !toRow.isTerminal) return;
   if (delta === -1 && !toRow.isTerminal) return;
+  if (
+    input.allowSkipCustomerApproval
+    && delta > 2
+    && !toRow.isTerminal
+    && skippedStatusesAreCustomerApprovalGap(enabled, fromIndex, toIndex)
+  ) {
+    return;
+  }
 
   throw new Error(
     `انتقال الحالة غير مسموح من «${fromRow?.label || from}» إلى «${toRow.label || to}».`,

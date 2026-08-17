@@ -1,7 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button, SearchableSelect } from '../components/UI';
+import { Card, Badge, Button } from '../components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import {
@@ -40,6 +42,7 @@ import { ManagedModalPortal } from '../../../components/modal-manager/ManagedMod
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import {
   Select,
   SelectContent,
@@ -155,7 +158,6 @@ export const ProductionPlans: React.FC = () => {
   const createProductionPlan = useAppStore((s) => s.createProductionPlan);
   const updateProductionPlan = useAppStore((s) => s.updateProductionPlan);
   const deleteProductionPlan = useAppStore((s) => s.deleteProductionPlan);
-  const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
   const { can } = usePermission();
   const planReportCreateEnabled = isOperationPathEnabled(
     systemSettings,
@@ -359,12 +361,28 @@ export const ProductionPlans: React.FC = () => {
       return injectionComponents.map((m) => ({
         value: m.id,
         label: getProductOptionLabel(m),
+        name: m.name,
+        code: m.code,
+        barcode: m.barcode,
+        stockItemType: 'material' as const,
       }));
     }
     return filterProductionProducts(_rawProducts)
       .filter((p) => Boolean(p.id))
-      .map((p) => ({ value: p.id!, label: getProductOptionLabel(p) }));
+      .map((p) => ({
+        value: p.id!,
+        label: getProductOptionLabel(p),
+        name: p.name,
+        code: p.code,
+        barcode: p.barcode,
+        stockItemType: 'finished_good' as const,
+      }));
   }, [formPlanType, injectionComponents, _rawProducts]);
+
+  const formProductPicker = useMemo(
+    () => buildCodeVoucherPicker(formProductSelectOptions),
+    [formProductSelectOptions],
+  );
 
   useEffect(() => {
     if (!formProductId) return;
@@ -751,32 +769,42 @@ export const ProductionPlans: React.FC = () => {
   const saveNewPlan = async () => {
     if (!formProductId || formQuantity <= 0 || !uid || !calculations) return;
     setSaving(true);
-    await createProductionPlan({
-      productId: formProductId,
-      planType: formPlanType,
-      plannedQuantity: formQuantity,
-      producedQuantity: 0,
-      startDate: formStartDate,
-      plannedStartDate: formStartDate,
-      plannedEndDate: calculations.plannedEndDate,
-      estimatedDurationDays: calculations.estimatedDays,
-      avgDailyTarget: calculations.avgDailyTarget,
-      priority: formPriority,
-      estimatedCost: calculations.estimatedCost,
-      actualCost: 0,
-      acceptsProductionFromReports: formAcceptsProductionFromReports,
-      status: 'planned',
-      createdBy: uid,
-    }, { path: PRODUCTION_PLAN_CREATE_PATHS.plansPage });
-    setFormProductId('');
-    setFormQuantity(0);
-    setFormDailyTarget(0);
-    setFormPriority('medium');
-    setFormPlanType('finished_product');
-    setFormAcceptsProductionFromReports(true);
-    setSaving(false);
-    setFormOpen(false);
-    setCapacityWarning({ show: false, load: 0, capacity: 0 });
+    try {
+      const createdId = await createProductionPlan({
+        productId: formProductId,
+        planType: formPlanType,
+        plannedQuantity: formQuantity,
+        producedQuantity: 0,
+        startDate: formStartDate,
+        plannedStartDate: formStartDate,
+        plannedEndDate: calculations.plannedEndDate,
+        estimatedDurationDays: calculations.estimatedDays,
+        avgDailyTarget: calculations.avgDailyTarget,
+        priority: formPriority,
+        estimatedCost: calculations.estimatedCost,
+        actualCost: 0,
+        acceptsProductionFromReports: formAcceptsProductionFromReports,
+        status: 'planned',
+        createdBy: uid,
+      }, { path: PRODUCTION_PLAN_CREATE_PATHS.plansPage });
+      if (!createdId) {
+        showAppToast('error', 'تعذر حفظ خطة الإنتاج');
+        return;
+      }
+      setFormProductId('');
+      setFormQuantity(0);
+      setFormDailyTarget(0);
+      setFormPriority('medium');
+      setFormPlanType('finished_product');
+      setFormAcceptsProductionFromReports(true);
+      setFormOpen(false);
+      setCapacityWarning({ show: false, load: 0, capacity: 0 });
+      showAppToast('success', 'تم حفظ خطة الإنتاج');
+    } catch {
+      showAppToast('error', 'تعذر حفظ خطة الإنتاج');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleEdit = async () => {
@@ -786,18 +814,24 @@ export const ProductionPlans: React.FC = () => {
       ? calculateEstimatedDays(editForm.plannedQuantity, manualDailyTarget)
       : resolvePlanDurationDays(editPlan);
     setEditSaving(true);
-    await updateProductionPlan(editPlan.id, {
-      plannedQuantity: editForm.plannedQuantity,
-      avgDailyTarget: manualDailyTarget > 0 ? Math.ceil(manualDailyTarget) : editPlan.avgDailyTarget,
-      estimatedDurationDays: durationDays > 0 ? durationDays : editPlan.estimatedDurationDays,
-      startDate: editForm.startDate,
-      plannedStartDate: editForm.startDate,
-      plannedEndDate: durationDays > 0 ? addDaysToDate(editForm.startDate, durationDays) : editPlan.plannedEndDate,
-      priority: editForm.priority,
-      acceptsProductionFromReports: editForm.acceptsProductionFromReports,
-    }, { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageEdit });
-    setEditSaving(false);
-    setEditPlan(null);
+    try {
+      await updateProductionPlan(editPlan.id, {
+        plannedQuantity: editForm.plannedQuantity,
+        avgDailyTarget: manualDailyTarget > 0 ? Math.ceil(manualDailyTarget) : editPlan.avgDailyTarget,
+        estimatedDurationDays: durationDays > 0 ? durationDays : editPlan.estimatedDurationDays,
+        startDate: editForm.startDate,
+        plannedStartDate: editForm.startDate,
+        plannedEndDate: durationDays > 0 ? addDaysToDate(editForm.startDate, durationDays) : editPlan.plannedEndDate,
+        priority: editForm.priority,
+        acceptsProductionFromReports: editForm.acceptsProductionFromReports,
+      }, { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageEdit });
+      setEditPlan(null);
+      showAppToast('success', 'تم حفظ تعديلات الخطة');
+    } catch {
+      showAppToast('error', 'تعذر حفظ تعديلات الخطة');
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const handleBulkDateShift = async () => {
@@ -815,8 +849,10 @@ export const ProductionPlans: React.FC = () => {
           }, { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageBulkDateShift });
         }),
       );
-      await fetchProductionPlans();
       setSelectedPlanIds([]);
+      showAppToast('success', 'تم ترحيل تاريخ الخطط المحددة');
+    } catch {
+      showAppToast('error', 'تعذر ترحيل تاريخ الخطط');
     } finally {
       setBulkSaving(false);
     }
@@ -825,21 +861,33 @@ export const ProductionPlans: React.FC = () => {
   const handleStatusChange = async () => {
     if (!statusPlan?.id) return;
     setStatusSaving(true);
-    await updateProductionPlan(
-      statusPlan.id,
-      { status: newStatus },
-      { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageStatus },
-    );
-    setStatusSaving(false);
-    setStatusPlan(null);
+    try {
+      await updateProductionPlan(
+        statusPlan.id,
+        { status: newStatus },
+        { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageStatus },
+      );
+      setStatusPlan(null);
+      showAppToast('success', 'تم تحديث حالة الخطة');
+    } catch {
+      showAppToast('error', 'تعذر تحديث حالة الخطة');
+    } finally {
+      setStatusSaving(false);
+    }
   };
 
   const handleDelete = async () => {
     if (!deletePlanId) return;
     setDeleting(true);
-    await deleteProductionPlan(deletePlanId);
-    setDeleting(false);
-    setDeletePlanId(null);
+    try {
+      await deleteProductionPlan(deletePlanId);
+      setDeletePlanId(null);
+      showAppToast('success', 'تم حذف الخطة');
+    } catch {
+      showAppToast('error', 'تعذر حذف الخطة');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const hasActiveFilters = filterSearch
@@ -1023,12 +1071,13 @@ export const ProductionPlans: React.FC = () => {
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                 {formPlanType === 'component_injection' ? 'مكون الحقن *' : 'المنتج *'}
               </label>
-              <SearchableSelect
-                options={formProductSelectOptions}
+              <VoucherItemCombobox
+                options={formProductPicker.options}
+                catalog={formProductPicker.catalog}
                 value={formProductId}
                 onChange={setFormProductId}
-                placeholder={formPlanType === 'component_injection' ? 'ابحث واختر مكون الحقن...' : 'ابحث واختر المنتج...'}
-                className="h-auto min-h-12 p-3.5 rounded-[var(--border-radius-lg)] bg-[var(--color-card)]"
+                placeholder={formPlanType === 'component_injection' ? 'ابحث أو امسح كود مكون الحقن' : 'ابحث بالاسم أو امسح الباركود'}
+                className="h-auto min-h-12 bg-[var(--color-card)]"
               />
             </div>
 

@@ -15,6 +15,8 @@ import {
   PRODUCTION_REPORT_OPERATION_KEYS,
   isOperationPathEnabled,
 } from '../../../modules/system/lib/operationPathSettings';
+import { useJobsStore } from '../../background-jobs/useJobsStore';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 export const GlobalImportReportsModal: React.FC = () => {
   const { t } = useTranslation();
@@ -22,17 +24,21 @@ export const GlobalImportReportsModal: React.FC = () => {
   const listSeparator = t('modalManager.shared.listSeparator');
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.REPORTS_IMPORT);
   const { can } = usePermission();
-  const createReport = useAppStore((s) => s.createReport);
+  const queueReportCreate = useAppStore((s) => s.queueReportCreate);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const products = useAppStore((s) => s._rawProducts);
   const lines = useAppStore((s) => s._rawLines);
   const employees = useAppStore((s) => s._rawEmployees);
   const reports = useAppStore((s) => s.productionReports);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [message, setMessage] = useState<string | null>(null);
 
   const validRows = useMemo(
@@ -63,10 +69,8 @@ export const GlobalImportReportsModal: React.FC = () => {
   )) return null;
 
   const handleClose = () => {
-    if (saving) return;
     setResult(null);
     setMessage(null);
-    setProgress({ done: 0, total: 0 });
     close();
   };
 
@@ -104,7 +108,7 @@ export const GlobalImportReportsModal: React.FC = () => {
     }
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     if (futureDateErrorRowsCount > 0) {
       setMessage(
         t('modalManager.importReports.cannotSaveFutureDateRows', { rows: futureDateErrorRowIndexes.join(listSeparator) })
@@ -112,43 +116,64 @@ export const GlobalImportReportsModal: React.FC = () => {
       return;
     }
     if (validRows.length === 0) return;
-    setSaving(true);
+
+    const rowsToImport = [...validRows];
+    const jobId = addJob({
+      fileName: 'reports-import.xlsx',
+      jobType: 'Reports Import',
+      totalRows: rowsToImport.length,
+      startedBy: userDisplayName || 'Current User',
+    });
+    startJob(jobId, 'Saving to database...');
+    setResult(null);
     setMessage(null);
-    setProgress({ done: 0, total: validRows.length });
+    close();
+    showAppToast('success', 'بدأ استيراد التقارير في الخلفية.');
 
-    let done = 0;
-    let failed = 0;
-    let duplicate = 0;
-    for (const row of validRows) {
-      try {
-        const created = await createReport(toReportData(row), {
-          path: PRODUCTION_REPORT_CREATE_PATHS.globalImport,
-        });
-        if (!created) {
-          const storeErr = useAppStore.getState().error;
-          if (isReportDuplicateError(storeErr)) duplicate += 1;
+    void (async () => {
+      let done = 0;
+      let failed = 0;
+      let duplicate = 0;
+      for (const row of rowsToImport) {
+        try {
+          const queued = queueReportCreate(toReportData(row), {
+            path: PRODUCTION_REPORT_CREATE_PATHS.globalImport,
+          });
+          const created = await queued.completion;
+          if (!created) {
+            const storeErr = useAppStore.getState().error;
+            if (isReportDuplicateError(storeErr)) duplicate += 1;
+            failed += 1;
+          }
+        } catch (error) {
+          if (isReportDuplicateError(error)) duplicate += 1;
           failed += 1;
+        } finally {
+          done += 1;
+          setJobProgress(jobId, {
+            processedRows: done,
+            totalRows: rowsToImport.length,
+            statusText: 'Saving to database...',
+            status: 'processing',
+          });
         }
-      } catch (error) {
-        if (isReportDuplicateError(error)) duplicate += 1;
-        failed += 1;
-      } finally {
-        done += 1;
-        setProgress({ done, total: validRows.length });
       }
-    }
 
-    if (failed === 0) {
-      setMessage(t('modalManager.importReports.importSuccess', { done }));
-      setResult(null);
-    } else {
-      const failedMsg =
-        duplicate > 0
-          ? t('modalManager.importReports.importPartialWithDuplicates', { success: done - failed, failed, duplicate })
-          : t('modalManager.importReports.importPartial', { success: done - failed, failed });
-      setMessage(getReportDuplicateMessage(null, failedMsg));
-    }
-    setSaving(false);
+      const addedRows = Math.max(0, done - failed);
+      if (addedRows === 0 && failed > 0) {
+        const failedMsg =
+          duplicate > 0
+            ? t('modalManager.importReports.importPartialWithDuplicates', { success: 0, failed, duplicate })
+            : t('modalManager.importReports.importPartial', { success: 0, failed });
+        failJob(jobId, getReportDuplicateMessage(null, failedMsg), 'Failed');
+      } else {
+        completeJob(jobId, {
+          addedRows,
+          failedRows: failed,
+          statusText: 'Completed',
+        });
+      }
+    })();
   };
 
   return (
@@ -190,7 +215,7 @@ export const GlobalImportReportsModal: React.FC = () => {
           />
 
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={parsing || saving}>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={parsing}>
               {parsing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
               {t('modalManager.importReports.chooseFile')}
             </Button>
@@ -206,7 +231,7 @@ export const GlobalImportReportsModal: React.FC = () => {
                   })),
                 })
               }
-              disabled={parsing || saving}
+              disabled={parsing}
             >
               <Download size={14} />
               {t('modalManager.importReports.downloadTemplate')}
@@ -222,18 +247,6 @@ export const GlobalImportReportsModal: React.FC = () => {
             </div>
           )}
 
-          {saving && (
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-[var(--color-surface-hover)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary rounded-full transition-all duration-300"
-                  style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
-                />
-              </div>
-              <span className="text-sm font-bold text-primary shrink-0">{progress.done}/{progress.total}</span>
-            </div>
-          )}
-
           {message && (
             <div className="rounded-[var(--border-radius-base)] border border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)]/80 px-3 py-2 text-xs font-bold text-[rgb(var(--color-warning))]">
               {message}
@@ -242,13 +255,12 @@ export const GlobalImportReportsModal: React.FC = () => {
         </div>
 
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose} disabled={saving} iconName="close" tone="neutral">{t('ui.close')}</Button>
+          <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.close')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}
-            disabled={saving || validRows.length === 0 || futureDateErrorRowsCount > 0}
+            disabled={validRows.length === 0 || futureDateErrorRowsCount > 0}
           >
-            {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />
             {t('modalManager.importReports.saveReports', { count: validRows.length })}
           </Button>

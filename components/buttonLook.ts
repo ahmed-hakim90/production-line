@@ -161,7 +161,7 @@ const EXACT: Record<string, ButtonLook> = {
   الاستبدال: { icon: 'swap_horiz', tone: 'export' },
   'التسعير (الماستر)': { icon: 'payments', tone: 'edit' },
   الفروع: { icon: 'store', tone: 'submit' },
-  'مؤشرات العملاء': { icon: 'analytics', tone: 'view' },
+  'لوحة العملاء': { icon: 'analytics', tone: 'view' },
   المخزون: { icon: 'warehouse', tone: 'view' },
   الورشة: { icon: 'handyman', tone: 'execute' },
   'تطبيق الحالة': { icon: 'play_circle', tone: 'execute' },

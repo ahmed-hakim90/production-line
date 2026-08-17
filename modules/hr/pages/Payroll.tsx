@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Button, Badge, KPIBox } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
@@ -7,7 +7,7 @@ import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import { hrNotificationService } from '../approval/notifications';
 import { employeeService } from '../employeeService';
 import {
@@ -20,7 +20,6 @@ import {
 } from '../payroll';
 import type { PayslipData } from '../utils/payslipGenerator';
 import { PayslipPrint } from '../components/PayslipPrint';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { CombinedPayslipsPrint } from '../components/CombinedPayslipsPrint';
 import { getDocs, query, where } from 'firebase/firestore';
 import { departmentsRef, payrollDistributionsRef } from '../collections';

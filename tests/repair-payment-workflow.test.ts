@@ -35,7 +35,7 @@ assert.match(serverSource, /!warrantySettlement && gross <= 0/);
 assert.match(serverSource, /إذن الدفع الحالي قيمته صفر وغير صالح للتسليم/);
 assert.match(serverSource, /settlementType:\s*warrantyJob \? WARRANTY_SETTLEMENT/);
 assert.match(serverSource, /WAR-\$\{receiptNo\}/);
-assert.match(serverSource, /إذن ضمان المصنّع لا يُحصَّل/);
+assert.match(serverSource, /طلب ضمان المصنّع لا يُرسل لموافقة تسعير العميل/);
 assert.match(serverSource, /job\.delivered_warranty/);
 assert.match(serverSource, /warranty_settled/);
 assert.match(serverSource, /assertAccountingMapReady/);

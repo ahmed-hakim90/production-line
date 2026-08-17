@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
@@ -11,8 +11,7 @@ import type { ComponentCompensationRequest, DisassemblyOrder, SuppliesReceiptOrd
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
-import { useManagedPrint } from '../../../utils/printManager';
-import { exportToPDF, waitForExportPaint } from '../../../utils/reportExport';
+import { usePrintEngine } from '../../../utils/printManager';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -50,7 +49,6 @@ export const ProductionInventoryApprovals: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const actor = userDisplayName || userEmail || 'Current User';
-  const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const canPrint = can('inventory.transactions.print');
   const applyScoped = (data: ApprovalsPageData) => {
     if (!scoped) {
@@ -100,13 +98,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
   const [compPage, setCompPage] = useState(1);
   const [disPage, setDisPage] = useState(1);
   const [receiptPage, setReceiptPage] = useState(1);
-  const [printOrder, setPrintOrder] = useState<SuppliesReceiptOrder | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: 'اذن-استلام-مستلزمات',
-  });
+  const { printDocument } = usePrintEngine();
 
   const load = async (opts?: { force?: boolean }) => {
     const cached = peekPageDataCache<ApprovalsPageData>(APPROVALS_CACHE_KEY);
@@ -262,18 +254,14 @@ export const ProductionInventoryApprovals: React.FC = () => {
     }
   };
 
-  const printReceipt = async (order: SuppliesReceiptOrder) => {
-    setPrintOrder(order);
-    await waitForExportPaint(80);
-    if (isMobilePrint && printRef.current) {
-      await exportToPDF(printRef.current, `اذن-استلام-${order.referenceNo}`, {
-        paperSize: printTemplate?.paperSize,
-        orientation: printTemplate?.orientation,
-        copies: 1,
-      });
-      return;
-    }
-    handlePrint();
+  const printReceipt = (order: SuppliesReceiptOrder) => {
+    printDocument({
+      documentTitle: `اذن-استلام-${order.referenceNo || order.id}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <SuppliesReceiptPrint ref={ref} order={order} printSettings={printTemplate} />
+      ),
+    });
   };
 
   if (!can('inventory.view')) return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
@@ -616,22 +604,6 @@ export const ProductionInventoryApprovals: React.FC = () => {
           itemLabel="طلب"
         />
       </OpsDashPanel>
-
-      <div
-        aria-hidden
-        style={{
-          position: 'fixed',
-          left: '-9999px',
-          top: 0,
-          pointerEvents: 'none',
-          direction: 'rtl',
-          width: '210mm',
-          maxWidth: 'none',
-          overflow: 'visible',
-        }}
-      >
-        <SuppliesReceiptPrint ref={printRef} order={printOrder} printSettings={printTemplate} />
-      </div>
     </ModuleOpsPageShell>
   );
 };

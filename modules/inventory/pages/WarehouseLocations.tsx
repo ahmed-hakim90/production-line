@@ -6,7 +6,12 @@ import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPag
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '../lib/materialVoucherPicker';
 import { warehouseService } from '../services/warehouseService';
+import { materialService } from '../../manufacturing/services/materialService';
+import type { Material } from '../../manufacturing/types';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { warehouseRackService } from '../services/warehouseRackService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { defaultItemLocationService } from '../services/defaultItemLocationService';
@@ -63,6 +68,7 @@ export const WarehouseLocations: React.FC = () => {
   const { can } = usePermission();
   const systemSettings = useAppStore((s) => s.systemSettings);
   const printSettings = systemSettings?.printTemplate;
+  const rawProducts = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const [labelEngineOpen, setLabelEngineOpen] = useState(false);
   const [labelEngineSeed, setLabelEngineSeed] = useState<WarehouseLabelEngineSeed>({ mode: 'locations' });
@@ -133,6 +139,30 @@ export const WarehouseLocations: React.FC = () => {
   const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
   const selectedRack = racks.find((rack) => rack.id === selectedRackId);
   const canManage = can('inventory.locations.manage');
+  const { data: materialsCatalog } = useCachedPageLoad<Material[]>(
+    can('inventory.view') || canManage ? 'inventory:materials-catalog' : null,
+    () => materialService.getAll(),
+    { maxAgeMs: 60_000 },
+  );
+  const materials = materialsCatalog ?? [];
+
+  const barcodeByItemId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const product of rawProducts) {
+      const id = String(product.id || '').trim();
+      const barcode = String(product.barcode || '').trim();
+      if (id && barcode) map.set(id, barcode);
+    }
+    for (const material of materials) {
+      const id = String(material.id || '').trim();
+      const barcode = String(material.barcode || '').trim();
+      if (id && barcode) map.set(id, barcode);
+      const legacyId = String(material.legacyRawMaterialId || '').trim();
+      if (legacyId && barcode) map.set(legacyId, barcode);
+    }
+    return map;
+  }, [rawProducts, materials]);
+
 
   const load = async (nextWarehouseId = warehouseId) => {
     try {
@@ -225,6 +255,24 @@ export const WarehouseLocations: React.FC = () => {
       .forEach((row) => map.set(`${row.itemType}__${row.itemId}`, row));
     return map;
   }, [defaults, warehouseId]);
+  const defaultItemPicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        itemOptions.map((item) => {
+          const key = `${item.itemType}__${item.itemId}`;
+          const defaultCode = defaultsByItemKey.get(key)?.locationCode;
+          return {
+            value: key,
+            label: `${item.itemName} (${item.itemCode})${defaultCode ? ` - الافتراضي ${defaultCode}` : ''}`,
+            name: item.itemName,
+            code: item.itemCode,
+            barcode: barcodeByItemId.get(item.itemId) || undefined,
+            stockItemType: item.itemType,
+          };
+        }),
+      ),
+    [itemOptions, defaultsByItemKey, barcodeByItemId],
+  );
   const defaultWarnings = useMemo(() => {
     const activeIds = new Set(activeShelves.map((loc) => loc.id));
     return defaults
@@ -659,26 +707,19 @@ export const WarehouseLocations: React.FC = () => {
 
       <OpsDashPanel title="الرف الافتراضي للصنف" accent="inventory">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4">
-          <select
-            className="rounded-lg border px-3 py-2 text-sm md:col-span-2"
-            value={defaultItemKey}
-            onChange={(e) => {
-              setDefaultItemKey(e.target.value);
-              const existing = defaultsByItemKey.get(e.target.value);
-              setDefaultLocationId(existing?.locationId || '');
-            }}
-          >
-            <option value="">اختر صنف من أرصدة المخزن</option>
-            {itemOptions.map((item) => {
-              const key = `${item.itemType}__${item.itemId}`;
-              return (
-                <option key={key} value={key}>
-                  {item.itemName} ({item.itemCode})
-                  {defaultsByItemKey.get(key)?.locationCode ? ` - الافتراضي ${defaultsByItemKey.get(key)?.locationCode}` : ''}
-                </option>
-              );
-            })}
-          </select>
+          <div className="md:col-span-2">
+            <VoucherItemCombobox
+              options={defaultItemPicker.options}
+              catalog={defaultItemPicker.catalog}
+              value={defaultItemKey}
+              onChange={(value) => {
+                setDefaultItemKey(value);
+                const existing = defaultsByItemKey.get(value);
+                setDefaultLocationId(existing?.locationId || '');
+              }}
+              placeholder="ابحث بالاسم أو امسح الباركود"
+            />
+          </div>
           <select className="rounded-lg border px-3 py-2 text-sm" value={defaultLocationId} onChange={(e) => setDefaultLocationId(e.target.value)}>
             <option value="">اختر الرف الافتراضي</option>
             {activeShelves.map((loc) => <option key={loc.id} value={loc.id}>{loc.code}</option>)}

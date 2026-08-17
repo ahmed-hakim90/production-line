@@ -31,6 +31,15 @@ import {
   isInjectionShiftSelected,
 } from '@/modules/production/utils/injectionReportShift';
 import { resolveReportBehaviorSettings } from '@/modules/production/lib/reportBehaviorSettings';
+import {
+  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
+  REPORT_SAVE_PENDING_MESSAGE,
+  REPORT_SAVE_SUCCESS_MESSAGE,
+  REPORT_SAVE_TOAST_ID,
+  SAVE_ERROR_TOAST_DURATION_MS,
+  describeMissingReportSaveFields,
+  describeSelectedWorkOrderMismatch,
+} from '@/modules/production/lib/reportSaveFeedback';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import type { LineWorkerAssignment } from '../../../types';
 import {
@@ -118,7 +127,7 @@ export const GlobalCreateReportModal: React.FC = () => {
     source?: string;
   } | undefined;
   const { can, isPackagingOnly } = usePermission();
-  const createReport = useAppStore((s) => s.createReport);
+  const queueReportCreate = useAppStore((s) => s.queueReportCreate);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const reportBehavior = useMemo(() => resolveReportBehaviorSettings(systemSettings), [systemSettings]);
   const employees = useAppStore((s) => s.employees);
@@ -564,8 +573,15 @@ export const GlobalCreateReportModal: React.FC = () => {
     close();
   };
 
+  const isDelegatedEntry = Boolean(
+    canCreateForAnySupervisor
+    && currentEmployee?.id
+    && form.employeeId
+    && form.employeeId !== currentEmployee.id,
+  );
+
   const openErrorOverlay = (text: string) => {
-    showAppToast('error', text);
+    showAppToast('error', text, { duration: SAVE_ERROR_TOAST_DURATION_MS });
   };
 
   const handleSave = async () => {
@@ -590,59 +606,41 @@ export const GlobalCreateReportModal: React.FC = () => {
     const selectedWorkOrder = form.workOrderId
       ? activeWorkOrders.find((row) => row.id === form.workOrderId) ?? null
       : null;
-    const isDelegatedEntry = Boolean(
-      canCreateForAnySupervisor
-      && currentEmployee?.id
-      && form.employeeId
-      && form.employeeId !== currentEmployee.id,
-    );
     if (isDelegatedEntry && !selectedWorkOrder) {
-      openErrorOverlay('اختر أمر شغل أولاً لإنشاء تقرير بالنيابة عن مشرف الخط.');
+      openErrorOverlay(DELEGATED_WORK_ORDER_REQUIRED_MESSAGE);
       return;
     }
-    if (selectedWorkOrder && (
-      !selectedWorkOrder.supervisorId
-      || selectedWorkOrder.supervisorId !== form.employeeId
-      || selectedWorkOrder.lineId !== form.lineId
-      || selectedWorkOrder.productId !== form.productId
-    )) {
-      openErrorOverlay('بيانات المشرف والخط والمنتج يجب أن تطابق أمر الشغل المختار.');
-      return;
-    }
-    if (form.reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(form.shift)) {
-      openErrorOverlay('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
-      return;
+    if (selectedWorkOrder) {
+      const mismatch = describeSelectedWorkOrderMismatch({
+        workOrderSupervisorId: selectedWorkOrder.supervisorId,
+        workOrderLineId: selectedWorkOrder.lineId,
+        workOrderProductId: selectedWorkOrder.productId,
+        employeeId: form.employeeId,
+        lineId: form.lineId,
+        productId: form.productId,
+      });
+      if (mismatch) {
+        openErrorOverlay(mismatch);
+        return;
+      }
     }
     const workersRequired = reportBehavior.requireLaborForFinishedReports && requiresWorkers && effectiveWorkersCount <= 0 && !packagingLaborOptional;
     const validPackagingLines = (form.packagingLines || [])
       .map((l) => canonicalPackagingLine(l, getUnitsPerCarton))
       .map(({ productId, quantityPieces }) => ({ productId, quantityPieces }))
       .filter((l) => l.productId && l.quantityPieces > 0);
-    const packagingLinesOk = form.reportType !== 'packaging' || validPackagingLines.length > 0;
-    const baseFieldsOk = form.reportType === 'packaging'
-      ? Boolean(
-        form.lineId
-        && form.employeeId
-        && (!reportBehavior.requireWorkHoursOnReports || form.workHours)
-        && (!reportBehavior.requirePositiveQuantityOnReports || packagingLinesOk),
-      )
-      : Boolean(
-        form.lineId
-        && form.productId
-        && form.employeeId
-        && (!reportBehavior.requirePositiveQuantityOnReports || form.quantityProduced)
-        && (!reportBehavior.requireWorkHoursOnReports || form.workHours),
-      );
-    if (!baseFieldsOk || workersRequired) {
-      openErrorOverlay(
-        form.reportType === 'packaging' && !packagingLinesOk
-          ? t('modalManager.createReport.completeRequiredFieldsPackagingMulti')
-          : requiresWorkers
-            ? (packagingLaborOptional
-              ? t('modalManager.createReport.completeRequiredFieldsPackaging')
-              : t('modalManager.createReport.completeRequiredFields'))
-            : t('modalManager.createReport.completeRequiredFieldsInjection'),
-      );
+    const missingFieldsMessage = describeMissingReportSaveFields({
+      missingLine: !form.lineId,
+      missingEmployee: !form.employeeId,
+      missingProduct: form.reportType !== 'packaging' && !form.productId,
+      packagingLinesMissing: form.reportType === 'packaging' && validPackagingLines.length === 0,
+      missingQuantity: reportBehavior.requirePositiveQuantityOnReports && form.reportType !== 'packaging' && !form.quantityProduced,
+      missingHours: reportBehavior.requireWorkHoursOnReports && !form.workHours,
+      missingLabor: workersRequired,
+      missingShift: form.reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(form.shift),
+    });
+    if (missingFieldsMessage) {
+      openErrorOverlay(missingFieldsMessage);
       return;
     }
     setSaving(true);
@@ -668,18 +666,30 @@ export const GlobalCreateReportModal: React.FC = () => {
           ? form.shift
           : undefined,
       } as Omit<ProductionReport, 'id' | 'createdAt'>;
-      const created = await createReport(reportPayload, { path: operationPath });
-      if (!created) {
-        const storeError = useAppStore.getState().error;
-        openErrorOverlay(getReportDuplicateMessage(storeError, t('modalManager.createReport.saveError')));
-        return;
-      }
-      showAppToast('success', t('modalManager.createReport.saveSuccess'));
-      setForm(emptyForm(reportBehavior.operationalDayStartHour));
+      const queued = queueReportCreate(reportPayload, { path: operationPath });
+      showAppToast('loading', REPORT_SAVE_PENDING_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
+      void queued.completion.then((createdId) => {
+        if (!createdId) {
+          const storeError = useAppStore.getState().error;
+          setSaving(false);
+          showAppToast(
+            'error',
+            getReportDuplicateMessage(storeError, t('modalManager.createReport.saveError')),
+            { id: REPORT_SAVE_TOAST_ID, duration: SAVE_ERROR_TOAST_DURATION_MS },
+          );
+          return;
+        }
+        setForm(emptyForm(reportBehavior.operationalDayStartHour));
+        setSaving(false);
+        close();
+        showAppToast('success', REPORT_SAVE_SUCCESS_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
+      }).catch((error) => {
+        setSaving(false);
+        openErrorOverlay(getReportDuplicateMessage(error, t('modalManager.createReport.saveError')));
+      });
     } catch (error) {
       const errorMessage = getReportDuplicateMessage(error, t('modalManager.createReport.saveError'));
       openErrorOverlay(errorMessage);
-    } finally {
       setSaving(false);
     }
   };
@@ -746,7 +756,9 @@ export const GlobalCreateReportModal: React.FC = () => {
           )}
 
           <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.workOrderOptional')}</label>
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+              {isDelegatedEntry ? t('modalManager.createReport.workOrderRequired') : t('modalManager.createReport.workOrderOptional')}
+            </label>
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
               value={form.workOrderId}
@@ -793,13 +805,18 @@ export const GlobalCreateReportModal: React.FC = () => {
                 }
               }}
             >
-              <option value="">{t('modalManager.createReport.selectWorkOrder')}</option>
+              <option value="">{t('modalManager.createReport.workOrderNone')}</option>
               {activeWorkOrders.map((wo) => (
                 <option key={wo.id} value={wo.id!}>
                   {`${productNameById.get(wo.productId) ?? t('modalManager.createReport.unknownProduct')} — ${t('modalManager.createReport.remaining')}: ${Math.max(0, Number(wo.quantity || 0) - Number(wo.producedQuantity || 0))} ${t('modalManager.createReport.units')}`}
                 </option>
               ))}
             </select>
+            {isDelegatedEntry && (
+              <p className="text-[11px] font-medium text-[rgb(var(--color-warning))]">
+                {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

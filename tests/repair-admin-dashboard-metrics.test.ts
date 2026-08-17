@@ -31,6 +31,10 @@ assert.equal(getWorkDaysElapsed('', now), 0);
 
 assert.equal(
   isWaitingCustomerApproval({ status: 'waiting_approval', approvalStatus: 'not_required' }),
+  false,
+);
+assert.equal(
+  isWaitingCustomerApproval({ status: 'waiting_approval', approvalStatus: 'pending' }),
   true,
 );
 assert.equal(

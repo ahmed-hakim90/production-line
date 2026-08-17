@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useTenantNavigate } from "@/lib/useTenantNavigate";
 import {
@@ -42,7 +42,7 @@ import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
 import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
 import { calculateWasteRatio } from "@/utils/calculations";
 import { usePermission } from "../../../utils/permissions";
-import { useManagedPrint } from "@/utils/printManager";
+import { usePrintEngine } from "@/utils/printManager";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
@@ -56,7 +56,6 @@ import {
   SURFACE_CARD,
 } from "@/src/components/erp/DetailPageChrome";
 import { CatalogProductDetailPrint } from "../components/CatalogProductDetailPrint";
-import { PrintOffscreenHost } from "@/src/components/erp/PrintOffscreenHost";
 
 const CHART_TOOLTIP_STYLE: React.CSSProperties = {
   borderRadius: 8,

@@ -94,8 +94,8 @@ const sampleJob = {
     'https://app.example.com/track/acme/approve?job=j1&token=tok',
   );
   assert.match(approval, /إجمالي التقدير/);
-  assert.match(approval, /قطع الغيار المقترحة/);
   assert.match(approval, /شاشة/);
+  assert.match(approval, /قطعة/);
   assert.match(approval, /رابط الموافقة أو الرفض/);
   assert.ok(!approval.includes('(أنشئ الرابط أولاً)'));
 }

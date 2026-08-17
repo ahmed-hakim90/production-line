@@ -61,6 +61,8 @@ import { formatRepairApprovalRequestMessage } from '../utils/whatsappRepairMessa
 import { RepairJobPrint } from '../components/RepairJobPrint';
 import { RepairJobIntakePrintBundle } from '../components/RepairJobIntakePrintBundle';
 import { DeliveryReceiptPDF } from '../components/DeliveryReceiptPDF';
+import { RepairPaymentPrint } from '../components/RepairPaymentPrint';
+import { buildRepairPaymentAccountBreakdown } from '../lib/repairPaymentProductBreakdown';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { isReadyToIssueUsage } from '../lib/repairPartFulfillment';
 import { StatusBadge } from '../components/StatusBadge';
@@ -224,6 +226,7 @@ export const RepairJobDetail: React.FC = () => {
   const printRef = useRef<HTMLDivElement>(null);
   const intakeBundlePrintRef = useRef<HTMLDivElement>(null);
   const deliveryAuthorizationPrintRef = useRef<HTMLDivElement>(null);
+  const paymentAccountPrintRef = useRef<HTMLDivElement>(null);
   const printTemplate = systemSettings?.printTemplate;
   const intakeBundlePrintSettings = useMemo(
     () => ({ ...DEFAULT_PRINT_TEMPLATE, ...printTemplate, paperSize: 'a5' as const }),
@@ -239,6 +242,13 @@ export const RepairJobDetail: React.FC = () => {
     contentRef: deliveryAuthorizationPrintRef,
     printSettings: printTemplate,
     documentTitle: job ? `اذن-تسليم-${job.deliveryAuthorizationNo || job.receiptNo}` : 'اذن-تسليم',
+  });
+  const handlePrintPaymentAccount = useManagedPrint({
+    contentRef: paymentAccountPrintRef,
+    printSettings: printTemplate,
+    documentTitle: job
+      ? `تفصيل-حساب-${paymentAuthorization?.authorizationNo || job.receiptNo}`
+      : 'تفصيل-حساب-صيانة',
   });
   const printDeliveryAuthorizationRef = useRef(handlePrintDeliveryAuthorization);
   printDeliveryAuthorizationRef.current = handlePrintDeliveryAuthorization;
@@ -355,6 +365,14 @@ export const RepairJobDetail: React.FC = () => {
   }, [finalCost, job?.laborCost, job?.paidAmount, job?.partsUsed, job?.paymentStatus, jobProducts, manualFinalOverride, serviceOnly, serviceOnlyCost]);
   const effectiveFinalCost = computedJobCost.finalCost;
   const hasInWarrantyProduct = useMemo(() => jobProducts.some((item) => item.inWarranty), [jobProducts]);
+  const accountBreakdown = useMemo(
+    () => (job ? buildRepairPaymentAccountBreakdown({ ...job, jobProducts }, paymentAuthorization) : { products: [], unassigned: [] }),
+    [job, jobProducts, paymentAuthorization],
+  );
+  const productWorkById = useMemo(
+    () => new Map(accountBreakdown.products.map((row) => [row.itemId, row])),
+    [accountBreakdown],
+  );
 
   const branch = useMemo(
     () => branches.find((b) => b.id === job?.branchId) || null,
@@ -1207,8 +1225,8 @@ export const RepairJobDetail: React.FC = () => {
   }, [job?.id, tenantSlug]);
   const waApproval = useMemo(() => {
     if (!job || !approvalUrl) return '';
-    return formatRepairApprovalRequestMessage(job, approvalUrl);
-  }, [job, approvalUrl]);
+    return formatRepairApprovalRequestMessage(job, approvalUrl, paymentAuthorization);
+  }, [job, approvalUrl, paymentAuthorization]);
   const isAssignedToCurrentTechnician = useMemo(() => {
     const assigned = String(job?.technicianId || '').trim();
     return assigned.length > 0 && technicianIds.includes(assigned);
@@ -1296,11 +1314,13 @@ export const RepairJobDetail: React.FC = () => {
   const canRequestApprovalLink = Boolean(
     actionState?.canRequestApproval
     && can('repair.jobs.reception')
+    && job
+    && !isFullManufacturerWarrantyJob(job)
     && (
-      isStatusRole(job?.status, 'estimate_review', repairSettings.workflow.statuses)
-      || isStatusRole(job?.status, 'awaiting_customer', repairSettings.workflow.statuses)
-      || job?.status === 'estimate_ready'
-      || job?.status === 'waiting_approval'
+      isStatusRole(job.status, 'estimate_review', repairSettings.workflow.statuses)
+      || isStatusRole(job.status, 'awaiting_customer', repairSettings.workflow.statuses)
+      || job.status === 'estimate_ready'
+      || job.status === 'waiting_approval'
     ),
   );
   const canPreparePaymentAuth = can('repair.payments.collect') || can('repair.discounts.request');
@@ -1320,7 +1340,11 @@ export const RepairJobDetail: React.FC = () => {
 
   const generateApprovalLink = async () => {
     if (!job?.id || !canRequestApprovalLink) {
-      toast.error('لا تملك صلاحية إنشاء رابط موافقة لهذا الطلب.');
+      toast.error(
+        job && isFullManufacturerWarrantyJob(job)
+          ? 'طلب الضمان الكامل لا يحتاج موافقة تسعير من العميل.'
+          : 'لا تملك صلاحية إنشاء رابط موافقة لهذا الطلب.',
+      );
       return;
     }
     setCreatingApprovalLink(true);
@@ -1486,6 +1510,14 @@ export const RepairJobDetail: React.FC = () => {
       disabled: exportingPdf,
       onClick: () => { void exportReceipt(); },
     });
+    if (paymentAuthorization) {
+      items.push({
+        label: 'طباعة تفصيل الحساب',
+        icon: 'receipt_long',
+        group: 'طباعة وتصدير',
+        onClick: () => handlePrintPaymentAccount(),
+      });
+    }
 
     if (can('repair.complaints.manage')) {
       items.push({
@@ -1533,6 +1565,8 @@ export const RepairJobDetail: React.FC = () => {
   }, [
     job,
     exportingPdf,
+    paymentAuthorization,
+    handlePrintPaymentAccount,
     can,
     navigate,
     tenantSlug,
@@ -1931,10 +1965,39 @@ export const RepairJobDetail: React.FC = () => {
                       <div><span className="text-muted-foreground">إكسسوارات:</span> {item.accessories || '—'}</div>
                       <div className="sm:col-span-2"><span className="text-muted-foreground">عطل العميل:</span> {item.diagnosis || '—'}</div>
                       <div className="sm:col-span-2"><span className="text-muted-foreground">تشخيص الفني:</span> {item.technicianDiagnosis || 'لم يُسجَّل بعد'}</div>
-                      <div className="sm:col-span-2">
-                        <span className="text-muted-foreground">خدمات:</span>{' '}
-                        {serviceNames.length > 0 ? serviceNames.join('، ') : 'لم تُحدد بعد'}
-                      </div>
+                      {(() => {
+                        const priced = productWorkById.get(String(item.itemId || ''));
+                        if (priced && priced.works.length > 0) {
+                          return (
+                            <div className="sm:col-span-2 space-y-1">
+                              <div className="text-muted-foreground">الخدمات والقطع</div>
+                              {priced.works.map((work, workIdx) => (
+                                <div key={`${item.itemId}-${work.kind}-${workIdx}`} className="flex justify-between gap-2 text-xs">
+                                  <span>
+                                    {work.kind === 'part' ? 'قطعة' : 'خدمة'} · {work.name}
+                                    {work.quantity > 1 ? ` ×${work.quantity}` : ''}
+                                  </span>
+                                  <span className="tabular-nums font-medium">
+                                    {work.inWarranty ? 'مجاني' : `${work.customerTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`}
+                                  </span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between gap-2 border-t border-border/60 pt-1 text-xs font-semibold">
+                                <span>إجمالي المنتج</span>
+                                <span className="tabular-nums">
+                                  {priced.inWarranty ? 'مجاني' : `${priced.customerTotal.toLocaleString('ar-EG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م`}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="sm:col-span-2">
+                            <span className="text-muted-foreground">خدمات:</span>{' '}
+                            {serviceNames.length > 0 ? serviceNames.join('، ') : 'لم تُحدد بعد'}
+                          </div>
+                        );
+                      })()}
                     </div>
                     {(can('repair.replacements.create') || can('repair.jobs.reception'))
                       && Number(item.unrepairableQuantity || 0) > 0 ? (
@@ -2067,6 +2130,12 @@ export const RepairJobDetail: React.FC = () => {
 
           {!isDeliveredStatus(job.status) ? (
             <OpsDashPanel title="موافقة العميل" accent="repair">
+              {isFullManufacturerWarrantyJob(job) ? (
+                <p className="text-sm text-muted-foreground">
+                  كل المنتجات داخل الضمان — التكلفة على العميل صفر. لا حاجة لموافقة التسعير؛ الورشة تبدأ الإصلاح بعد التشخيص مباشرة.
+                </p>
+              ) : (
+                <>
               <p className="mb-3 text-sm text-muted-foreground">
                 أنشئ الرابط ثم أرسله واتساب بعد الجاهزية.
               </p>
@@ -2103,6 +2172,8 @@ export const RepairJobDetail: React.FC = () => {
                   </p>
                 )}
               </div>
+                </>
+              )}
             </OpsDashPanel>
           ) : null}
 
@@ -2169,8 +2240,8 @@ export const RepairJobDetail: React.FC = () => {
               {hasInWarrantyProduct && !paymentAuthorization ? (
                 <div className="rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/70 p-2 text-xs text-[rgb(var(--color-primary))]">
                   {isFullManufacturerWarrantyJob(job)
-                    ? 'كل المنتجات داخل الضمان: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.'
-                    : 'طلب مختلط: عند الجاهزية جهّز إذن الدفع — يُحصَّل غير الضمان فقط.'}
+                    ? 'كل المنتجات داخل الضمان: لا موافقة تسعير على العميل. بعد التشخيص تبدأ الورشة الإصلاح، وعند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.'
+                    : 'طلب مختلط: عند الجاهزية جهّز إذن الدفع — يُحصَّل غير الضمان فقط. موافقة العميل مطلوبة على الجزء غير المغطى.'}
                 </div>
               ) : null}
 
@@ -2485,6 +2556,7 @@ export const RepairJobDetail: React.FC = () => {
           job={financialJob}
           branch={branch}
           products={jobProducts}
+          authorization={paymentAuthorization}
           trackUrl={trackUrl}
           printSettings={intakeBundlePrintSettings}
           statusMap={repairSettings.statusMap}
@@ -2495,6 +2567,13 @@ export const RepairJobDetail: React.FC = () => {
           job={financialJob}
           branch={branch}
           products={jobProducts}
+          printSettings={printTemplate}
+        />
+        <RepairPaymentPrint
+          ref={paymentAccountPrintRef}
+          authorization={paymentAuthorization}
+          job={job}
+          branch={branch}
           printSettings={printTemplate}
         />
       </div>

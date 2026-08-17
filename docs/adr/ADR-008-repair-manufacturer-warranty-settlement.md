@@ -30,6 +30,7 @@ Operators asked for:
 ### Full manufacturer warranty (`warrantyScope = manufacturer`)
 
 - `prepareAuthorization` creates `settlementType: 'warranty'` with money fields = 0, status `paid`, authorization prefix `WAR-…`. Manual discounts are rejected.
+- Customer pricing approval is **not required**. After diagnosis + service/part the job advances to `in_repair` (or `awaiting_parts`), with `approvalStatus: not_required`. Sending the public approval link is rejected. Mixed/partial jobs still require customer approval on the billable share.
 - `collectPayment` rejects warranty settlements.
 - `deliver` allows zero gross, sets `financialState: warranty_settled`, emits `job.delivered_warranty`.
 - Journal type: `repair_warranty_delivery` with covered amounts posted via `warrantyAllowances` (contra-revenue) so GL reflects absorbed warranty service/parts without customer cash.

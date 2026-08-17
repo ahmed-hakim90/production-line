@@ -5,6 +5,8 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { Button, SearchableSelect } from '../components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { usePermission } from '../../../utils/permissions';
 import {
   exportAsImage,
@@ -88,6 +90,15 @@ import {
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
 import { resolveReportBehaviorSettings } from '../lib/reportBehaviorSettings';
+import {
+  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
+  REPORT_SAVE_PENDING_MESSAGE,
+  REPORT_SAVE_SUCCESS_MESSAGE,
+  REPORT_SAVE_TOAST_ID,
+  SAVE_ERROR_TOAST_DURATION_MS,
+  describeMissingReportSaveFields,
+  describeSelectedWorkOrderMismatch,
+} from '../lib/reportSaveFeedback';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
@@ -233,7 +244,7 @@ export const QuickAction: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can, isPackagingOnly } = usePermission();
   const canCreateForAnySupervisor = can('reports.createForAnySupervisor');
-  const createReport = useAppStore((s) => s.createReport);
+  const queueReportCreate = useAppStore((s) => s.queueReportCreate);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const lineStatuses = useAppStore((s) => s.lineStatuses);
@@ -303,7 +314,7 @@ export const QuickAction: React.FC = () => {
   const [selectedLineWorkerEmployeeId, setSelectedLineWorkerEmployeeId] = useState('');
   const [addingLineWorker, setAddingLineWorker] = useState(false);
   const [endingLineWorkerAssignmentId, setEndingLineWorkerAssignmentId] = useState<string | null>(null);
-  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
+  const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; barcode?: string; categoryName?: string }>>([]);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
   const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
   // `today` holds the report date the user is filing for (defaults to the
@@ -604,9 +615,28 @@ export const QuickAction: React.FC = () => {
 
   const selectableProducts = useMemo(() => (
     reportType === 'component_injection'
-      ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
-      : filterProductionProducts(_rawProducts).map((p) => ({ value: p.id!, label: p.name }))
+      ? injectionRawMaterialOptions.map((m) => ({
+          value: m.id,
+          label: m.code ? `${m.name} (${m.code})` : m.name,
+          name: m.name,
+          code: m.code,
+          barcode: m.barcode,
+          stockItemType: 'material' as const,
+        }))
+      : filterProductionProducts(_rawProducts).map((p) => ({
+          value: p.id!,
+          label: p.code ? `${p.name} (${p.code})` : p.name,
+          name: p.name,
+          code: p.code,
+          barcode: p.barcode,
+          stockItemType: 'finished_good' as const,
+        }))
   ), [reportType, injectionRawMaterialOptions, _rawProducts]);
+
+  const selectableProductPicker = useMemo(
+    () => buildCodeVoucherPicker(selectableProducts),
+    [selectableProducts],
+  );
 
   useEffect(() => {
     if (reportType !== 'component_injection') return;
@@ -1211,6 +1241,14 @@ export const QuickAction: React.FC = () => {
     return bySupervisor.filter((wo) => workOrderMatchesReportType(wo, resolveReportType(reportType)));
   }, [activeWOs, canCreateForAnySupervisor, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId, reportType]);
 
+  const isDelegatedEntry = Boolean(
+    canCreateForAnySupervisor
+    && currentEmployee?.id
+    && employeeId
+    && employeeId !== currentEmployee.id,
+  );
+  const workOrderRequired = reportBehavior.requireWorkOrderOnQuickAction || isDelegatedEntry;
+
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
     const canSaveCurrentType = reportType === 'component_injection'
@@ -1223,70 +1261,44 @@ export const QuickAction: React.FC = () => {
       .map((l) => canonicalPackagingLine(l, getUnitsPerCarton))
       .map(({ productId, quantityPieces }) => ({ productId, quantityPieces }))
       .filter((l) => l.productId && l.quantityPieces > 0);
-    if (!lineId || !employeeId) {
-      showAppToast('error', 'أكمل بيانات الخط والمشرف أولاً.');
-      return;
-    }
-    if (reportType === 'packaging') {
-      if (validPackagingLines.length === 0) {
-        showAppToast('error', 'أضف سطر منتج واحد على الأقل بكمية صحيحة (كراتين إن وُجد حجم كرتونة للمنتج، وإلا قطع).');
-        return;
-      }
-    } else if (!productId) {
-      showAppToast('error', 'أكمل بيانات الخط والمنتج والمشرف أولاً.');
-      return;
-    }
-    const requireWorkOrder = reportBehavior.requireWorkOrderOnQuickAction;
     const selectedWorkOrder = selectedWorkOrderId
       ? scopedActiveWOs.find((wo) => wo.id === selectedWorkOrderId) ?? null
       : null;
     const reportProductId = reportType === 'packaging'
-      ? validPackagingLines[0].productId
+      ? validPackagingLines[0]?.productId || ''
       : productId;
-    const isDelegatedEntry = Boolean(
-      canCreateForAnySupervisor
-      && currentEmployee?.id
-      && employeeId
-      && employeeId !== currentEmployee.id,
-    );
+    const missingFieldsMessage = describeMissingReportSaveFields({
+      missingLine: !lineId,
+      missingEmployee: !employeeId,
+      missingProduct: reportType !== 'packaging' && !productId,
+      packagingLinesMissing: reportType === 'packaging' && validPackagingLines.length === 0,
+      missingQuantity: reportBehavior.requirePositiveQuantityOnReports && reportType !== 'packaging' && effectiveQuantityProduced <= 0,
+      missingHours: reportBehavior.requireWorkHoursOnReports && Number(hours || 0) <= 0,
+      missingLabor: reportBehavior.requireLaborForFinishedReports && requiresWorkers && workersTotal <= 0 && !packagingLaborOptionalQuick,
+      missingShift: reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(injectionShift),
+      missingWorkOrder: reportBehavior.requireWorkOrderOnQuickAction && !isDelegatedEntry && !selectedWorkOrder,
+    });
+    if (missingFieldsMessage) {
+      showAppToast('error', missingFieldsMessage, { duration: SAVE_ERROR_TOAST_DURATION_MS });
+      return;
+    }
     if (isDelegatedEntry && !selectedWorkOrder) {
-      showAppToast('error', 'اختر أمر شغل أولاً لإنشاء تقرير بالنيابة عن مشرف الخط.');
+      showAppToast('error', DELEGATED_WORK_ORDER_REQUIRED_MESSAGE, { duration: SAVE_ERROR_TOAST_DURATION_MS });
       return;
     }
-    if (selectedWorkOrder && (
-      !selectedWorkOrder.supervisorId
-      || selectedWorkOrder.supervisorId !== employeeId
-      || selectedWorkOrder.lineId !== lineId
-      || selectedWorkOrder.productId !== reportProductId
-    )) {
-      showAppToast('error', 'بيانات المشرف والخط والمنتج يجب أن تطابق أمر الشغل المختار.');
-      return;
-    }
-    if (requireWorkOrder) {
-      if (!selectedWorkOrderId || !selectedWorkOrder) {
-        showAppToast('error', 'اختر أمر شغل موجّه للمشرف قبل حفظ التقرير.');
+    if (selectedWorkOrder) {
+      const mismatch = describeSelectedWorkOrderMismatch({
+        workOrderSupervisorId: selectedWorkOrder.supervisorId,
+        workOrderLineId: selectedWorkOrder.lineId,
+        workOrderProductId: selectedWorkOrder.productId,
+        employeeId,
+        lineId,
+        productId: reportProductId,
+      });
+      if (mismatch) {
+        showAppToast('error', mismatch, { duration: SAVE_ERROR_TOAST_DURATION_MS });
         return;
       }
-      if (selectedWorkOrder.lineId !== lineId || selectedWorkOrder.productId !== reportProductId) {
-        showAppToast('error', 'أمر الشغل المختار لا يطابق الخط والمنتج في التقرير.');
-        return;
-      }
-    }
-    if (reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(injectionShift)) {
-      showAppToast('error', 'اختر الوردية (صباحي أو مسائي) قبل الحفظ');
-      return;
-    }
-    if (reportBehavior.requireWorkHoursOnReports && Number(hours || 0) <= 0) {
-      showAppToast('error', 'أكمل ساعات العمل.');
-      return;
-    }
-    if (reportBehavior.requirePositiveQuantityOnReports && reportType !== 'packaging' && effectiveQuantityProduced <= 0) {
-      showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية وساعات العمل).');
-      return;
-    }
-    if (reportBehavior.requireLaborForFinishedReports && requiresWorkers && workersTotal <= 0 && !packagingLaborOptionalQuick) {
-      showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
-      return;
     }
     if (
       productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
@@ -1350,30 +1362,36 @@ export const QuickAction: React.FC = () => {
         : {}),
     };
 
-    let id: string | null = null;
-    let saveError: unknown = null;
-    try {
-      id = await createReport(data, { path: PRODUCTION_REPORT_CREATE_PATHS.quickAction });
-    } catch (error) {
-      saveError = error;
-    }
+    const queued = queueReportCreate(data, { path: PRODUCTION_REPORT_CREATE_PATHS.quickAction });
+    showAppToast('loading', REPORT_SAVE_PENDING_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
 
-    if (id) {
+    void queued.completion.then((createdId) => {
+      if (!createdId) {
+        const latestStoreError = useAppStore.getState().error;
+        setSaving(false);
+        showAppToast(
+          'error',
+          getReportDuplicateMessage(latestStoreError || saveErrorFromStore, 'تعذر حفظ التقرير'),
+          { id: REPORT_SAVE_TOAST_ID, duration: SAVE_ERROR_TOAST_DURATION_MS },
+        );
+        return;
+      }
       if (reportType === 'packaging') {
         setProductId(validPackagingLines[0].productId);
       }
+      showAppToast('success', REPORT_SAVE_SUCCESS_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
       const packagingPrintLines = reportType === 'packaging'
         ? buildPackagingPrintLinesFromReport(
           {
             ...data,
-            id: typeof id === 'string' ? id : undefined,
+            id: createdId,
             reportType: 'packaging',
           } as ProductionReport,
           { getProductName: getProductNameForPrint, getUnitsPerCarton },
         )
         : undefined;
       const row: ReportPrintRow = {
-        reportId: id,
+        reportId: createdId,
         reportCode: undefined,
         date: today,
         sourceReportType: resolveReportType(reportType),
@@ -1402,6 +1420,7 @@ export const QuickAction: React.FC = () => {
       };
       setPrintReport(row);
       setSaved(true);
+      setSaving(false);
       writeQuickActionStoredState(storageKey, {
         savedShare: {
           printReport: row,
@@ -1411,12 +1430,14 @@ export const QuickAction: React.FC = () => {
           savedAt: Date.now(),
         },
       });
-      showAppToast('success', 'تم حفظ التقرير بنجاح');
-    } else {
-      const latestStoreError = useAppStore.getState().error;
-      showAppToast('error', getReportDuplicateMessage(saveError || latestStoreError || saveErrorFromStore, 'تعذر حفظ التقرير'));
-    }
-    setSaving(false);
+    }).catch((error) => {
+      setSaving(false);
+      showAppToast(
+        'error',
+        getReportDuplicateMessage(error, 'تعذر حفظ التقرير'),
+        { id: REPORT_SAVE_TOAST_ID, duration: SAVE_ERROR_TOAST_DURATION_MS },
+      );
+    });
   };
 
   const handleReset = () => {
@@ -1683,22 +1704,22 @@ export const QuickAction: React.FC = () => {
       {!saved ? (
         <OpsDashPanel title="بيانات التقرير" accent="production">
           {/* Work Order Selector — list is scoped to the report supervisor */}
-          {(reportBehavior.requireWorkOrderOnQuickAction || can('workOrders.view') || canCreateForAnySupervisor) && (
+          {(workOrderRequired || can('workOrders.view') || canCreateForAnySupervisor) && (
             <div className="mb-5">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 flex items-center gap-1">
                 <span className="material-icons-round text-sm text-primary">assignment</span>
-                {reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor
+                {workOrderRequired
                   ? 'أمر شغل موجّه للمشرف (إلزامي)'
                   : 'أمر شغل (اختياري)'}
-                {(reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor) && (
+                {workOrderRequired && (
                   <span className="text-[rgb(var(--color-danger))]" aria-hidden>*</span>
                 )}
               </label>
               <Select
-                value={selectedWorkOrderId || ((reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor) ? undefined : 'none')}
+                value={selectedWorkOrderId || (workOrderRequired ? undefined : 'none')}
                 onValueChange={(value) => {
                   if (value === 'none') {
-                    if (reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor) return;
+                    if (workOrderRequired) return;
                     setSelectedWorkOrderId('');
                     return;
                   }
@@ -1709,14 +1730,14 @@ export const QuickAction: React.FC = () => {
                 <SelectTrigger className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
                   <SelectValue
                     placeholder={
-                      reportBehavior.requireWorkOrderOnQuickAction || canCreateForAnySupervisor
+                      workOrderRequired
                         ? 'اختر أمر شغل موجّه للمشرف'
                         : 'اختر أمر شغل لتعبئة البيانات تلقائياً'
                     }
                   />
                 </SelectTrigger>
                 <SelectContent>
-                  {!reportBehavior.requireWorkOrderOnQuickAction && !canCreateForAnySupervisor && (
+                  {!workOrderRequired && (
                     <SelectItem value="none">بدون أمر شغل</SelectItem>
                   )}
                   {scopedActiveWOs.map((wo) => {
@@ -1732,10 +1753,22 @@ export const QuickAction: React.FC = () => {
                 </SelectContent>
               </Select>
               {scopedActiveWOs.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-[rgb(var(--color-danger))] font-medium">
-                  {reportBehavior.requireWorkOrderOnQuickAction
-                    ? 'لا توجد أوامر شغل نشطة موجّهة لهذا المشرف — أنشئ أمر شغل أو راجع التوجيه قبل الحفظ.'
-                    : 'لا توجد أوامر شغل مرتبطة بالمشرف المختار.'}
+                <p className={`mt-1.5 text-[11px] font-medium ${workOrderRequired ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
+                  {workOrderRequired
+                    ? (isDelegatedEntry
+                      ? DELEGATED_WORK_ORDER_REQUIRED_MESSAGE
+                      : 'لا توجد أوامر شغل نشطة موجّهة لهذا المشرف — أنشئ أمر شغل أو راجع التوجيه قبل الحفظ.')
+                    : 'لا توجد أوامر شغل مرتبطة بالمشرف المختار. يمكن الحفظ بدون أمر شغل.'}
+                </p>
+              )}
+              {!workOrderRequired && scopedActiveWOs.length > 0 && (
+                <p className="mt-1.5 text-[11px] font-medium text-[var(--color-text-muted)]">
+                  أمر الشغل غير إلزامي من الإعدادات. اتركه «بدون أمر شغل» إذا لا تريد الربط.
+                </p>
+              )}
+              {isDelegatedEntry && scopedActiveWOs.length > 0 && (
+                <p className="mt-1.5 text-[11px] font-medium text-[rgb(var(--color-warning))]">
+                  {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}
                 </p>
               )}
             </div>
@@ -1794,7 +1827,10 @@ export const QuickAction: React.FC = () => {
                   placeholder="اختر المشرف"
                   options={activeEmployees.map((s) => ({ value: s.id, label: s.name }))}
                   value={employeeId}
-                  onChange={setEmployeeId}
+                  onChange={(value) => {
+                    setEmployeeId(value);
+                    setSelectedWorkOrderId('');
+                  }}
                 />
               )}
             </div>
@@ -1806,7 +1842,10 @@ export const QuickAction: React.FC = () => {
                 placeholder="اختر الخط"
                 options={selectableLines.map((l) => ({ value: l.id!, label: l.name }))}
                 value={lineId}
-                onChange={setLineId}
+                onChange={(value) => {
+                  setLineId(value);
+                  setSelectedWorkOrderId('');
+                }}
                 disabled={canCreateForAnySupervisor && Boolean(selectedWorkOrderId)}
               />
             </div>
@@ -1888,9 +1927,10 @@ export const QuickAction: React.FC = () => {
                     >
                       <div className={cn('space-y-2', productSpan)}>
                         <label className="text-xs font-bold text-[var(--color-text-muted)]">المنتج *</label>
-                        <SearchableSelect
-                          placeholder="اختر المنتج"
-                          options={selectableProducts}
+                        <VoucherItemCombobox
+                          placeholder="ابحث بالاسم أو امسح الباركود"
+                          options={selectableProductPicker.options}
+                          catalog={selectableProductPicker.catalog}
                           value={row.productId}
                           disabled={canCreateForAnySupervisor && Boolean(selectedWorkOrderId)}
                           onChange={(v) => {
@@ -1899,6 +1939,7 @@ export const QuickAction: React.FC = () => {
                               next[idx] = { ...newEmptyPackagingLine(), productId: v };
                               return next;
                             });
+                            setSelectedWorkOrderId('');
                           }}
                         />
                       </div>
@@ -2017,11 +2058,15 @@ export const QuickAction: React.FC = () => {
               <>
                 <div>
                   <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">{reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}</label>
-                  <SearchableSelect
-                    placeholder={reportType === 'component_injection' ? 'اختر المكون' : 'اختر المنتج'}
-                    options={selectableProducts}
+                  <VoucherItemCombobox
+                    placeholder={reportType === 'component_injection' ? 'ابحث أو امسح كود المكون' : 'ابحث بالاسم أو امسح الباركود'}
+                    options={selectableProductPicker.options}
+                    catalog={selectableProductPicker.catalog}
                     value={productId}
-                    onChange={setProductId}
+                    onChange={(value) => {
+                      setProductId(value);
+                      setSelectedWorkOrderId('');
+                    }}
                     disabled={canCreateForAnySupervisor && Boolean(selectedWorkOrderId)}
                   />
                 </div>
@@ -2259,6 +2304,7 @@ export const QuickAction: React.FC = () => {
                 || !lineId
                 || (reportType !== 'packaging' && !productId)
                 || !employeeId
+                || (workOrderRequired && !selectedWorkOrderId)
                 || (reportBehavior.requirePositiveQuantityOnReports && reportType !== 'packaging' && effectiveQuantityProduced <= 0)
                 || (reportType === 'packaging' && !packagingFormValid)
                 || (reportBehavior.requireLaborForFinishedReports && reportType !== 'component_injection' && !packagingLaborOptionalQuick && workersTotal <= 0)

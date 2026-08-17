@@ -1350,6 +1350,8 @@ export type PrintDocumentTypeId =
   | "productionReport"
   | "repairSalesInvoice"
   | "stockTransfer"
+  | "stockReceipt"
+  | "stockIssue"
   | "itemCard"
   | "accountingReport"
   | "qualityReport"
@@ -1372,6 +1374,7 @@ export type PrintDocumentTypeId =
   | "workOrder"
   | "productionIssue"
   | "departmentConsumableIssue"
+  | "sparePartsReplenishment"
   | "itemBarcodeLabel"
   | "locationBarcodeLabel";
 

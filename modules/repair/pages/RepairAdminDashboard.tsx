@@ -859,7 +859,7 @@ export const RepairAdminDashboard: React.FC = () => {
       )}
       {canViewCustomers && (
         <Link to={path('/customers/kpi')}>
-          <Button size="sm" variant="outline">مؤشرات العملاء</Button>
+          <Button size="sm" variant="outline">لوحة العملاء</Button>
         </Link>
       )}
     </div>
@@ -1289,7 +1289,7 @@ export const RepairAdminDashboard: React.FC = () => {
                   )}
                   {canViewCustomers && (
                     <Link to={path('/customers/kpi')}>
-                      <Button size="sm" variant="outline">مؤشرات العملاء</Button>
+                      <Button size="sm" variant="outline">لوحة العملاء</Button>
                     </Link>
                   )}
                 </div>

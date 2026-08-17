@@ -12,7 +12,8 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { SearchableSelect } from '@/components/UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import { routingQueryKeys } from '../hooks/routingQueries';
 import { useStopwatch } from '../hooks/useStopwatch';
 import { routingPlanService } from '../services/routingPlanService';
@@ -259,10 +260,20 @@ export const ExecutionPage: React.FC = () => {
     }
   }, [actualWorkers, completeMut, execSteps, execution, executionId, isNew, qc, stepIndex, stepNotes, stopAndCaptureSeconds]);
 
-  const productOptions = useMemo(
-    () => filterProductionProducts(_rawProducts)
-      .filter((p) => Boolean(p.id))
-      .map((p) => ({ value: p.id!, label: p.name })),
+  const productPicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        filterProductionProducts(_rawProducts)
+          .filter((p) => Boolean(p.id))
+          .map((p) => ({
+            value: p.id!,
+            label: p.code ? `${p.name} (${p.code})` : p.name,
+            name: p.name,
+            code: p.code,
+            barcode: p.barcode,
+            stockItemType: 'finished_good' as const,
+          })),
+      ),
     [_rawProducts],
   );
 
@@ -466,11 +477,12 @@ export const ExecutionPage: React.FC = () => {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold text-muted-foreground">المنتج</Label>
-              <SearchableSelect
-                options={productOptions}
+              <VoucherItemCombobox
+                options={productPicker.options}
+                catalog={productPicker.catalog}
                 value={productId}
                 onChange={setProductId}
-                placeholder="اختر المنتج"
+                placeholder="ابحث بالاسم أو امسح الباركود"
               />
             </div>
             <div className="space-y-1.5">

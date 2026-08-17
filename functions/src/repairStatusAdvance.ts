@@ -106,7 +106,9 @@ export function roleFlowIndex(role: RepairStatusRole): number {
   return idx >= 0 ? idx : -1;
 }
 
-export function partsAwaitingFulfillment(partsUsed: Array<Record<string, unknown>> | undefined | null): boolean {
+export function partsAwaitingFulfillment(
+  partsUsed: Array<{ fulfillmentStatus?: unknown }> | undefined | null,
+): boolean {
   return (partsUsed || []).some((row) =>
     ['pending_supply', 'ready_to_issue'].includes(String(row.fulfillmentStatus || '')),
   );
@@ -188,6 +190,8 @@ export function resolveNextStatusForAction(input: {
   hasDiagnosis?: boolean;
   hasServiceOrPartSignal?: boolean;
   waitsForParts?: boolean;
+  /** Full manufacturer warranty: customer pays 0, so skip pricing approval. */
+  skipCustomerApproval?: boolean;
 }): string | null {
   const current = mapLegacyRepairStatus(input.currentStatus);
   const currentRole = resolveStatusRole(current, input.statuses);
@@ -210,13 +214,20 @@ export function resolveNextStatusForAction(input: {
     if (mapLegacyRepairStatus(targetId) === current) return null;
     return targetId;
   };
+  const afterCustomerGate = (): string | null => (
+    input.waitsForParts ? (pick('awaiting_parts') || pick('in_repair')) : pick('in_repair')
+  );
 
   switch (input.action) {
     case 'diagnosis_saved': {
       if (!input.hasDiagnosis) return null;
       // Diagnosis text saved → تم الفحص. With part/service already on the job,
       // advance straight to estimate review (still may pass through diagnosed if estimate role missing).
+      // Full warranty skips pricing approval and starts repair (or waits for parts).
       if (input.hasServiceOrPartSignal) {
+        if (input.skipCustomerApproval) {
+          return afterCustomerGate() || pick('estimate_review') || pick('diagnosis');
+        }
         return pick('estimate_review') || pick('diagnosis');
       }
       return pick('diagnosis');
@@ -233,7 +244,13 @@ export function resolveNextStatusForAction(input: {
           if (!targetId || mapLegacyRepairStatus(targetId) === current) return null;
           return targetId;
         }
+        if (input.skipCustomerApproval && currentRole === 'awaiting_customer') {
+          return pick('in_repair');
+        }
         return null;
+      }
+      if (input.skipCustomerApproval) {
+        return afterCustomerGate() || pick('estimate_review');
       }
       return pick('estimate_review');
     }
@@ -245,10 +262,17 @@ export function resolveNextStatusForAction(input: {
       if (currentRole === 'awaiting_parts') return pick('in_repair');
       return null;
     case 'repair_done': {
+      const warrantyMayFinish = Boolean(input.skipCustomerApproval)
+        && (
+          currentRole === 'estimate_review'
+          || currentRole === 'awaiting_customer'
+          || currentRole === 'diagnosis'
+        );
       if (
         currentRole !== 'in_repair'
         && currentRole !== 'awaiting_parts'
         && currentRole !== 'none'
+        && !warrantyMayFinish
       ) {
         return null;
       }

@@ -16,6 +16,7 @@ import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { warehouseService } from '../services/warehouseService';
 import { materialService } from '../../manufacturing/services/materialService';
+import { isMaterialOptedInForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import { sparePartsRecallService } from '../services/sparePartsRecallService';
 import {
   SPARE_PARTS_RECALL_STATUS_LABELS,
@@ -114,7 +115,7 @@ export const SparePartsRecall: React.FC = () => {
     [warehouses],
   );
   const activeMaterials = useMemo(
-    () => materials.filter((m) => m.isActive !== false),
+    () => materials.filter((m) => m.isActive !== false && isMaterialOptedInForSpareParts(m)),
     [materials],
   );
   const materialPicker = useMemo(

@@ -10,6 +10,8 @@ export type WasteComponentOption = {
    */
   materialId: string;
   materialName: string;
+  materialCode?: string;
+  barcode?: string;
   quantityUsed: number;
 };
 
@@ -28,22 +30,41 @@ export function resolveWasteComponentOptions(input: {
     bomItems: input.bomItems,
     materials: input.materials,
     rawMaterials: input.rawMaterials,
-  }).map((row) => ({
-    materialId: row.materialId,
-    materialName: row.materialName,
-    quantityUsed: Number(row.qtyPerUnit || 0),
-  }));
+  }).map((row) => {
+    const material = input.materials.find((m) => String(m.id || '') === row.materialId);
+    return {
+      materialId: row.materialId,
+      materialName: row.materialName,
+      materialCode: row.materialCode,
+      barcode: String(material?.barcode || '').trim() || undefined,
+      quantityUsed: Number(row.qtyPerUnit || 0),
+    };
+  });
 }
 
 export async function loadWasteComponentOptions(productId: string): Promise<WasteComponentOption[]> {
   const id = String(productId || '').trim();
   if (!id) return [];
 
-  const { loadProductComponents } = await import('../../catalog/lib/productComponents');
-  const rows = await loadProductComponents(id);
+  const [{ loadProductComponents }, { materialService }] = await Promise.all([
+    import('../../catalog/lib/productComponents'),
+    import('../../manufacturing/services/materialService'),
+  ]);
+  const [rows, materials] = await Promise.all([
+    loadProductComponents(id),
+    materialService.getAll().catch(() => []),
+  ]);
+  const barcodeById = new Map(
+    materials
+      .filter((m) => m.id)
+      .map((m) => [String(m.id), String(m.barcode || '').trim()] as const)
+      .filter(([, barcode]) => Boolean(barcode)),
+  );
   return rows.map((row) => ({
     materialId: row.materialId,
     materialName: row.materialName,
+    materialCode: row.materialCode,
+    barcode: barcodeById.get(row.materialId) || undefined,
     quantityUsed: Number(row.qtyPerUnit || 0),
   }));
 }

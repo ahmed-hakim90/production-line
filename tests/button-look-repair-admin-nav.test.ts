@@ -15,7 +15,7 @@ const cases: Array<{ label: string; tone: string; icon: string }> = [
   { label: 'الاستبدال', tone: 'export', icon: 'swap_horiz' },
   { label: 'التسعير (الماستر)', tone: 'edit', icon: 'payments' },
   { label: 'الفروع', tone: 'submit', icon: 'store' },
-  { label: 'مؤشرات العملاء', tone: 'view', icon: 'analytics' },
+  { label: 'لوحة العملاء', tone: 'view', icon: 'analytics' },
   { label: 'المخزون', tone: 'view', icon: 'warehouse' },
   { label: 'الخزينة اليومية', tone: 'save', icon: 'point_of_sale' },
   { label: 'التقرير الشهري', tone: 'view', icon: 'calendar_month' },

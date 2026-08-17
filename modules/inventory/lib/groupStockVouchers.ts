@@ -83,8 +83,8 @@ export function isRepairStockSource(source?: StockSourceModule | null): boolean 
 }
 
 export function voucherMovementTitle(movementType: 'IN' | 'OUT', spareContext = false): string {
-  if (movementType === 'IN') return spareContext ? 'إذن إضافة' : 'إذن وارد';
-  return 'إذن منصرف';
+  if (movementType === 'IN') return spareContext ? 'إذن إضافة قطع غيار' : 'إذن إضافة';
+  return spareContext ? 'إذن منصرف قطع غيار' : 'إذن منصرف';
 }
 
 export function voucherDestinationLabel(movementType: 'IN' | 'OUT', spareContext = false): string {
@@ -101,13 +101,15 @@ export function buildVoucherPrintDataFromTransactions(params: {
   spareContext?: boolean;
 }): StockTransferPrintData {
   const { group, warehouseName, spareContext = false } = params;
+  const documentType = voucherMovementTitle(group.movementType, spareContext);
   return {
     transferNo: group.referenceNo,
     createdAt: group.createdAt,
     fromWarehouseName: warehouseName,
     toWarehouseName: voucherDestinationLabel(group.movementType, spareContext),
     note: group.note,
-    statusLabel: voucherMovementTitle(group.movementType, spareContext),
+    statusLabel: documentType,
+    documentType,
     createdBy: group.createdBy,
     items: group.lines.map((line) => ({
       itemName: line.itemName,
@@ -116,13 +118,14 @@ export function buildVoucherPrintDataFromTransactions(params: {
       quantity: Math.abs(Number(line.quantity || 0)),
       quantityPieces: Math.abs(Number(line.quantity || 0)),
       unitsPerCarton: Number(line.unitsPerCarton || 0) || undefined,
+      ...(line.locationCode ? { locationCode: line.locationCode } : {}),
     })),
   };
 }
 
 export function voucherPrintFilePrefix(movementType: 'IN' | 'OUT', spareContext = false): string {
-  if (movementType === 'IN') return spareContext ? 'اذن-اضافة' : 'اذن-وارد';
-  return 'اذن-منصرف';
+  if (movementType === 'IN') return spareContext ? 'اذن-اضافة' : 'اذن-اضافة';
+  return spareContext ? 'اذن-منصرف' : 'اذن-منصرف';
 }
 
 /** Flatten grouped recent rows for a compact ops feed. */

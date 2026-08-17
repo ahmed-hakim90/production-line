@@ -1,6 +1,10 @@
-import type { RepairJob } from '../types';
+import type { RepairJob, RepairPaymentAuthorization } from '../types';
 import { computeRepairJobCost } from './repairBusinessLogic';
 import { isDeliveredStatus, mapLegacyRepairStatus } from './repairWorkflowNormalize';
+import {
+  buildRepairPaymentAccountBreakdown,
+  formatRepairPaymentAccountText,
+} from '../lib/repairPaymentProductBreakdown';
 
 const statusLabelMap: Record<string, string> = {
   received: 'وارد',
@@ -124,26 +128,47 @@ export const formatRepairDeliveredMessage = (job: RepairJob, trackUrl?: string):
     trackUrl ? `رابط متابعة الطلب:\n${trackUrl}` : '',
   ]);
 
-/** رابط موافقة العميل على التقدير — يشمل قطع الغيار عند توفرها */
-export const formatRepairApprovalRequestMessage = (job: RepairJob, approveUrl: string): string => {
+/** رابط موافقة العميل على التقدير — يشمل خدمة/قطعة كل منتج عند توفرها */
+export const formatRepairApprovalRequestMessage = (
+  job: RepairJob,
+  approveUrl: string,
+  authorization?: RepairPaymentAuthorization | null,
+): string => {
+  const account = buildRepairPaymentAccountBreakdown(job, authorization);
+  const productBlock = formatRepairPaymentAccountText(account);
   const cost = computeRepairJobCost(job);
-  const estimate = cost.estimatedCost > 0 ? cost.estimatedCost : cost.finalCost;
-  const partsBlock = formatPartsBlock(job);
+  const estimate = Number(authorization?.netAmount || 0) > 0
+    ? Number(authorization?.netAmount)
+    : (cost.estimatedCost > 0 ? cost.estimatedCost : cost.finalCost);
   const costLines = [
     `رقم الإيصال: ${job.receiptNo || '—'}`,
     `إجمالي التقدير: ${money(estimate)}`,
   ];
-  if (cost.partsCost > 0) costLines.push(`منها قطع غيار: ${money(cost.partsCost)}`);
-  if (cost.laborCost > 0) costLines.push(`أجور صيانة: ${money(cost.laborCost)}`);
-  if (cost.serviceOnlyCost > 0) costLines.push(`خدمة: ${money(cost.serviceOnlyCost)}`);
+  if (!productBlock) {
+    const partsBlock = formatPartsBlock(job);
+    if (cost.partsCost > 0) costLines.push(`منها قطع غيار: ${money(cost.partsCost)}`);
+    if (cost.laborCost > 0) costLines.push(`أجور صيانة: ${money(cost.laborCost)}`);
+    if (cost.serviceOnlyCost > 0) costLines.push(`خدمة: ${money(cost.serviceOnlyCost)}`);
+    return joinMessage([
+      [
+        `مرحباً ${job.customerName || 'عميلنا'}،`,
+        `نحتاج موافقتكم على تقدير إصلاح جهاز (${deviceLabel(job)}).`,
+      ].join('\n'),
+      costLines.join('\n'),
+      partsBlock,
+      approveUrl
+        ? `رابط الموافقة أو الرفض (صالح لمدة محدودة):\n${approveUrl}`
+        : 'الرجاء طلب رابط الموافقة من الفرع.',
+    ]);
+  }
 
   return joinMessage([
     [
       `مرحباً ${job.customerName || 'عميلنا'}،`,
-      `نحتاج موافقتكم على تقدير إصلاح جهاز (${deviceLabel(job)}).`,
+      `نحتاج موافقتكم على تقدير إصلاح الأجهزة التالية.`,
     ].join('\n'),
     costLines.join('\n'),
-    partsBlock,
+    productBlock,
     approveUrl
       ? `رابط الموافقة أو الرفض (صالح لمدة محدودة):\n${approveUrl}`
       : 'الرجاء طلب رابط الموافقة من الفرع.',

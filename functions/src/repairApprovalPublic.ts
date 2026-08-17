@@ -7,6 +7,7 @@ import {
   isFullManufacturerWarrantyJob,
   warrantyProductItemIds,
 } from './repairManufacturerWarranty.js';
+import { buildRepairPaymentAccountBreakdown } from './repairPaymentProductBreakdown.js';
 
 export type PublicRepairApprovalPartLine = {
   partName: string;
@@ -17,12 +18,23 @@ export type PublicRepairApprovalPartLine = {
   warrantyLabel: string;
 };
 
+export type PublicRepairApprovalWorkLine = {
+  kind: 'service' | 'part';
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  catalogTotal: number;
+  lineCost: number;
+  inWarranty: boolean;
+};
+
 export type PublicRepairApprovalProductLine = {
   name: string;
   quantity: number;
   lineCost: number;
   inWarranty: boolean;
   warrantyLabel: string;
+  works?: PublicRepairApprovalWorkLine[];
 };
 
 export type PublicRepairApprovalView = {
@@ -43,6 +55,7 @@ export type PublicRepairApprovalView = {
   estimatedTotal: number;
   parts: PublicRepairApprovalPartLine[];
   products: PublicRepairApprovalProductLine[];
+  unassignedWorks?: PublicRepairApprovalWorkLine[];
 };
 
 const money = (value: unknown): number => {
@@ -88,6 +101,16 @@ export type PublicRepairApprovalJobSource = {
 
 export function buildPublicRepairApprovalView(
   job: PublicRepairApprovalJobSource,
+  authorization?: {
+    serviceLines?: unknown;
+    partLines?: unknown;
+    settlementType?: unknown;
+    warrantyScope?: unknown;
+    serviceGross?: unknown;
+    partsGross?: unknown;
+    netAmount?: unknown;
+    grossAmount?: unknown;
+  } | null,
 ): PublicRepairApprovalView {
   const rawProducts = Array.isArray(job.jobProducts) ? job.jobProducts : [];
   const fullWarranty = isFullManufacturerWarrantyJob({
@@ -152,7 +175,7 @@ export function buildPublicRepairApprovalView(
     ? computed
     : (estimatedStored > 0 ? estimatedStored : money(job.finalCostOverride ?? job.finalCost));
 
-  return {
+  const view: PublicRepairApprovalView = {
     receiptNo: text(job.receiptNo, 64),
     customerName: text(job.customerName, 120),
     customerPhone: text(job.customerPhone, 32),
@@ -170,5 +193,48 @@ export function buildPublicRepairApprovalView(
     estimatedTotal,
     parts,
     products,
+  };
+
+  if (!authorization) return view;
+
+  const account = buildRepairPaymentAccountBreakdown(job, authorization);
+  const pricedProducts: PublicRepairApprovalProductLine[] = account.products.map((row) => ({
+    name: text(row.productLabel, 120) || 'منتج',
+    quantity: 1,
+    lineCost: row.customerTotal,
+    inWarranty: row.inWarranty,
+    warrantyLabel: row.warrantyLabel,
+    works: row.works.map((work) => ({
+      kind: work.kind,
+      name: work.name,
+      quantity: work.quantity,
+      unitPrice: work.unitPrice,
+      catalogTotal: work.catalogTotal,
+      lineCost: work.customerTotal,
+      inWarranty: work.inWarranty,
+    })),
+  }));
+  const authPartsCost = money(authorization.partsGross);
+  const authServiceCost = money(authorization.serviceGross);
+  const authNet = money(authorization.netAmount);
+  const authGross = money(authorization.grossAmount);
+  return {
+    ...view,
+    products: pricedProducts.length > 0 ? pricedProducts : view.products,
+    unassignedWorks: account.unassigned.map((work) => ({
+      kind: work.kind,
+      name: work.name,
+      quantity: work.quantity,
+      unitPrice: work.unitPrice,
+      catalogTotal: work.catalogTotal,
+      lineCost: work.customerTotal,
+      inWarranty: work.inWarranty,
+    })),
+    partsCost: authPartsCost > 0 || authServiceCost > 0 ? authPartsCost : view.partsCost,
+    productsCost: authServiceCost > 0 || authPartsCost > 0 ? authServiceCost : view.productsCost,
+    billableProductsCost: money(pricedProducts.filter((row) => !row.inWarranty).reduce((sum, row) => sum + row.lineCost, 0)),
+    laborCost: 0,
+    serviceOnlyCost: 0,
+    estimatedTotal: authNet > 0 || authGross > 0 ? authNet : view.estimatedTotal,
   };
 }

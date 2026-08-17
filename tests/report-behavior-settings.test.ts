@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { getOperationalDateString } from '../utils/calculations';
 import {
   DEFAULT_REPORT_BEHAVIOR_SETTINGS,
@@ -48,5 +49,19 @@ assert.equal(
   getOperationalDateString(6, new Date('2026-07-29T06:30:00')),
   '2026-07-29',
 );
+
+const quickActionSource = readFileSync(new URL('../modules/production/pages/QuickAction.tsx', import.meta.url), 'utf8');
+assert.match(
+  quickActionSource,
+  /workOrderRequired = reportBehavior.requireWorkOrderOnQuickAction \|\| isDelegatedEntry/,
+);
+assert.match(quickActionSource, /بدون أمر شغل/);
+assert.doesNotMatch(
+  quickActionSource,
+  /requireWorkOrderOnQuickAction \|\| canCreateForAnySupervisor\s*\n\s*\? 'أمر شغل موجّه للمشرف \(إلزامي\)'/,
+);
+
+const storeSource = readFileSync(new URL('../store/useAppStore.ts', import.meta.url), 'utf8');
+assert.match(storeSource, /Do not silently attach a work order when the operator left it empty/);
 
 console.log('report-behavior-settings tests passed');

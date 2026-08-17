@@ -593,10 +593,9 @@ export const MENU_CONFIG: MenuGroup[] = [
     label: 'العملاء',
     icon: 'groups',
     children: [
+      { key: 'customers-kpi', label: 'لوحة العملاء', icon: 'monitoring', path: '/customers/kpi', permission: 'customers.view' },
       { key: 'customers-list', label: 'سجل العملاء', icon: 'badge', path: '/customers', permission: 'customers.view' },
-      { key: 'customers-kpi', label: 'مؤشرات العملاء', icon: 'monitoring', path: '/customers/kpi', permission: 'customers.view' },
       { key: 'customers-import', label: 'استيراد العملاء', icon: 'upload_file', path: '/customers/import', permission: 'customers.import' },
-      { key: 'customers-repair-link', label: 'ربط طلبات الصيانة', icon: 'link', path: '/customers/repair-link', permission: 'customers.edit' },
     ],
   },
   {

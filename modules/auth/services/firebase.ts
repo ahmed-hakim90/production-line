@@ -635,6 +635,24 @@ export type PublicRepairApprovalEstimate = {
     lineCost: number;
     inWarranty?: boolean;
     warrantyLabel?: string;
+    works?: Array<{
+      kind: 'service' | 'part';
+      name: string;
+      quantity: number;
+      unitPrice: number;
+      catalogTotal?: number;
+      lineCost: number;
+      inWarranty?: boolean;
+    }>;
+  }>;
+  unassignedWorks?: Array<{
+    kind: 'service' | 'part';
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    catalogTotal?: number;
+    lineCost: number;
+    inWarranty?: boolean;
   }>;
 };
 

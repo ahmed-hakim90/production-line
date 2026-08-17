@@ -8,6 +8,7 @@ import { createRepairSpareIssueHandler, issueRepairSpareIssueHandler, } from './
 import { loadCustomerType, pickRepairSalePrice, roundRepairMoney } from './repairSalePrice.js';
 import { consumeReservedInTx, releaseStockInTx, reserveStockInTx, } from './stockReservation.js';
 import { mapLegacyRepairStatus } from './repairStatusIds.js';
+import { isFullManufacturerWarrantyJob } from './repairManufacturerWarranty.js';
 import { loadTenantWorkflowStatuses, partsAwaitingFulfillment, resolveNextStatusForAction, } from './repairStatusAdvance.js';
 const db = getDb();
 const USERS = 'users';
@@ -33,15 +34,21 @@ const stripUndefined = (obj) => Object.fromEntries(Object.entries(obj).filter(([
 const toIsoNow = () => new Date().toISOString();
 async function maybeAdvanceJobAfterPartLinked(tenantId, jobRef, job, waitsForParts) {
     const statuses = await loadTenantWorkflowStatuses(db, tenantId);
+    const skipCustomerApproval = isFullManufacturerWarrantyJob(job);
     const nextStatus = resolveNextStatusForAction({
         action: 'part_or_service_linked',
         currentStatus: String(job.status || ''),
         statuses,
         waitsForParts,
+        skipCustomerApproval,
     });
     if (!nextStatus || nextStatus === mapLegacyRepairStatus(String(job.status || '')))
         return;
-    await jobRef.update({ status: nextStatus, updatedAt: toIsoNow() });
+    await jobRef.update({
+        status: nextStatus,
+        updatedAt: toIsoNow(),
+        ...(skipCustomerApproval ? { approvalStatus: 'not_required' } : {}),
+    });
 }
 async function maybeAdvanceJobAfterPartsReady(tenantId, jobRef, job) {
     if (partsAwaitingFulfillment(job.partsUsed))
@@ -648,11 +655,13 @@ export const requestRepairJobSparePartHandler = async (request) => {
         replenishmentReferenceNo,
     }));
     const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+    const skipCustomerApproval = isFullManufacturerWarrantyJob(job);
     const nextStatus = resolveNextStatusForAction({
         action: 'part_or_service_linked',
         currentStatus: String(job.status || ''),
         statuses,
         waitsForParts: true,
+        skipCustomerApproval,
     });
     const jobUpdate = {
         partsUsed: prevParts,
@@ -660,6 +669,8 @@ export const requestRepairJobSparePartHandler = async (request) => {
     };
     if (nextStatus && nextStatus !== mapLegacyRepairStatus(String(job.status || ''))) {
         jobUpdate.status = nextStatus;
+        if (skipCustomerApproval)
+            jobUpdate.approvalStatus = 'not_required';
     }
     await jobRef.update(jobUpdate);
     await writeActivity(actor, 'repair_job_spare_part.pending_supply', jobId, {

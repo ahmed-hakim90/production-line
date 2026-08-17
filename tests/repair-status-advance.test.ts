@@ -128,6 +128,89 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
 }
 
 {
+  // Full manufacturer warranty: customer pays 0 — skip pricing approval.
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'diagnosis_saved',
+      currentStatus: 'diagnosing',
+      statuses: defaultStatuses,
+      hasDiagnosis: true,
+      hasServiceOrPartSignal: true,
+      skipCustomerApproval: true,
+    }),
+    'repairing',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'diagnosis_saved',
+      currentStatus: 'diagnosing',
+      statuses: defaultStatuses,
+      hasDiagnosis: true,
+      hasServiceOrPartSignal: true,
+      waitsForParts: true,
+      skipCustomerApproval: true,
+    }),
+    'waiting_parts',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'part_or_service_linked',
+      currentStatus: 'diagnosed',
+      statuses: defaultStatuses,
+      skipCustomerApproval: true,
+    }),
+    'repairing',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'part_or_service_linked',
+      currentStatus: 'estimate_ready',
+      statuses: defaultStatuses,
+      skipCustomerApproval: true,
+    }),
+    'repairing',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'part_or_service_linked',
+      currentStatus: 'waiting_approval',
+      statuses: defaultStatuses,
+      skipCustomerApproval: true,
+    }),
+    'repairing',
+  );
+  // Billable / mixed jobs still wait for customer pricing approval.
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'diagnosis_saved',
+      currentStatus: 'diagnosing',
+      statuses: defaultStatuses,
+      hasDiagnosis: true,
+      hasServiceOrPartSignal: true,
+      skipCustomerApproval: false,
+    }),
+    'estimate_ready',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'repair_done',
+      currentStatus: 'estimate_ready',
+      statuses: defaultStatuses,
+      skipCustomerApproval: true,
+    }),
+    'ready',
+  );
+  assert.equal(
+    resolveNextStatusForAction({
+      action: 'repair_done',
+      currentStatus: 'estimate_ready',
+      statuses: defaultStatuses,
+    }),
+    null,
+  );
+}
+
+{
   const custom = assignDefaultRolesToStatuses([
     { id: 'received', order: 1, role: 'intake', isEnabled: true },
     { id: 'custom_inspect', order: 2, role: 'diagnosis', isEnabled: true },

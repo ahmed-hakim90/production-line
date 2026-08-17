@@ -12,8 +12,8 @@ export const SPARE_PARTS_REPLENISHMENT_SOURCE = 'spare_parts_replenishment' as c
 export const SPARE_PARTS_REPLENISHMENT_STATUS_LABELS: Record<SparePartsReplenishmentStatus, string> = {
   submitted: 'مقدّم من المركز',
   approved: 'معتمد',
-  prepared: 'مجهّز',
-  responsible_approved: 'معتمد من المسؤول — بانتظار الاستلام',
+  prepared: 'جاهز (مجهّز)',
+  responsible_approved: 'خرج — بانتظار استلام المركز',
   received: 'تم الاستلام',
   rejected: 'مرفوض',
   cancelled: 'ملغى',
@@ -106,11 +106,17 @@ export function canCancelSparePartsRequest(
   );
 }
 
+/**
+ * Effective prepared qty for a line.
+ * Explicit `preparedQty` (including 0 = excluded) wins; otherwise fall back to requested.
+ */
 export function resolvePreparedQty(
   line: Pick<SparePartsReplenishmentLine, 'requestedQty' | 'preparedQty'>,
 ): number {
-  const prepared = toNumber(line.preparedQty);
-  if (prepared > 0) return prepared;
+  if (line.preparedQty != null) {
+    const prepared = toNumber(line.preparedQty);
+    return prepared < 0 ? 0 : prepared;
+  }
   return toNumber(line.requestedQty);
 }
 
@@ -123,9 +129,26 @@ export function resolveReceiveQty(
     if (!(n > 0)) throw new Error('كمية الاستلام يجب أن تكون أكبر من صفر.');
     return n;
   }
-  const prepared = resolvePreparedQty(line);
-  if (prepared > 0) return prepared;
-  return toNumber(line.requestedQty);
+  return resolvePreparedQty(line);
+}
+
+export type SparePartsPrepareLineInput = {
+  lineId: string;
+  preparedQty: number;
+};
+
+/** Client-side guard before calling prepare — CF is authoritative. */
+export function validateSparePartsPrepareLines(lines: SparePartsPrepareLineInput[]): void {
+  if (!Array.isArray(lines) || lines.length === 0) {
+    throw new Error('لا توجد بنود للتجهيز.');
+  }
+  for (const line of lines) {
+    const qty = toNumber(line.preparedQty);
+    if (qty < 0) throw new Error('كمية التجهيز لا يمكن أن تكون سالبة.');
+  }
+  if (!lines.some((line) => toNumber(line.preparedQty) > 0)) {
+    throw new Error('يجب تجهيز بند واحد على الأقل بكمية أكبر من صفر.');
+  }
 }
 
 /** Open basket may accept more job demands only while still submitted. */

@@ -314,6 +314,9 @@ const resolveLinesFromMaterials = async (tenantId, drafts) => {
         if (material.isActive === false) {
             throw new HttpsError('failed-precondition', `المكوّن غير نشط: ${material.name || draft.itemId}`);
         }
+        if (material.availableForSpareParts !== true) {
+            throw new HttpsError('failed-precondition', 'هذه المادة غير مفعّلة لقطع الغيار. فعّلها من شاشة المواد التصنيعية أولاً.');
+        }
         const unitCost = roundMoney(materialPurchaseCostPerBaseUnit(material));
         resolved.push({
             lineId: draft.itemId,
@@ -503,8 +506,8 @@ export const prepareSparePartsReplenishmentHandler = async (request) => {
         if (!key)
             continue;
         const qty = toNumber(row.preparedQty);
-        if (!(qty > 0)) {
-            throw new HttpsError('invalid-argument', 'كمية التجهيز يجب أن تكون أكبر من صفر.');
+        if (qty < 0) {
+            throw new HttpsError('invalid-argument', 'كمية التجهيز لا يمكن أن تكون سالبة.');
         }
         prepMap.set(key, qty);
     }
@@ -518,6 +521,16 @@ export const prepareSparePartsReplenishmentHandler = async (request) => {
             : toNumber(line.preparedQty) > 0
                 ? toNumber(line.preparedQty)
                 : toNumber(line.requestedQty);
+        const { locationId: _oldLocId, locationCode: _oldLocCode, allocations: _oldAlloc, availableQty: _oldAvail, shortageQty: _oldShortage, ...baseLine } = line;
+        if (!(preparedQty > 0)) {
+            lines.push({
+                ...baseLine,
+                preparedQty: 0,
+                totalCostSnapshot: 0,
+                allocations: [],
+            });
+            continue;
+        }
         const preferred = String(line.locationId || '').trim() || undefined;
         const allocated = await allocateLineForCentralWarehouse({
             tenantId: actor.tenantId,
@@ -529,7 +542,6 @@ export const prepareSparePartsReplenishmentHandler = async (request) => {
             locationsRequired,
             locationById,
         });
-        const { locationId: _oldLocId, locationCode: _oldLocCode, allocations: _oldAlloc, availableQty: _oldAvail, shortageQty: _oldShortage, ...baseLine } = line;
         const nextLine = {
             ...baseLine,
             preparedQty,
@@ -543,6 +555,9 @@ export const prepareSparePartsReplenishmentHandler = async (request) => {
             nextLine.shortageQty = allocated.shortageQty;
         }
         lines.push(nextLine);
+    }
+    if (!lines.some((line) => toNumber(line.preparedQty) > 0)) {
+        throw new HttpsError('failed-precondition', 'يجب تجهيز بند واحد على الأقل بكمية أكبر من صفر.');
     }
     const totalCostSnapshot = roundMoney(lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0));
     const now = toIsoNow();
@@ -579,17 +594,26 @@ export const responsibleApproveSparePartsReplenishmentHandler = async (request) 
     const locationById = new Map(locations.map((loc) => [loc.id, loc]));
     const lines = [];
     for (const line of data.lines || []) {
+        const preparedQty = line.preparedQty != null
+            ? toNumber(line.preparedQty)
+            : toNumber(line.requestedQty);
+        if (!(preparedQty > 0)) {
+            lines.push({
+                ...line,
+                preparedQty: 0,
+                allocations: [],
+            });
+            continue;
+        }
         const existing = normalizeLineAllocations(line);
         if (existing.length > 0 || !locationsRequired) {
             lines.push({
                 ...line,
+                preparedQty,
                 ...(existing.length > 0 ? { allocations: existing } : {}),
             });
             continue;
         }
-        const preparedQty = toNumber(line.preparedQty) > 0
-            ? toNumber(line.preparedQty)
-            : toNumber(line.requestedQty);
         const allocated = await allocateLineForCentralWarehouse({
             tenantId: actor.tenantId,
             warehouseId: data.fromWarehouseId,
@@ -657,15 +681,19 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
         let needsPersist = false;
         const backfilledLines = [];
         for (const line of data.lines || []) {
+            const preparedQty = line.preparedQty != null
+                ? toNumber(line.preparedQty)
+                : toNumber(line.requestedQty);
+            if (!(preparedQty > 0)) {
+                backfilledLines.push({ ...line, preparedQty: 0, allocations: [] });
+                continue;
+            }
             const existing = normalizeLineAllocations(line);
             if (existing.length > 0) {
                 backfilledLines.push({ ...line, allocations: existing });
                 continue;
             }
             needsPersist = true;
-            const preparedQty = toNumber(line.preparedQty) > 0
-                ? toNumber(line.preparedQty)
-                : toNumber(line.requestedQty);
             const allocated = await allocateLineForCentralWarehouse({
                 tenantId: actor.tenantId,
                 warehouseId: data.fromWarehouseId,
@@ -703,11 +731,16 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
             throw new HttpsError('permission-denied', 'الطلب خارج شركتك.');
         }
         const planned = [];
+        const skippedLines = [];
         const balanceRefs = [];
         for (const line of current.lines || []) {
-            const prepared = toNumber(line.preparedQty) > 0
+            const prepared = line.preparedQty != null
                 ? toNumber(line.preparedQty)
                 : toNumber(line.requestedQty);
+            if (!(prepared > 0)) {
+                skippedLines.push({ ...line, preparedQty: 0, receivedQty: 0 });
+                continue;
+            }
             const receivedQty = recvMap.has(line.lineId)
                 ? recvMap.get(line.lineId)
                 : prepared;
@@ -731,6 +764,9 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
                 locationRefs,
             });
             balanceRefs.push(sourceBalRef, targetBalRef, ...locationRefs.map((r) => r.locRef));
+        }
+        if (planned.length === 0) {
+            throw new HttpsError('failed-precondition', 'لا توجد بنود مجهّزة للاستلام.');
         }
         const balanceSnaps = balanceRefs.length > 0 ? await tx.getAll(...balanceRefs) : [];
         const balanceSnapByPath = new Map(balanceSnaps.map((s) => [s.ref.path, s]));
@@ -888,6 +924,7 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
                     : {}),
             });
         }
+        nextLines.push(...skippedLines);
         const totalCostSnapshot = roundMoney(nextLines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0));
         tx.update(ref, {
             status: 'received',

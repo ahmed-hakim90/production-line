@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -28,9 +28,8 @@ import type {
 } from '../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { INVENTORY_DOCUMENT_PATHS } from '../../system/lib/operationPathSettings';
-import { exportToPDF, waitForExportPaint } from '../../../utils/reportExport';
 import { toast } from '../../../components/Toast';
 import {
   fetchCachedPageData,
@@ -97,7 +96,6 @@ const emptyLine = (): SuppliesReceiptLine => ({
 export const SuppliesReceipt: React.FC = () => {
   const { can } = usePermission();
   const [searchParams] = useSearchParams();
-  const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const canPrint = can('inventory.transactions.print');
   const consumableMode = searchParams.get('materialType') === 'consumable';
   const {
@@ -154,13 +152,7 @@ export const SuppliesReceipt: React.FC = () => {
   const [fillingKey, setFillingKey] = useState<string | null>(null);
   const [listPage, setListPage] = useState(1);
   const [selectedOrderId, setSelectedOrderId] = useState('');
-  const [printOrder, setPrintOrder] = useState<SuppliesReceiptOrder | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: 'اذن-استلام-مستلزمات',
-  });
+  const { printDocument } = usePrintEngine();
 
   const applyListData = useCallback((data: SuppliesReceiptListData) => {
     const scopedWhs = consumableMode ? data.warehouses : filterWarehouses(data.warehouses);
@@ -454,18 +446,14 @@ export const SuppliesReceipt: React.FC = () => {
     setNote('');
   };
 
-  const print = async (order: SuppliesReceiptOrder) => {
-    setPrintOrder(order);
-    await waitForExportPaint(80);
-    if (isMobilePrint && printRef.current) {
-      await exportToPDF(printRef.current, `اذن-استلام-${order.referenceNo}`, {
-        paperSize: printTemplate?.paperSize,
-        orientation: printTemplate?.orientation,
-        copies: 1,
-      });
-      return;
-    }
-    handlePrint();
+  const print = (order: SuppliesReceiptOrder) => {
+    printDocument({
+      documentTitle: `اذن-استلام-${order.referenceNo || order.id}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <SuppliesReceiptPrint ref={ref} order={order} printSettings={printTemplate} />
+      ),
+    });
   };
 
   const createDraft = async () => {
@@ -1046,22 +1034,6 @@ export const SuppliesReceipt: React.FC = () => {
             </p>
           )}
         </OpsDashPanel>
-      </div>
-
-      <div
-        aria-hidden
-        style={{
-          position: 'fixed',
-          left: '-9999px',
-          top: 0,
-          pointerEvents: 'none',
-          direction: 'rtl',
-          width: '210mm',
-          maxWidth: 'none',
-          overflow: 'visible',
-        }}
-      >
-        <SuppliesReceiptPrint ref={printRef} order={printOrder} printSettings={printTemplate} />
       </div>
     </ModuleOpsPageShell>
   );

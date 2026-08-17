@@ -16,6 +16,7 @@ import {
   type StockBalanceData,
 } from './stockReservation.js';
 import { mapLegacyRepairStatus } from './repairStatusIds.js';
+import { isFullManufacturerWarrantyJob } from './repairManufacturerWarranty.js';
 import {
   loadTenantWorkflowStatuses,
   partsAwaitingFulfillment,
@@ -115,18 +116,29 @@ type JobDocRef = { update: (data: Record<string, unknown>) => Promise<unknown> }
 async function maybeAdvanceJobAfterPartLinked(
   tenantId: string,
   jobRef: JobDocRef,
-  job: { status?: string; partsUsed?: Array<Record<string, unknown>> },
+  job: {
+    status?: string;
+    partsUsed?: Array<Record<string, unknown>>;
+    warrantyScope?: unknown;
+    jobProducts?: Array<{ inWarranty?: unknown } | null | undefined>;
+  },
   waitsForParts: boolean,
 ): Promise<void> {
   const statuses = await loadTenantWorkflowStatuses(db, tenantId);
+  const skipCustomerApproval = isFullManufacturerWarrantyJob(job);
   const nextStatus = resolveNextStatusForAction({
     action: 'part_or_service_linked',
     currentStatus: String(job.status || ''),
     statuses,
     waitsForParts,
+    skipCustomerApproval,
   });
   if (!nextStatus || nextStatus === mapLegacyRepairStatus(String(job.status || ''))) return;
-  await jobRef.update({ status: nextStatus, updatedAt: toIsoNow() });
+  await jobRef.update({
+    status: nextStatus,
+    updatedAt: toIsoNow(),
+    ...(skipCustomerApproval ? { approvalStatus: 'not_required' } : {}),
+  });
 }
 
 async function maybeAdvanceJobAfterPartsReady(
@@ -685,6 +697,8 @@ export const requestRepairJobSparePartHandler = async (request: CallableRequest)
     status?: string;
     customerId?: string;
     partsUsed?: Array<Record<string, unknown>>;
+    warrantyScope?: unknown;
+    jobProducts?: Array<{ inWarranty?: unknown } | null | undefined>;
   };
   if (String(job.tenantId || '').trim() !== actor.tenantId) {
     throw new HttpsError('permission-denied', 'طلب الصيانة خارج شركتك.');
@@ -923,11 +937,13 @@ export const requestRepairJobSparePartHandler = async (request: CallableRequest)
   }));
 
   const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+  const skipCustomerApproval = isFullManufacturerWarrantyJob(job);
   const nextStatus = resolveNextStatusForAction({
     action: 'part_or_service_linked',
     currentStatus: String(job.status || ''),
     statuses,
     waitsForParts: true,
+    skipCustomerApproval,
   });
   const jobUpdate: Record<string, unknown> = {
     partsUsed: prevParts,
@@ -935,6 +951,7 @@ export const requestRepairJobSparePartHandler = async (request: CallableRequest)
   };
   if (nextStatus && nextStatus !== mapLegacyRepairStatus(String(job.status || ''))) {
     jobUpdate.status = nextStatus;
+    if (skipCustomerApproval) jobUpdate.approvalStatus = 'not_required';
   }
 
   await jobRef.update(jobUpdate);

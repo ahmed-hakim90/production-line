@@ -20,7 +20,7 @@ import {
 } from '../../utils/workOrderReportLinking';
 import { estimateReportCost } from '../../../../utils/costCalculations';
 import { exportWorkOrders, type WorkOrderExportRow } from '../../../../utils/exportExcel';
-import { commitAndPrint, useManagedPrint } from '../../../../utils/printManager';
+import { usePrintEngine } from '../../../../utils/printManager';
 import { usePermission } from '../../../../utils/permissions';
 import { reportService } from '../../services/reportService';
 import {
@@ -30,7 +30,6 @@ import { unwrapOrThrow } from '@/shared/usecases';
 import { sumQuantityProducedForWorkOrderExcludingPackaging } from '../../utils/packagingLine';
 import { WorkOrderPrint } from '../../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../components/ProductionReportPrint';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { WorkOrderDrawer } from './WorkOrderDrawer';
 import { WorkOrderFilters } from './WorkOrderFilters';
 import { WorkOrdersTable } from './WorkOrdersTable';
@@ -199,13 +198,7 @@ export const WorkOrders: React.FC = () => {
   const [syncingStatus, setSyncingStatus] = useState<string | null>(null);
   const [reconcilingOrderId, setReconcilingOrderId] = useState<string | null>(null);
   const [reportMetaByOrderId, setReportMetaByOrderId] = useState<Record<string, WorkOrderReportMeta>>({});
-  const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
-  const woPrintRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: woPrintRef,
-    printSettings: printTemplate,
-    documentTitle: 'أمر شغل',
-  });
+  const { printDocument } = usePrintEngine();
   const canCreateWorkOrderPermission = can('workOrders.create') || can('workOrders.componentInjection.manage');
   const canCreateWorkOrder = canCreateWorkOrderPermission && isOperationPathEnabled(
     systemSettings,

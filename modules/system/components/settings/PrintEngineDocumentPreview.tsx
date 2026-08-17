@@ -17,6 +17,7 @@ import { LocationBarcodeLabelPrint } from '../../../inventory/components/Locatio
 import { SuppliesReceiptPrint } from '../../../inventory/components/SuppliesReceiptPrint';
 import { ProductionIssuePrint } from '../../../inventory/components/ProductionIssuePrint';
 import { DepartmentConsumableIssuePrint } from '../../../inventory/components/DepartmentConsumableIssuePrint';
+import { SparePartsReplenishmentPrint } from '../../../inventory/components/SparePartsReplenishmentPrint';
 import { AccountingReportPrint } from '../../../accounting/components/AccountingReportPrint';
 import { QualityReportPrint } from '../../../quality/components/QualityReportPrint';
 import { PayslipPrint } from '../../../hr/components/PayslipPrint';
@@ -48,6 +49,7 @@ import {
   PRINT_PREVIEW_REPAIR_INVOICE,
   PRINT_PREVIEW_REPAIR_JOB,
   PRINT_PREVIEW_REPAIR_PAYMENT_AUTH,
+  PRINT_PREVIEW_REPAIR_PAYMENT_JOB,
   PRINT_PREVIEW_REPAIR_SPARE_ISSUE,
   PRINT_PREVIEW_REPAIR_TREASURY,
   PRINT_PREVIEW_ROUTING_EXECUTION,
@@ -56,6 +58,8 @@ import {
   PRINT_PREVIEW_SUPERVISOR_PERFORMANCE,
   PRINT_PREVIEW_SUPPLIES_RECEIPT,
   PRINT_PREVIEW_TRANSFER,
+  PRINT_PREVIEW_STOCK_RECEIPT,
+  PRINT_PREVIEW_STOCK_ISSUE,
   PRINT_PREVIEW_WAREHOUSE_COUNT,
   PRINT_PREVIEW_WORK_ORDER,
   PRINT_PREVIEW_WORKER_REPORT,
@@ -130,6 +134,10 @@ export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
         );
       case 'stockTransfer':
         return <StockTransferPrint ref={ref} data={PRINT_PREVIEW_TRANSFER} printSettings={printSettings} />;
+      case 'stockReceipt':
+        return <StockTransferPrint ref={ref} data={PRINT_PREVIEW_STOCK_RECEIPT} printSettings={printSettings} />;
+      case 'stockIssue':
+        return <StockTransferPrint ref={ref} data={PRINT_PREVIEW_STOCK_ISSUE} printSettings={printSettings} />;
       case 'itemCard':
         return <ItemCardPrint ref={ref} card={PRINT_PREVIEW_ITEM_CARD} printSettings={printSettings} />;
       case 'accountingReport':
@@ -170,6 +178,8 @@ export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
           <RepairPaymentPrint
             ref={ref}
             authorization={PRINT_PREVIEW_REPAIR_PAYMENT_AUTH as any}
+            job={PRINT_PREVIEW_REPAIR_PAYMENT_JOB as any}
+            branch={PRINT_PREVIEW_REPAIR_BRANCH as any}
             printSettings={printSettings}
           />
         );
@@ -327,6 +337,36 @@ export const PrintEngineDocumentPreview = forwardRef<HTMLDivElement, Props>(
           <DepartmentConsumableIssuePrint
             ref={ref}
             issue={PRINT_PREVIEW_DEPARTMENT_CONSUMABLE_ISSUE as any}
+            printSettings={printSettings}
+          />
+        );
+      case 'sparePartsReplenishment':
+        return (
+          <SparePartsReplenishmentPrint
+            ref={ref}
+            request={{
+              referenceNo: 'SPR-DEMO-001',
+              status: 'submitted',
+              fromWarehouseId: 'wh-central',
+              fromWarehouseName: 'قطع غيار مركزي',
+              toWarehouseId: 'wh-center',
+              toWarehouseName: 'مركز الصيانة',
+              createdBy: 'أحمد',
+              createdAt: new Date().toISOString(),
+              lines: [
+                {
+                  lineId: 'm1',
+                  itemType: 'material',
+                  itemId: 'm1',
+                  itemName: 'محرك مروحة',
+                  itemCode: 'FAN-01',
+                  unit: 'piece',
+                  requestedQty: 4,
+                  unitCostSnapshot: 120,
+                  totalCostSnapshot: 480,
+                },
+              ],
+            } as any}
             printSettings={printSettings}
           />
         );

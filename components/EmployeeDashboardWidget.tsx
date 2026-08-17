@@ -29,6 +29,8 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { Card, Badge, Button, LoadingSkeleton } from './UI';
+import { VoucherItemCombobox } from '@/modules/inventory/components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '@/modules/inventory/lib/materialVoucherPicker';
 import {
   Dialog,
   DialogContent,
@@ -342,6 +344,23 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     [closeProductId, products],
   );
   const closeAssemblyMode = getProductAssemblyMode(closeSelectedProduct);
+  const startProductPicker = useMemo(
+    () =>
+      buildCodeVoucherPicker(
+        products
+          .filter((product) => Boolean(product.id))
+          .map((product) => ({
+            value: String(product.id),
+            label: product.code ? `${product.name} (${product.code})` : product.name,
+            name: product.name,
+            code: product.code,
+            barcode: product.barcode,
+            stockItemType: 'finished_good' as const,
+          })),
+      ),
+    [products],
+  );
+
   // Team products: no per-worker share table on shift close.
   const closeIndividualWorkerOutputsEnabled = Boolean(closeLineId && closeProductId)
     && closeAssemblyMode === 'individual'
@@ -735,12 +754,13 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                       <option key={line.id} value={line.id}>{line.name}</option>
                     ))}
                   </select>
-                  <select className="erp-input" value={startProductId} onChange={(event) => setStartProductId(event.target.value)}>
-                    <option value="">اختر المنتج</option>
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>{product.name}</option>
-                    ))}
-                  </select>
+                  <VoucherItemCombobox
+                    options={startProductPicker.options}
+                    catalog={startProductPicker.catalog}
+                    value={startProductId}
+                    onChange={setStartProductId}
+                    placeholder="ابحث بالاسم أو امسح الباركود"
+                  />
                 </div>
               )}
             </div>

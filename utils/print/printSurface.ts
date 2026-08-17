@@ -193,6 +193,25 @@ export const PRINT_ENGINE_IFRAME_CSS = `
   color: ${PRINT_SURFACE.text};
   min-width: 0;
 }
+.print-info-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid ${PRINT_SURFACE.border};
+}
+.print-info-cell {
+  min-width: 0;
+  padding: 10px 12px;
+  text-align: right;
+}
+.print-product-head {
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 .print-progress-track {
   flex: 1;
   height: 6px;

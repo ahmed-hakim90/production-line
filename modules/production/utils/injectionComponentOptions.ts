@@ -10,13 +10,17 @@ export type InjectionComponentOption = {
   id: string;
   name: string;
   code: string;
+  barcode?: string;
   categoryName?: string;
 };
 
-const toOption = (row: InjectionMaterialFilterRow & { id: string }): InjectionComponentOption => ({
+const toOption = (
+  row: InjectionMaterialFilterRow & { id: string; barcode?: string | null },
+): InjectionComponentOption => ({
   id: row.id,
   name: String(row.name || '').trim(),
   code: String(row.code || '').trim(),
+  barcode: String(row.barcode || '').trim() || undefined,
   categoryName: String(row.categoryName || '').trim(),
 });
 

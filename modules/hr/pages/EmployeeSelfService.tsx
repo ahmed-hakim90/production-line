@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Button, Badge } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedPrint } from '@/utils/printManager';
+import { usePrintEngine } from '@/utils/printManager';
 import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
 import { createLeaveRequest } from '../usecases/createLeaveRequest';
@@ -16,8 +16,6 @@ import { createRequest, getPendingApprovals, type ApprovalEmployeeInfo, type Fir
 import { formatPenaltyRequestSummary } from '../approval/penaltyApproval';
 import { getEmployeeLockedPayslip } from '../payroll';
 import { PayslipPrint } from '../components/PayslipPrint';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
-import type { PayslipData } from '../utils/payslipGenerator';
 import type { FirestorePayrollRecord } from '../payroll';
 import type {
   FirestoreLeaveRequest,

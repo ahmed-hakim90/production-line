@@ -88,9 +88,9 @@ Import existing customer codes via UI:
 
 Link historical repair jobs that lack `customerId`:
 
-1. Menu → العملاء → ربط طلبات الصيانة (`/customers/repair-link`)
-2. Scan → preview matches by unique phone digits (≥7)
-3. Apply links (unique match only; no auto-create; ambiguous phones skipped)
+The one-time UI (`/customers/repair-link`) was removed. Matching rules remain in
+`modules/customers/lib/linkRepairJobsByPhone.ts` (unique phone digits ≥7; no auto-create).
+New jobs must pick a master customer on create. Old `/customers/repair-link` redirects to `/customers/kpi`.
 
 Collections: `customers`, `customer_activities`. See [adr/ADR-004-customers-master-data.md](./adr/ADR-004-customers-master-data.md).
 

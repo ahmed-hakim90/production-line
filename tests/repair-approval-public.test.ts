@@ -142,4 +142,53 @@ const baseJob = {
   assert.equal(view.estimatedTotal, 450); // 200 parts + 100 labor + 150 product
 }
 
+{
+  const view = buildPublicRepairApprovalView(
+    {
+      receiptNo: 'REP-0001',
+      customerName: 'اونلاين سوكاني',
+      customerPhone: '0100',
+      warrantyScope: 'none',
+      laborCost: 0,
+      serviceOnlyCost: 0,
+      jobProducts: [
+        {
+          itemId: 'p1',
+          productName: 'SK-666N خلاط',
+          quantity: 1,
+          inWarranty: false,
+          serviceIds: ['diagnosis'],
+          finalCost: 0,
+        },
+        {
+          itemId: 'p2',
+          productName: 'SK-7011N كبه',
+          quantity: 1,
+          inWarranty: false,
+          serviceIds: [],
+          finalCost: 0,
+        },
+      ],
+      partsUsed: [],
+    },
+    {
+      serviceLines: [
+        { id: 'diagnosis', name: 'تشخيص', quantity: 1, unitPrice: 150, lineTotal: 150 },
+      ],
+      partLines: [],
+      serviceGross: 150,
+      partsGross: 0,
+      netAmount: 150,
+      grossAmount: 150,
+    },
+  );
+  assert.equal(view.products.length, 2);
+  assert.equal(view.products[0]?.lineCost, 150);
+  assert.equal(view.products[0]?.works?.[0]?.name, 'تشخيص');
+  assert.equal(view.products[1]?.lineCost, 0);
+  assert.equal(view.products[1]?.works?.length, 0);
+  assert.equal(view.estimatedTotal, 150);
+  assert.equal(view.laborCost, 0);
+}
+
 console.log('repair-approval-public.test.ts: ok');

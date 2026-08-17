@@ -26,6 +26,12 @@ import {
 import { isPackagingLineId } from '@/modules/production/utils/packagingLine';
 import { getReportDuplicateMessage } from '@/modules/production/utils/reportDuplicateError';
 import {
+  REPORT_SAVE_PENDING_MESSAGE,
+  REPORT_SAVE_SUCCESS_MESSAGE,
+  REPORT_SAVE_TOAST_ID,
+  SAVE_ERROR_TOAST_DURATION_MS,
+} from '@/modules/production/lib/reportSaveFeedback';
+import {
   PRODUCTION_REPORT_CREATE_PATHS,
   PRODUCTION_REPORT_OPERATION_KEYS,
   isOperationPathEnabled,
@@ -200,17 +206,27 @@ export const SupervisorWorkOrderQuickReportDialog: React.FC<Props> = ({
     const queued = queueReportCreate(payload, {
       path: PRODUCTION_REPORT_CREATE_PATHS.supervisorDashboard,
     });
-    showAppToast('success', 'تمت إضافة التقرير للجدول وجارٍ تأكيد حفظه.');
+    showAppToast('loading', REPORT_SAVE_PENDING_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
     onClose();
     setSaving(false);
     void queued.completion.then((createdId) => {
       if (!createdId) {
         const storeError = useAppStore.getState().error;
-        showAppToast('error', getReportDuplicateMessage(storeError, 'تعذر حفظ التقرير. استخدم إعادة المحاولة من الجدول.'));
+        showAppToast(
+          'error',
+          getReportDuplicateMessage(storeError, 'تعذر حفظ التقرير. استخدم إعادة المحاولة من الجدول.'),
+          { id: REPORT_SAVE_TOAST_ID, duration: SAVE_ERROR_TOAST_DURATION_MS },
+        );
         return;
       }
-      showAppToast('success', 'تم تأكيد حفظ التقرير، والترحيل مستمر في الخلفية.');
+      showAppToast('success', REPORT_SAVE_SUCCESS_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
       onSaved?.();
+    }).catch((error) => {
+      showAppToast(
+        'error',
+        getReportDuplicateMessage(error, 'تعذر حفظ التقرير. استخدم إعادة المحاولة من الجدول.'),
+        { id: REPORT_SAVE_TOAST_ID, duration: SAVE_ERROR_TOAST_DURATION_MS },
+      );
     });
   };
 

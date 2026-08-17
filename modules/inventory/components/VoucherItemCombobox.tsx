@@ -29,6 +29,11 @@ export type VoucherItemComboboxProps = {
   onChange: (itemId: string) => void;
   /** Called after a selection so parent can move focus (shelf / qty). */
   onSelected?: (itemId: string) => void;
+  /**
+   * Grid navigation when the dropdown is closed.
+   * Return true if the event was handled (parent moves focus).
+   */
+  onGridKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -59,6 +64,7 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
       value,
       onChange,
       onSelected,
+      onGridKeyDown,
       placeholder = 'ابحث بالاسم أو امسح الكود',
       disabled = false,
       className = '',
@@ -214,6 +220,7 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
         if (disabled) return;
 
         if (e.key === 'ArrowDown' || e.key === 'Down') {
+          if (!open && onGridKeyDown?.(e)) return;
           e.preventDefault();
           e.stopPropagation();
           if (!open) {
@@ -226,6 +233,7 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
         }
 
         if (e.key === 'ArrowUp' || e.key === 'Up') {
+          if (!open && onGridKeyDown?.(e)) return;
           e.preventDefault();
           e.stopPropagation();
           if (!open) {
@@ -235,6 +243,10 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
           }
           moveHighlight(highlightRef.current - 1);
           return;
+        }
+
+        if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Left' || e.key === 'Right') && !open) {
+          if (onGridKeyDown?.(e)) return;
         }
 
         if (e.key === 'Home' && open) {
@@ -270,7 +282,7 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
           }
         }
       },
-      [commit, disabled, filtered, moveHighlight, open, query, tryExactCode],
+      [commit, disabled, filtered, moveHighlight, onGridKeyDown, open, query, tryExactCode],
     );
 
     const portalTarget = getRootPortalContainer() ?? (typeof document !== 'undefined' ? document.body : null);

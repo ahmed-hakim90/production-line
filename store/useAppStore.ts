@@ -199,6 +199,10 @@ import {
 import {
   resolveReportBehaviorSettings,
 } from '../modules/production/lib/reportBehaviorSettings';
+import {
+  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
+  productionIssueRequiredMessage,
+} from '../modules/production/lib/reportSaveFeedback';
 import { buildAggregateCostDeltas } from '../modules/production/lib/reportAggregateCostReconciliation';
 import {
   PRODUCTION_REPORT_CREATE_PATHS,
@@ -992,6 +996,49 @@ function upsertLoadedReportRow(
   return [report, ...rows];
 }
 
+/** Insert or replace a work order in the in-memory list without a full Firestore reload. */
+function upsertLoadedWorkOrder(
+  rows: WorkOrder[],
+  workOrder: WorkOrder,
+): WorkOrder[] {
+  if (!workOrder.id) return rows;
+  if (rows.some((row) => row.id === workOrder.id)) {
+    return rows.map((row) => (row.id === workOrder.id ? { ...row, ...workOrder } : row));
+  }
+  return [workOrder, ...rows];
+}
+
+/** Insert or replace a production plan in the in-memory list without a full Firestore reload. */
+function upsertLoadedProductionPlan(
+  rows: ProductionPlan[],
+  plan: ProductionPlan,
+): ProductionPlan[] {
+  if (!plan.id) return rows;
+  if (rows.some((row) => row.id === plan.id)) {
+    return rows.map((row) => (row.id === plan.id ? { ...row, ...plan } : row));
+  }
+  return [plan, ...rows];
+}
+
+/** Prefer cached reports already loaded for dashboards/lists when rebuilding planReports. */
+function buildPlanReportsFromCachedReports(
+  plans: ProductionPlan[],
+  cachedReports: ProductionReport[],
+  previousPlanReports: Record<string, ProductionReport[]>,
+): Record<string, ProductionReport[]> {
+  const next: Record<string, ProductionReport[]> = { ...previousPlanReports };
+  for (const plan of plans) {
+    if (!plan.id && !plan.productId) continue;
+    const key = plan.id || `product_${plan.productId}`;
+    if (cachedReports.length > 0) {
+      next[key] = filterReportsForProductionPlan(plan, cachedReports);
+    } else if (!next[key]) {
+      next[key] = [];
+    }
+  }
+  return next;
+}
+
 function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
   return status === 'pending' || status === 'in_progress' || status === 'paused';
 }
@@ -1003,7 +1050,7 @@ type ProductionReportLinkInput = Pick<
 
 async function resolveProductionReportExecutionLinks(
   input: ProductionReportLinkInput,
-  cachedWorkOrders: WorkOrder[],
+  _cachedWorkOrders: WorkOrder[],
   options?: { preserveCompletedWorkOrder?: boolean },
 ): Promise<{
   activeWorkOrder: WorkOrder | null;
@@ -1031,41 +1078,8 @@ async function resolveProductionReportExecutionLinks(
     }
   }
 
-  if (!activeWorkOrder) {
-    const candidates = new Map<string, WorkOrder>();
-    const addCandidate = (workOrder: WorkOrder | null | undefined) => {
-      if (workOrder?.id) candidates.set(String(workOrder.id), workOrder);
-    };
-
-    try {
-      (await workOrderService.getActiveByProduct(input.productId)).forEach(addCandidate);
-    } catch {
-      // Cached/all-work-order fallbacks keep report entry usable if a compound query index is unavailable.
-    }
-
-    try {
-      (await workOrderService.getActiveByLineAndProduct(input.lineId, input.productId)).forEach(addCandidate);
-    } catch {
-      // Same-line compound query is optional when product-scoped active WOs already loaded.
-    }
-
-    cachedWorkOrders
-      .filter((workOrder) => isActiveWorkOrderStatus(workOrder.status) && workOrder.productId === input.productId)
-      .forEach(addCandidate);
-
-    if (candidates.size === 0) {
-      (await workOrderService.getAll()).forEach(addCandidate);
-    }
-
-    activeWorkOrder = pickBestAutoLinkedWorkOrder(Array.from(candidates.values()), {
-      lineId: input.lineId,
-      productId: input.productId,
-      supervisorId: input.employeeId,
-      reportType,
-      reportDate: input.date,
-      includeCompleted: options?.preserveCompletedWorkOrder === true,
-    });
-  }
+  // Do not silently attach a work order when the operator left it empty.
+  // Auto-attach made optional-WO saves fail on صرف إنتاج / supervisor mismatch.
 
   const explicitPlanId = String(input.productionPlanId || '').trim();
   const explicitPlan = explicitPlanId
@@ -1547,7 +1561,10 @@ interface AppState {
   /** Link eligible reports from WO start date onward, then set producedQuantity from linked report sum (idempotent). */
   reconcileWorkOrderFromReports: (
     workOrderId: string,
-    context: { path: ProductionReportReconcilePath } | { internal: true },
+    context: (
+      | { path: ProductionReportReconcilePath }
+      | { internal: true }
+    ) & { mode?: 'full' | 'linkedOnly' },
   ) => Promise<{
     linked: number;
     reportCount: number;
@@ -2942,34 +2959,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     const run = (async () => {
       try {
+        // List load only — do not N+1 scan reports per plan here.
+        // Progress/status reconcile stays on report save + reconcileProductionPlanFromReports.
         const productionPlans = await productionPlanService.getAll();
         const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
-        const reconcilablePlans = productionPlans.filter(
-          (p) =>
-            p.status === 'in_progress'
-            || p.status === 'planned'
-            || p.status === 'paused'
-            || p.status === 'completed',
+        const state = get();
+        const cachedReports = state.monthlyReports.length > 0
+          ? state.monthlyReports
+          : state.productionReports;
+        const planReports = buildPlanReportsFromCachedReports(
+          productionPlans,
+          cachedReports,
+          state.planReports,
         );
-        const planReports: Record<string, ProductionReport[]> = {};
-        const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
-        await Promise.all(
-          reconcilablePlans.map(async (plan) => {
-            const key = plan.id || `product_${plan.productId}`;
-            const reports = await reportService.getByProduct(plan.productId);
-            planReports[key] = filterReportsForProductionPlan(plan, reports);
-            if (!plan.id) return;
-            const patch = deriveProductionPlanAutoPatch(plan, reports);
-            if (!patch) return;
-            planAutoPatches.push({ id: plan.id, patch });
-            Object.assign(plan, patch);
-          })
-        );
-        if (planAutoPatches.length > 0) {
-          await Promise.allSettled(
-            planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
-          );
-        }
         set({ productionPlans, productionPlanFollowUps, planReports });
         get()._rebuildLines();
         _plansFetchedAt = Date.now();
@@ -3020,38 +3022,62 @@ export const useAppStore = create<AppState>((set, get) => ({
         planType,
       });
       if (id) {
-        await get().fetchProductionPlans({ force: true });
-        const saved = await productionPlanService.getById(id);
-        if (saved) {
-          void get().autoGeneratePlanMaterialRequirements(saved);
-        }
-        const supervisorId = String(data.supervisorId || saved?.supervisorId || '').trim();
-        if (supervisorId) {
-          const { _rawProducts, systemSettings } = get();
-          const productId = data.productId || saved?.productId;
-          let productName = _rawProducts.find((p) => p.id === productId)?.name ?? '';
-          if (!productName && planType === 'component_injection' && productId) {
-            try {
-              const { loadInjectionComponentOptions } = await import('../modules/production/utils/injectionComponentOptions');
-              const keywords = systemSettings.planSettings?.injectionRawMaterialCategoryKeywords;
-              const components = await loadInjectionComponentOptions(keywords);
-              productName = components.find((row) => row.id === productId)?.name ?? '';
-            } catch {
-              productName = '';
+        const localPlan: ProductionPlan = {
+          ...data,
+          id,
+          planType,
+          createdAt: new Date().toISOString(),
+        };
+        set((state) => ({
+          error: null,
+          productionPlans: upsertLoadedProductionPlan(state.productionPlans, localPlan),
+          planReports: {
+            ...state.planReports,
+            [id]: state.planReports[id] ?? [],
+          },
+        }));
+        get()._rebuildLines();
+
+        void (async () => {
+          try {
+            const saved = await productionPlanService.getById(id);
+            const planForSideEffects = saved ?? localPlan;
+            if (saved) {
+              set((state) => ({
+                productionPlans: upsertLoadedProductionPlan(state.productionPlans, saved),
+              }));
             }
+            void get().autoGeneratePlanMaterialRequirements(planForSideEffects);
+            const supervisorId = String(data.supervisorId || planForSideEffects.supervisorId || '').trim();
+            if (!supervisorId) return;
+            const { _rawProducts, systemSettings } = get();
+            const productId = data.productId || planForSideEffects.productId;
+            let productName = _rawProducts.find((p) => p.id === productId)?.name ?? '';
+            if (!productName && planType === 'component_injection' && productId) {
+              try {
+                const { loadInjectionComponentOptions } = await import('../modules/production/utils/injectionComponentOptions');
+                const keywords = systemSettings.planSettings?.injectionRawMaterialCategoryKeywords;
+                const components = await loadInjectionComponentOptions(keywords);
+                productName = components.find((row) => row.id === productId)?.name ?? '';
+              } catch {
+                productName = '';
+              }
+            }
+            const qty = Number(data.plannedQuantity ?? planForSideEffects.plannedQuantity ?? 0);
+            await notificationService.create({
+              recipientId: supervisorId,
+              type: 'production_plan_assigned',
+              title: 'خطة إنتاج جديدة',
+              message: `خطة إنتاج — ${productName} — ${Number.isFinite(qty) ? qty : 0} وحدة`,
+              referenceId: id,
+              isRead: false,
+            }).catch((notifyError) => {
+              console.warn('production plan notify failed:', notifyError);
+            });
+          } catch (sideEffectError) {
+            console.warn('createProductionPlan background side effects failed:', sideEffectError);
           }
-          const qty = Number(data.plannedQuantity ?? saved?.plannedQuantity ?? 0);
-          await notificationService.create({
-            recipientId: supervisorId,
-            type: 'production_plan_assigned',
-            title: 'خطة إنتاج جديدة',
-            message: `خطة إنتاج — ${productName} — ${Number.isFinite(qty) ? qty : 0} وحدة`,
-            referenceId: id,
-            isRead: false,
-          }).catch((notifyError) => {
-            console.warn('production plan notify failed:', notifyError);
-          });
-        }
+        })();
       }
       return id;
     } catch (error) {
@@ -3078,11 +3104,32 @@ export const useAppStore = create<AppState>((set, get) => ({
         throw new Error('غير مصرح بتعديل خطة الإنتاج.');
       }
       await productionPlanService.update(id, data);
-      await get().fetchProductionPlans({ force: true });
-      const saved = await productionPlanService.getById(id);
-      if (saved) {
-        void get().autoGeneratePlanMaterialRequirements(saved);
-      }
+      const localPlan: ProductionPlan = {
+        ...(existingPlan ?? { id, productId: '', plannedQuantity: 0, producedQuantity: 0, startDate: '', plannedStartDate: '', plannedEndDate: '', estimatedDurationDays: 0, avgDailyTarget: 0, priority: 'medium', estimatedCost: 0, actualCost: 0, status: 'planned', createdBy: '' }),
+        ...data,
+        id,
+        planType,
+      };
+      set((state) => ({
+        error: null,
+        productionPlans: upsertLoadedProductionPlan(state.productionPlans, localPlan),
+      }));
+      get()._rebuildLines();
+      void (async () => {
+        try {
+          const saved = await productionPlanService.getById(id);
+          if (saved) {
+            set((state) => ({
+              productionPlans: upsertLoadedProductionPlan(state.productionPlans, saved),
+            }));
+            void get().autoGeneratePlanMaterialRequirements(saved);
+          } else {
+            void get().autoGeneratePlanMaterialRequirements(localPlan);
+          }
+        } catch (sideEffectError) {
+          console.warn('updateProductionPlan background side effects failed:', sideEffectError);
+        }
+      })();
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
@@ -3106,7 +3153,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteProductionPlan: async (id) => {
     try {
       await productionPlanService.delete(id);
-      await get().fetchProductionPlans({ force: true });
+      set((state) => {
+        const { [id]: _removed, ...restPlanReports } = state.planReports;
+        return {
+          productionPlans: state.productionPlans.filter((plan) => plan.id !== id),
+          planReports: restPlanReports,
+        };
+      });
+      get()._rebuildLines();
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -3202,28 +3256,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         throw new Error(msg);
       }
+      let workOrderNumber = String(data.workOrderNumber || '').trim();
+      if (!workOrderNumber) {
+        workOrderNumber = await workOrderService.generateNextNumber();
+      }
       const id = await workOrderService.create({
         ...data,
+        workOrderNumber,
         workOrderType,
       });
       trackedOperation.entityId = id ?? trackedOperation.entityId;
       trackedOperation.batchId = id ?? trackedOperation.batchId;
       if (id) {
-        await get().fetchWorkOrders({ force: true });
-        const { _rawProducts } = get();
-        const product = _rawProducts.find((p) => p.id === data.productId);
-        if (data.supervisorId) {
-          await notificationService.create({
-            recipientId: data.supervisorId,
-            type: 'work_order_assigned',
-            title: 'أمر شغل جديد',
-            message: `أمر شغل ${data.workOrderNumber} — ${product?.name ?? ''} — ${data.quantity} وحدة`,
-            referenceId: id,
-            isRead: false,
-          });
-        }
+        const localWorkOrder: WorkOrder = {
+          ...data,
+          workOrderNumber,
+          id,
+          workOrderType,
+          createdAt: new Date().toISOString(),
+        };
+        set((state) => ({
+          error: null,
+          workOrders: upsertLoadedWorkOrder(state.workOrders, localWorkOrder),
+        }));
 
-        const { uid, userDisplayName, userEmail } = get();
         eventBus.emit(SystemEvents.WORK_ORDER_CREATED, {
           module: 'production',
           entityType: 'work_order',
@@ -3236,7 +3292,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             userName: userDisplayName ?? userEmail ?? undefined,
           },
           metadata: {
-            workOrderNumber: data.workOrderNumber,
+            workOrderNumber,
             lineId: data.lineId,
             productId: data.productId,
             quantity: data.quantity,
@@ -3244,11 +3300,31 @@ export const useAppStore = create<AppState>((set, get) => ({
           },
         });
 
-        try {
-          await get().reconcileWorkOrderFromReports(id, { internal: true });
-        } catch (reconcileError) {
-          console.warn('reconcileWorkOrderFromReports after create failed:', reconcileError);
-        }
+        void (async () => {
+          try {
+            if (data.supervisorId) {
+              const { _rawProducts } = get();
+              const product = _rawProducts.find((p) => p.id === data.productId);
+              await notificationService.create({
+                recipientId: data.supervisorId,
+                type: 'work_order_assigned',
+                title: 'أمر شغل جديد',
+                message: `أمر شغل ${workOrderNumber} — ${product?.name ?? ''} — ${data.quantity} وحدة`,
+                referenceId: id,
+                isRead: false,
+              }).catch((notifyError) => {
+                console.warn('work order notify failed:', notifyError);
+              });
+            }
+            try {
+              await get().reconcileWorkOrderFromReports(id, { internal: true });
+            } catch (reconcileError) {
+              console.warn('reconcileWorkOrderFromReports after create failed:', reconcileError);
+            }
+          } catch (sideEffectError) {
+            console.warn('createWorkOrder background side effects failed:', sideEffectError);
+          }
+        })();
       }
       actionTrackerService.succeedOperation(trackedOperation, {
         metadata: {
@@ -3346,8 +3422,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
       await workOrderService.update(id, data);
-      await get().fetchWorkOrders({ force: true });
-      const updatedWorkOrder = get().workOrders.find((w) => w.id === id) ?? (existing ? { ...existing, ...data } : null);
+      const updatedWorkOrder: WorkOrder = existing
+        ? { ...existing, ...data, id }
+        : { ...(data as WorkOrder), id };
+      set((state) => ({
+        error: null,
+        workOrders: upsertLoadedWorkOrder(state.workOrders, updatedWorkOrder),
+      }));
 
       if (existing && data.status && data.status !== existing.status) {
         if (data.status === 'in_progress') {
@@ -3384,92 +3465,101 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      if (data.status === 'completed' && updatedWorkOrder) {
-        const existingReports = await reportService.getByWorkOrderId(id);
-        const reportsForAutoClose = excludePackagingLineReportsForWorkOrderProduction(
-          existingReports,
-          get()._rawLines,
-        );
-        if (
-          reportsForAutoClose.length === 0
-          && isOperationPathEnabled(
-            get().systemSettings,
-            PRODUCTION_REPORT_OPERATION_KEYS.create,
-            PRODUCTION_REPORT_CREATE_PATHS.workOrderCompletion,
-          )
-        ) {
-          const toLocalDateString = (value: any): string => {
-            if (!value) return getReportOperationalDateString(get().systemSettings);
-            if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-            const dt = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
-            if (Number.isNaN(dt.getTime())) return getReportOperationalDateString(get().systemSettings);
-            const y = dt.getFullYear();
-            const m = String(dt.getMonth() + 1).padStart(2, '0');
-            const day = String(dt.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-          };
+      void (async () => {
+        try {
+          if (data.status === 'completed' && updatedWorkOrder) {
+            const existingReports = await reportService.getByWorkOrderId(id);
+            const reportsForAutoClose = excludePackagingLineReportsForWorkOrderProduction(
+              existingReports,
+              get()._rawLines,
+            );
+            if (
+              reportsForAutoClose.length === 0
+              && isOperationPathEnabled(
+                get().systemSettings,
+                PRODUCTION_REPORT_OPERATION_KEYS.create,
+                PRODUCTION_REPORT_CREATE_PATHS.workOrderCompletion,
+              )
+            ) {
+              const toLocalDateString = (value: any): string => {
+                if (!value) return getReportOperationalDateString(get().systemSettings);
+                if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+                const dt = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
+                if (Number.isNaN(dt.getTime())) return getReportOperationalDateString(get().systemSettings);
+                const y = dt.getFullYear();
+                const m = String(dt.getMonth() + 1).padStart(2, '0');
+                const day = String(dt.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+              };
 
-          if (!updatedWorkOrder.supervisorId) {
-            throw new Error('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
+              if (!updatedWorkOrder.supervisorId) {
+                console.warn('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
+              } else {
+                const woCloseReportType =
+                  updatedWorkOrder.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
+                const woCloseProducedQty = Number(
+                  updatedWorkOrder.actualProducedFromScans ??
+                  updatedWorkOrder.producedQuantity ??
+                  0,
+                );
+                const woCloseReportPayload: Omit<ProductionReport, 'id' | 'createdAt'> = {
+                  employeeId: updatedWorkOrder.supervisorId,
+                  productId: updatedWorkOrder.productId,
+                  lineId: updatedWorkOrder.lineId,
+                  reportType: woCloseReportType,
+                  date: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
+                  quantityProduced: woCloseProducedQty,
+                  workersCount: Number(
+                    updatedWorkOrder.actualWorkersCount ??
+                    updatedWorkOrder.maxWorkers ??
+                    0,
+                  ),
+                  workersProductionCount: 0,
+                  workersPackagingCount: 0,
+                  workersQualityCount: 0,
+                  workersMaintenanceCount: 0,
+                  workersExternalCount: 0,
+                  workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
+                  notes: updatedWorkOrder.notes ?? '',
+                  workOrderId: id,
+                  productionPlanId: updatedWorkOrder.planId || undefined,
+                };
+
+                const closeReportId = await get().createReport(woCloseReportPayload, {
+                  path: PRODUCTION_REPORT_CREATE_PATHS.workOrderCompletion,
+                });
+                if (!closeReportId) {
+                  console.warn(get().error || 'تعذر إنشاء تقرير إغلاق أمر الشغل.');
+                }
+              }
+            }
           }
 
-          const woCloseReportType =
-            updatedWorkOrder.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
-          const woCloseProducedQty = Number(
-            updatedWorkOrder.actualProducedFromScans ??
-            updatedWorkOrder.producedQuantity ??
-            0,
-          );
-          const woCloseReportPayload: Omit<ProductionReport, 'id' | 'createdAt'> = {
-            employeeId: updatedWorkOrder.supervisorId,
-            productId: updatedWorkOrder.productId,
-            lineId: updatedWorkOrder.lineId,
-            reportType: woCloseReportType,
-            date: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
-            quantityProduced: woCloseProducedQty,
-            workersCount: Number(
-              updatedWorkOrder.actualWorkersCount ??
-              updatedWorkOrder.maxWorkers ??
-              0,
-            ),
-            workersProductionCount: 0,
-            workersPackagingCount: 0,
-            workersQualityCount: 0,
-            workersMaintenanceCount: 0,
-            workersExternalCount: 0,
-            workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
-            notes: updatedWorkOrder.notes ?? '',
-            workOrderId: id,
-            productionPlanId: updatedWorkOrder.planId || undefined,
-          };
-
-          const closeReportId = await get().createReport(woCloseReportPayload, {
-            path: PRODUCTION_REPORT_CREATE_PATHS.workOrderCompletion,
-          });
-          if (!closeReportId) {
-            throw new Error(get().error || 'تعذر إنشاء تقرير إغلاق أمر الشغل.');
+          const notificationRecipientId = data.supervisorId ?? updatedWorkOrder?.supervisorId ?? existing?.supervisorId;
+          if (notificationRecipientId && data.status !== existing?.status) {
+            const { _rawProducts } = get();
+            const productId = updatedWorkOrder?.productId ?? existing?.productId;
+            const product = _rawProducts.find((p) => p.id === productId);
+            const statusLabels: Record<string, string> = { in_progress: 'بدأ التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
+            const statusLabel = statusLabels[data.status || ''];
+            if (statusLabel && existing) {
+              await notificationService.create({
+                recipientId: notificationRecipientId,
+                type: data.status === 'completed' ? 'work_order_completed' : 'work_order_updated',
+                title: `تحديث أمر شغل — ${statusLabel}`,
+                message: `أمر شغل ${existing.workOrderNumber} — ${product?.name ?? ''} — ${statusLabel}`,
+                referenceId: id,
+                isRead: false,
+              }).catch((notifyError) => {
+                console.warn('work order status notify failed:', notifyError);
+              });
+            }
           }
+        } catch (sideEffectError) {
+          console.warn('updateWorkOrder background side effects failed:', sideEffectError);
         }
-      }
+      })();
 
-      const notificationRecipientId = data.supervisorId ?? updatedWorkOrder?.supervisorId ?? existing?.supervisorId;
-      if (notificationRecipientId && data.status !== existing?.status) {
-        const { _rawProducts } = get();
-        const productId = updatedWorkOrder?.productId ?? existing?.productId;
-        const product = _rawProducts.find((p) => p.id === productId);
-        const statusLabels: Record<string, string> = { in_progress: 'بدأ التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
-        const statusLabel = statusLabels[data.status || ''];
-        if (statusLabel) {
-          await notificationService.create({
-            recipientId: notificationRecipientId,
-            type: data.status === 'completed' ? 'work_order_completed' : 'work_order_updated',
-            title: `تحديث أمر شغل — ${statusLabel}`,
-            message: `أمر شغل ${existing.workOrderNumber} — ${product?.name ?? ''} — ${statusLabel}`,
-            referenceId: id,
-            isRead: false,
-          });
-        }
-      }
       actionTrackerService.succeedOperation(trackedOperation, {
         metadata: {
           status: data.status ?? null,
@@ -3491,7 +3581,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteWorkOrder: async (id) => {
     try {
       await workOrderService.delete(id);
-      await get().fetchWorkOrders({ force: true });
+      set((state) => ({
+        workOrders: state.workOrders.filter((wo) => wo.id !== id),
+      }));
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
@@ -4214,7 +4306,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         || !targetEmployee
         || targetEmployee.isActive === false
       )) {
-        set({ error: 'إنشاء التقرير بالنيابة يتطلب أمر شغل ومشرفاً نشطاً مطابقاً له.' });
+        set({ error: DELEGATED_WORK_ORDER_REQUIRED_MESSAGE });
         return null;
       }
       const shouldPostToPlan =
@@ -4234,8 +4326,9 @@ export const useAppStore = create<AppState>((set, get) => ({
             productionPlanId: activePlan?.id || undefined,
           });
           if (!hasIssuedProductionComponents) {
-            const msg =
-              'لا يمكن حفظ تقرير الإنتاج قبل اعتماد وإصدار إذن صرف إنتاج لأمر الشغل أو الخطة. أنشئ الصرف من صفحة «صرف إنتاج» ثم أعد المحاولة.';
+            const msg = productionIssueRequiredMessage(Boolean(
+              activeWO?.id || activePlan?.id || savePayload.workOrderId,
+            ));
             set({ error: msg });
             return null;
           }
@@ -5155,9 +5248,9 @@ export const useAppStore = create<AppState>((set, get) => ({
             productionPlanId: finalMergedReport.productionPlanId || undefined,
           });
           if (!hasIssuedProductionComponents) {
-            throw new Error(
-              'لا يمكن إنهاء الوردية قبل اعتماد وإصدار إذن صرف إنتاج لأمر الشغل أو الخطة.',
-            );
+            throw new Error(productionIssueRequiredMessage(Boolean(
+              finalMergedReport.workOrderId || finalMergedReport.productionPlanId,
+            )));
           }
         }
       }
@@ -5187,11 +5280,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         previousSkipsAggregates,
       );
       await reportService.update(id, updatePayload);
-      const savedReport = await reportService.getById(id);
-      if (!savedReport) {
-        throw new Error('تم تحديث التقرير ولكن تعذر إعادة تحميله لإكمال المزامنة.');
+
+      // Prefer a fresh read so server fields (codes, posting state) are accurate in the list.
+      // Fail soft: merge local payload if reload fails so the UI is not blocked.
+      let savedReport: ProductionReport = { ...existingReport, ...updatePayload, id };
+      try {
+        const reloaded = await reportService.getById(id);
+        if (reloaded) savedReport = reloaded;
+      } catch (reloadError) {
+        console.warn('updateReport reload after write failed:', reloadError);
       }
-      const savedIndustrialCost = calculateReportIndustrialCost(savedReport);
+
       if (
         context.path === PRODUCTION_REPORT_UPDATE_PATHS.shiftClose
         && reportBehavior.autoApplyInventoryOnReportSave
@@ -5216,34 +5315,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           );
         }
       }
-      {
-        const nextSkipsAggregates = isPackagingThroughputReport(savedReport, get()._rawLines);
-        await reconcileReportAggregateCosts({
-          reportId: id,
-          expectedReport: savedReport,
-          industrialCost: savedIndustrialCost,
-          skipsAggregates: nextSkipsAggregates,
-        });
-        const affectedWorkOrderIds = new Set(
-          [existingReport.workOrderId, savedReport.workOrderId]
-            .map((workOrderId) => String(workOrderId || '').trim())
-            .filter(Boolean),
-        );
-        for (const workOrderId of affectedWorkOrderIds) {
-          await get().reconcileWorkOrderFromReports(workOrderId, { internal: true });
-        }
-      }
-      const affectedProductIds = new Set<string>();
-      if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
-      if (updatePayload.productId) affectedProductIds.add(updatePayload.productId);
-      (updatePayload.packagingLines || []).forEach((l) => {
-        if (l.productId) affectedProductIds.add(l.productId);
-      });
-      await Promise.all(
-        Array.from(affectedProductIds).map((productId) =>
-          syncProductAvgDailyProduction(productId)
-        )
-      );
+
+      const savedIndustrialCost = calculateReportIndustrialCost(savedReport);
       const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const savedRow: ProductionReport = { ...savedReport, id };
@@ -5282,48 +5355,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       get()._rebuildProducts();
       get()._rebuildLines();
-      try {
-        const costedReport = await persistProductionReportCostSnapshot(id, get);
-        if (costedReport) {
-          set((state) => ({
-            todayReports: replaceLoadedReportRow(state.todayReports, costedReport),
-            monthlyReports: replaceLoadedReportRow(state.monthlyReports, costedReport),
-            productionReports: replaceLoadedReportRow(state.productionReports, costedReport),
-            productionReportsRangeCache: Object.fromEntries(
-              Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
-                key,
-                { ...value, rows: replaceLoadedReportRow(value.rows, costedReport) },
-              ]),
-            ),
-          }));
-        }
-      } catch (snapErr) {
-        console.warn('persistProductionReportCostSnapshot (update):', snapErr);
-        const costErrorMessage = (snapErr as Error)?.message || 'تعذر إعادة حساب تكلفة التصنيع الكاملة.';
-        set({ error: costErrorMessage });
-        await reportService.update(id, {
-          manufacturingCostPostingState: 'failed',
-          manufacturingCostPostingError: costErrorMessage,
-        }).catch(() => undefined);
-      }
-      try {
-        await syncWorkerDailyPerformanceFromReport(id, savedReport);
-      } catch (syncErr) {
-        console.warn('syncWorkerDailyPerformanceFromReport (update):', syncErr);
-      }
-      {
-        const affectedPlanIds = new Set(
-          [existingReport?.productionPlanId, savedReport.productionPlanId]
-            .map((planId) => String(planId || '').trim())
-            .filter(Boolean),
-        );
-        for (const planId of affectedPlanIds) {
-          await get().reconcileProductionPlanFromReports(planId);
-        }
-        if (affectedPlanIds.size === 0) {
-          await get().fetchProductionPlans({ force: true });
-        }
-      }
+      get().invalidateReportsUiReferenceCache();
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -5346,7 +5378,90 @@ export const useAppStore = create<AppState>((set, get) => ({
           changedFields: Object.keys(data || {}),
         },
       });
-      get().invalidateReportsUiReferenceCache();
+
+      void (async () => {
+        try {
+          const nextSkipsAggregates = isPackagingThroughputReport(savedReport, get()._rawLines);
+          await reconcileReportAggregateCosts({
+            reportId: id,
+            expectedReport: savedReport,
+            industrialCost: savedIndustrialCost,
+            skipsAggregates: nextSkipsAggregates,
+          });
+          const affectedWorkOrderIds = new Set(
+            [existingReport.workOrderId, savedReport.workOrderId]
+              .map((workOrderId) => String(workOrderId || '').trim())
+              .filter(Boolean),
+          );
+          for (const workOrderId of affectedWorkOrderIds) {
+            await get().reconcileWorkOrderFromReports(workOrderId, {
+              internal: true,
+              mode: 'linkedOnly',
+            });
+          }
+        } catch (error) {
+          console.warn('updateReport background reconcile failed:', error);
+        }
+
+        try {
+          const affectedProductIds = new Set<string>();
+          if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
+          if (updatePayload.productId) affectedProductIds.add(updatePayload.productId);
+          (updatePayload.packagingLines || []).forEach((l) => {
+            if (l.productId) affectedProductIds.add(l.productId);
+          });
+          await Promise.all(
+            Array.from(affectedProductIds).map((productId) =>
+              syncProductAvgDailyProduction(productId)
+            )
+          );
+        } catch (error) {
+          console.warn('updateReport background avg production sync failed:', error);
+        }
+
+        try {
+          const costedReport = await persistProductionReportCostSnapshot(id, get);
+          if (costedReport) {
+            set((state) => ({
+              todayReports: replaceLoadedReportRow(state.todayReports, costedReport),
+              monthlyReports: replaceLoadedReportRow(state.monthlyReports, costedReport),
+              productionReports: replaceLoadedReportRow(state.productionReports, costedReport),
+              productionReportsRangeCache: Object.fromEntries(
+                Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+                  key,
+                  { ...value, rows: replaceLoadedReportRow(value.rows, costedReport) },
+                ]),
+              ),
+            }));
+          }
+        } catch (snapErr) {
+          console.warn('persistProductionReportCostSnapshot (update):', snapErr);
+          const costErrorMessage = (snapErr as Error)?.message || 'تعذر إعادة حساب تكلفة التصنيع الكاملة.';
+          await reportService.update(id, {
+            manufacturingCostPostingState: 'failed',
+            manufacturingCostPostingError: costErrorMessage,
+          }).catch(() => undefined);
+        }
+
+        try {
+          await syncWorkerDailyPerformanceFromReport(id, savedReport);
+        } catch (syncErr) {
+          console.warn('syncWorkerDailyPerformanceFromReport (update):', syncErr);
+        }
+
+        try {
+          const affectedPlanIds = new Set(
+            [existingReport?.productionPlanId, savedReport.productionPlanId]
+              .map((planId) => String(planId || '').trim())
+              .filter(Boolean),
+          );
+          for (const planId of affectedPlanIds) {
+            await get().reconcileProductionPlanFromReports(planId);
+          }
+        } catch (planErr) {
+          console.warn('updateReport background plan reconcile failed:', planErr);
+        }
+      })();
     } catch (error) {
       actionTrackerService.failOperation(trackedOperation, {
         error,
@@ -5445,21 +5560,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       await reportService.delete(id);
-      if (linkedWorkOrderId) {
-        await get().reconcileWorkOrderFromReports(linkedWorkOrderId, { internal: true });
-      }
+
       const linkedPlanId = String(reportToDelete.productionPlanId || '').trim();
-      if (linkedPlanId) {
-        await get().reconcileProductionPlanFromReports(linkedPlanId);
-      }
       const productIdsToResync = new Set<string>();
       if (reportToDelete.productId) productIdsToResync.add(String(reportToDelete.productId));
       (reportToDelete.packagingLines || []).forEach((l) => {
         if (l.productId) productIdsToResync.add(String(l.productId));
       });
-      await Promise.all(
-        Array.from(productIdsToResync).map((pid) => syncProductAvgDailyProduction(pid)),
-      );
+
       const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       invalidateProductionReportsRangeCacheForDates(
@@ -5488,9 +5596,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
       get()._rebuildProducts();
       get()._rebuildLines();
-      if (!linkedPlanId) {
-        await get().fetchProductionPlans({ force: true });
-      }
+      get().invalidateReportsUiReferenceCache();
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -5513,7 +5619,29 @@ export const useAppStore = create<AppState>((set, get) => ({
           productId: reportToDelete.productId,
         },
       });
-      get().invalidateReportsUiReferenceCache();
+
+      void (async () => {
+        try {
+          if (linkedWorkOrderId) {
+            await get().reconcileWorkOrderFromReports(linkedWorkOrderId, {
+              internal: true,
+              mode: 'linkedOnly',
+            });
+          }
+          if (linkedPlanId) {
+            await get().reconcileProductionPlanFromReports(linkedPlanId);
+          }
+        } catch (reconcileError) {
+          console.warn('deleteReport background reconcile failed:', reconcileError);
+        }
+        try {
+          await Promise.all(
+            Array.from(productIdsToResync).map((pid) => syncProductAvgDailyProduction(pid)),
+          );
+        } catch (avgError) {
+          console.warn('deleteReport background avg production sync failed:', avgError);
+        }
+      })();
     } catch (error) {
       actionTrackerService.failOperation(trackedOperation, {
         error,
@@ -5804,10 +5932,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (patch) {
         await productionPlanService.update(id, patch);
       }
-      await get().fetchProductionPlans({ force: true, silent: true });
-      const refreshed = get().productionPlans.find((row) => row.id === id) || { ...plan, ...patch };
-      const planReports = filterReportsForProductionPlan(refreshed, reports);
-      const producedQuantity = planReports.reduce(
+      const refreshed = { ...plan, ...patch, id };
+      const planReportsForPlan = filterReportsForProductionPlan(refreshed, reports);
+      set((state) => ({
+        productionPlans: upsertLoadedProductionPlan(state.productionPlans, refreshed),
+        planReports: {
+          ...state.planReports,
+          [id]: planReportsForPlan,
+        },
+      }));
+      get()._rebuildLines();
+      const producedQuantity = planReportsForPlan.reduce(
         (sum, report) => sum + Number(report.quantityProduced || 0),
         0,
       );
@@ -5835,6 +5970,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!id) {
       throw new Error('معرّف أمر الشغل غير صالح.');
     }
+    const mode = context.mode === 'linkedOnly' ? 'linkedOnly' : 'full';
 
     try {
       const wo = await workOrderService.getById(id);
@@ -5842,39 +5978,42 @@ export const useAppStore = create<AppState>((set, get) => ({
         throw new Error('أمر الشغل غير موجود.');
       }
 
-      const startDate = getWorkOrderEffectiveStartDate(wo) || getReportOperationalDateString(get().systemSettings);
-      const today = getReportOperationalDateString(get().systemSettings);
-      const targetDate = String(wo.targetDate || '').trim();
-      // Include reports after targetDate while the WO is still open (common after a line move).
-      const endDate = [targetDate, today].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().at(-1) || today;
-      const rangeStart = startDate <= endDate ? startDate : endDate;
-      const rangeEnd = startDate <= endDate ? endDate : startDate;
-
-      const [rangeReports, productReports] = await Promise.all([
-        reportService.getByDateRange(rangeStart, rangeEnd),
-        reportService.getByProduct(wo.productId).catch(() => [] as ProductionReport[]),
-      ]);
-      const reportById = new Map<string, ProductionReport>();
-      for (const report of [...rangeReports, ...productReports]) {
-        if (report.id) reportById.set(String(report.id), report);
-      }
-      const toLink = filterUnlinkedReportsEligibleForWorkOrder(wo, Array.from(reportById.values()));
       const planId = String(wo.planId || '').trim();
       let linked = 0;
 
-      for (const report of toLink) {
-        if (!report.id) continue;
-        const patch: Partial<ProductionReport> = { workOrderId: id };
-        if (planId && !String(report.productionPlanId || '').trim()) {
-          patch.productionPlanId = planId;
-          patch.productionPlanLinkMode = 'auto';
+      if (mode === 'full') {
+        const startDate = getWorkOrderEffectiveStartDate(wo) || getReportOperationalDateString(get().systemSettings);
+        const today = getReportOperationalDateString(get().systemSettings);
+        const targetDate = String(wo.targetDate || '').trim();
+        // Include reports after targetDate while the WO is still open (common after a line move).
+        const endDate = [targetDate, today].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().at(-1) || today;
+        const rangeStart = startDate <= endDate ? startDate : endDate;
+        const rangeEnd = startDate <= endDate ? endDate : startDate;
+
+        const [rangeReports, productReports] = await Promise.all([
+          reportService.getByDateRange(rangeStart, rangeEnd),
+          reportService.getByProduct(wo.productId).catch(() => [] as ProductionReport[]),
+        ]);
+        const reportById = new Map<string, ProductionReport>();
+        for (const report of [...rangeReports, ...productReports]) {
+          if (report.id) reportById.set(String(report.id), report);
         }
-        await reportService.update(report.id, patch);
-        linked += 1;
+        const toLink = filterUnlinkedReportsEligibleForWorkOrder(wo, Array.from(reportById.values()));
+
+        for (const report of toLink) {
+          if (!report.id) continue;
+          const patch: Partial<ProductionReport> = { workOrderId: id };
+          if (planId && !String(report.productionPlanId || '').trim()) {
+            patch.productionPlanId = planId;
+            patch.productionPlanLinkMode = 'auto';
+          }
+          await reportService.update(report.id, patch);
+          linked += 1;
+        }
       }
 
       const linkedReports = await reportService.getByWorkOrderId(id);
-      if (planId) {
+      if (planId && mode === 'full') {
         for (const report of linkedReports) {
           if (!report.id) continue;
           if (String(report.productionPlanId || '').trim()) continue;
@@ -5885,7 +6024,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      const refreshedLinked = planId ? await reportService.getByWorkOrderId(id) : linkedReports;
+      const refreshedLinked = (planId && mode === 'full')
+        ? await reportService.getByWorkOrderId(id)
+        : linkedReports;
       const producedQuantity = sumProducedFromWorkOrderReports(id, refreshedLinked);
       const targetQty = Number(wo.quantity || 0);
       const lastProducingReportDate = lastProducingReportDateFromReports(refreshedLinked);
@@ -5907,16 +6048,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       await workOrderService.update(id, statusPatch);
 
-      await get().fetchWorkOrders({ force: true });
+      set((state) => ({
+        workOrders: upsertLoadedWorkOrder(state.workOrders, { ...wo, ...statusPatch, id }),
+      }));
       if (planId) {
         try {
           await get().reconcileProductionPlanFromReports(planId);
         } catch (planErr) {
           console.warn('reconcileProductionPlanFromReports after WO reconcile failed:', planErr);
-          await get().fetchProductionPlans({ force: true, silent: true });
         }
-      } else {
-        await get().fetchProductionPlans({ force: true, silent: true });
       }
 
       const touchedDates = refreshedLinked

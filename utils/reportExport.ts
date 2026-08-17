@@ -63,8 +63,17 @@ const applyRtlFontClone = (clonedDoc: Document, fontFamily?: string) => {
       font-family: ${resolvedFamily} !important;
     }
     /* html2canvas often ignores Tailwind grid at narrow viewport widths */
-    .print-report .grid {
+    .print-root .grid, .print-report .grid {
       display: grid !important;
+    }
+    .print-info-grid {
+      display: grid !important;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+    .print-product-head {
+      display: flex !important;
+      align-items: flex-start;
+      justify-content: space-between;
     }
     .print-report .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)) !important; }
     .print-report .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }

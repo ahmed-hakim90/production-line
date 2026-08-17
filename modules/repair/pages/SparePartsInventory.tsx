@@ -16,7 +16,7 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
-import { printAfterPaint, useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { toast } from '../../../components/Toast';
 import {
   type FirestoreUserWithRepair,
@@ -39,7 +39,6 @@ import { LowStockAlert } from '../components/LowStockAlert';
 import { CreateRepairReplenishmentModal } from '../components/CreateRepairReplenishmentModal';
 import { CreateRepairSparePartModal } from '../components/CreateRepairSparePartModal';
 import { SparePartsInventoryCountPrint } from '../components/SparePartsInventoryCountPrint';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { toUserSafeFirestoreError } from '../lib/repairFirestoreErrors';
 import {
   loadSparePartsCatalogMaterials,
@@ -89,12 +88,7 @@ export const SparePartsInventory: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
   const printTemplate = systemSettings?.printTemplate;
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrintCountSheet = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: 'ورقة جرد قطع غيار',
-  });
+  const { printDocument } = usePrintEngine();
   const canViewReplenishment =
     can('sparePartsReplenishment.view')
     || can('sparePartsReplenishment.create')
@@ -590,7 +584,22 @@ export const SparePartsInventory: React.FC = () => {
                   variant="outline"
                   size="sm"
                   disabled={!branchId || !activeWarehouseId || printRows.length === 0}
-                  onClick={() => printAfterPaint(() => { void handlePrintCountSheet(); })}
+                  onClick={() => {
+                    printDocument({
+                      documentTitle: 'ورقة جرد قطع غيار',
+                      printSettings: printTemplate,
+                      render: (ref) => (
+                        <SparePartsInventoryCountPrint
+                          ref={ref}
+                          rows={printRows}
+                          branchName={activeBranch?.name || ''}
+                          warehouseName={activeWarehouseName}
+                          locationByItemId={locationByItemId}
+                          printSettings={printTemplate}
+                        />
+                      ),
+                    });
+                  }}
                 >
                   طباعة الجرد
                 </Button>
@@ -803,16 +812,6 @@ export const SparePartsInventory: React.FC = () => {
         onCreated={() => void load({ force: true })}
       />
       <LowStockAlert open={lowStock.isOpen} onOpenChange={(open) => { if (!open) lowStock.dismiss(); }} entries={lowStock.lowStockEntries} />
-      <PrintOffscreenHost>
-        <SparePartsInventoryCountPrint
-          ref={printRef}
-          rows={printRows}
-          branchName={activeBranch?.name || ''}
-          warehouseName={activeWarehouseName}
-          locationByItemId={locationByItemId}
-          printSettings={printTemplate}
-        />
-      </PrintOffscreenHost>
     </RepairOpsPageShell>
   );
 };

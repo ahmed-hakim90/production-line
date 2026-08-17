@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { Button, SearchableSelect } from '../components/UI';
+import { Button } from '../components/UI';
+import { VoucherItemCombobox } from '../components/VoucherItemCombobox';
+import { buildCodeVoucherPicker } from '../lib/materialVoucherPicker';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { materialService } from '../../manufacturing/services/materialService';
 import { bomService } from '../../manufacturing/services/bomService';
 import type { Material } from '../../manufacturing/types';
@@ -130,13 +132,7 @@ export const ItemCard: React.FC = () => {
   const [countLoading, setCountLoading] = useState(false);
   const [countWarning, setCountWarning] = useState<string | null>(null);
   const [labelEngineOpen, setLabelEngineOpen] = useState(false);
-
-  const printRef = useRef<HTMLDivElement>(null);
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings,
-    documentTitle: 'كارت الصنف',
-  });
+  const { printDocument } = usePrintEngine();
 
   const warehouseNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -172,13 +168,18 @@ export const ItemCard: React.FC = () => {
       .filter((m) => m.id);
   }, [itemType, products, materials]);
 
-  const itemSelectOptions = useMemo(
+  const itemPicker = useMemo(
     () =>
-      catalogOptions.map((opt) => ({
-        value: opt.id,
-        label: opt.code ? `${opt.name} (${opt.code})` : opt.name,
-        hint: opt.category || undefined,
-      })),
+      buildCodeVoucherPicker(
+        catalogOptions.map((opt) => ({
+          value: opt.id,
+          label: opt.code ? `${opt.name} (${opt.code})` : opt.name,
+          name: opt.name,
+          code: opt.code,
+          barcode: opt.barcode,
+          stockItemType: opt.itemType === 'finished_good' ? 'finished_good' : 'material',
+        })),
+      ),
     [catalogOptions],
   );
 
@@ -483,7 +484,20 @@ export const ItemCard: React.FC = () => {
           >
             طباعة ملصق باركود
           </Button>
-          <Button type="button" disabled={!printModel} onClick={() => handlePrint()}>
+          <Button
+            type="button"
+            disabled={!printModel}
+            onClick={() => {
+              if (!printModel) return;
+              printDocument({
+                documentTitle: 'كارت الصنف',
+                printSettings,
+                render: (ref) => (
+                  <ItemCardPrint ref={ref} card={printModel} printSettings={printSettings} />
+                ),
+              });
+            }}
+          >
             طباعة الكارت
           </Button>
         </div>
@@ -513,12 +527,13 @@ export const ItemCard: React.FC = () => {
           </label>
 
           <label className="text-sm font-semibold space-y-1 md:col-span-2">
-            <span>بحث بالاسم أو الكود</span>
-            <SearchableSelect
-              options={itemSelectOptions}
+            <span>بحث بالاسم أو الكود أو الباركود</span>
+            <VoucherItemCombobox
+              options={itemPicker.options}
+              catalog={itemPicker.catalog}
               value={itemId}
               onChange={setItemId}
-              placeholder={itemType !== 'finished_good' && catalogLoading ? 'جاري تحميل الأصناف…' : 'ابحث بالاسم أو الكود…'}
+              placeholder={itemType !== 'finished_good' && catalogLoading ? 'جاري تحميل الأصناف…' : 'ابحث بالاسم أو امسح الباركود'}
               disabled={itemType !== 'finished_good' && catalogLoading}
             />
           </label>
@@ -732,11 +747,6 @@ export const ItemCard: React.FC = () => {
           </OpsDashPanel>
         </>
       ) : null}
-
-      {/* Off-screen printable surface */}
-      <div className="fixed -left-[10000px] top-0" aria-hidden>
-        <ItemCardPrint ref={printRef} card={printModel} printSettings={printSettings} />
-      </div>
 
       <BarcodeLabelPrintEngineModal
         open={labelEngineOpen}

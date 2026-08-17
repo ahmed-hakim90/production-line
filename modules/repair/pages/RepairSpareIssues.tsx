@@ -10,13 +10,12 @@ import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
-import { useManagedPrint } from '../../../utils/printManager';
+import { usePrintEngine } from '../../../utils/printManager';
 import { useAppStore } from '../../../store/useAppStore';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
 import { CreateRepairSpareIssueModal } from '../components/CreateRepairSpareIssueModal';
 import { RepairSpareIssuePrint } from '../components/RepairSpareIssuePrint';
-import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import {
   REPAIR_SPARE_APPROVAL_MODE_LABELS,
   REPAIR_SPARE_ISSUE_STATUS_LABELS,
@@ -90,15 +89,9 @@ export const RepairSpareIssues: React.FC = () => {
       })),
     [],
   );
-  const [printIssue, setPrintIssue] = useState<RepairSpareIssue | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
   const detailPanelRef = useRef<HTMLDivElement>(null);
   const printTemplate = useAppStore((s) => s.systemSettings)?.printTemplate;
-  const handlePrint = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: 'سند صرف قطع غيار',
-  });
+  const { printDocument } = usePrintEngine();
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -207,10 +200,13 @@ export const RepairSpareIssues: React.FC = () => {
   };
 
   const printRow = (row: RepairSpareIssue) => {
-    setPrintIssue(row);
-    window.setTimeout(() => {
-      void handlePrint();
-    }, 50);
+    printDocument({
+      documentTitle: `سند صرف قطع غيار-${row.referenceNo || row.id}`,
+      printSettings: printTemplate,
+      render: (ref) => (
+        <RepairSpareIssuePrint ref={ref} issue={row} printSettings={printTemplate} />
+      ),
+    });
   };
 
   const busy = Boolean(selected?.id && busyId === selected.id);
@@ -537,10 +533,6 @@ export const RepairSpareIssues: React.FC = () => {
         </div>
         ) : null}
       </div>
-
-      <PrintOffscreenHost>
-        <RepairSpareIssuePrint ref={printRef} issue={printIssue} printSettings={printTemplate} />
-      </PrintOffscreenHost>
 
       <CreateRepairSpareIssueModal
         open={showCreate}

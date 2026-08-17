@@ -597,7 +597,7 @@ export const CustomerDetail: React.FC = () => {
               variant="outline"
               onClick={() => navigate(withTenantPath(tenantSlug, '/customers/kpi'))}
             >
-              مؤشرات العملاء
+              لوحة العملاء
             </Button>
           )}
           {canEdit ? (
