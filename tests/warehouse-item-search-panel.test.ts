@@ -10,7 +10,7 @@ assert.match(panelSrc, /matchesItemSearch/);
 assert.match(panelSrc, /ابحث بالاسم أو الكود/);
 assert.match(panelSrc, /اكتب حرفين على الأقل/);
 assert.match(panelSrc, /pageId/);
-assert.match(panelSrc, /\/inventory\/item-card/);
+assert.match(panelSrc, /buildItemCardPath/);
 
 const workspaceSrc = readFileSync(
   new URL('../modules/inventory/pages/WarehouseWorkspace.tsx', import.meta.url),

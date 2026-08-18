@@ -102,6 +102,8 @@ export const StockCounts: React.FC = () => {
   const loadData = async () => {
     invalidatePageDataCache(STOCK_COUNTS_CACHE_KEY);
     invalidatePageDataCache(STOCK_COUNTS_BALANCES_CACHE);
+    invalidatePageDataCache('inventory:warehouse-workspace');
+    invalidatePageDataCache('inventory:stock-balances');
     await Promise.all([reloadList(true), reloadBalances(true)]);
   };
 

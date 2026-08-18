@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  reservationShortageMessage,
   stockAvailableQty,
   stockReservedQty,
 } from '../functions/src/stockReservation';
@@ -17,5 +18,13 @@ describe('stock reservation helpers', () => {
     assert.equal(stockReservedQty({ reservedQty: 4 }), 4);
     assert.equal(stockReservedQty({ reservedQty: -2 }), 0);
     assert.equal(stockReservedQty({}), 0);
+  });
+
+  it('formats a user-safe reservation shortage message', () => {
+    assert.equal(
+      reservationShortageMessage(4, 1, 'الصنف شاشة'),
+      'الرصيد المتاح غير كافٍ للحجز — الصنف شاشة (المطلوب 4، المتاح 1).',
+    );
+    assert.match(reservationShortageMessage(2, 0), /المتاح 0/);
   });
 });

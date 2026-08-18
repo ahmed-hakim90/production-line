@@ -247,3 +247,51 @@ export function isPendingReplenishmentStatus(status: SparePartsReplenishmentStat
     || status === 'responsible_approved'
   );
 }
+
+const GENERIC_CALLABLE_LABEL =
+  /^(internal|unknown|ok|cancelled|not-found|not found|unauthenticated|permission-denied|permission denied|failed-precondition|resource-exhausted|unavailable|deadline-exceeded|invalid-argument|already-exists|aborted|out-of-range|unimplemented|data-loss)$/i;
+
+/** Recover Arabic business copy; hide Firebase INTERNAL/code labels. */
+export function mapSparePartsCallableError(error: unknown, fallback: string): Error {
+  const code = String((error as { code?: string })?.code || '').toLowerCase();
+  const message = String((error as { message?: string })?.message || '').trim();
+  const arabic = message.match(/[\u0600-\u06FF][^]*[\u0600-\u06FF0-9).]/);
+  const business = arabic ? arabic[0].trim() : '';
+
+  if (code.includes('unauthenticated') || message.toLowerCase() === 'unauthenticated') {
+    return new Error('يجب تسجيل الدخول أولًا ثم إعادة المحاولة.');
+  }
+  if (
+    code.includes('permission-denied')
+    || message.toLowerCase().includes('missing or insufficient permissions')
+  ) {
+    return new Error(
+      'ليس لديك صلاحية قراءة/تنفيذ تموين قطع الغيار. تأكد من صلاحية العرض في الدور، أو أن قواعد Firestore محدّثة.',
+    );
+  }
+  if (business && business.length < 180) {
+    return new Error(business);
+  }
+  if (code.includes('failed-precondition')) {
+    return new Error(message && !GENERIC_CALLABLE_LABEL.test(message)
+      ? message
+      : 'لا يمكن تنفيذ العملية في الحالة الحالية.');
+  }
+  if (code.includes('invalid-argument')) {
+    return new Error(message && !GENERIC_CALLABLE_LABEL.test(message) ? message : 'بيانات غير صالحة.');
+  }
+  if (code.includes('not-found')) {
+    return new Error(message && !GENERIC_CALLABLE_LABEL.test(message) ? message : 'الطلب غير موجود.');
+  }
+  if (
+    GENERIC_CALLABLE_LABEL.test(message)
+    || code.includes('internal')
+    || code.includes('unavailable')
+    || message.toLowerCase().includes('failed to fetch')
+  ) {
+    return new Error(fallback);
+  }
+  if (message) return new Error(message);
+  return new Error(fallback);
+}
+

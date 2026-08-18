@@ -24,6 +24,15 @@ export const stockReservedQty = (balance: StockBalanceData | null | undefined): 
   return Number.isFinite(reserved) && reserved > 0 ? reserved : 0;
 };
 
+export const reservationShortageMessage = (
+  qty: number,
+  available: number,
+  label?: string,
+): string => {
+  const item = String(label || '').trim() || 'الصنف';
+  return `الرصيد المتاح غير كافٍ للحجز — ${item} (المطلوب ${qty}، المتاح ${available}).`;
+};
+
 const assertTenant = (balance: StockBalanceData | undefined, tenantId: string, label: string) => {
   if (!balance) return;
   if (String(balance.tenantId || '').trim() !== tenantId) {
@@ -57,7 +66,7 @@ export const reserveStockInTx = (
   if (available + 1e-9 < qty) {
     throw new HttpsError(
       'failed-precondition',
-      `الرصيد المتاح غير كافٍ للحجز (المتاح ${available}).`,
+      reservationShortageMessage(qty, available, input.label),
     );
   }
   if (!existing) {

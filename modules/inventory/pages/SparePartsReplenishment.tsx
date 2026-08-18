@@ -201,6 +201,8 @@ export const SparePartsReplenishment: React.FC = () => {
 
   const load = useCallback(async () => {
     invalidatePageDataCache(REPLENISHMENT_LIST_CACHE);
+    invalidatePageDataCache('inventory:warehouse-workspace');
+    invalidatePageDataCache('repair:parts-replenishment');
     await reloadList(true);
   }, [reloadList]);
 

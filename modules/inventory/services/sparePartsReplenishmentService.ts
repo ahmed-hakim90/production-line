@@ -15,7 +15,7 @@ import type {
   SparePartsReplenishmentRequest,
   SparePartsReplenishmentStatus,
 } from '../types';
-import { SPARE_PARTS_REPLENISHMENT_COLLECTION } from '../lib/sparePartsReplenishment';
+import { SPARE_PARTS_REPLENISHMENT_COLLECTION, mapSparePartsCallableError } from '../lib/sparePartsReplenishment';
 import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 import { warehouseService } from './warehouseService';
 import { replenishmentScopeFieldForBoundRole } from '../lib/boundWarehouseCatalog';
@@ -70,31 +70,14 @@ const countWithConstraints = async (constraints: QueryConstraint[]): Promise<num
   }
 };
 
-const toUserSafeError = (error: unknown, fallback: string): Error => {
-  const code = String((error as { code?: string })?.code || '').toLowerCase();
-  const message = String((error as { message?: string })?.message || '').trim();
-  if (code.includes('unauthenticated') || message.toLowerCase().includes('unauthenticated')) {
-    return new Error('يجب تسجيل الدخول أولًا ثم إعادة المحاولة.');
-  }
-  if (isPermissionDenied(error)) {
-    return new Error(
-      'ليس لديك صلاحية قراءة/تنفيذ تموين قطع الغيار. تأكد من صلاحية العرض في الدور، أو أن قواعد Firestore محدّثة.',
-    );
-  }
-  if (code.includes('failed-precondition')) return new Error(message || 'لا يمكن تنفيذ العملية في الحالة الحالية.');
-  if (code.includes('invalid-argument')) return new Error(message || 'بيانات غير صالحة.');
-  if (code.includes('not-found')) return new Error(message || 'الطلب غير موجود.');
-  if (message && !message.toLowerCase().includes('missing or insufficient permissions')) {
-    return new Error(message);
-  }
-  return new Error(fallback);
-};
+const toUserSafeError = (error: unknown, fallback: string): Error =>
+  mapSparePartsCallableError(error, fallback);
 
-const callSafe = async <T>(run: () => Promise<T>): Promise<T> => {
+const callSafe = async <T>(run: () => Promise<T>, fallback = 'تعذر تنفيذ العملية.'): Promise<T> => {
   try {
     return await run();
   } catch (error: unknown) {
-    throw toUserSafeError(error, 'تعذر تنفيذ العملية.');
+    throw toUserSafeError(error, fallback);
   }
 };
 
@@ -211,7 +194,7 @@ export const sparePartsReplenishmentService = {
   async approve(requestId: string): Promise<void> {
     await callSafe(async () => {
       await httpsCallable(requireFunctions(), 'approveSparePartsReplenishment')({ requestId });
-    });
+    }, 'تعذر اعتماد الطلب. تحقق من الرصيد المتاح في المخزن المركزي.');
   },
 
   async prepare(

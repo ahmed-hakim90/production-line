@@ -15,6 +15,12 @@ import type { Material } from '../../manufacturing/types';
 import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
 import { itemTypeLabel } from '../lib/stockLabels';
+import {
+  findItemCardCatalogOption,
+  isItemCardCatalogReady,
+  itemCardQueryItemType,
+  shouldWarnItemMissingFromCatalog,
+} from '../lib/itemCardCatalog';
 import { movementFateLabel, movementPathLabel } from '../lib/itemMovementTrace';
 import type {
   InventoryItemType,
@@ -34,7 +40,6 @@ import { buildProductBomCountCards } from '../../production/lib/buildProductBomC
 import type { ProductBomCountCard } from '../../production/components/ProductBomCountCardPrint';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import {
-  invalidatePageDataCache,
   isPageDataCacheFresh,
   peekPageDataCache,
   setPageDataCache,
@@ -115,16 +120,19 @@ export const ItemCard: React.FC = () => {
   const canView = can('inventory.view');
   const [searchParams, setSearchParams] = useSearchParams();
   const products = useAppStore((s) => s._rawProducts || []);
+  const productsLoading = useAppStore((s) => s.productsLoading);
   const printSettings = useAppStore((s) => s.systemSettings?.printTemplate);
 
-  const [itemType, setItemType] = useState<InventoryItemType>(
-    () => (searchParams.get('itemType') as InventoryItemType) || 'finished_good',
-  );
+  const [itemType, setItemType] = useState<InventoryItemType>(() => {
+    const raw = searchParams.get('itemType');
+    if (!raw) return 'finished_good';
+    return itemCardQueryItemType(raw);
+  });
   const [itemId, setItemId] = useState(() => searchParams.get('itemId') || '');
   const [warehouseId, setWarehouseId] = useState(() => searchParams.get('warehouseId') || '');
   const initialCard = itemId
     ? peekPageDataCache<ItemCardPageData>(itemCardCacheKey(
-      (searchParams.get('itemType') as InventoryItemType) || 'finished_good',
+      itemType,
       itemId,
       searchParams.get('warehouseId') || '',
     ))
@@ -143,6 +151,11 @@ export const ItemCard: React.FC = () => {
   );
   const warehouses = warehouseRows ?? [];
   const materials = catalog ?? [];
+  const catalogReady = isItemCardCatalogReady({
+    itemType,
+    materialsCatalogLoaded: catalog != null,
+    productsLoading,
+  });
   const [balances, setBalances] = useState<StockItemBalance[]>(() => initialCard?.balances ?? []);
   const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>(
     () => initialCard?.locationBalances ?? [],
@@ -159,6 +172,7 @@ export const ItemCard: React.FC = () => {
   const movementCursorStateRef = useRef<MovementCursorState>(
     initialCard?.cursorState ?? { byType: {}, hasMoreByType: {} },
   );
+  const missingCatalogToastKeyRef = useRef<string | null>(null);
 
   const [countCards, setCountCards] = useState<ProductBomCountCard[]>([]);
   const [countPreviewOpen, setCountPreviewOpen] = useState(false);
@@ -216,33 +230,53 @@ export const ItemCard: React.FC = () => {
     [catalogOptions],
   );
 
-  const selected = useMemo(
-    () => catalogOptions.find((opt) => opt.id === itemId) || null,
-    [catalogOptions, itemId],
-  );
+  const selected = useMemo(() => {
+    const aliases = materials.map((material) => ({
+      id: String(material.id || ''),
+      aliasIds: material.legacyRawMaterialId ? [String(material.legacyRawMaterialId)] : [],
+    })).filter((row) => row.id);
+    const fromPicker = findItemCardCatalogOption(catalogOptions, itemId, aliases);
+    if (fromPicker) return fromPicker;
+    if (itemType === 'finished_good') return null;
+    const material = materials.find((row) =>
+      String(row.id || '') === itemId || String(row.legacyRawMaterialId || '') === itemId,
+    );
+    if (!material?.id) return null;
+    return {
+      id: String(material.id),
+      code: material.code || '',
+      name: material.name || '',
+      unit: material.baseUnit || 'piece',
+      category: material.categoryName || material.type || '',
+      itemType: 'material' as const,
+      barcode: String((material as { barcode?: string }).barcode || ''),
+    };
+  }, [catalogOptions, itemId, itemType, materials]);
 
   const itemBalances = useMemo(() => {
     if (!selected) return [];
+    const matchIds = new Set([selected.id, itemId].filter(Boolean));
     return balances
-      .filter((row) => matchesItemBalance(row, selected.itemType, selected.id))
+      .filter((row) => [...matchIds].some((id) => matchesItemBalance(row, selected.itemType, id)))
       .filter((row) => !warehouseId || row.warehouseId === warehouseId)
       .map((row) => ({
         ...row,
         warehouseName: warehouseNameById.get(row.warehouseId) || row.warehouseId,
       }))
       .sort((a, b) => String(a.warehouseName).localeCompare(String(b.warehouseName), 'ar'));
-  }, [balances, selected, warehouseId, warehouseNameById]);
+  }, [balances, itemId, selected, warehouseId, warehouseNameById]);
 
   const itemLocationRows = useMemo(() => {
     if (!selected) return [];
+    const matchIds = new Set([selected.id, itemId].filter(Boolean));
     return locationBalances
-      .filter((row) => String(row.itemId || '') === selected.id)
+      .filter((row) => matchIds.has(String(row.itemId || '')))
       .filter((row) => !warehouseId || row.warehouseId === warehouseId)
       .sort((a, b) =>
         String(a.locationCode || '').localeCompare(String(b.locationCode || ''), 'ar')
         || Number(b.quantity || 0) - Number(a.quantity || 0),
       );
-  }, [locationBalances, selected, warehouseId]);
+  }, [itemId, locationBalances, selected, warehouseId]);
 
   const printModel = useMemo((): ItemCardPrintModel | null => {
     if (!selected) return null;
@@ -294,7 +328,6 @@ export const ItemCard: React.FC = () => {
 
     if (!cached) setLoading(true);
     try {
-      const selectedOption = catalogOptions.find((opt) => opt.id === itemId);
       const ownerType = itemType === 'finished_good' ? 'product' : 'material';
       const movementTypes = itemMovementTypes(itemType);
 
@@ -388,10 +421,6 @@ export const ItemCard: React.FC = () => {
           hasNext: firstHasNext,
         });
       }
-
-      if (!selectedOption) {
-        toast.error('تعذر العثور على الصنف المحدد في الكتالوج.');
-      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'تعذر تحميل كارت الصنف.');
       setBalances([]);
@@ -407,7 +436,6 @@ export const ItemCard: React.FC = () => {
     itemId,
     itemType,
     warehouseId,
-    catalogOptions,
     materials,
     products,
     setSearchParams,
@@ -424,6 +452,21 @@ export const ItemCard: React.FC = () => {
     }
     void loadCard(true);
   }, [itemId, itemType, warehouseId, loadCard]);
+
+  useEffect(() => {
+    if (!shouldWarnItemMissingFromCatalog({
+      itemId,
+      catalogReady,
+      foundInCatalog: Boolean(selected),
+    })) {
+      if (selected) missingCatalogToastKeyRef.current = null;
+      return;
+    }
+    const key = `${itemType}:${itemId}`;
+    if (missingCatalogToastKeyRef.current === key) return;
+    missingCatalogToastKeyRef.current = key;
+    toast.error('تعذر العثور على الصنف المحدد في الكتالوج.');
+  }, [catalogReady, itemId, itemType, selected]);
 
   const loadNextMovementsPage = async () => {
     if (!itemId || !hasMoreMovements) return;

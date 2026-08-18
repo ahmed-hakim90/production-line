@@ -38,6 +38,7 @@ import {
   submitRepairSpareIssueHandler,
 } from './repairSpareIssues.js';
 import { buildPublicRepairApprovalView } from './repairApprovalPublic.js';
+import { wrapCallableUserSafe } from './callableUserSafeError.js';
 import {
   approveSparePartsReplenishmentHandler,
   cancelSparePartsReplenishmentHandler,
@@ -2406,37 +2407,43 @@ export const returnRepairSpareIssue = onCall(
 
 export const createSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
-  createSparePartsReplenishmentHandler,
+  wrapCallableUserSafe('تعذر إنشاء طلب التموين.', createSparePartsReplenishmentHandler),
 );
 
 export const approveSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
-  approveSparePartsReplenishmentHandler,
+  wrapCallableUserSafe(
+    'تعذر اعتماد طلب التموين. تحقق من الرصيد المتاح في المخزن المركزي.',
+    approveSparePartsReplenishmentHandler,
+  ),
 );
 
 export const prepareSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
-  prepareSparePartsReplenishmentHandler,
+  wrapCallableUserSafe('تعذر تجهيز طلب التموين.', prepareSparePartsReplenishmentHandler),
 );
 
 export const responsibleApproveSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
-  responsibleApproveSparePartsReplenishmentHandler,
+  wrapCallableUserSafe(
+    'تعذر تسجيل موافقة المسؤول على التموين.',
+    responsibleApproveSparePartsReplenishmentHandler,
+  ),
 );
 
 export const receiveSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
-  receiveSparePartsReplenishmentHandler,
+  wrapCallableUserSafe('تعذر تأكيد استلام التموين.', receiveSparePartsReplenishmentHandler),
 );
 
 export const rejectSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
-  rejectSparePartsReplenishmentHandler,
+  wrapCallableUserSafe('تعذر رفض طلب التموين.', rejectSparePartsReplenishmentHandler),
 );
 
 export const cancelSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
-  cancelSparePartsReplenishmentHandler,
+  wrapCallableUserSafe('تعذر إلغاء طلب التموين.', cancelSparePartsReplenishmentHandler),
 );
 
 export const listMaintenanceCenterSpareBalances = onCall(

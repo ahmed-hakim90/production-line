@@ -3,8 +3,9 @@
  * Status: submitted → approved → prepared → responsible_approved → received
  * Stock posts only on receive. Unit costs always snapshotted from materials master.
  */
-import { type DocumentReference } from 'firebase-admin/firestore';
+import { type DocumentReference, type Transaction } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
+import { toCallableUserSafeError } from './callableUserSafeError.js';
 import { getDb } from './adminApp.js';
 import {
   assertActorWarehouseInvolved,
@@ -129,6 +130,17 @@ type RequestDoc = {
   tenantId: string;
 };
 
+const runTx = async <T>(
+  fallback: string,
+  updater: (tx: Transaction) => Promise<T>,
+): Promise<T> => {
+  try {
+    return await db.runTransaction(updater);
+  } catch (error: unknown) {
+    throw toCallableUserSafeError(error, fallback);
+  }
+};
+
 const releaseRequestReservations = async (
   tenantId: string,
   fromWarehouseId: string,
@@ -136,7 +148,7 @@ const releaseRequestReservations = async (
 ): Promise<void> => {
   const lines = reservedLines || [];
   if (lines.length === 0) return;
-  await db.runTransaction(async (tx) => {
+  await runTx('تعذر تحرير حجز المخزون.', async (tx) => {
     for (const line of lines) {
       const qty = toNumber(line.reservedQty);
       if (!(qty > 0)) continue;
@@ -699,7 +711,9 @@ export const approveSparePartsReplenishmentHandler = async (request: CallableReq
 
   const now = toIsoNow();
   const reservedLines: Array<{ itemId: string; itemType: 'material'; reservedQty: number }> = [];
-  await db.runTransaction(async (tx) => {
+  await runTx(
+    'تعذر اعتماد طلب التموين. تحقق من الرصيد المتاح في المخزن المركزي.',
+    async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'الطلب غير موجود.');
     const current = snap.data() as RequestDoc;
@@ -749,7 +763,8 @@ export const approveSparePartsReplenishmentHandler = async (request: CallableReq
       stockReserved: true,
       reservedLines,
     });
-  });
+    },
+  );
   await writeActivity(actor, 'spare_parts_replenishment.approve', requestId, {
     referenceNo: data.referenceNo,
   });
@@ -1026,7 +1041,7 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
   }
 
   const now = toIsoNow();
-  await db.runTransaction(async (tx) => {
+  await runTx('تعذر تأكيد استلام التموين.', async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new HttpsError('not-found', 'الطلب غير موجود.');
     const current = snap.data() as RequestDoc;

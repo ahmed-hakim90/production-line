@@ -1204,6 +1204,12 @@ export const StockMovementForm: React.FC = () => {
       resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : movementType === 'OUT' ? 'OUT' : 'IN');
       setSaving(false);
       invalidatePageDataCache('inventory:stock-transactions');
+      invalidatePageDataCache('inventory:stock-balances');
+      invalidatePageDataCache('inventory:warehouse-workspace');
+      invalidatePageDataCache('inventory:warehouse-locations');
+      invalidatePageDataCache('inventory:item-card');
+      invalidatePageDataCache('inventory:stock-counts-balances');
+      invalidatePageDataCache('inventory:department-consumables');
 
       if (printPayload && printAction !== 'none') {
         if (printAction === 'preview') {

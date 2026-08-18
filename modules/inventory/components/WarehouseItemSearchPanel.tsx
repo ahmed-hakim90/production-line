@@ -6,6 +6,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { withTenantPath } from '@/lib/tenantPaths';
 import { formatNumber } from '../../../utils/calculations';
 import { hasActiveItemSearch, matchesItemSearch } from '../lib/itemSearch';
+import { buildItemCardPath } from '../lib/itemCardCatalog';
 import type { StockItemBalance } from '../types';
 
 const PAGE_SIZE = 15;
@@ -116,7 +117,11 @@ export function WarehouseItemSearchPanel({
                             className="text-xs font-bold text-primary underline"
                             to={withTenantPath(
                               tenantSlug,
-                              `/inventory/item-card?itemType=${encodeURIComponent(row.itemType)}&itemId=${encodeURIComponent(row.itemId)}&warehouseId=${encodeURIComponent(warehouseId)}`,
+                              buildItemCardPath({
+                                itemType: row.itemType,
+                                itemId: row.itemId,
+                                warehouseId,
+                              }),
                             )}
                           >
                             فتح

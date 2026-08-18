@@ -39,13 +39,31 @@ import {
   type RepairBranch,
   type RepairSparePart,
 } from '../types';
+import {
+  invalidatePageDataCache,
+  isPageDataCacheFresh,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const LIST_PAGE_SIZE = 20;
+const REPAIR_BRANCHES_CACHE_KEY = 'repair:branches-list';
+const REPAIR_REPLENISH_CACHE_PREFIX = 'repair:parts-replenishment';
+const REPAIR_REPLENISH_CACHE_MAX_AGE_MS = 45_000;
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 
 type ListTab = 'awaiting' | 'all';
+
+type RepairReplenishmentPageData = {
+  rows: SparePartsReplenishmentRequest[];
+  parts: RepairSparePart[];
+};
+
+function repairReplenishmentCacheKey(warehouseId: string): string {
+  return `${REPAIR_REPLENISH_CACHE_PREFIX}:${warehouseId}`;
+}
 
 export const RepairPartsReplenishment: React.FC = () => {
   const { dir } = useAppDirection();
@@ -76,11 +94,16 @@ export const RepairPartsReplenishment: React.FC = () => {
     [user, userRoleName, systemSettings, userPermissions],
   );
 
-  const [branches, setBranches] = useState<RepairBranch[]>([]);
-  const [selectedBranchId, setSelectedBranchId] = useState('');
-  const [parts, setParts] = useState<RepairSparePart[]>([]);
-  const [rows, setRows] = useState<SparePartsReplenishmentRequest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialBranches = peekPageDataCache<RepairBranch[]>(REPAIR_BRANCHES_CACHE_KEY) ?? [];
+  const initialWarehouseId = String(initialBranches[0]?.warehouseId || '').trim();
+  const initialReplenish = initialWarehouseId
+    ? peekPageDataCache<RepairReplenishmentPageData>(repairReplenishmentCacheKey(initialWarehouseId))
+    : null;
+  const [branches, setBranches] = useState<RepairBranch[]>(() => initialBranches);
+  const [selectedBranchId, setSelectedBranchId] = useState(() => String(initialBranches[0]?.id || ''));
+  const [parts, setParts] = useState<RepairSparePart[]>(() => initialReplenish?.parts ?? []);
+  const [rows, setRows] = useState<SparePartsReplenishmentRequest[]>(() => initialReplenish?.rows ?? []);
+  const [loading, setLoading] = useState(() => !initialReplenish);
   const [statusFilter, setStatusFilter] = useState<SparePartsReplenishmentStatus | ''>('');
   const [listTab, setListTab] = useState<ListTab>('awaiting');
   const [listPage, setListPage] = useState(1);
@@ -96,7 +119,18 @@ export const RepairPartsReplenishment: React.FC = () => {
   );
   const toWarehouseId = String(activeBranch?.warehouseId || '').trim();
 
-  const loadBranches = useCallback(async () => {
+  const loadBranches = useCallback(async (force = false) => {
+    const cached = peekPageDataCache<RepairBranch[]>(REPAIR_BRANCHES_CACHE_KEY);
+    if (cached) {
+      setBranches(cached);
+      setSelectedBranchId((prev) => {
+        if (prev && cached.some((b) => b.id === prev)) return prev;
+        return String(cached[0]?.id || '');
+      });
+    }
+    if (!force && cached && isPageDataCacheFresh(REPAIR_BRANCHES_CACHE_KEY, REPAIR_REPLENISH_CACHE_MAX_AGE_MS)) {
+      return;
+    }
     const branchRows = await repairBranchService.list();
     const accessibleIds = new Set(
       resolveAccessibleRepairBranchIds({
@@ -110,39 +144,59 @@ export const RepairPartsReplenishment: React.FC = () => {
       ? branchRows
       : branchRows.filter((b) => accessibleIds.has(String(b.id || '')));
     setBranches(scoped);
+    setPageDataCache(REPAIR_BRANCHES_CACHE_KEY, scoped);
     setSelectedBranchId((prev) => {
       if (prev && scoped.some((b) => b.id === prev)) return prev;
       return String(scoped[0]?.id || '');
     });
   }, [repairCtx.canViewAllBranches, user, currentEmployee?.id]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (force = false) => {
     if (!canView || !toWarehouseId) {
       setRows([]);
       setParts([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const cacheKey = repairReplenishmentCacheKey(toWarehouseId);
+    const cached = peekPageDataCache<RepairReplenishmentPageData>(cacheKey);
+    if (cached) {
+      setRows(cached.rows);
+      setParts(cached.parts);
+      setLoading(false);
+    }
+    if (!force && cached && isPageDataCacheFresh(cacheKey, REPAIR_REPLENISH_CACHE_MAX_AGE_MS)) {
+      return;
+    }
+    if (!cached) setLoading(true);
     try {
       const reqRes = await sparePartsReplenishmentService.listPaged({
         toWarehouseId,
         limit: 100,
       });
-      setRows(reqRes.items);
+      const partRows = selectedBranchId
+        ? await sparePartsService.listParts(selectedBranchId).catch(() => [] as RepairSparePart[])
+        : [];
+      const payload: RepairReplenishmentPageData = {
+        rows: reqRes.items,
+        parts: partRows,
+      };
+      setRows(payload.rows);
+      setParts(payload.parts);
+      setPageDataCache(cacheKey, payload);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر تحميل طلبات التموين.');
       setRows([]);
     } finally {
       setLoading(false);
     }
-    if (selectedBranchId) {
-      const partRows = await sparePartsService.listParts(selectedBranchId).catch(() => [] as RepairSparePart[]);
-      setParts(partRows);
-    } else {
-      setParts([]);
-    }
   }, [canView, toWarehouseId, selectedBranchId]);
+
+  const reloadReplenishment = useCallback(async () => {
+    invalidatePageDataCache(REPAIR_REPLENISH_CACHE_PREFIX);
+    invalidatePageDataCache(REPAIR_BRANCHES_CACHE_KEY);
+    await load(true);
+  }, [load]);
 
   useEffect(() => {
     if (!canView) return;
@@ -217,7 +271,7 @@ export const RepairPartsReplenishment: React.FC = () => {
     try {
       await action();
       toast.success(success);
-      await load();
+      await reloadReplenishment();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر تنفيذ الإجراء.');
     } finally {
@@ -264,7 +318,7 @@ export const RepairPartsReplenishment: React.FC = () => {
         { key: 'awaiting', label: 'بانتظار الاستلام', value: awaitingReceiptCount, accent: awaitingReceiptCount > 0 },
         { key: 'total', label: 'الطلبات', value: filtered.length },
       ]}
-      onRefresh={() => void load()}
+      onRefresh={() => void reloadReplenishment()}
       refreshing={loading}
       actions={(
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
@@ -543,7 +597,7 @@ export const RepairPartsReplenishment: React.FC = () => {
         onOpenChange={setCreateOpen}
         toWarehouseId={toWarehouseId}
         parts={parts}
-        onCreated={() => void load()}
+        onCreated={() => void reloadReplenishment()}
       />
     </RepairOpsPageShell>
   );

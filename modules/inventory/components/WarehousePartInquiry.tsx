@@ -5,6 +5,7 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { Button } from './UI';
+import { buildItemCardPath } from '../lib/itemCardCatalog';
 import {
   resolveWarehouseScanLookup,
   type WarehouseScanCatalogItem,
@@ -186,7 +187,11 @@ export function WarehousePartInquiry({
   const itemCardPath = (hit: WarehouseScanItemHit) =>
     withTenantPath(
       tenantSlug,
-      `/inventory/item-card?itemType=${encodeURIComponent(hit.itemType)}&itemId=${encodeURIComponent(hit.itemId)}&warehouseId=${encodeURIComponent(warehouseId)}`,
+      buildItemCardPath({
+        itemType: hit.itemType,
+        itemId: hit.itemId,
+        warehouseId,
+      }),
     );
 
   const renderItemHit = (hit: WarehouseScanItemHit, key: string, dense = false) => {

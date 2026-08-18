@@ -9,6 +9,7 @@ import { warehouseService } from '../services/warehouseService';
 import type { StockItemBalance, Warehouse, WarehouseRole } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
+import { buildItemCardPath } from '../lib/itemCardCatalog';
 import { WAREHOUSE_ROLE_LABELS, itemTypeLabel } from '../lib/stockLabels';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
@@ -456,11 +457,11 @@ export const StockBalances: React.FC = () => {
   }, [loading, statusSummary, statusFilter, negativeOnly]);
 
   const openItemCard = (row: StockItemBalance) => {
-    navigate(
-      `/inventory/item-card?itemType=${encodeURIComponent(
-        row.itemType === 'raw_material' ? 'material' : row.itemType,
-      )}&itemId=${encodeURIComponent(row.itemId)}&warehouseId=${encodeURIComponent(row.warehouseId)}`,
-    );
+    navigate(buildItemCardPath({
+      itemType: row.itemType,
+      itemId: row.itemId,
+      warehouseId: row.warehouseId,
+    }));
   };
 
   const openAdjustment = (row: StockItemBalance) => {

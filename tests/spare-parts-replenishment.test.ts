@@ -11,6 +11,7 @@ import {
   resolveReceiveQty,
   validateSparePartsDraftLines,
   validateSparePartsPrepareLines,
+  mapSparePartsCallableError,
   SPARE_PARTS_REPLENISHMENT_STATUS_LABELS,
 } from '../modules/inventory/lib/sparePartsReplenishment.ts';
 import { WAREHOUSE_ROLE_LABELS, SOURCE_MODULE_LABELS } from '../modules/inventory/lib/stockLabels.ts';
@@ -53,6 +54,29 @@ assert.throws(() => validateSparePartsPrepareLines([
 
 assert.equal(materialPurchaseCostPerBaseUnit({ purchaseCost: 100, conversionRate: 10 }), 10);
 assert.equal(materialPurchaseCostPerBaseUnit({ purchaseCost: 20 }), 20);
+
+assert.equal(
+  mapSparePartsCallableError({ code: 'functions/internal', message: 'INTERNAL' }, 'تعذر اعتماد الطلب. تحقق من الرصيد المتاح في المخزن المركزي.').message,
+  'تعذر اعتماد الطلب. تحقق من الرصيد المتاح في المخزن المركزي.',
+);
+assert.equal(
+  mapSparePartsCallableError({
+    code: 'functions/internal',
+    message: 'INTERNAL: الرصيد المتاح غير كافٍ للحجز — شاشة (المطلوب 2، المتاح 0).',
+  }, 'fallback').message.includes('الرصيد المتاح غير كافٍ'),
+  true,
+);
+assert.equal(
+  mapSparePartsCallableError({
+    code: 'functions/failed-precondition',
+    message: 'الرصيد المتاح غير كافٍ للحجز — شاشة (المطلوب 2، المتاح 0).',
+  }, 'fallback').message.includes('المطلوب 2'),
+  true,
+);
+assert.equal(
+  mapSparePartsCallableError({ code: 'functions/permission-denied', message: 'PERMISSION_DENIED' }, 'fallback').message.includes('صلاحية'),
+  true,
+);
 
 assert.doesNotThrow(() => validateSparePartsDraftLines([
   { itemId: 'm1', quantity: 2 },

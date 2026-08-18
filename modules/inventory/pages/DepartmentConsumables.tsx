@@ -58,9 +58,17 @@ import {
   INVENTORY_STOCK_MOVE_PATHS,
   isOperationPathEnabled,
 } from '../../system/lib/operationPathSettings';
+import {
+  invalidatePageDataCache,
+  isPageDataCacheFresh,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const PAGE_SIZE = 20;
 const THIS_MONTH = new Date().toISOString().slice(0, 7);
+const CONSUMABLES_CACHE_PREFIX = 'inventory:department-consumables';
+const CONSUMABLES_CACHE_MAX_AGE_MS = 45_000;
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 const moneyFmt = (n: number) => new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
 
@@ -70,6 +78,21 @@ function consumableUnitLabel(unit: string): string {
 
 type TabKey = 'issues' | 'catalog' | 'report';
 type ModalKey = 'addStock' | 'createIssue' | 'importSheet' | 'none';
+
+type DepartmentConsumablesPageData = {
+  warehouses: Warehouse[];
+  locations: WarehouseLocation[];
+  departments: FirestoreDepartment[];
+  consumables: ConsumableOption[];
+  orders: DepartmentConsumableIssue[];
+};
+
+function consumablesCacheKey(scoped: boolean, warehouseIds: string[]): string {
+  if (scoped && warehouseIds.length > 0) {
+    return `${CONSUMABLES_CACHE_PREFIX}:${[...warehouseIds].sort().join(',')}`;
+  }
+  return `${CONSUMABLES_CACHE_PREFIX}:all`;
+}
 
 export const DepartmentConsumables: React.FC = () => {
   const { can } = usePermission();
@@ -113,19 +136,23 @@ export const DepartmentConsumables: React.FC = () => {
   const setPanelHidden = useJobsStore((s) => s.setPanelHidden);
   const setPanelMinimized = useJobsStore((s) => s.setPanelMinimized);
 
+  const warehouseScopeKey = [...warehouseIds].sort().join(',');
+  const cacheKey = consumablesCacheKey(scoped, warehouseIds);
+  const initialPage = peekPageDataCache<DepartmentConsumablesPageData>(cacheKey);
+
   const [tab, setTab] = useState<TabKey>('issues');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialPage);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ModalKey>('none');
   const [showDefine, setShowDefine] = useState(false);
   const [exportingBalances, setExportingBalances] = useState(false);
   const [sheetBusy, setSheetBusy] = useState(false);
 
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
-  const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
-  const [consumables, setConsumables] = useState<ConsumableOption[]>([]);
-  const [orders, setOrders] = useState<DepartmentConsumableIssue[]>([]);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() => initialPage?.warehouses ?? []);
+  const [locations, setLocations] = useState<WarehouseLocation[]>(() => initialPage?.locations ?? []);
+  const [departments, setDepartments] = useState<FirestoreDepartment[]>(() => initialPage?.departments ?? []);
+  const [consumables, setConsumables] = useState<ConsumableOption[]>(() => initialPage?.consumables ?? []);
+  const [orders, setOrders] = useState<DepartmentConsumableIssue[]>(() => initialPage?.orders ?? []);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -162,8 +189,24 @@ export const DepartmentConsumables: React.FC = () => {
   const [report, setReport] = useState<DepartmentConsumableMonthlyReport | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const applyConsumablesData = (data: DepartmentConsumablesPageData) => {
+    setWarehouses(data.warehouses);
+    setLocations(data.locations);
+    setDepartments(data.departments);
+    setConsumables(data.consumables);
+    setOrders(data.orders);
+  };
+
+  const load = useCallback(async (force = false) => {
+    const cached = peekPageDataCache<DepartmentConsumablesPageData>(cacheKey);
+    if (cached) {
+      applyConsumablesData(cached);
+      setLoading(false);
+    }
+    if (!force && cached && isPageDataCacheFresh(cacheKey, CONSUMABLES_CACHE_MAX_AGE_MS)) {
+      return;
+    }
+    if (!cached) setLoading(true);
     try {
       const locationPromise = (async (): Promise<WarehouseLocation[]> => {
         if (scoped && warehouseIds.length > 0) {
@@ -186,11 +229,11 @@ export const DepartmentConsumables: React.FC = () => {
           },
         ),
       ]);
-      setWarehouses(whs);
-      setLocations(locs);
-      setDepartments(depts);
-      setConsumables(
-        materials
+      const payload: DepartmentConsumablesPageData = {
+        warehouses: whs,
+        locations: locs,
+        departments: depts,
+        consumables: materials
           .filter((m) => m.id && m.isActive !== false && m.type === 'consumable')
           .map((m) => ({
             id: m.id!,
@@ -199,14 +242,21 @@ export const DepartmentConsumables: React.FC = () => {
             unit: m.baseUnit || 'piece',
             purchaseCost: Number(m.purchaseCost || 0),
           })),
-      );
-      setOrders(issueRows);
+        orders: issueRows,
+      };
+      applyConsumablesData(payload);
+      setPageDataCache(cacheKey, payload);
     } catch (error) {
       toast.error(toUserSafeFirestoreError(error, 'تعذر تحميل بيانات المستهلكات.'));
     } finally {
       setLoading(false);
     }
-  }, [scoped, warehouseIds]);
+  }, [cacheKey, scoped, warehouseIds, warehouseScopeKey]);
+
+  const reloadConsumables = useCallback(async () => {
+    invalidatePageDataCache(CONSUMABLES_CACHE_PREFIX);
+    await load(true);
+  }, [load]);
 
   useEffect(() => {
     if (!canView) return;
@@ -272,7 +322,7 @@ export const DepartmentConsumables: React.FC = () => {
     try {
       await action();
       toast.success(success);
-      await load();
+      await reloadConsumables();
     } catch (error) {
       toast.error(toUserSafeFirestoreError(error, error instanceof Error ? error.message : 'تعذر تنفيذ العملية.'));
     } finally {
@@ -301,7 +351,7 @@ export const DepartmentConsumables: React.FC = () => {
       toast.success('تم تسجيل المرتجع.');
       setReturnIssue(null);
       setReturnQtyByLine({});
-      await load();
+      await reloadConsumables();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'تعذر تسجيل المرتجع.');
     } finally {
@@ -560,7 +610,7 @@ export const DepartmentConsumables: React.FC = () => {
               ? `اكتمل مع أخطاء (${failed} فشل)`
               : 'اكتمل رفع شيت المستهلكات',
           });
-          void load();
+          void reloadConsumables();
         },
         onFail: (message) => {
           failJob(jobId, message, 'فشل رفع شيت المستهلكات');
@@ -1106,7 +1156,7 @@ export const DepartmentConsumables: React.FC = () => {
       <AddConsumableStockModal
         open={activeModal === 'addStock'}
         onClose={() => setActiveModal('none')}
-        onSaved={() => void load()}
+        onSaved={() => void reloadConsumables()}
         onDefineConsumable={() => setShowDefine(true)}
         warehouses={visibleWarehouses}
         locations={locations}
@@ -1127,7 +1177,7 @@ export const DepartmentConsumables: React.FC = () => {
       <CreateDepartmentIssueModal
         open={activeModal === 'createIssue'}
         onClose={() => setActiveModal('none')}
-        onCreated={() => void load()}
+        onCreated={() => void reloadConsumables()}
         onDefineConsumable={() => setShowDefine(true)}
         warehouses={visibleWarehouses}
         departments={departments}
