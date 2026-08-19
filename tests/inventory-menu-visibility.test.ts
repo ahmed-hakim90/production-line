@@ -283,7 +283,15 @@ assert.equal(
 );
 assert.equal(
   isInventoryMenuItemVisibleForWarehouseScope({
-    menuKey: 'inv-department-consumables',
+    menuKey: 'inv-fg-transfer',
+    scoped: true,
+    accessibleWarehouseRoles: ['packaging'],
+  }),
+  true,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-fg-transfer',
     scoped: true,
     accessibleWarehouseRoles: ['spare_parts_central'],
   }),

@@ -25,6 +25,7 @@ import {
 import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { isMenuGroupEnabledForPacks } from '@/lib/activityPacks';
 import { usePermission } from '@/utils/permissions';
+import { isPackagingOnlyMenuItemVisible } from '@/utils/packagingOnlyPermissions';
 import { useAppStore } from '@/store/useAppStore';
 import { binaryFilterItems, buildBinarySearchIndex } from '@/utils/binarySearch';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
@@ -159,7 +160,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
   const listRef  = useRef<HTMLDivElement>(null);
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
-  const { can }  = usePermission();
+  const { can, isPackagingOnly }  = usePermission();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
   const operationPaths = useAppStore((s) => s.systemSettings.operationPaths);
@@ -176,6 +177,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
       group.children.forEach((item) => {
         if (
           canAccessMenuItem(can, item, roleKey)
+          && isPackagingOnlyMenuItemVisible(item.key, isPackagingOnly)
           && isMenuItemOperationPathEnabled(operationPaths, item.key)
         ) {
           items.push({
@@ -193,6 +195,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
       });
     });
     const existingKeys = new Set(items.map((i) => i.key));
+    if (isPackagingOnly) return items;
     SUPPLIES_WAREHOUSE_SHORTCUTS.forEach((shortcut) => {
       if (!can(shortcut.permission)) return;
       if (existingKeys.has(shortcut.key)) return;
@@ -214,7 +217,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
       });
     });
     return items;
-  }, [can, operationPaths, roleKey, tenantActivityPacks]);
+  }, [can, isPackagingOnly, operationPaths, roleKey, tenantActivityPacks]);
 
   const searchIndex = useMemo(
     () =>

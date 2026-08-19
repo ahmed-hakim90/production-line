@@ -61,6 +61,9 @@ import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseS
 import { materialService } from '../../manufacturing/services/materialService';
 import type { Material } from '../../manufacturing/types';
 import { isMaterialOptedInForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { defaultTransferItemType, inventoryMovementsPageTitle } from '../lib/transferItemTypeDefault';
+import { resolveTransferSourceWarehouses } from '../lib/transferSourceWarehouses';
 import {
   buildComponentCatalogOptions,
   getComponentAvailableQty,
@@ -157,7 +160,9 @@ export const StockMovementForm: React.FC = () => {
     resolveScopedWarehouseId,
     routingConfigured,
     settingsPath,
+    isMaterialsWarehouseRole,
   } = useMaterialsWarehouseScope();
+  useEnsureStoreData(['products']);
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const uid = useAppStore((s) => s.uid);
@@ -170,7 +175,7 @@ export const StockMovementForm: React.FC = () => {
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
   const companyName = useAppStore((s) => s.systemSettings.branding?.factoryName ?? 'الشركة');
-  const { can } = usePermission();
+  const { can, isPackagingOnly } = usePermission();
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [warehouseLocations, setWarehouseLocations] = useState<WarehouseLocation[]>([]);
@@ -183,8 +188,11 @@ export const StockMovementForm: React.FC = () => {
   const initialSearch = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const initialMovement = initialSearch.get('movementType');
   const initialItemType = initialSearch.get('itemType');
-  const [itemType, setItemType] = useState<ItemType>(
-    scoped || initialItemType === 'raw_material' ? 'raw_material' : 'finished_good',
+  const [itemType, setItemType] = useState<ItemType>(() =>
+    defaultTransferItemType({
+      queryItemType: initialItemType,
+      isMaterialsWarehouseRole,
+    }),
   );
   const [itemId, setItemId] = useState('');
   const [warehouseId, setWarehouseId] = useState(
@@ -194,9 +202,11 @@ export const StockMovementForm: React.FC = () => {
   const [toLocationId, setToLocationId] = useState('');
   const [toWarehouseId, setToWarehouseId] = useState('');
   const [movementType, setMovementType] = useState<MovementType>(
-    initialMovement === 'OUT' || initialMovement === 'TRANSFER' || initialMovement === 'ADJUSTMENT'
-      ? initialMovement
-      : 'IN',
+    isPackagingOnly
+      ? 'TRANSFER'
+      : initialMovement === 'OUT' || initialMovement === 'TRANSFER' || initialMovement === 'ADJUSTMENT'
+        ? initialMovement
+        : 'IN',
   );
   const [adjustmentReason, setAdjustmentReason] = useState<StockAdjustmentReason>('manual_correction');
   const [quantity, setQuantity] = useState<number>(0);
@@ -345,25 +355,43 @@ export const StockMovementForm: React.FC = () => {
     setWarehouseId((prev) =>
       resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]),
     );
-    const nextItemType = initialSearch.get('itemType');
-    if (scoped || nextItemType === 'raw_material') {
-      setItemType('raw_material');
-    } else if (nextItemType === 'finished_good') {
+    const selectedWarehouse = warehouses.find(
+      (w) => w.id === (queryWarehouseId || scopedWarehouseId || warehouseId),
+    );
+    const nextItemType = defaultTransferItemType({
+      queryItemType: initialSearch.get('itemType'),
+      isMaterialsWarehouseRole,
+      warehouseRole: selectedWarehouse?.warehouseRole,
+    });
+    if (isPackagingOnly) {
       setItemType('finished_good');
+      setMovementType('TRANSFER');
+    } else {
+      setItemType(nextItemType);
+      const nextMovement = initialSearch.get('movementType');
+      if (
+        nextMovement === 'IN' ||
+        nextMovement === 'OUT' ||
+        nextMovement === 'TRANSFER' ||
+        nextMovement === 'ADJUSTMENT'
+      ) {
+        setMovementType(nextMovement);
+      }
     }
-    const nextMovement = initialSearch.get('movementType');
-    if (
-      nextMovement === 'IN' ||
-      nextMovement === 'OUT' ||
-      nextMovement === 'TRANSFER' ||
-      nextMovement === 'ADJUSTMENT'
-    ) {
-      setMovementType(nextMovement);
-    }
-  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, initialSearch, resolveScopedWarehouseId]);
+  }, [
+    isMaterialsWarehouseRole,
+    isPackagingOnly,
+    scopedWarehouseId,
+    initialSearch,
+    resolveScopedWarehouseId,
+    warehouseIds.join('|'),
+    warehouses,
+    warehouseId,
+  ]);
 
   /** إذن إضافة من قائمة قطع الغيار: افترض المخزن المركزي إن لم يُحدَّد مخزن. */
   useEffect(() => {
+    if (isPackagingOnly) return;
     if (warehouseId || scopedWarehouseId || scoped) return;
     if (movementType !== 'IN') return;
     if (initialSearch.get('warehouseId')) return;
@@ -371,12 +399,7 @@ export const StockMovementForm: React.FC = () => {
     if (!central?.id) return;
     setWarehouseId(central.id);
     setItemType('raw_material');
-  }, [warehouses, warehouseId, scopedWarehouseId, scoped, movementType, initialSearch]);
-
-  const sourceWarehouses = useMemo(
-    () => filterManualTransferWarehouses(filterWarehouses(warehouses)),
-    [filterWarehouses, warehouses],
-  );
+  }, [warehouses, warehouseId, scopedWarehouseId, scoped, movementType, initialSearch, isPackagingOnly]);
 
   const openImportInByCodeModal = useCallback((nextItemType: 'finished_good' | 'raw_material' = 'finished_good') => {
     openModal(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE, {
@@ -411,11 +434,46 @@ export const StockMovementForm: React.FC = () => {
   const isSparePartsContext = isSparePartsWarehouse(selectedWarehouseRole);
   const usesMultiLineItems = movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER';
 
+  const sourceWarehouses = useMemo(
+    () =>
+      resolveTransferSourceWarehouses({
+        warehouses,
+        filterWarehouses,
+        scoped,
+        isMaterialsWarehouseRole,
+        itemType,
+        sparePartsContext: isSparePartsContext,
+      }),
+    [
+      filterWarehouses,
+      isMaterialsWarehouseRole,
+      isSparePartsContext,
+      itemType,
+      scoped,
+      warehouses,
+    ],
+  );
+
   useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (
+      params.get('movementType') === movementType
+      && (params.get('itemType') || '') === itemType
+    ) {
+      return;
+    }
+    params.set('movementType', movementType);
+    params.set('itemType', itemType);
+    const qs = params.toString();
+    navigate(`/inventory/movements?${qs}`, { replace: true });
+  }, [itemType, location.search, movementType, navigate]);
+
+  useEffect(() => {
+    if (isPackagingOnly) return;
     if (!isSparePartsContext || scoped) return;
     if (initialSearch.get('itemType') === 'finished_good') return;
     setItemType((prev) => (prev === 'raw_material' ? prev : 'raw_material'));
-  }, [isSparePartsContext, scoped, initialSearch]);
+  }, [isPackagingOnly, isSparePartsContext, scoped, initialSearch]);
 
   const finishedGoodOptions = useMemo((): TransferItemOption[] => products.map((p) => {
     const raw = rawProductMetaById.get(p.id);
@@ -1442,18 +1500,8 @@ export const StockMovementForm: React.FC = () => {
     }
   };
 
-  const pageTitle = isSparePartsContext && movementType === 'IN'
-    ? 'إذن إضافة قطع غيار'
-    : movementType === 'IN'
-      ? 'إذن إضافة (وارد)'
-      : movementType === 'OUT'
-        ? 'إذن منصرف'
-        : movementType === 'TRANSFER'
-          ? 'تحويل مخزون'
-          : 'تسوية مخزون';
-  const pageSubtitle = isSparePartsContext && movementType === 'IN'
-    ? 'تسجيل وارد متعدد الأسطر للمخزن المركزي أو مراكز الصيانة'
-    : 'وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة';
+  const pageTitle = inventoryMovementsPageTitle(movementType);
+  const pageSubtitle = 'وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة';
   const linesSectionLabel =
     movementType === 'TRANSFER'
       ? 'أصناف التحويلة'
@@ -1463,7 +1511,7 @@ export const StockMovementForm: React.FC = () => {
   const addLineLabel = itemType === 'finished_good' ? 'إضافة منتج' : 'إضافة صنف';
   const primarySaveLabel =
     movementType === 'IN'
-      ? (isSparePartsContext ? 'حفظ إذن الإضافة' : 'حفظ الوارد')
+      ? 'حفظ الإذن'
       : movementType === 'OUT'
         ? 'حفظ المنصرف'
         : movementType === 'TRANSFER'
@@ -1546,11 +1594,7 @@ export const StockMovementForm: React.FC = () => {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[13px] font-bold text-[var(--color-text)]">
-                {isSparePartsContext && movementType === 'IN'
-                  ? 'تسجيل إذن الإضافة'
-                  : isSparePartsContext && movementType === 'OUT'
-                    ? 'تسجيل إذن المنصرف'
-                    : 'تسجيل الحركة'}
+                تسجيل الحركة
               </span>
               {isSparePartsContext && selectedWarehouseRole?.warehouseRole ? (
                 <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))] border border-[rgb(var(--color-primary)/0.2)]">
@@ -1574,13 +1618,15 @@ export const StockMovementForm: React.FC = () => {
           <div className={`grid gap-3 ${isSparePartsContext ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
             <div className={isSparePartsContext ? 'sm:col-span-2' : ''}>
               <label className={labelClass}>نوع الحركة</label>
-              <div className="erp-date-seg" style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
+              <div className="erp-date-seg" style={{ width: '100%', display: 'grid', gridTemplateColumns: isPackagingOnly ? '1fr' : '1fr 1fr 1fr 1fr' }}>
                 {([
                   { value: 'IN' as MovementType, label: isSparePartsContext ? 'إضافة' : 'وارد', icon: 'south_west' },
                   { value: 'OUT' as MovementType, label: 'منصرف', icon: 'north_east' },
                   { value: 'TRANSFER' as MovementType, label: 'تحويل', icon: 'swap_horiz' },
                   { value: 'ADJUSTMENT' as MovementType, label: 'تسوية', icon: 'tune' },
-                ] as const).map((opt) => (
+                ] as const)
+                  .filter((opt) => !isPackagingOnly || opt.value === 'TRANSFER')
+                  .map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
@@ -1600,7 +1646,7 @@ export const StockMovementForm: React.FC = () => {
               </div>
             </div>
 
-            {!isSparePartsContext && !scoped ? (
+            {!isPackagingOnly && !isSparePartsContext && !scoped ? (
               <div>
                 <label className={labelClass}>نوع الصنف</label>
                 <Select
@@ -1633,16 +1679,16 @@ export const StockMovementForm: React.FC = () => {
 
             <div>
               <label className={labelClass}>المخزن</label>
-              {isFinishedTransferFlow && hasAutoTransferSource ? (
+              {isFinishedTransferFlow && hasAutoTransferSource && selectedFromWarehouse ? (
                 <div className={fieldDisabledClass}>
-                  {selectedFromWarehouse?.name || 'غير محدد'}
+                  {selectedFromWarehouse.name}
                   <span className="text-[11px] text-[var(--color-text-muted)] mr-2">(من تم الصنع)</span>
                 </div>
               ) : (
                 <SearchableSelect
                   options={warehouseSelectOptions}
                   value={warehouseId}
-                  disabled={warehouseSelectLocked}
+                  disabled={warehouseSelectLocked && itemType === 'raw_material'}
                   onChange={(value) => {
                     setWarehouseId(value);
                     setLocationId('');

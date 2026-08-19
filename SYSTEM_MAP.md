@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP **ForgeOps** — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-17 (product brand: ForgeOps)
+**Last updated:** 2026-08-19 (product brand: ForgeOps)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -70,6 +70,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Factory / production | Plans, reports, production issues |
 | Materials warehouse | Raw/decomposed control, production issues |
 | Spare-parts central | Home `/` → warehouse workspace; mobile bar (لوحتي / التموين / الأرصدة / المراكز); queue `/inventory/spare-parts-replenishment` |
+| Packaging operator | Home `/` → تحكم التغليف; keys: `reports.packaging.create` without `reports.create` + `productionHandover.approve` + `inventory.transactions.create`. Do **not** bind to a spare-parts warehouse. |
 | Inventory admin | `/inventory/warehouses` hub (role/branch filters) |
 | Repair center / reception | Home `/` → repair ops; mobile bar (لوحتي / طلب جديد / الطلبات / التحصيل) |
 | Repair admin / مدير الصيانة | Home `/` → repair admin; mobile bar (لوحتي / الطلبات / التحصيل / الأداء) |

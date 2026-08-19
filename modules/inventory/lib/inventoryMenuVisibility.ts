@@ -41,20 +41,24 @@ const MENU_KEYS_BY_WAREHOUSE_ROLE: Record<WarehouseRole, readonly string[]> = {
   production_wip: [
     ...SCOPED_SHARED_MENU_KEYS,
     'inv-transfer-approvals',
+    'inv-fg-transfer',
   ],
   finished_staging: [
     ...SCOPED_SHARED_MENU_KEYS,
     'inv-transfer-approvals',
     'inv-production-approvals',
+    'inv-fg-transfer',
   ],
   final_product: [
     ...SCOPED_SHARED_MENU_KEYS,
     'inv-transfer-approvals',
     'inv-production-approvals',
+    'inv-fg-transfer',
   ],
   packaging: [
     ...SCOPED_SHARED_MENU_KEYS,
     'inv-transfer-approvals',
+    'inv-fg-transfer',
   ],
   waste: [...SCOPED_SHARED_MENU_KEYS],
   spare_parts_central: [

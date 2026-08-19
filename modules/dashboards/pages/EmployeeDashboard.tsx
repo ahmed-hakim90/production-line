@@ -144,7 +144,7 @@ export const EmployeeDashboard: React.FC = () => {
     loading: s.loading,
   }));
 
-  const { can } = usePermission();
+  const { can, isPackagingOnly } = usePermission();
   const canPackagingControl =
     can('productionHandover.approve')
     || can('inventory.transfers.approve')
@@ -180,7 +180,7 @@ export const EmployeeDashboard: React.FC = () => {
   const { printDocument } = usePrintEngine();
   const [componentLabelOptions, setComponentLabelOptions] = useState<InjectionComponentOption[]>([]);
 
-  const routingShortcutsVisible = can('routing.view') || can('routing.execute');
+  const routingShortcutsVisible = !isPackagingOnly && (can('routing.view') || can('routing.execute'));
   const {
     data: activeRoutingPlans = [],
     isLoading: activeRoutingPlansLoading,
@@ -688,14 +688,20 @@ export const EmployeeDashboard: React.FC = () => {
           {can('inventory.transactions.create') && (
             <GhostButton
               type="button"
-              onClick={() => navigate('/inventory/movements')}
+              onClick={() =>
+                navigate(
+                  isPackagingOnly
+                    ? '/inventory/movements?itemType=finished_good&movementType=TRANSFER'
+                    : '/inventory/movements',
+                )
+              }
               iconName="warehouse"
               tone="share"
             >
-              حركة المخزون
+              {isPackagingOnly ? 'تحويل منتج تام' : 'حركة المخزون'}
             </GhostButton>
           )}
-          {(can('departmentConsumables.view') || can('departmentConsumables.create')) && (
+          {(can('departmentConsumables.view') || can('departmentConsumables.create')) && !isPackagingOnly && (
             <GhostButton
               type="button"
               onClick={() => navigate('/inventory/department-consumables')}

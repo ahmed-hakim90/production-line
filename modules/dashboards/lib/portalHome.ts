@@ -10,6 +10,7 @@ export type PortalKind =
   | 'factory_manager'
   | 'employee'
   | 'warehouse_manager'
+  | 'packaging'
   | 'repair'
   | 'repair_technician'
   | 'generic';
@@ -56,6 +57,13 @@ export function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boo
   );
 }
 
+/** Packaging operator: packaging reports without general production create. */
+export function isPackagingOperatorPortal(checker: PortalPermissionChecker): boolean {
+  if (isSystemOrFactoryChromeRole(checker)) return false;
+  if (checker.can('reports.create')) return false;
+  return checker.can('reports.packaging.create');
+}
+
 /** Repair ops / centers-manager home — not factory production dashboards. */
 export function isRepairOpsPortal(checker: PortalPermissionChecker): boolean {
   if (isRepairTechnicianPortal(checker)) return false;
@@ -82,6 +90,8 @@ export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind 
 
   if (checker.can('adminDashboard.view')) return 'admin';
   if (checker.can('factoryDashboard.view')) return 'factory_manager';
+
+  if (isPackagingOperatorPortal(checker)) return 'packaging';
 
   if (isWarehouseOperatorPortal(checker)) return 'warehouse_manager';
 

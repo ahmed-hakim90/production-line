@@ -761,12 +761,8 @@ export const StockTransactions: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      eyebrow={spareContext || repairOpsOnly ? 'حركات قطع الغيار والصيانة' : 'سجل حركات المخزون'}
-      rangeLabel={
-        spareContext || repairOpsOnly
-          ? 'أذون الإضافة والصرف والتموين وسندات قطع الغيار'
-          : 'تتبع كامل لكل حركة على المنتجات والخامات'
-      }
+      eyebrow="سجل حركات المخزون"
+      rangeLabel="تتبع كامل لكل حركة على المنتجات والخامات"
       actions={(
         <div className="flex flex-wrap items-center gap-2">
           {can('inventory.transactions.create') ? (

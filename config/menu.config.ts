@@ -433,7 +433,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         permission: 'inventory.transactions.create',
         anyOfPermissions: ['inventory.transactions.create', 'sparePartsReplenishment.prepare', 'repair.parts.manage'],
       },
-      { key: 'inv-spare-parts-in', label: 'إذن إضافة قطع غيار', icon: 'add_box', path: '/inventory/movements?movementType=IN', permission: 'inventory.transactions.create' },
+      { key: 'inv-spare-parts-in', label: 'إذن إضافة', icon: 'add_box', path: '/inventory/movements?movementType=IN', permission: 'inventory.transactions.create' },
       {
         key: 'inv-spare-parts-center-stock',
         label: 'أرصدة المراكز',
@@ -471,6 +471,20 @@ export const MENU_CONFIG: MenuGroup[] = [
         path: '/inventory/transfer-approvals',
         permission: 'inventory.view',
         badgeSource: badgeSources.pendingTransferApprovals,
+      },
+      {
+        key: 'inv-fg-transfer',
+        label: 'تحويل منتج تام',
+        icon: 'sync_alt',
+        path: '/inventory/movements?itemType=finished_good&movementType=TRANSFER',
+        permission: 'inventory.transactions.create',
+        excludeRoleKeys: [
+          'materials_warehouse',
+          'spare_parts_central_warehouse',
+          'maintenance_center_warehouse',
+          'repair_reception',
+          'repair_technician',
+        ],
       },
       {
         key: 'inv-counts',

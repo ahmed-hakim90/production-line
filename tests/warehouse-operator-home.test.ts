@@ -41,8 +41,12 @@ assert.equal(
   '/inventory/transfer-approvals',
 );
 assert.equal(
-  resolveWarehouseRolePrimaryPath('wh-1', 'general'),
-  '/inventory/warehouses/wh-1',
+  resolveWarehouseRolePrimaryPath('wh-1', 'packaging'),
+  '/production/packaging/control',
+);
+assert.equal(
+  resolveWarehouseRolePrimaryPath('wh-1', 'finished_staging'),
+  '/production/packaging/control',
 );
 assert.equal(
   resolveWarehouseRolePrimaryPath('wh-1', 'production_floor'),

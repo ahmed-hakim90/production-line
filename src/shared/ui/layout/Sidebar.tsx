@@ -35,6 +35,7 @@ import {
   isRepairPartsReplenishmentMenuVisible,
   resolveAccessibleWarehouseRoles,
 } from '@/modules/inventory/lib/inventoryMenuVisibility';
+import { isPackagingOnlyMenuItemVisible } from '@/utils/packagingOnlyPermissions';
 import type { WarehouseRole } from '@/modules/inventory/types';
 import {
   resolveUserRepairBranchIds,
@@ -102,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const { t } = useTranslation();
   const { isRTL } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
-  const { can }  = usePermission();
+  const { can, isPackagingOnly }  = usePermission();
   const { roleName, roleColor, isReadOnly } = useCurrentRole();
   const userDisplayName    = useAppStore((s) => s.userDisplayName);
   const userEmail          = useAppStore((s) => s.userEmail);
@@ -276,6 +277,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         .map((g) => {
           const children = g.children.filter((i) => (
             canAccessMenuItem(can, i, roleKey)
+            && isPackagingOnlyMenuItemVisible(i.key, isPackagingOnly)
             && isMenuItemOperationPathEnabled(operationPaths, i.key)
             && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
             && (
@@ -367,6 +369,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     [
       accessibleWarehouseRoles,
       can,
+      isPackagingOnly,
       currentEmployee?.level,
       operationPaths,
       tenantActivityPacks,

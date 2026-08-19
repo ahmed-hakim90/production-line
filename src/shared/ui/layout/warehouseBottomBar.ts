@@ -1,6 +1,7 @@
 import type { MenuItem } from '@/config/menu.config';
 import { canAccessMenuItem } from '@/config/menu.config';
 import {
+  isPackagingOperatorPortal,
   isRepairOpsPortal,
   isRepairTechnicianPortal,
   isWarehouseOperatorPortal,
@@ -66,6 +67,7 @@ export function resolveWarehouseBottomPersona(checker: PortalPermissionChecker &
   boundWarehouseRole?: WarehouseRole | null;
 }): WarehouseBottomPersona | null {
   if (isFactoryChromePortal(checker)) return null;
+  if (isPackagingOperatorPortal(checker)) return null;
   if (isRepairOpsPortal(checker) || isRepairTechnicianPortal(checker)) return null;
 
   if (checker.roleKey === 'spare_parts_central_warehouse') return 'spare_parts_central';

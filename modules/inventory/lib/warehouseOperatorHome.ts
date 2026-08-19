@@ -45,6 +45,10 @@ export function resolveWarehouseRolePrimaryPath(
       return '/inventory/raw-materials/control';
     case 'final_product':
       return '/inventory/transfer-approvals';
+    case 'packaging':
+    case 'finished_staging':
+    case 'production_wip':
+      return '/production/packaging/control';
     case 'production_floor':
       return '/production/floor';
     default:

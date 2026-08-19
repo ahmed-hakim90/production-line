@@ -158,6 +158,19 @@ assert.equal(
 
 assert.equal(
   resolvePortalKind({
+    can: (p) =>
+      p === 'reports.packaging.create'
+      || p === 'inventory.view'
+      || p === 'inventory.transactions.create'
+      || p === 'sparePartsReplenishment.prepare',
+    inventoryWarehouseId: 'wh-central',
+  }),
+  'packaging',
+  'packaging-only operator must not land on spare-parts warehouse chrome',
+);
+
+assert.equal(
+  resolvePortalKind({
     can: (p) => p === 'adminDashboard.view' || p === 'repair.adminDashboard.view',
     roleKey: 'admin',
     roleName: 'مدير النظام',

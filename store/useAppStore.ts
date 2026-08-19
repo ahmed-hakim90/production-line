@@ -164,6 +164,7 @@ import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { checkPermission, isPackagingOnlyPermissions, normalizeRolePermissions, type Permission } from '../utils/permissions';
+import { applyPackagingOnlyPermissionLocks } from '../utils/packagingOnlyPermissions';
 import { applyBuiltinRolePermissionLocks } from '../utils/builtinRolePermissionLocks';
 import { resolveBootstrapDataAccess } from '../lib/bootstrapDataAccess';
 import { DEFAULT_PLAN_SETTINGS, DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
@@ -1892,9 +1893,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       userRoleId: role.id!,
       userRoleName: role.name,
       userRoleColor: role.color,
-      userPermissions: applyBuiltinRolePermissionLocks(
-        normalizeRolePermissions(role.permissions),
-        getBuiltInRoleKey(role),
+      userPermissions: applyPackagingOnlyPermissionLocks(
+        applyBuiltinRolePermissionLocks(
+          normalizeRolePermissions(role.permissions),
+          getBuiltInRoleKey(role),
+        ),
       ),
     });
   },

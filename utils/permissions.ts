@@ -16,9 +16,13 @@ import {
 } from './packagingOnlyPermissions';
 
 export {
+  applyPackagingOnlyPermissionLocks,
   canCreatePackagingReportsFromMap,
+  isPackagingOnlyMenuItemVisible,
   isPackagingOnlyPermissions,
   normalizeRolePermissions,
+  PACKAGING_OPERATOR_FIRESTORE_PERMISSIONS,
+  PACKAGING_ONLY_MENU_KEYS,
 } from './packagingOnlyPermissions';
 
 // Permission matrix engine: import from `@/utils/permissionCatalog`

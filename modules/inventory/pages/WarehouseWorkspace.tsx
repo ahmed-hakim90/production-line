@@ -261,6 +261,7 @@ function roleActions(
       ];
     case 'finished_staging':
     case 'production_wip':
+    case 'packaging':
       return [
         {
           label: 'تحكم التغليف',
@@ -268,9 +269,9 @@ function roleActions(
           description: 'استلام تحت التسليم / بانتظار التغليف',
         },
         {
-          label: 'اعتماد التحويلات',
-          path: '/inventory/transfer-approvals',
-          description: 'تحويلات معلّقة',
+          label: 'تحويل منتج تام',
+          path: `/inventory/movements?warehouseId=${encodeURIComponent(warehouseId)}&itemType=finished_good&movementType=TRANSFER`,
+          description: 'تحويل من بانتظار التغليف إلى المنتج التام',
         },
       ];
     default:

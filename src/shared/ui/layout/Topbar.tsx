@@ -25,10 +25,11 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { useCommandPalette } from '@/components/useCommandPalette';
 import { resolveMenuIcon } from './menuIconMap';
 import { usePageBackRegistration } from './PageBackContext';
-import { tenantHomePath } from '@/lib/tenantPaths';
+import { tenantHomePath, logicalPathnameFromLocation } from '@/lib/tenantPaths';
 import { useAppDirection } from './useAppDirection';
 import { usePwaInstall } from '@/hooks/usePwaInstall';
 import { useAppContentRefresh } from './AppContentRefresh';
+import { inventoryMovementsBreadcrumbLabel } from '@/modules/inventory/lib/transferItemTypeDefault';
 
 export interface TopbarProps {
   onMenuToggle: () => void;
@@ -76,6 +77,23 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
 
   /* Resolve breadcrumb from location */
   const breadcrumb = useMemo(() => {
+    const logicalPath = logicalPathnameFromLocation(location.pathname);
+    if (logicalPath === '/inventory/movements') {
+      return {
+        group: 'المخازن',
+        groupIcon: 'warehouse',
+        page: inventoryMovementsBreadcrumbLabel(location.search),
+        pageIcon: 'sync_alt',
+      };
+    }
+    if (logicalPath === '/quick-inventory-transfer') {
+      return {
+        group: 'المخازن',
+        groupIcon: 'warehouse',
+        page: 'تحويل مخزون',
+        pageIcon: 'sync_alt',
+      };
+    }
     for (const group of MENU_CONFIG) {
       for (const item of group.children) {
         if (isActiveItem(item)) {
@@ -84,7 +102,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
       }
     }
     return null;
-  }, [location.pathname, location.search]);
+  }, [isActiveItem, location.pathname, location.search]);
 
   useEffect(() => {
     // Keep palette from persisting as an invisible full-screen blocker across route changes.

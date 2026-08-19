@@ -28,6 +28,10 @@ const RepairTechnicianHome = lazyNamed(
   () => import('../../repair/pages/RepairTechnicianHome'),
   'RepairTechnicianHome',
 );
+const PackagingControl = lazyNamed(
+  () => import('../../production/pages/PackagingControl'),
+  'PackagingControl',
+);
 
 /**
  * Single `/` home: role-based portal shell
@@ -62,7 +66,8 @@ export const HomeDashboardRouter: React.FC = () => {
   else if (portal === 'factory_manager') body = <FactoryManagerDashboard />;
   else if (portal === 'employee') {
     body = useSupervisorDashboard ? <SupervisorDashboard /> : <EmployeeDashboard />;
-  } else if (portal === 'warehouse_manager') body = <WarehouseManagerHome />;
+  } else if (portal === 'packaging') body = <PackagingControl />;
+  else if (portal === 'warehouse_manager') body = <WarehouseManagerHome />;
   else if (portal === 'repair') body = <RepairDashboard />;
   else if (portal === 'repair_technician') body = <RepairTechnicianHome />;
 

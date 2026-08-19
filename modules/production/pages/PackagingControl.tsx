@@ -280,10 +280,24 @@ export const PackagingControl: React.FC = () => {
             || can('inventory.transfers.approve')
             || can('factoryDashboard.view')
             || can('adminDashboard.view') ? (
-            <Link to={withTenantPath(tenantSlug, '/reports')}>
+            <Link to={withTenantPath(tenantSlug, '/quick-action')}>
               <PrimaryButton iconName="description" tone="execute">
                 تقرير تغليف
               </PrimaryButton>
+            </Link>
+          ) : null}
+          {can('inventory.transactions.create') ? (
+            <Link
+              to={withTenantPath(
+                tenantSlug,
+                `/inventory/movements?itemType=finished_good&movementType=TRANSFER${
+                  sourceWarehouseId ? `&warehouseId=${encodeURIComponent(sourceWarehouseId)}` : ''
+                }`,
+              )}
+            >
+              <GhostButton iconName="sync_alt" tone="share">
+                تحويل منتج تام
+              </GhostButton>
             </Link>
           ) : null}
         </div>
@@ -292,9 +306,13 @@ export const PackagingControl: React.FC = () => {
       {!configured && (
         <p className="text-sm font-medium text-[rgb(var(--color-warning))] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)] rounded-lg px-4 py-3">
           التوجيه غير مكتمل: عيّن مخزن تحت التسليم وبانتظار التغليف والمنتج التام من الإعدادات، ويجب أن تكون مختلفة.
-          <Link className="font-bold underline ms-2" to={withTenantPath(tenantSlug, '/settings/production')}>
-            فتح الإعدادات
-          </Link>
+          {can('settings.edit') ? (
+            <Link className="font-bold underline ms-2" to={withTenantPath(tenantSlug, '/settings/production')}>
+              فتح الإعدادات
+            </Link>
+          ) : (
+            <span className="ms-2">اطلب من الإدارة ضبط توجيه المخازن.</span>
+          )}
         </p>
       )}
 
@@ -326,7 +344,7 @@ export const PackagingControl: React.FC = () => {
             </GhostButton>
           </Link>
         )}
-        {can('inventory.view') && (
+        {can('inventory.transfers.approve') && (
           <Link to={withTenantPath(tenantSlug, '/inventory/transfer-approvals')}>
             <GhostButton iconName="fact_check" tone="approve">
               اعتماد التحويلات

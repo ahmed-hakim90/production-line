@@ -10,6 +10,9 @@ import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
 import type { RawMaterial, Warehouse, StockItemBalance } from '../types';
 import { usePermission } from '../../../utils/permissions';
+import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { defaultTransferItemType } from '../lib/transferItemTypeDefault';
+import { resolveTransferSourceWarehouses } from '../lib/transferSourceWarehouses';
 import { PrintOffscreenHost } from '@/src/components/erp/PrintOffscreenHost';
 import { usePrintEngine } from '@/utils/printManager';
 import {
@@ -88,8 +91,10 @@ export const QuickWarehouseTransfer: React.FC = () => {
     resolveScopedWarehouseId,
     routingConfigured,
     settingsPath,
+    isMaterialsWarehouseRole,
   } = useMaterialsWarehouseScope();
-  const { can } = usePermission();
+  useEnsureStoreData(['products']);
+  const { can, isPackagingOnly } = usePermission();
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const uid = useAppStore((s) => s.uid);
@@ -112,8 +117,13 @@ export const QuickWarehouseTransfer: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
 
-  const [itemType, setItemType] = useState<ItemType>(
-    scoped || searchParams.get('itemType') === 'raw_material' ? 'raw_material' : 'finished_good',
+  const [itemType, setItemType] = useState<ItemType>(() =>
+    isPackagingOnly
+      ? 'finished_good'
+      : defaultTransferItemType({
+        queryItemType: searchParams.get('itemType'),
+        isMaterialsWarehouseRole,
+      }),
   );
   const [warehouseId, setWarehouseId] = useState(
     () => searchParams.get('warehouseId') || scopedWarehouseId || '',
@@ -196,21 +206,42 @@ export const QuickWarehouseTransfer: React.FC = () => {
     setWarehouseId((prev) =>
       resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]),
     );
-    const nextItemType = searchParams.get('itemType');
-    if (scoped || nextItemType === 'raw_material') {
-      setItemType('raw_material');
-    } else if (nextItemType === 'finished_good') {
-      setItemType('finished_good');
-    }
-  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
-
-  const fromWarehouseOptions = useMemo(
-    () => filterManualTransferWarehouses(filterWarehouses(warehouses)),
-    [filterWarehouses, warehouses],
-  );
+    const nextItemType = defaultTransferItemType({
+      queryItemType: searchParams.get('itemType'),
+      isMaterialsWarehouseRole,
+    });
+    setItemType(isPackagingOnly ? 'finished_good' : nextItemType);
+  }, [
+    isMaterialsWarehouseRole,
+    isPackagingOnly,
+    scopedWarehouseId,
+    searchParams,
+    resolveScopedWarehouseId,
+    warehouseIds.join('|'),
+  ]);
 
   const selectedFromWarehouse = warehouses.find((w) => w.id === warehouseId);
   const sparePartsTransferContext = isSparePartsTransferWarehouseRole(selectedFromWarehouse?.warehouseRole);
+
+  const fromWarehouseOptions = useMemo(
+    () =>
+      resolveTransferSourceWarehouses({
+        warehouses,
+        filterWarehouses,
+        scoped,
+        isMaterialsWarehouseRole,
+        itemType,
+        sparePartsContext: sparePartsTransferContext,
+      }),
+    [
+      filterWarehouses,
+      isMaterialsWarehouseRole,
+      itemType,
+      scoped,
+      sparePartsTransferContext,
+      warehouses,
+    ],
+  );
 
   const toWarehouseOptions = useMemo(
     () =>
@@ -536,7 +567,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
   return (
     <ModuleOpsPageShell
-      eyebrow="المخزون"
+      eyebrow="تحويل مخزون"
       rangeLabel="تسجيل مرجعي تحويل بين المخازن بسرعة — حفظ، مشاركة وتصدير"
     >
       <MaterialsWarehouseScopeBanner

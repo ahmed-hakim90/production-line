@@ -64,10 +64,17 @@ const centralCan = (p: string) =>
   );
   assert.equal(
     shouldShowWarehouseBottomBar({
-      can: (p) => p === 'repair.jobs.technician',
-      roleKey: 'repair_technician',
+      can: (p) =>
+        p === 'reports.packaging.create'
+        || p === 'inventory.view'
+        || p === 'inventory.transactions.create'
+        || p === 'sparePartsReplenishment.prepare'
+        || p === 'sparePartsReplenishment.approve',
+      inventoryWarehouseId: 'wh-central',
+      boundWarehouseRole: 'spare_parts_central',
     }),
     false,
+    'packaging-only operator must not get spare-parts bottom bar',
   );
 }
 
