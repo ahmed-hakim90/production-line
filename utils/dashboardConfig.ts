@@ -308,6 +308,15 @@ export const DEFAULT_BRANDING: BrandingSettings = {
   timezone: 'Asia/Riyadh',
 };
 
+export const PRODUCT_UI_FONT_FAMILY = 'Cairo';
+
+/** Product UI font. The previous default (IBM Plex) maps here so saved tenant themes pick up Cairo. */
+export function resolveUiFontFamily(family?: string | null): string {
+  const value = String(family || '').trim();
+  if (!value || value === 'IBM Plex Sans Arabic') return PRODUCT_UI_FONT_FAMILY;
+  return value;
+}
+
 export const DEFAULT_THEME: ThemeSettings = {
   primaryColor: '#4F46E5',
   secondaryColor: '#6366F1',
@@ -333,7 +342,7 @@ export const DEFAULT_THEME: ThemeSettings = {
     '--card-foreground': '222 84% 5%',
   },
   darkMode: 'light',
-  baseFontFamily: 'IBM Plex Sans Arabic',
+  baseFontFamily: 'Cairo',
   baseFontSize: 14,
   /** Flow base radius — themeEngine scales sm/lg/xl from this (xl ≈ 22–24px). */
   borderRadius: 12,

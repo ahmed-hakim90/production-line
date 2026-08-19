@@ -112,12 +112,12 @@ const QUICK_ACTION_COLORS: { value: QuickActionColor; label: string; classes: st
 ];
 
 const FONT_FAMILIES = [
-  { value: 'Inter', label: 'Inter' },
   { value: 'Cairo', label: 'Cairo' },
   { value: 'Tajawal', label: 'Tajawal' },
+  { value: 'Noto Sans Arabic', label: 'Noto Sans Arabic' },
+  { value: 'Inter', label: 'Inter' },
   { value: 'Rubik', label: 'Rubik' },
   { value: 'IBM Plex Sans Arabic', label: 'IBM Plex Sans Arabic' },
-  { value: 'Noto Sans Arabic', label: 'Noto Sans Arabic' },
 ];
 
 const resolveProductionWorkerSettings = (

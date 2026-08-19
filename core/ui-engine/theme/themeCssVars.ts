@@ -1,5 +1,5 @@
 import type { ThemeSettings } from '@/types';
-import { DEFAULT_THEME } from '@/utils/dashboardConfig';
+import { DEFAULT_THEME, resolveUiFontFamily } from '@/utils/dashboardConfig';
 
 export type ThemePresetForCss = 'indigo-pro' | 'light' | 'dark' | 'factory' | 'custom';
 
@@ -47,7 +47,8 @@ export function buildThemeSettingsCssVars(
     t.mutedTextColor
     || (tenantPreset === 'dark' ? '#94a3b8' : '#64748b');
   const cw = (t.contentMaxWidth ?? DEFAULT_THEME.contentMaxWidth ?? '1536px').trim();
-  const fontStack = `'${t.baseFontFamily}', 'Noto Sans Arabic', sans-serif`;
+  const uiFont = resolveUiFontFamily(t.baseFontFamily);
+  const fontStack = `'${uiFont}', 'Noto Sans Arabic', sans-serif`;
   /** Scale toolbar/input/header-action heights with base font so settings affect buttons, not only body text. */
   const controlScale = (fs / 14) * densityFactor;
   const controlSm = Math.max(28, Math.round(34 * controlScale));

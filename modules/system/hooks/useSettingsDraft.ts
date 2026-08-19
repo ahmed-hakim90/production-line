@@ -10,6 +10,7 @@ import {
   DEFAULT_KPI_THRESHOLDS,
   DEFAULT_PRINT_TEMPLATE,
   DEFAULT_THEME,
+  resolveUiFontFamily,
 } from '../../../utils/dashboardConfig';
 import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import { resolvePrintTemplate, resolveSystemSettings } from '../lib/resolveSystemSettings';
@@ -54,7 +55,11 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
       printTemplate: resolvePrintTemplate(resolved.printTemplate),
       planSettings: syncPlanSettingsWarehouseRouting(resolved.planSettings) as PlanSettings,
       branding: { ...DEFAULT_BRANDING, ...resolved.branding } as BrandingSettings,
-      theme: { ...DEFAULT_THEME, ...resolved.theme } as ThemeSettings,
+      theme: {
+        ...DEFAULT_THEME,
+        ...resolved.theme,
+        baseFontFamily: resolveUiFontFamily(resolved.theme?.baseFontFamily),
+      } as ThemeSettings,
       dashboardDisplay: { ...DEFAULT_DASHBOARD_DISPLAY, ...resolved.dashboardDisplay } as DashboardDisplaySettings,
       alertToggles: { ...DEFAULT_ALERT_TOGGLES, ...resolved.alertToggles } as AlertToggleSettings,
       quickActions: (resolved.quickActions ?? [])

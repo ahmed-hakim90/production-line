@@ -69,7 +69,7 @@
     --color-sidebar-text: #334155;
     --color-sidebar-border: #e5e7eb;
 
-    --font-family-base: 'IBM Plex Sans Arabic', 'Noto Sans Arabic', 'Cairo', sans-serif;
+    --font-family-base: 'Cairo', 'Noto Sans Arabic', sans-serif;
     --font-size-base: 14px;
     --font-size-sm: 13px;
     --font-size-xs: 12px;

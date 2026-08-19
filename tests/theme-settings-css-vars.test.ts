@@ -67,4 +67,14 @@ import { buildThemeSettingsCssVars } from '../core/ui-engine/theme/themeCssVars.
   assert.equal(darkMuted['--color-text-muted'], '#94a3b8');
 }
 
+{
+  assert.equal(DEFAULT_THEME.baseFontFamily, 'Cairo');
+  const fromLegacy = buildThemeSettingsCssVars({
+    ...DEFAULT_THEME,
+    baseFontFamily: 'IBM Plex Sans Arabic',
+  });
+  assert.match(fromLegacy['--font-family-base'] || '', /Cairo/);
+  assert.doesNotMatch(fromLegacy['--font-family-base'] || '', /IBM Plex/);
+}
+
 console.log('theme-settings-css-vars.test.ts: ok');
