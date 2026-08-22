@@ -39,6 +39,7 @@ import {
   type IssueSourceSummary,
 } from '../lib/productionIssueRequest';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
+import { resolveProductionFloorWarehouseForIssue } from '../lib/resolveProductionFloorWarehouse';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 
 function callableUserError(error: unknown, fallback: string): Error {
@@ -273,16 +274,12 @@ async function resolveProductionFloorWarehouse(): Promise<Warehouse> {
   if (!settings) throw new Error('تعذر تحميل إعدادات النظام.');
   const routing = resolveInventoryRoutingV1(settings);
   const floorId = String(routing.productionFloorWarehouseId || '').trim();
-  if (!floorId) {
-    throw new Error('حدّد مخزن صالة الإنتاج في توجيه المخازن أولاً.');
-  }
-  if (floorId === String(routing.decomposedWarehouseId || '').trim()) {
-    throw new Error('مخزن صالة الإنتاج يجب أن يختلف عن مخزن المفكك.');
-  }
-  const warehouses = await warehouseService.getAllWarehouses();
-  const warehouse = warehouses.find((w) => w.id === floorId);
-  if (!warehouse?.id) throw new Error('مخزن صالة الإنتاج غير موجود أو غير نشط.');
-  return warehouse;
+  const loaded = floorId ? await warehouseService.getById(floorId) : null;
+  return resolveProductionFloorWarehouseForIssue({
+    routingFloorWarehouseId: floorId,
+    decomposedWarehouseId: routing.decomposedWarehouseId,
+    loadedWarehouse: loaded,
+  });
 }
 
 const OPEN_ISSUE_STATUSES = new Set<ProductionIssueOrder['status']>([
