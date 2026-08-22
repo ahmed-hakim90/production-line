@@ -48,6 +48,11 @@ import {
   runAssetDepreciationCallable,
 } from '../services/firebase';
 import { getCurrentTenantId, setCurrentTenant } from '../lib/currentTenant';
+import {
+  clearCachedAppSession,
+  readCachedAppSession,
+  writeCachedAppSession,
+} from '../lib/appSessionCache';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
@@ -692,6 +697,7 @@ interface AppState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
+  hydrateFromCachedSession: (uid: string) => boolean;
   initializeApp: () => Promise<void>;
   checkApprovalStatus: () => Promise<boolean>;
 
@@ -1146,6 +1152,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   logout: async () => {
     setCurrentTenant(null);
     const { uid, userEmail } = get();
+    clearCachedAppSession(uid);
     if (uid && userEmail) {
       activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج');
     }
@@ -1232,6 +1239,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  // ── Warm resume: apply local session before server validation ────────────
+
+  hydrateFromCachedSession: (uid: string) => {
+    const cachedSession = readCachedAppSession(uid);
+    if (!cachedSession?.userProfile?.isActive) return false;
+    setCurrentTenant(cachedSession.userProfile.tenantId);
+    set({
+      isAuthenticated: true,
+      isPendingApproval: false,
+      uid,
+      userEmail: cachedSession.userEmail,
+      userDisplayName: cachedSession.userDisplayName,
+      userProfile: cachedSession.userProfile,
+      tenantCompanyName: cachedSession.tenantCompanyName ?? '',
+      error: null,
+      authError: null,
+    });
+    get()._applyRole(cachedSession.role);
+    return true;
+  },
+
   // ── App Bootstrap (called after login) ─────────────────────────────────
 
   initializeApp: async () => {
@@ -1251,6 +1279,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const userDoc = await userService.get(uid);
       if (!userDoc) {
+        clearCachedAppSession(uid);
         await signOut();
         setCurrentTenant(null);
         set({
@@ -1264,6 +1293,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       setCurrentTenant(userDoc.tenantId);
 
       if (!userDoc.isActive) {
+        clearCachedAppSession(uid);
         set({
           isAuthenticated: true,
           isPendingApproval: true,
@@ -1292,6 +1322,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       get()._applyRole(role);
       await get()._loadAppData();
+      writeCachedAppSession({
+        uid,
+        userEmail: userDoc.email,
+        userDisplayName: userDoc.displayName,
+        userProfile: userDoc,
+        role,
+        tenantCompanyName: get().tenantCompanyName,
+      });
       set({ loading: false });
     } catch (error) {
       console.error('initializeApp error:', error);

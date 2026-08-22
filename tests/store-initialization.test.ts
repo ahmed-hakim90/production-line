@@ -19,6 +19,11 @@ try {
     {},
     'store should initialize with fail-closed permissions without reading the circular export',
   );
+  assert.equal(
+    typeof storeModule.useAppStore.getState().hydrateFromCachedSession,
+    'function',
+    'store should expose warm-session hydration used by App bootstrap',
+  );
 } finally {
   await server.close();
 }
