@@ -36,6 +36,7 @@ import { usePrintEngine } from '../../../utils/printManager';
 import { ProductionIssuePrint } from '../components/ProductionIssuePrint';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
+import { findNewestUnseenProductionRequest } from '../lib/productionIssueRequest';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 import {
@@ -187,6 +188,8 @@ export const ProductionIssues: React.FC = () => {
   const [preparingLines, setPreparingLines] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const autoPreparedRequestIdsRef = useRef<Set<string>>(new Set());
+  const knownOrderIdsRef = useRef<Set<string> | null>(null);
+  const pollingOrdersRef = useRef(false);
   const { printDocument } = usePrintEngine();
   const issuePrintSettings = useMemo(
     () => ({
@@ -235,6 +238,9 @@ export const ProductionIssues: React.FC = () => {
 
       const visibleWarehouses = filterWarehouses(data.warehouses);
       setOrders(data.orders);
+      if (knownOrderIdsRef.current === null) {
+        knownOrderIdsRef.current = new Set(data.orders.map((row) => row.id).filter(Boolean) as string[]);
+      }
       setWarehouses(visibleWarehouses);
       setLocations(data.locations);
       setRacks(data.racks);
@@ -260,6 +266,48 @@ export const ProductionIssues: React.FC = () => {
 
   useEffect(() => {
     void load();
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    const refreshIncomingRequests = async () => {
+      if (disposed || pollingOrdersRef.current || document.visibilityState === 'hidden') return;
+      pollingOrdersRef.current = true;
+      try {
+        const nextOrders = await productionIssueService.getAll();
+        if (disposed) return;
+        const knownIds = knownOrderIdsRef.current;
+        if (knownIds === null) {
+          knownOrderIdsRef.current = new Set(nextOrders.map((row) => row.id).filter(Boolean) as string[]);
+          return;
+        }
+        const newestRequest = findNewestUnseenProductionRequest(nextOrders, knownIds);
+        knownOrderIdsRef.current = new Set(nextOrders.map((row) => row.id).filter(Boolean) as string[]);
+        setOrders(nextOrders);
+        if (newestRequest?.id) {
+          setListTab('requests');
+          setSelectedOrderId(newestRequest.id);
+          setApproveQty(String(newestRequest.quantity || ''));
+          setOrdersPage(1);
+          setMessage(`وصل طلب صرف جديد ${newestRequest.referenceNo || ''} وتم فتحه تلقائياً.`.trim());
+        }
+      } catch {
+        // Background refresh is best-effort; the manual reload paths still surface errors.
+      } finally {
+        pollingOrdersRef.current = false;
+      }
+    };
+
+    const timer = window.setInterval(() => void refreshIncomingRequests(), 5_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void refreshIncomingRequests();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -398,8 +446,6 @@ export const ProductionIssues: React.FC = () => {
   }, [orders, listTab]);
   const selectedOrder =
     listOrders.find((row) => row.id === selectedOrderId)
-    || orders.find((row) => row.id === selectedOrderId)
-    || listOrders[0]
     || null;
   const ordersTotalPages = Math.max(1, Math.ceil(listOrders.length / ISSUE_ORDERS_PAGE_SIZE));
   const safeOrdersPage = Math.min(ordersPage, ordersTotalPages);
@@ -1091,6 +1137,14 @@ export const ProductionIssues: React.FC = () => {
               </div>
             </>
           )}
+          {!selectedOrder && (
+            <div className="px-6 py-16 text-center">
+              <p className="text-sm font-black text-[var(--color-text)]">اختر طلب صرف من القائمة</p>
+              <p className="mt-2 text-xs text-[var(--color-text-muted)]">
+                الطلبات الجديدة يتم تحديثها وفتحها تلقائياً، ولن يتم عرض طلب قديم أثناء الانتظار.
+              </p>
+            </div>
+          )}
         </OpsDashPanel>
         </div>
 
@@ -1112,6 +1166,8 @@ export const ProductionIssues: React.FC = () => {
                 onClick={() => {
                   setListTab(key);
                   setOrdersPage(1);
+                  setSelectedOrderId('');
+                  setApproveQty('');
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
                   listTab === key ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'

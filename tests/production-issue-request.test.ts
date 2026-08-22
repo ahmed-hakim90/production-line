@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   findBlockingOpenIssue,
+  findNewestUnseenProductionRequest,
   isBlockingOpenIssueStatus,
   requestRemainingQty,
   suggestRequestQuantity,
@@ -19,6 +20,21 @@ const blocking = findBlockingOpenIssue([
   { id: '2', status: 'requested', sourceType: 'production_plan' },
 ]);
 assert.equal(blocking?.id, '2');
+
+const newestUnseen = findNewestUnseenProductionRequest([
+  { id: 'new-request', status: 'requested' },
+  { id: 'known-request', status: 'requested' },
+  { id: 'new-draft', status: 'draft' },
+], new Set(['known-request']));
+assert.equal(newestUnseen?.id, 'new-request');
+
+assert.equal(
+  findNewestUnseenProductionRequest([
+    { id: 'known-request', status: 'requested' },
+    { id: 'issued', status: 'issued' },
+  ], new Set(['known-request'])),
+  undefined,
+);
 
 assert.equal(
   findBlockingOpenIssue([

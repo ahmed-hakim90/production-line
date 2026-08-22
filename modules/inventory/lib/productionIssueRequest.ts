@@ -19,6 +19,16 @@ export function findBlockingOpenIssue(
   ) as ProductionIssueOrder | undefined;
 }
 
+/** First newly-arrived production request from a list ordered newest first. */
+export function findNewestUnseenProductionRequest(
+  orders: Pick<ProductionIssueOrder, 'id' | 'status'>[],
+  knownOrderIds: ReadonlySet<string>,
+): ProductionIssueOrder | undefined {
+  return orders.find(
+    (row) => row.status === 'requested' && Boolean(row.id) && !knownOrderIds.has(row.id!),
+  ) as ProductionIssueOrder | undefined;
+}
+
 export type IssueSourceSummary = {
   issuedQty: number;
   openRequestedQty: number;
