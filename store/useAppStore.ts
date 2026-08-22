@@ -106,7 +106,6 @@ import { DUPLICATE_ENTITY_CODE } from '../modules/shared/services/entityCodeSequ
 import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
-import { ALL_PERMISSIONS } from '../utils/permissions';
 import { DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
 import {
   applyAppTheme,
@@ -149,18 +148,11 @@ import type {
   NormalizedAttendanceLogInput,
 } from '../modules/hr/attendance/types';
 
-// ─── Helper: build full admin permissions map (fallback) ─────────────────────
-
-function adminPermissions(): Record<string, boolean> {
-  const perms: Record<string, boolean> = {};
-  ALL_PERMISSIONS.forEach((p) => { perms[p] = true; });
-  return perms;
-}
-
 function emptyPermissions(): Record<string, boolean> {
-  const perms: Record<string, boolean> = {};
-  ALL_PERMISSIONS.forEach((p) => { perms[p] = false; });
-  return perms;
+  // Missing permission keys are already treated as false. Keeping the initial
+  // map empty also avoids a circular module dependency with utils/permissions,
+  // whose React hooks import this store.
+  return {};
 }
 
 function isBlockedNotification(notification: AppNotification): boolean {
