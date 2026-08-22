@@ -3136,7 +3136,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         (reportType === 'finished_product' && isPackagingLineId(savePayload.lineId, get()._rawLines))
         || reportType === 'packaging';
       if (
-        &&
         reportType === 'finished_product'
         && !packagingLaborOptional
         && Number(savePayload.workersCount || 0) <= 0
