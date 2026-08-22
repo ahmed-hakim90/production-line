@@ -6,6 +6,10 @@ assert.match(hook, /pagesRef/);
 assert.match(hook, /const cached = pagesRef\.current\[nextIndex\]/);
 assert.match(hook, /pagesRef\.current = \[\]/);
 assert.match(hook, /queryKey/);
+assert.match(hook, /keepPreviousData/);
+assert.match(hook, /if \(!keepPreviousData\)/);
+assert.match(hook, /initialLoading: loading && !hasLoadedOnce/);
+assert.match(hook, /refreshing: loading && hasLoadedOnce/);
 
 for (const file of [
   'modules/production/services/productService.ts',

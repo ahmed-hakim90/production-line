@@ -23,7 +23,7 @@ import { db, isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
 import { employeesRef, HR_COLLECTIONS } from './collections';
 import type { FirestoreEmployee } from '@/types';
-import { buildSearchPrefixes, normalizeFirestoreSearch } from '@/lib/firestoreSearch';
+import { buildSearchPrefixes, resolveFirestoreSearchKey } from '@/lib/firestoreSearch';
 
 const eqTenant = () => where('tenantId', '==', getCurrentTenantId());
 
@@ -72,7 +72,7 @@ export const employeeService = {
     const pageSize = options.pageSize === 50 ? 50 : 20;
     const take = pageSize + 1;
     const constraints: any[] = [eqTenant()];
-    const search = normalizeFirestoreSearch(options.search);
+    const search = resolveFirestoreSearchKey(options.search);
     if (search.length >= 2) constraints.push(where('searchPrefixes', 'array-contains', search));
     if (options.filters?.departmentId) constraints.push(where('departmentId', '==', options.filters.departmentId));
     if (options.filters?.jobPositionId) constraints.push(where('jobPositionId', '==', options.filters.jobPositionId));

@@ -170,6 +170,8 @@ export interface FirestoreEmployee {
   acNo?: string;
   shiftType?: "shift1" | "shift2" | "shift3" | "flexible";
   workDays?: number[];
+  /** Normalized server-side search keys; legacy rows may omit this field. */
+  searchPrefixes?: string[];
   createdAt?: any;
 }
 

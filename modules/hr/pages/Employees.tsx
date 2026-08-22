@@ -66,8 +66,9 @@ import {
 } from '@/modules/production/utils/productionEmployeeContext';
 import { useCursorPagination } from '@/hooks/useCursorPagination';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { normalizeFirestoreSearch } from '@/lib/firestoreSearch';
+import { normalizeFirestoreSearch, resolveFirestoreSearchKey } from '@/lib/firestoreSearch';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { matchesEmployeeSearch, mergeEmployeeSearchResults } from '../utils/employeeSearch';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -161,23 +162,26 @@ export const Employees: React.FC = () => {
     systemAccess: 'all',
   });
   const debouncedSearch = useDebouncedValue(search, 350);
+  const normalizedDebouncedSearch = normalizeFirestoreSearch(debouncedSearch);
+  const serverSearch = normalizedDebouncedSearch.length >= 2 ? debouncedSearch : '';
   const employeeQueryKey = useMemo(() => JSON.stringify({
-    search: normalizeFirestoreSearch(debouncedSearch),
+    search: resolveFirestoreSearchKey(serverSearch),
     filters: filterValues,
-  }), [debouncedSearch, filterValues]);
+  }), [serverSearch, filterValues]);
   const loadEmployeePage = useCallback((cursor: Parameters<typeof employeeService.listPaged>[0]['cursor']) =>
     employeeService.listPaged({
       pageSize: 20,
       cursor,
-      search: debouncedSearch,
+      search: serverSearch,
     }).then((result) => ({
       items: result.items,
       nextCursor: result.nextCursor,
       hasNext: result.hasMore,
-    })), [debouncedSearch, filterValues]);
+    })), [serverSearch]);
   const employeePager = useCursorPagination<FirestoreEmployee, NonNullable<Awaited<ReturnType<typeof employeeService.listPaged>>['nextCursor']>>({
     queryKey: employeeQueryKey,
     loadPage: loadEmployeePage,
+    keepPreviousData: true,
   });
   const listEmployees = employeePager.items;
   const listLoading = employeePager.loading;
@@ -325,16 +329,12 @@ export const Employees: React.FC = () => {
   }, [tenantEmployeeCount, listEmployees, pendingUsers.length]);
 
   const filtered = useMemo(() => {
+    const inputIsDebounced = normalizeFirestoreSearch(search) === normalizedDebouncedSearch;
     let list = listEmployees;
-    const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (e) =>
-          e.name?.toLowerCase().includes(q) ||
-          (e.code && e.code.toLowerCase().includes(q)) ||
-          getProductionContext(e.id)?.lineName.toLowerCase().includes(q) ||
-          getEffectiveManagerName(e).toLowerCase().includes(q)
-      );
+    if (inputIsDebounced && !listLoading && normalizedDebouncedSearch.length >= 2) {
+      list = mergeEmployeeSearchResults(listEmployees, _rawEmployees, debouncedSearch);
+    } else if (inputIsDebounced && !listLoading && normalizedDebouncedSearch.length === 1) {
+      list = listEmployees.filter((employee) => matchesEmployeeSearch(employee, debouncedSearch));
     }
     if (filterValues.department && filterValues.department !== 'all') list = list.filter((e) => e.departmentId === filterValues.department);
     if (filterValues.jobPosition && filterValues.jobPosition !== 'all') list = list.filter((e) => e.jobPositionId === filterValues.jobPosition);
@@ -344,7 +344,7 @@ export const Employees: React.FC = () => {
     if (filterValues.systemAccess === 'yes') list = list.filter((e) => e.hasSystemAccess);
     if (filterValues.systemAccess === 'no') list = list.filter((e) => !e.hasSystemAccess);
     return list;
-  }, [listEmployees, _rawEmployees, search, filterValues, productionEmployeeContext]);
+  }, [listEmployees, _rawEmployees, search, debouncedSearch, normalizedDebouncedSearch, listLoading, filterValues]);
 
   const filteredSalaryTotal = useMemo(
     () => filtered.reduce((sum, emp) => sum + Number(emp.baseSalary ?? 0), 0),
@@ -917,7 +917,7 @@ export const Employees: React.FC = () => {
     );
   }
 
-  if (listLoading && listEmployees.length === 0) {
+  if (employeePager.initialLoading) {
     return <PageContentSkeleton variant="list" showFilters tableRows={10} />;
   }
 
@@ -1009,7 +1009,7 @@ export const Employees: React.FC = () => {
 
       <OpsDashPanel title="قائمة الموظفين" accent="hr" bodyClassName="p-0 overflow-hidden">
         <SmartFilterBar
-      pageId="hr-employees"
+          pageId="hr-employees"
           searchPlaceholder="بحث باسم أو رمز الموظف"
           searchValue={search}
           onSearchChange={setSearch}
@@ -1048,8 +1048,22 @@ export const Employees: React.FC = () => {
           ]}
           quickFilterValues={filterValues}
           onQuickFilterChange={handleFilterChange}
+          extra={employeePager.refreshing ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]" role="status" aria-live="polite">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              جاري تحديث النتائج…
+            </span>
+          ) : null}
           className="mb-0 border-0 rounded-none"
         />
+        {employeePager.error ? (
+          <div className="mx-4 mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.08)] px-4 py-3 text-sm text-[rgb(var(--color-danger))]" role="alert">
+            <span>تعذر تحميل نتائج الموظفين. تحقق من الاتصال أو فهرس Firestore ثم حاول مرة أخرى.</span>
+            <Button variant="secondary" onClick={() => void employeePager.refresh()}>
+              إعادة المحاولة
+            </Button>
+          </div>
+        ) : null}
         <SelectableTable<FirestoreEmployee>
         data={filtered}
         columns={employeeColumns}
@@ -1610,5 +1624,4 @@ export const Employees: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
 

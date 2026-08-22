@@ -10,6 +10,7 @@ import {
 
 assert.equal(normalizeFirestoreSearch('  أحمـد  مُحمد ١٢۳  '), 'احمد محمد 123');
 assert.equal(normalizeFirestoreSearch('على'), 'علي');
+assert.equal(normalizeFirestoreSearch('  مُحَمَّد   مَجْدِي  '), 'محمد مجدي');
 const prefixes = buildSearchPrefixes(['شركة النور الحديثة', 'PRD-١٢٣', '0100 555']);
 assert(prefixes.includes('الن'));
 assert(prefixes.includes('النور الح'));
@@ -42,5 +43,9 @@ for (const query of ['7033', '7033A', 'SK-7033A', 'sk7033a', 'sk 7033', '050436'
 assert.equal(isServerSearchReady('ا'), false);
 assert.equal(isServerSearchReady('اح'), true);
 assert.equal(isServerSearchReady(''), true);
+
+const employeePrefixes = buildSearchPrefixes(['محمد مجدي أحمد', 'EMP-101']);
+assert(employeePrefixes.includes('محمد مجدي'));
+assert(matchesFirestoreSearch('مُحَمَّد مجدى أحمد', 'محمد مجدي'));
 
 console.log('firestore-search.test.ts passed');

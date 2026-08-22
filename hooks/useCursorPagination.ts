@@ -10,6 +10,8 @@ export interface CursorPaginationState<T> {
   items: T[];
   page: number;
   loading: boolean;
+  initialLoading: boolean;
+  refreshing: boolean;
   error: unknown;
   hasPrevious: boolean;
   hasNext: boolean;
@@ -25,8 +27,10 @@ export function useCursorPagination<T, TCursor = unknown>(options: {
   queryKey: string;
   loadPage: (cursor: TCursor | null) => Promise<CursorPage<T, TCursor>>;
   enabled?: boolean;
+  /** Keep the current page visible while a changed query loads its first page. */
+  keepPreviousData?: boolean;
 }): CursorPaginationState<T> {
-  const { queryKey, loadPage, enabled = true } = options;
+  const { queryKey, loadPage, enabled = true, keepPreviousData = false } = options;
   const loadPageRef = useRef(loadPage);
   loadPageRef.current = loadPage;
   const pagesRef = useRef<Array<CachedPage<T, TCursor>>>([]);
@@ -35,6 +39,7 @@ export function useCursorPagination<T, TCursor = unknown>(options: {
   const [items, setItems] = useState<T[]>([]);
   const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(enabled);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
   const fetchAt = useCallback(async (index: number, cursor: TCursor | null, replace: boolean) => {
@@ -50,6 +55,7 @@ export function useCursorPagination<T, TCursor = unknown>(options: {
       setPageIndex(index);
       setItems(result.items);
       setHasNext(result.hasNext);
+      setHasLoadedOnce(true);
     } catch (nextError) {
       if (requestId === requestRef.current) setError(nextError);
     } finally {
@@ -61,15 +67,18 @@ export function useCursorPagination<T, TCursor = unknown>(options: {
     requestRef.current += 1;
     pagesRef.current = [];
     setPageIndex(0);
-    setItems([]);
-    setHasNext(false);
+    if (!keepPreviousData) {
+      setItems([]);
+      setHasNext(false);
+    }
     setError(null);
     if (!enabled) {
       setLoading(false);
+      setHasLoadedOnce(false);
       return;
     }
     void fetchAt(0, null, false);
-  }, [enabled, fetchAt, queryKey]);
+  }, [enabled, fetchAt, keepPreviousData, queryKey]);
 
   const next = useCallback(async () => {
     if (loading || !hasNext) return;
@@ -108,6 +117,8 @@ export function useCursorPagination<T, TCursor = unknown>(options: {
     items,
     page: pageIndex + 1,
     loading,
+    initialLoading: loading && !hasLoadedOnce,
+    refreshing: loading && hasLoadedOnce,
     error,
     hasPrevious: pageIndex > 0,
     hasNext,
