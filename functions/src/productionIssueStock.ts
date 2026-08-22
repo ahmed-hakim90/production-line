@@ -146,8 +146,23 @@ const loadActor = async (uid: string): Promise<ActorContext> => {
   };
 };
 
-const hasPermission = (actor: ActorContext, keys: string[]) =>
-  actor.isSuperAdmin || keys.some((key) => actor.permissions[key] === true);
+/** Mirror client utils/permissions aliases for production issue approve/issue. */
+const PERMISSION_ALIASES: Record<string, readonly string[]> = {
+  'productionIssue.create': ['inventory.transactions.create'],
+  'productionIssue.approve': ['inventory.transfers.approve', 'inventory.transactions.create'],
+  'productionIssue.print': ['inventory.transactions.create'],
+  'productionIssue.return': ['inventory.transactions.create'],
+  'productionIssue.compensate': ['inventory.transfers.approve', 'inventory.transactions.create'],
+};
+
+const hasPermission = (actor: ActorContext, keys: string[]) => {
+  if (actor.isSuperAdmin) return true;
+  return keys.some((key) => {
+    if (actor.permissions[key] === true) return true;
+    const aliases = PERMISSION_ALIASES[key] || [];
+    return aliases.some((alias) => actor.permissions[alias] === true);
+  });
+};
 
 async function resolveFloorWarehouse(
   order: IssueOrder,

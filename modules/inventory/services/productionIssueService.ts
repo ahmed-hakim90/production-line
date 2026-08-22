@@ -63,18 +63,31 @@ const COLLECTION = 'production_issue_orders';
 async function loadWarehouseScopedIssueOrders(
   ...constraints: QueryConstraint[]
 ): Promise<ProductionIssueOrder[]> {
-  const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+  let boundWarehouseId: string | null = null;
+  try {
+    boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+  } catch (error) {
+    console.warn('[productionIssueService] failed resolving bound warehouse, treating as bound-unknown', error);
+  }
   const load = async (warehouseField?: 'sourceWarehouseId' | 'targetWarehouseId') => {
-    const snap = await getDocs(tenantQuery(
-      db,
-      COLLECTION,
-      ...(warehouseField
-        ? [where(warehouseField, '==', boundWarehouseId)]
-        : []),
-      ...constraints,
-    ));
-    return snap.docs;
+    try {
+      const snap = await getDocs(tenantQuery(
+        db,
+        COLLECTION,
+        ...(warehouseField
+          ? [where(warehouseField, '==', boundWarehouseId)]
+          : []),
+        ...constraints,
+      ));
+      return snap.docs;
+    } catch (error) {
+      console.warn('[productionIssueService] failed loading issue orders', warehouseField || 'unscoped', error);
+      return [];
+    }
   };
+  // Bound operators can only run field-equality-scoped queries (Firestore rules
+  // reject an unfiltered list for them); a boundWarehouseId that failed to resolve
+  // must not silently fall through to the unscoped query below.
   const docs = boundWarehouseId
     ? [...await load('sourceWarehouseId'), ...await load('targetWarehouseId')]
     : await load();

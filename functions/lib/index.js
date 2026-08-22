@@ -15,6 +15,7 @@ import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRes
 import { addDepartmentConsumableStockHandler, approveDepartmentConsumableIssueHandler, cancelDepartmentConsumableIssueHandler, createDepartmentConsumableIssueHandler, getDepartmentConsumableMonthlyReportHandler, issueDepartmentConsumableIssueHandler, rejectDepartmentConsumableIssueHandler, returnDepartmentConsumableIssueHandler, submitDepartmentConsumableIssueHandler, } from './departmentConsumableIssues.js';
 import { approveRepairSpareIssueHandler, cancelRepairSpareIssueHandler, createRepairSpareIssueHandler, issueRepairSpareIssueHandler, rejectRepairSpareIssueHandler, returnRepairSpareIssueHandler, submitRepairSpareIssueHandler, } from './repairSpareIssues.js';
 import { buildPublicRepairApprovalView } from './repairApprovalPublic.js';
+import { wrapCallableUserSafe } from './callableUserSafeError.js';
 import { approveSparePartsReplenishmentHandler, cancelSparePartsReplenishmentHandler, createSparePartsReplenishmentHandler, prepareSparePartsReplenishmentHandler, receiveSparePartsReplenishmentHandler, rejectSparePartsReplenishmentHandler, responsibleApproveSparePartsReplenishmentHandler, } from './sparePartsReplenishment.js';
 import { cancelSparePartsRecallHandler, confirmSparePartsRecallHandler, createSparePartsRecallHandler, listMaintenanceCenterSpareBalancesHandler, } from './sparePartsRecall.js';
 import { issuePendingRepairPartUsageHandler, requestRepairJobSparePartHandler, } from './repairJobSparePartRequest.js';
@@ -1910,13 +1911,13 @@ export const rejectRepairSpareIssue = onCall({ region: 'us-central1', memory: '2
 export const issueRepairSpareIssue = onCall({ region: 'us-central1', memory: '512MiB' }, issueRepairSpareIssueHandler);
 export const cancelRepairSpareIssue = onCall({ region: 'us-central1', memory: '256MiB' }, cancelRepairSpareIssueHandler);
 export const returnRepairSpareIssue = onCall({ region: 'us-central1', memory: '512MiB' }, returnRepairSpareIssueHandler);
-export const createSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, createSparePartsReplenishmentHandler);
-export const approveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, approveSparePartsReplenishmentHandler);
-export const prepareSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, prepareSparePartsReplenishmentHandler);
-export const responsibleApproveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, responsibleApproveSparePartsReplenishmentHandler);
-export const receiveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, receiveSparePartsReplenishmentHandler);
-export const rejectSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, rejectSparePartsReplenishmentHandler);
-export const cancelSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, cancelSparePartsReplenishmentHandler);
+export const createSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر إنشاء طلب التموين.', createSparePartsReplenishmentHandler));
+export const approveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر اعتماد طلب التموين. تحقق من الرصيد المتاح في المخزن المركزي.', approveSparePartsReplenishmentHandler));
+export const prepareSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر تجهيز طلب التموين.', prepareSparePartsReplenishmentHandler));
+export const responsibleApproveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر تسجيل موافقة المسؤول على التموين.', responsibleApproveSparePartsReplenishmentHandler));
+export const receiveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر تأكيد استلام التموين.', receiveSparePartsReplenishmentHandler));
+export const rejectSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر رفض طلب التموين.', rejectSparePartsReplenishmentHandler));
+export const cancelSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر إلغاء طلب التموين.', cancelSparePartsReplenishmentHandler));
 export const listMaintenanceCenterSpareBalances = onCall({ region: 'us-central1', memory: '512MiB' }, listMaintenanceCenterSpareBalancesHandler);
 export const createSparePartsRecall = onCall({ region: 'us-central1', memory: '512MiB' }, createSparePartsRecallHandler);
 export const confirmSparePartsRecall = onCall({ region: 'us-central1', memory: '512MiB' }, confirmSparePartsRecallHandler);

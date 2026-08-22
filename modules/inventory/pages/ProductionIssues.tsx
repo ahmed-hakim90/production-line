@@ -211,15 +211,18 @@ export const ProductionIssues: React.FC = () => {
         setRacks(cached.racks);
       }
 
-      const [{ data },] = await Promise.all([
+      const [{ data }] = await Promise.all([
         fetchCachedPageData(
           PRODUCTION_ISSUES_CACHE_KEY,
           async () => {
             const [issueRows, whs, locs, rackRows] = await Promise.all([
-              productionIssueService.getAll(),
-              warehouseService.getActiveWarehouses(),
-              warehouseLocationService.getAll(),
-              warehouseRackService.getAll(),
+              productionIssueService.getAll().catch((err) => {
+                console.warn('[ProductionIssues] failed loading issue orders', err);
+                return [] as ProductionIssueOrder[];
+              }),
+              warehouseService.getActiveWarehouses().catch(() => [] as Warehouse[]),
+              warehouseLocationService.getAll().catch(() => [] as WarehouseLocation[]),
+              warehouseRackService.getAll().catch(() => [] as WarehouseRack[]),
             ]);
             return {
               orders: issueRows,
@@ -230,10 +233,11 @@ export const ProductionIssues: React.FC = () => {
           },
           { force, maxAgeMs: 45_000 },
         ),
-        fetchWorkOrders(),
-        fetchProductionPlans(),
-        fetchProducts(),
-        fetchLines(),
+        // Catalog fetches must not fail the whole page for warehouse-only roles.
+        fetchWorkOrders().catch(() => undefined),
+        fetchProductionPlans().catch(() => undefined),
+        fetchProducts().catch(() => undefined),
+        fetchLines().catch(() => undefined),
       ]);
 
       const visibleWarehouses = filterWarehouses(data.warehouses);

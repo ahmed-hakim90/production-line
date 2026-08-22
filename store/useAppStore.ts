@@ -114,6 +114,7 @@ import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
+import type { ProductionReportCreatePath } from '../modules/system/lib/operationPathSettings';
 import {
   applyAppTheme,
   cacheTenantTheme,
@@ -138,7 +139,10 @@ import {
 import { eventBus, SystemEvents } from '../shared/events';
 import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
-import { REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
+import { REPORT_DUPLICATE_MESSAGE, INJECTION_REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
+import { isInjectionShiftSelected, isDuplicateProductionReport } from '../modules/production/utils/injectionReportShift';
+import { resolveReportBehaviorSettings } from '../modules/production/lib/reportBehaviorSettings';
+import { getProductAssemblyMode, hasLineSpecificWorkerTarget } from '../modules/production/selectors/workerTargetSelector';
 import {
   buildProductionReportCostSnapshotPatch,
   buildSupervisorHourlyRatesMap,
@@ -779,6 +783,11 @@ interface AppState {
 
   // Mutations — Reports
   createReport: (data: Omit<ProductionReport, 'id' | 'createdAt'>) => Promise<string | null>;
+  queueReportCreate: (
+    data: Omit<ProductionReport, 'id' | 'createdAt'>,
+    context: { path: ProductionReportCreatePath },
+  ) => { optimisticId: string; completion: Promise<string | null> };
+  retryQueuedReportCreate: (optimisticId: string) => Promise<string | null>;
   createComponentWasteReport: (data: CreateComponentWasteReportInput) => Promise<string | null>;
   updateReport: (id: string, data: Partial<ProductionReport>) => Promise<void>;
   deleteReport: (id: string) => Promise<void>;
@@ -991,6 +1000,19 @@ function reapplyThemeFromAppStore(get: () => AppState, options?: { syncTenantDoc
     applyAppTheme(m, theme);
     cacheTenantTheme(m);
   });
+}
+
+
+/** Insert or replace a report in an in-memory list without a full Firestore reload. */
+function upsertLoadedReportRow(
+  rows: ProductionReport[],
+  report: ProductionReport,
+): ProductionReport[] {
+  if (!report.id) return rows;
+  if (rows.some((row) => row.id === report.id)) {
+    return rows.map((row) => (row.id === report.id ? { ...row, ...report } : row));
+  }
+  return [report, ...rows];
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
@@ -3517,6 +3539,213 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+
+  queueReportCreate: (data, context) => {
+    const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const optimisticId = `local-report-${randomPart}`;
+    const actorUid = String(get().uid || '').trim();
+    const actorEmployee = get().currentEmployee;
+    const canDelegate = hasPermission(
+      get().userPermissions,
+      'reports.createForAnySupervisor',
+    );
+    const optimisticRow: ProductionReport = {
+      ...data,
+      id: optimisticId,
+      createdAt: new Date().toISOString(),
+      createdByUid: actorUid || undefined,
+      createdByNameSnapshot: get().userDisplayName || get().userEmail || undefined,
+      entryMode: canDelegate
+        && actorEmployee?.id
+        && actorEmployee.id !== data.employeeId
+        ? 'hall_supervisor_delegate'
+        : 'direct',
+      processingVersion: 2,
+      processingState: 'pending',
+      processingStage: 'waiting_for_save',
+      processingAttempts: 0,
+      clientSaveState: 'saving',
+      clientSaveError: '',
+      clientCreatePath: context.path,
+      clientCreatePayload: data as unknown as Record<string, unknown>,
+    };
+    const operationalToday = getOperationalDateString(8);
+    const { start: monthStart, end: monthEnd } = getMonthDateRange();
+    const inToday = String(data.date || '') === operationalToday;
+    const inMonth = String(data.date || '') >= monthStart && String(data.date || '') <= monthEnd;
+    const todayKey = getProductionReportsRangeCacheKey(operationalToday, operationalToday);
+    const monthKey = getProductionReportsRangeCacheKey(monthStart, monthEnd);
+
+    set((state) => {
+      const nextToday = inToday
+        ? upsertLoadedReportRow(state.todayReports, optimisticRow)
+        : state.todayReports;
+      const nextMonth = inMonth
+        ? upsertLoadedReportRow(state.monthlyReports, optimisticRow)
+        : state.monthlyReports;
+      return {
+        error: null,
+        todayReports: nextToday,
+        monthlyReports: nextMonth,
+        productionReports: inMonth
+          ? upsertLoadedReportRow(state.productionReports, optimisticRow)
+          : state.productionReports,
+        productionReportsRangeCache: {
+          ...state.productionReportsRangeCache,
+          ...(inToday
+            ? { [todayKey]: { rows: nextToday, fetchedAt: Date.now() } }
+            : {}),
+          ...(inMonth
+            ? { [monthKey]: { rows: nextMonth, fetchedAt: Date.now() } }
+            : {}),
+        },
+      };
+    });
+
+    const completion = (async (): Promise<string | null> => {
+      const createdId = await get().createReport(data);
+      if (!createdId) {
+        const message = get().error || 'تعذر حفظ التقرير.';
+        set((state) => {
+          const markFailed = (rows: ProductionReport[]) => rows.map((row) => (
+            row.id === optimisticId
+              ? {
+                  ...row,
+                  clientSaveState: 'failed' as const,
+                  clientSaveError: message,
+                  processingStage: 'save_failed',
+                }
+              : row
+          ));
+          return {
+            todayReports: markFailed(state.todayReports),
+            monthlyReports: markFailed(state.monthlyReports),
+            productionReports: markFailed(state.productionReports),
+            productionReportsRangeCache: Object.fromEntries(
+              Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+                key,
+                { ...value, rows: markFailed(value.rows) },
+              ]),
+            ),
+          };
+        });
+        return null;
+      }
+
+      set((state) => {
+        const removeOptimistic = (rows: ProductionReport[]) => rows.filter(
+          (row) => row.id !== optimisticId,
+        );
+        return {
+          todayReports: removeOptimistic(state.todayReports),
+          monthlyReports: removeOptimistic(state.monthlyReports),
+          productionReports: removeOptimistic(state.productionReports),
+          productionReportsRangeCache: Object.fromEntries(
+            Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+              key,
+              { ...value, rows: removeOptimistic(value.rows) },
+            ]),
+          ),
+        };
+      });
+      return createdId;
+    })().catch((error) => {
+      const message = error instanceof Error ? error.message : 'تعذر حفظ التقرير.';
+      set((state) => {
+        const markFailed = (rows: ProductionReport[]) => rows.map((row) => (
+          row.id === optimisticId
+            ? {
+                ...row,
+                clientSaveState: 'failed' as const,
+                clientSaveError: message,
+                processingStage: 'save_failed',
+              }
+            : row
+        ));
+        return {
+          todayReports: markFailed(state.todayReports),
+          monthlyReports: markFailed(state.monthlyReports),
+          productionReports: markFailed(state.productionReports),
+          productionReportsRangeCache: Object.fromEntries(
+            Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+              key,
+              { ...value, rows: markFailed(value.rows) },
+            ]),
+          ),
+        };
+      });
+      return null;
+    });
+
+    return { optimisticId, completion };
+  },
+
+  retryQueuedReportCreate: async (optimisticId) => {
+    const optimistic = [
+      ...get().todayReports,
+      ...get().monthlyReports,
+      ...get().productionReports,
+    ].find((row) => row.id === optimisticId && row.clientSaveState === 'failed');
+    const payload = optimistic?.clientCreatePayload;
+    if (!optimistic || !payload) return null;
+
+    set((state) => {
+      const markSaving = (rows: ProductionReport[]) => rows.map((row) => (
+        row.id === optimisticId
+          ? { ...row, clientSaveState: 'saving' as const, clientSaveError: '', processingStage: 'waiting_for_save' }
+          : row
+      ));
+      return {
+        todayReports: markSaving(state.todayReports),
+        monthlyReports: markSaving(state.monthlyReports),
+        productionReports: markSaving(state.productionReports),
+        productionReportsRangeCache: Object.fromEntries(
+          Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+            key,
+            { ...value, rows: markSaving(value.rows) },
+          ]),
+        ),
+      };
+    });
+
+    const createdId = await get().createReport(
+      payload as Omit<ProductionReport, 'id' | 'createdAt'>,
+    );
+    if (!createdId) {
+      const message = get().error || 'تعذر حفظ التقرير.';
+      set((state) => {
+        const markFailed = (rows: ProductionReport[]) => rows.map((row) => (
+          row.id === optimisticId
+            ? { ...row, clientSaveState: 'failed' as const, clientSaveError: message, processingStage: 'save_failed' }
+            : row
+        ));
+        return {
+          todayReports: markFailed(state.todayReports),
+          monthlyReports: markFailed(state.monthlyReports),
+          productionReports: markFailed(state.productionReports),
+        };
+      });
+      return null;
+    }
+    set((state) => {
+      const removeOptimistic = (rows: ProductionReport[]) => rows.filter((row) => row.id !== optimisticId);
+      return {
+        todayReports: removeOptimistic(state.todayReports),
+        monthlyReports: removeOptimistic(state.monthlyReports),
+        productionReports: removeOptimistic(state.productionReports),
+        productionReportsRangeCache: Object.fromEntries(
+          Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+            key,
+            { ...value, rows: removeOptimistic(value.rows) },
+          ]),
+        ),
+      };
+    });
+    return createdId;
+  },
+
   updateReport: async (id, data) => {
     const { uid, userDisplayName, userEmail } = get();
     const trackedOperation = actionTrackerService.startOperation({
@@ -3549,6 +3778,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         hasPermission(permissions, 'reports.componentInjection.manage') || forceInjectionOnly;
       const lines = get()._rawLines;
       const nextLineId = String(data.lineId ?? existingReport?.lineId ?? '').trim();
+      const reportBehavior = resolveReportBehaviorSettings(get().systemSettings);
 
       if (forcePackagingOnly && nextReportType !== 'packaging') {
         const msg = 'غير مصرح بتعديل نوع التقرير إلى غير التغليف.';

@@ -1,9 +1,6 @@
 import {
   doc,
   getDoc,
-  getDocs,
-  limit,
-  orderBy,
   runTransaction,
   setDoc,
   type Firestore,
@@ -11,41 +8,34 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
-import { tenantQuery } from '../../../lib/tenantFirestore';
-import { formatPiReference, piSeqFromReferenceNo } from '../lib/productionIssueRef';
+import { formatPiReference } from '../lib/productionIssueRef';
 
 export { formatPiReference, PI_REF_REGEX, piSeqFromReferenceNo } from '../lib/productionIssueRef';
 
 const COUNTERS_COLLECTION = 'inventory_counters';
-const ORDERS_COLLECTION = 'production_issue_orders';
-
-function maxPiFromDocs(docs: { data: () => Record<string, unknown> }[]): number {
-  return docs.reduce((max, d) => {
-    const ref = String(d.data()?.referenceNo || '').trim();
-    return Math.max(max, piSeqFromReferenceNo(ref));
-  }, 0);
-}
 
 function counterRef(dbInst: Firestore, tenantId: string) {
   return doc(dbInst, COUNTERS_COLLECTION, tenantId);
 }
 
-/** Seed `lastPiSeq` from recent sequential PI-#### refs when the counter field is missing. */
+/**
+ * Seed `lastPiSeq` when missing.
+ * Never list production_issue_orders here: bound warehouse operators cannot run
+ * unfiltered collection queries (Firestore rules require source/target warehouse
+ * equality). Same pattern as ensureInvCounter.
+ */
 export async function ensurePiCounter(): Promise<void> {
   const tenantId = getCurrentTenantId();
   const cref = counterRef(db, tenantId);
   const snap = await getDoc(cref);
   if (snap.exists() && Number.isFinite(Number(snap.data()?.lastPiSeq))) return;
 
-  const orderSnap = await getDocs(
-    tenantQuery(db, ORDERS_COLLECTION, orderBy('createdAt', 'desc'), limit(500)),
-  );
-  const lastPiSeq = Math.max(0, maxPiFromDocs(orderSnap.docs));
+  const existingSeq = snap.exists() ? Number(snap.data()?.lastPiSeq) : NaN;
   await setDoc(
     cref,
     {
       tenantId,
-      lastPiSeq,
+      lastPiSeq: Number.isFinite(existingSeq) ? Math.max(0, Math.floor(existingSeq)) : 0,
       updatedAt: new Date().toISOString(),
     },
     { merge: true },
@@ -79,7 +69,8 @@ function writePiSeqInTransaction(t: Transaction, nextSeq: number): string {
 
 /**
  * Reserve the next PI-#### reference (tenant-scoped, transactional).
- * Falls back to max(existing sequential)+1 if the counter write fails.
+ * On counter failure, allocate from a fresh ensure + second transaction attempt
+ * rather than scanning issue orders (denied for bound warehouse operators).
  */
 export async function allocateNextProductionIssueReference(): Promise<string> {
   await ensurePiCounter();
@@ -89,10 +80,11 @@ export async function allocateNextProductionIssueReference(): Promise<string> {
       return writePiSeqInTransaction(t, nextSeq);
     });
   } catch (error) {
-    console.warn('allocateNextProductionIssueReference: counter failed, using seed fallback', error);
-    const orderSnap = await getDocs(
-      tenantQuery(db, ORDERS_COLLECTION, orderBy('createdAt', 'desc'), limit(500)),
-    );
-    return formatPiReference(maxPiFromDocs(orderSnap.docs) + 1);
+    console.warn('allocateNextProductionIssueReference: counter failed, retry after re-seed', error);
+    await ensurePiCounter();
+    return runTransaction(db, async (t) => {
+      const nextSeq = await readNextPiSeqInTransaction(t);
+      return writePiSeqInTransaction(t, nextSeq);
+    });
   }
 }

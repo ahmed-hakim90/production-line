@@ -1,4 +1,5 @@
 import { HttpsError } from 'firebase-functions/v2/https';
+import { toCallableUserSafeError } from './callableUserSafeError.js';
 import { getDb } from './adminApp.js';
 import { assertActorWarehouseInvolved, resolveBoundInventoryWarehouseId, } from './inventoryWarehouseScope.js';
 import { releaseStockInTx, reserveStockInTx, stockAvailableQty, stockReservedQty, } from './stockReservation.js';
@@ -18,11 +19,19 @@ const MAX_LINES = 40;
 const SOURCE = 'spare_parts_replenishment';
 const CENTRAL_ROLE = 'spare_parts_central';
 const CENTER_ROLE = 'maintenance_center';
+const runTx = async (fallback, updater) => {
+    try {
+        return await db.runTransaction(updater);
+    }
+    catch (error) {
+        throw toCallableUserSafeError(error, fallback);
+    }
+};
 const releaseRequestReservations = async (tenantId, fromWarehouseId, reservedLines) => {
     const lines = reservedLines || [];
     if (lines.length === 0)
         return;
-    await db.runTransaction(async (tx) => {
+    await runTx('تعذر تحرير حجز المخزون.', async (tx) => {
         for (const line of lines) {
             const qty = toNumber(line.reservedQty);
             if (!(qty > 0))
@@ -435,7 +444,7 @@ export const approveSparePartsReplenishmentHandler = async (request) => {
     assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
     const now = toIsoNow();
     const reservedLines = [];
-    await db.runTransaction(async (tx) => {
+    await runTx('تعذر اعتماد طلب التموين. تحقق من الرصيد المتاح في المخزن المركزي.', async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists)
             throw new HttpsError('not-found', 'الطلب غير موجود.');
@@ -719,7 +728,7 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
         }
     }
     const now = toIsoNow();
-    await db.runTransaction(async (tx) => {
+    await runTx('تعذر تأكيد استلام التموين.', async (tx) => {
         const snap = await tx.get(ref);
         if (!snap.exists)
             throw new HttpsError('not-found', 'الطلب غير موجود.');
