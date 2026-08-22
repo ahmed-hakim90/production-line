@@ -54,6 +54,7 @@ import {
   writeCachedAppSession,
 } from '../lib/appSessionCache';
 import { resolveActivityPacks, type ActivityPackId } from '../lib/activityPacks';
+import { resolveBootstrapDataAccess } from '../lib/bootstrapDataAccess';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
@@ -1381,6 +1382,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const tenantId = get().userProfile?.tenantId;
+    const bootstrapAccess = resolveBootstrapDataAccess((permission) =>
+      hasPermission(get().userPermissions, permission),
+    );
     const [
       rawProducts,
       allCategories,
@@ -1407,9 +1411,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       productionPlanService.getAll(),
       productionPlanFollowUpService.getAll(),
       workOrderService.getAll(),
-      costCenterService.getAll(),
-      costCenterValueService.getAll(),
-      costAllocationService.getAll(),
+      bootstrapAccess.costCenters ? costCenterService.getAll() : Promise.resolve([]),
+      bootstrapAccess.costDetails ? costCenterValueService.getAll() : Promise.resolve([]),
+      bootstrapAccess.costDetails ? costAllocationService.getAll() : Promise.resolve([]),
       laborSettingsService.get(),
       assetService.getAll(),
       assetDepreciationService.getByPeriod(currentMonth),

@@ -692,10 +692,13 @@ export const reportService = {
 
   async getByLineAndProduct(lineId: string, productId: string, fromDate?: string): Promise<ProductionReport[]> {
     if (!isConfigured) return [];
+    const normalizedLineId = String(lineId || '').trim();
+    const normalizedProductId = String(productId || '').trim();
+    if (!normalizedLineId || !normalizedProductId) return [];
     try {
       const constraints: any[] = [
-        where('lineId', '==', lineId),
-        where('productId', '==', productId),
+        where('lineId', '==', normalizedLineId),
+        where('productId', '==', normalizedProductId),
         orderBy('date', 'desc'),
         limit(MAX_PAGE_SIZE),
       ];
@@ -716,12 +719,12 @@ export const reportService = {
         const fallbackQ = tenantQuery(
           db,
           COLLECTION,
-          where('lineId', '==', lineId),
+          where('lineId', '==', normalizedLineId),
           limit(Math.max(MAX_PAGE_SIZE * 5, 500)),
         );
         const fallbackSnap = await getDocs(fallbackQ);
         let rows = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionReport));
-        rows = rows.filter((r) => r.productId === productId);
+        rows = rows.filter((r) => r.productId === normalizedProductId);
         if (fromDate) rows = rows.filter((r) => (r.date || '') >= fromDate);
         rows.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
         return rows.slice(0, MAX_PAGE_SIZE);

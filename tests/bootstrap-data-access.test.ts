@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { resolveBootstrapDataAccess } from '../lib/bootstrapDataAccess.ts';
 
 const from = (permissions: string[]) =>
@@ -21,5 +22,11 @@ assert.deepEqual(
   { costCenters: true, costDetails: false },
   'accounting viewers can load cost centers without production cost detail datasets',
 );
+
+const store = readFileSync('store/useAppStore.ts', 'utf8');
+assert.match(store, /resolveBootstrapDataAccess/);
+assert.match(store, /bootstrapAccess\.costCenters \? costCenterService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
+assert.match(store, /bootstrapAccess\.costDetails \? costCenterValueService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
+assert.match(store, /bootstrapAccess\.costDetails \? costAllocationService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
 
 console.log('bootstrap-data-access.test.ts passed');

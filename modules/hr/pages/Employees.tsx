@@ -321,12 +321,13 @@ export const Employees: React.FC = () => {
 
   const summaryKpis = useMemo(() => {
     const total = tenantEmployeeCount ?? listEmployees.length;
-    const active = listEmployees.filter((e) => e.isActive !== false).length;
-    const inactive = listEmployees.filter((e) => e.isActive === false).length;
-    const withSystemAccess = listEmployees.filter((e) => e.hasSystemAccess).length;
+    const summaryEmployees = _rawEmployees.length > 0 ? _rawEmployees : listEmployees;
+    const active = summaryEmployees.filter((e) => e.isActive !== false).length;
+    const inactive = summaryEmployees.filter((e) => e.isActive === false).length;
+    const withSystemAccess = summaryEmployees.filter((e) => e.hasSystemAccess).length;
     const pending = pendingUsers.length;
     return { total, active, inactive, withSystemAccess, pending };
-  }, [tenantEmployeeCount, listEmployees, pendingUsers.length]);
+  }, [tenantEmployeeCount, listEmployees, _rawEmployees, pendingUsers.length]);
 
   const filtered = useMemo(() => {
     const inputIsDebounced = normalizeFirestoreSearch(search) === normalizedDebouncedSearch;
@@ -1624,4 +1625,3 @@ export const Employees: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
