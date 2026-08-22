@@ -274,7 +274,13 @@ async function resolveProductionFloorWarehouse(): Promise<Warehouse> {
   if (!settings) throw new Error('تعذر تحميل إعدادات النظام.');
   const routing = resolveInventoryRoutingV1(settings);
   const floorId = String(routing.productionFloorWarehouseId || '').trim();
-  const loaded = floorId ? await warehouseService.getById(floorId) : null;
+  const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+  // A supplies operator is intentionally scoped to their own source warehouse.
+  // Trust the admin-configured routing target instead of trying to validate a
+  // destination warehouse that the operator is not authorized to inspect.
+  const loaded = floorId && !boundWarehouseId
+    ? await warehouseService.getById(floorId)
+    : null;
   return resolveProductionFloorWarehouseForIssue({
     routingFloorWarehouseId: floorId,
     decomposedWarehouseId: routing.decomposedWarehouseId,
