@@ -786,7 +786,7 @@ export const ProductionIssues: React.FC = () => {
   };
 
   if (!can('inventory.view')) return <p className="p-6 text-sm text-[var(--color-text-muted)]">لا تملك صلاحية عرض المخازن.</p>;
-
+  const lineActionsDisabled = selectedOrder?.status !== 'issued';
   return (
     <ModuleOpsPageShell
       eyebrow="صرف إنتاج"
@@ -1075,11 +1075,12 @@ export const ProductionIssues: React.FC = () => {
                         <td className="p-3 text-xs">
                           مصروف {formatQty(line.issuedQty)} / تعويض {formatQty(line.compensatedQty)} / مرتجع {formatQty(line.returnedQty)} / هالك {formatQty(line.actualScrapQty)}
                         </td>
+               
                         <td className="p-3 text-center">
                           <div className="inline-flex flex-wrap items-center justify-center gap-1">
-                            <Button size="sm" variant="ghost" disabled={!can('productionIssue.return')} onClick={() => openLineAction('return', selectedOrder, line)}>مرتجع</Button>
-                            <Button size="sm" variant="ghost" disabled={!can('productionIssue.compensate')} onClick={() => openLineAction('compensate', selectedOrder, line)}>تعويض</Button>
-                            <Button size="sm" variant="ghost" disabled={!can('productionIssue.compensate')} onClick={() => openLineAction('scrap', selectedOrder, line)}>هالك</Button>
+                            <Button size="sm" variant="ghost" disabled={lineActionsDisabled || !can('productionIssue.return')} onClick={() => openLineAction('return', selectedOrder, line)}>مرتجع</Button>
+                            <Button size="sm" variant="ghost" disabled={lineActionsDisabled || !can('productionIssue.compensate')} onClick={() => openLineAction('compensate', selectedOrder, line)}>تعويض</Button>
+                            <Button size="sm" variant="ghost" disabled={lineActionsDisabled || !can('productionIssue.compensate')} onClick={() => openLineAction('scrap', selectedOrder, line)}>هالك</Button>
                           </div>
                         </td>
                       </tr>
