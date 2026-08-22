@@ -53,6 +53,7 @@ import {
   readCachedAppSession,
   writeCachedAppSession,
 } from '../lib/appSessionCache';
+import { resolveActivityPacks, type ActivityPackId } from '../lib/activityPacks';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
@@ -683,6 +684,8 @@ interface AppState {
   userProfile: FirestoreUser | null;
   /** من مستند tenants/{id}.name — بيانات الشركة */
   tenantCompanyName: string;
+  /** Effective product modules for this tenant; always normalized and non-empty. */
+  tenantActivityPacks: ActivityPackId[];
 
   // Dynamic RBAC
   roles: FirestoreRole[];
@@ -1048,6 +1051,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   userDisplayName: null,
   userProfile: null,
   tenantCompanyName: '',
+  tenantActivityPacks: resolveActivityPacks(),
 
   // Dynamic RBAC defaults (empty until login)
   roles: [],
@@ -1168,6 +1172,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       userDisplayName: null,
       userProfile: null,
       tenantCompanyName: '',
+      tenantActivityPacks: resolveActivityPacks(),
       userRoleId: '',
       userRoleName: '',
       userRoleColor: '',
@@ -1253,6 +1258,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       userDisplayName: cachedSession.userDisplayName,
       userProfile: cachedSession.userProfile,
       tenantCompanyName: cachedSession.tenantCompanyName ?? '',
+      tenantActivityPacks: resolveActivityPacks(cachedSession.tenantActivityPacks),
       error: null,
       authError: null,
     });
@@ -1329,6 +1335,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         userProfile: userDoc,
         role,
         tenantCompanyName: get().tenantCompanyName,
+        tenantActivityPacks: get().tenantActivityPacks,
       });
       set({ loading: false });
     } catch (error) {
@@ -1498,6 +1505,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       assetDepreciations,
       systemSettings: mergedSettings,
       tenantCompanyName: tenantDoc?.name?.trim() ?? '',
+      tenantActivityPacks: resolveActivityPacks(tenantDoc?.activityPacks),
     });
 
     reapplyThemeFromAppStore(get);

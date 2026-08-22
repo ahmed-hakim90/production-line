@@ -7,6 +7,7 @@ import {
   peekAnyActiveCachedAppSession,
   writeCachedAppSession,
 } from '../lib/appSessionCache.ts';
+import { DEFAULT_ACTIVITY_PACKS, resolveActivityPacks } from '../lib/activityPacks.ts';
 
 const UID = 'warm-user-1';
 
@@ -103,5 +104,17 @@ describe('appSessionCache warm boot', () => {
     assert.ok(peeked);
     assert.equal(peeked?.uid, UID);
     assert.equal(peeked?.userProfile.isActive, true);
+  });
+
+  it('legacy cached sessions without activity packs resolve to safe defaults', () => {
+    writeCachedAppSession(sampleSession as Parameters<typeof writeCachedAppSession>[0]);
+
+    const peeked = peekAnyActiveCachedAppSession();
+    assert.ok(peeked);
+    assert.equal(peeked?.tenantActivityPacks, undefined);
+    assert.deepEqual(
+      resolveActivityPacks(peeked?.tenantActivityPacks),
+      [...DEFAULT_ACTIVITY_PACKS],
+    );
   });
 });

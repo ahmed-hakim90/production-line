@@ -70,30 +70,31 @@ export function resolveActivityPacks(raw?: readonly string[] | null): ActivityPa
 }
 
 export function tenantHasActivityPack(
-  packs: readonly ActivityPackId[],
+  packs: readonly ActivityPackId[] | null | undefined,
   pack: ActivityPackId,
 ): boolean {
-  return packs.includes(pack);
+  return resolveActivityPacks(packs).includes(pack);
 }
 
 function packsAllow(
   requirement: readonly ActivityPackId[] | 'platform' | undefined,
-  enabled: readonly ActivityPackId[],
+  enabled: readonly ActivityPackId[] | null | undefined,
 ): boolean {
   if (!requirement || requirement === 'platform') return true;
-  return requirement.some((pack) => enabled.includes(pack));
+  const effectivePacks = resolveActivityPacks(enabled);
+  return requirement.some((pack) => effectivePacks.includes(pack));
 }
 
 export function isMenuGroupEnabledForPacks(
   menuGroupKey: string,
-  enabledPacks: readonly ActivityPackId[],
+  enabledPacks: readonly ActivityPackId[] | null | undefined,
 ): boolean {
   return packsAllow(MENU_GROUP_PACKS[menuGroupKey] ?? 'platform', enabledPacks);
 }
 
 export function isPermissionGroupEnabledForPacks(
   permissionGroupKey: string,
-  enabledPacks: readonly ActivityPackId[],
+  enabledPacks: readonly ActivityPackId[] | null | undefined,
 ): boolean {
   return packsAllow(PERMISSION_GROUP_PACKS[permissionGroupKey] ?? 'platform', enabledPacks);
 }

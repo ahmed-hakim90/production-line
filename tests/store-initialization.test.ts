@@ -24,6 +24,11 @@ try {
     'function',
     'store should expose warm-session hydration used by App bootstrap',
   );
+  assert.deepEqual(
+    storeModule.useAppStore.getState().tenantActivityPacks,
+    ['manufacturing', 'repair'],
+    'store should initialize legacy tenants with the default activity packs',
+  );
 } finally {
   await server.close();
 }

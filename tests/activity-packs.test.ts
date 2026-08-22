@@ -23,10 +23,13 @@ assert.equal(isMenuGroupEnabledForPacks('inventory', ['repair']), true);
 assert.equal(isMenuGroupEnabledForPacks('inventory', ['manufacturing']), true);
 assert.equal(isMenuGroupEnabledForPacks('hr', ['repair']), true);
 assert.equal(isMenuGroupEnabledForPacks('dashboards', []), true);
+assert.equal(isMenuGroupEnabledForPacks('production', undefined), true);
+assert.equal(isMenuGroupEnabledForPacks('repair', undefined), true);
 
 assert.equal(isPermissionGroupEnabledForPacks('production', ['manufacturing']), true);
 assert.equal(isPermissionGroupEnabledForPacks('repair', ['manufacturing']), false);
 assert.equal(isPermissionGroupEnabledForPacks('system', ['repair']), true);
+assert.equal(isPermissionGroupEnabledForPacks('production', undefined), true);
 
 assert.deepEqual(sanitizeActivityPacksForWrite(['repair']), ['repair']);
 assert.deepEqual(sanitizeActivityPacksForWrite([]), [...DEFAULT_ACTIVITY_PACKS]);
