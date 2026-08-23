@@ -568,6 +568,24 @@ service cloud.firestore {
         && pl_canAccessInventoryWarehouse(warehouseDocId);
     }
 
+    /**
+     * Production-issue operators need warehouse metadata for the issuing and
+     * destination warehouses even when users.inventoryWarehouseId binds stock
+     * access to one warehouse. This does not grant access to stock_* data.
+     * Mirror the legacy permission implications used by utils/permissions.ts.
+     */
+    function pl_canReadProductionIssueWarehouse() {
+      let p = pl_currentRoleDoc().data.permissions;
+      return pl_sameTenantOrLegacyRead()
+        && pl_rolePermMapOk()
+        && (
+          pl_rolePermTrue(p, 'productionIssue.create')
+          || pl_rolePermTrue(p, 'productionIssue.approve')
+          || pl_rolePermTrue(p, 'inventory.transactions.create')
+          || pl_rolePermTrue(p, 'inventory.transfers.approve')
+        );
+    }
+
     function pl_canWriteWarehouseDoc(warehouseDocId) {
       return pl_sameTenantOrLegacyWrite()
         && pl_canAccessInventoryWarehouse(warehouseDocId);
@@ -1336,18 +1354,10 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // A technician account receives a sanitized repair catalog through a
-    // callable. Firestore cannot hide individual price fields, so direct
-    // material reads are denied unless the account also has a commercial or
-    // inventory-management permission.
+    // Every active tenant user needs the material catalog for shared ERP flows
+    // such as production BOM resolution. Keep writes permission-gated below.
     match /materials/{id} {
-      allow read: if (
-        !pl_hasErpPermission('repair.jobs.technician')
-        || pl_hasErpPermission('repair.pricing.manage')
-        || pl_hasErpPermission('inventory.view')
-        || pl_hasErpPermission('inventory.transactions.create')
-        || pl_hasErpPermission('manufacturing.materials.manage')
-      ) && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow read: if pl_sameTenantOrLegacyRead() || pl_isSuperAdmin();
       allow create: if (
         !pl_hasErpPermission('repair.jobs.technician')
         || pl_hasErpPermission('manufacturing.materials.manage')
@@ -1862,6 +1872,7 @@ service cloud.firestore {
       // Split get/list: document-id equality cannot authorize a collection query.
       allow get: if pl_isActiveUser() && (
         pl_canReadWarehouseDoc(docId)
+        || pl_canReadProductionIssueWarehouse()
         || pl_canReadMaintenanceCenterWarehouseAsCentral()
         || pl_isSuperAdmin()
       );

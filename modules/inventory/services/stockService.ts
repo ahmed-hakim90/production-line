@@ -15,6 +15,8 @@ import {
   documentId,
   QueryDocumentSnapshot,
   type QueryConstraint,
+  type DocumentData,
+  type QuerySnapshot,
 } from 'firebase/firestore';
 import { createInventoryCountSessionCallable, db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -354,6 +356,38 @@ export const stockService = {
       cursor = snap.docs[snap.docs.length - 1];
     }
     return rows;
+  },
+
+  async getLocationBalancesForItems(params: {
+    warehouseId: string;
+    items: Array<{ itemType: InventoryItemType; itemId: string }>;
+  }): Promise<StockLocationBalance[]> {
+    if (!isConfigured) return [];
+    const scope = await resolveInventoryWarehouseReadScope(params.warehouseId);
+    if (scope.denied || !scope.warehouseId) return [];
+    const idsByType = new Map<InventoryItemType, string[]>();
+    params.items.forEach((item) => {
+      const itemId = String(item.itemId || '').trim();
+      if (!itemId) return;
+      idsByType.set(item.itemType, [...(idsByType.get(item.itemType) || []), itemId]);
+    });
+    const queries: Array<Promise<QuerySnapshot<DocumentData>>> = [];
+    idsByType.forEach((ids, itemType) => {
+      const uniqueIds = [...new Set(ids)];
+      for (let index = 0; index < uniqueIds.length; index += 30) {
+        queries.push(getDocs(tenantQuery(
+          db,
+          LOCATION_BALANCES_COLLECTION,
+          where('warehouseId', '==', scope.warehouseId),
+          where('itemType', '==', itemType),
+          where('itemId', 'in', uniqueIds.slice(index, index + 30)),
+          orderBy('updatedAt', 'desc'),
+        )));
+      }
+    });
+    const snapshots = await Promise.all(queries);
+    return snapshots.flatMap((snap) =>
+      snap.docs.map((row) => ({ id: row.id, ...row.data() } as StockLocationBalance)));
   },
 
   async getTransactions(warehouseId?: string): Promise<StockTransaction[]> {

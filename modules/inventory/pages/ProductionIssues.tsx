@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 import { Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
@@ -47,6 +48,7 @@ import {
 
 const ISSUE_ORDERS_PAGE_SIZE = 15;
 const PRODUCTION_ISSUES_CACHE_KEY = 'inventory:production-issues';
+const PRODUCTION_REQUEST_POLL_MS = 30_000;
 
 type ProductionIssuesLocalData = {
   orders: ProductionIssueOrder[];
@@ -185,6 +187,7 @@ export const ProductionIssues: React.FC = () => {
   const [scrapNeedsCompensation, setScrapNeedsCompensation] = useState(false);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [createProgress, setCreateProgress] = useState('');
   const [preparingLines, setPreparingLines] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const autoPreparedRequestIdsRef = useRef<Set<string>>(new Set());
@@ -305,7 +308,7 @@ export const ProductionIssues: React.FC = () => {
       }
     };
 
-    const timer = window.setInterval(() => void refreshIncomingRequests(), 5_000);
+    const timer = window.setInterval(() => void refreshIncomingRequests(), PRODUCTION_REQUEST_POLL_MS);
     const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') void refreshIncomingRequests();
     };
@@ -510,6 +513,7 @@ export const ProductionIssues: React.FC = () => {
       return;
     }
     setBusy(true);
+    setCreateProgress('جاري فحص أمر الشغل وتجهيز مكونات الصرف…');
     setMessage('');
     try {
       const id = await productionIssueService.createDraft({
@@ -527,6 +531,7 @@ export const ProductionIssues: React.FC = () => {
     } catch (error: any) {
       setMessage(error?.message || 'تعذر إنشاء أمر الصرف.');
     } finally {
+      setCreateProgress('');
       setBusy(false);
     }
   };
@@ -897,13 +902,21 @@ export const ProductionIssues: React.FC = () => {
               autoFocus={Boolean(String(searchParams.get('quantity') || '').trim())}
             />
           </label>
-          <Button variant="primary" disabled={busy || !can('productionIssue.create')} onClick={() => void createOrder()}>إنشاء إذن</Button>
+          <Button
+            variant="primary"
+            disabled={busy || !can('productionIssue.create')}
+            aria-busy={Boolean(createProgress)}
+            onClick={() => void createOrder()}
+          >
+            {createProgress ? <Loader2 size={16} className="animate-spin" aria-hidden /> : null}
+            {createProgress ? 'جاري إنشاء الإذن…' : 'إنشاء إذن'}
+          </Button>
           <div className="lg:col-start-4 text-xs font-semibold text-[var(--color-text-muted)]">
-            {issueQuantity.trim()
+            {createProgress || (issueQuantity.trim()
               ? `عدّل الكمية إن لزم ثم أنشئ الإذن (حد المصدر: ${formatQty(selectedSourceQuantity || Number(issueQuantity) || 0, 3)}).`
               : selectedSourceQuantity > 0
                 ? `اتركها فارغة لصرف كامل الكمية: ${formatQty(selectedSourceQuantity, 3)}`
-                : 'اختر المصدر لعرض الكمية الافتراضية.'}
+                : 'اختر المصدر لعرض الكمية الافتراضية.')}
           </div>
         </div>
       </OpsDashPanel>

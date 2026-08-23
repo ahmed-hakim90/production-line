@@ -156,6 +156,12 @@ const seed = async () => {
       'inventory.transfers.approve': true,
     },
   });
+  await set('roles', 'tenantA-production-issuer-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'productionIssue.create': true,
+    },
+  });
   await set('roles', 'tenantB-admin-role', {
     tenantId: 'tenantB',
     permissions: {
@@ -212,6 +218,20 @@ const seed = async () => {
     roleId: 'tenantA-inventory-writer-role',
     inventoryWarehouseId: 'whA',
   });
+  await set('users', 'userAProductionIssuer', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-production-issuer-role',
+    inventoryWarehouseId: 'whA',
+  });
+  await set('users', 'userABoundTechnician', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-repair-technician-role',
+    inventoryWarehouseId: 'whA',
+  });
   await set('users', 'userAUsersManager', {
     tenantId: 'tenantA',
     isActive: true,
@@ -225,6 +245,12 @@ const seed = async () => {
     roleId: 'tenantA-operator-role',
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
+  });
+  await set('users', 'userAInactive', {
+    tenantId: 'tenantA',
+    isActive: false,
+    isSuperAdmin: false,
+    roleId: 'tenantA-operator-role',
   });
   await set('users', 'userARepairTreasuryAdmin', {
     tenantId: 'tenantA',
@@ -1115,6 +1141,29 @@ await seed();
       code: 'B',
       isActive: true,
     });
+    await adb.collection('warehouses').doc('whFloor').set({
+      tenantId: 'tenantA',
+      name: 'Production Floor',
+      code: 'FLOOR',
+      warehouseRole: 'production_floor',
+      isActive: true,
+    });
+    await adb.collection('materials').doc('material-for-production-issue').set({
+      tenantId: 'tenantA',
+      name: 'Issue Material',
+      code: 'MAT-ISSUE',
+      type: 'raw_material',
+      baseUnit: 'piece',
+      isActive: true,
+    });
+    await adb.collection('materials').doc('material-from-other-tenant').set({
+      tenantId: 'tenantB',
+      name: 'Other Tenant Material',
+      code: 'MAT-OTHER',
+      type: 'raw_material',
+      baseUnit: 'piece',
+      isActive: true,
+    });
     await adb.collection('stock_items').doc('whA__material__item1').set({
       tenantId: 'tenantA',
       warehouseId: 'whA',
@@ -1188,13 +1237,46 @@ await seed();
   });
 
   const boundDb = testEnv.authenticatedContext('userAWarehouseBound').firestore();
+  const productionIssuerDb = testEnv.authenticatedContext('userAProductionIssuer').firestore();
+  const boundTechnicianDb = testEnv.authenticatedContext('userABoundTechnician').firestore();
   const unboundAdminDb = testEnv.authenticatedContext('userAAdmin').firestore();
+  const activeOperatorDb = testEnv.authenticatedContext('userAOperator').firestore();
+  const inactiveDb = testEnv.authenticatedContext('userAInactive').firestore();
+  const anonymousDb = testEnv.unauthenticatedContext().firestore();
   const usersManagerDb = testEnv.authenticatedContext('userAUsersManager').firestore();
 
   await assertSucceeds(boundDb.collection('stock_items').doc('whA__material__item1').get());
   await assertFails(boundDb.collection('stock_items').doc('whB__material__item1').get());
   await assertSucceeds(boundDb.collection('warehouses').doc('whA').get());
   await assertFails(boundDb.collection('warehouses').doc('whB').get());
+  await assertFails(boundDb.collection('warehouses').doc('whFloor').get());
+  await assertSucceeds(productionIssuerDb.collection('materials').doc('material-for-production-issue').get());
+  await assertSucceeds(boundTechnicianDb.collection('materials').doc('material-for-production-issue').get());
+  for (const materialReaderDb of [unboundAdminDb, productionIssuerDb, activeOperatorDb]) {
+    await assertSucceeds(
+      materialReaderDb.collection('materials')
+        .where('tenantId', '==', 'tenantA')
+        .where('__name__', 'in', ['material-for-production-issue'])
+        .get(),
+    );
+  }
+  await assertFails(inactiveDb.collection('materials').doc('material-for-production-issue').get());
+  await assertFails(anonymousDb.collection('materials').doc('material-for-production-issue').get());
+  await assertFails(unboundAdminDb.collection('materials').doc('material-from-other-tenant').get());
+  await assertFails(
+    unboundAdminDb.collection('materials')
+      .where('tenantId', '==', 'tenantB')
+      .where('__name__', 'in', ['material-from-other-tenant'])
+      .get(),
+  );
+  await assertSucceeds(productionIssuerDb.collection('warehouses').doc('whFloor').get());
+  await assertFails(productionIssuerDb.collection('stock_items').doc('whB__material__item1').get());
+  await assertSucceeds(
+    productionIssuerDb.collection('materials')
+      .where('tenantId', '==', 'tenantA')
+      .where('code', '==', 'MAT-ISSUE')
+      .get(),
+  );
   await assertSucceeds(boundDb.collection('stock_transactions').doc('txA').get());
   await assertFails(boundDb.collection('stock_transactions').doc('txB').get());
 
@@ -1425,6 +1507,12 @@ await seed();
 
   // Inventory writer with warehouse bind can write own warehouse only.
   const writerDb = testEnv.authenticatedContext('userAInventoryWriter').firestore();
+  // inventory.transactions.create implies productionIssue.create in the UI;
+  // the same actor may read warehouse metadata needed by the issue flow while
+  // stock balances and transactions remain restricted to the bound warehouse.
+  await assertSucceeds(writerDb.collection('warehouses').doc('whFloor').get());
+  await assertSucceeds(writerDb.collection('warehouses').doc('whB').get());
+  await assertFails(writerDb.collection('stock_items').doc('whB__material__item1').get());
   await assertSucceeds(writerDb.collection('stock_transactions').doc('txWriterOk').set({
     tenantId: 'tenantA',
     warehouseId: 'whA',

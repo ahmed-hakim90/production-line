@@ -150,6 +150,25 @@ export const materialService = {
     return { id: snap.id, ...snap.data() } as Material;
   },
 
+  async getByIds(ids: string[]): Promise<Material[]> {
+    if (!isConfigured) return [];
+    const uniqueIds = [...new Set(ids.map((id) => String(id || '').trim()).filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+    const chunks: string[][] = [];
+    for (let index = 0; index < uniqueIds.length; index += 30) {
+      chunks.push(uniqueIds.slice(index, index + 30));
+    }
+    const snapshots = await Promise.all(
+      chunks.map((chunk) => getDocs(tenantQuery(
+        db,
+        MATERIALS_COLLECTION,
+        where(documentId(), 'in', chunk),
+      ))),
+    );
+    return snapshots.flatMap((snap) =>
+      snap.docs.map((row) => ({ id: row.id, ...row.data() } as Material)));
+  },
+
   async getByCode(code: string): Promise<Material | null> {
     if (!isConfigured) return null;
     const want = normalizeMaterialCode(code);

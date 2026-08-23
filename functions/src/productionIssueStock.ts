@@ -31,7 +31,7 @@ const STOCK_TX = 'stock_transactions';
 const INVENTORY_COUNTERS = 'inventory_counters';
 const SYSTEM_SETTINGS = 'system_settings';
 
-type ActorContext = {
+export type ActorContext = {
   uid: string;
   tenantId: string;
   displayName: string;
@@ -163,6 +163,9 @@ const hasPermission = (actor: ActorContext, keys: string[]) => {
     return aliases.some((alias) => actor.permissions[alias] === true);
   });
 };
+
+export const loadProductionIssueActor = loadActor;
+export const productionIssueActorHasPermission = hasPermission;
 
 async function resolveFloorWarehouse(
   order: IssueOrder,
@@ -593,37 +596,10 @@ async function applyCrossWarehouseTransfers(params: {
   });
 }
 
-export const issueProductionIssueStock = onCall(
-  {
-    region: 'us-central1',
-    memory: '512MiB',
-  },
-  async (request) => {
-    const uid = requireAuth(request);
-    const actor = await loadActor(uid);
-    if (!hasPermission(actor, [
-      'productionIssue.approve',
-      'inventory.transfers.approve',
-      'inventory.transactions.create',
-    ])) {
-      throw new HttpsError('permission-denied', 'لا تملك صلاحية اعتماد صرف الإنتاج.');
-    }
-
-    if (
-      !request.data
-      || typeof request.data !== 'object'
-      || Array.isArray(request.data)
-      || Object.keys(request.data as Record<string, unknown>).some((key) => key !== 'orderId')
-      || typeof (request.data as Record<string, unknown>).orderId !== 'string'
-    ) {
-      throw new HttpsError('invalid-argument', 'بيانات أمر الصرف غير صالحة.');
-    }
-    const orderId = String((request.data as Record<string, unknown>).orderId).trim();
-    if (!orderId) throw new HttpsError('invalid-argument', 'معرّف أمر الصرف مطلوب.');
-    if (orderId.includes('/') || orderId.length > 256) {
-      throw new HttpsError('invalid-argument', 'معرّف أمر الصرف غير صالح.');
-    }
-
+export async function issueProductionIssueOrderForActor(
+  actor: ActorContext,
+  orderId: string,
+) {
     const orderRef = db.collection(ORDERS).doc(orderId);
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists) throw new HttpsError('not-found', 'أمر الصرف غير موجود.');
@@ -738,5 +714,40 @@ export const issueProductionIssueStock = onCall(
       targetWarehouseId: floor.id,
       idempotent: transferResult.idempotent,
     };
+}
+
+export const issueProductionIssueStock = onCall(
+  {
+    region: 'us-central1',
+    memory: '512MiB',
+  },
+  async (request) => {
+    const uid = requireAuth(request);
+    const actor = await loadActor(uid);
+    if (!hasPermission(actor, [
+      'productionIssue.approve',
+      'inventory.transfers.approve',
+      'inventory.transactions.create',
+      'roles.manage',
+      'adminDashboard.view',
+    ])) {
+      throw new HttpsError('permission-denied', 'لا تملك صلاحية اعتماد صرف الإنتاج.');
+    }
+
+    if (
+      !request.data
+      || typeof request.data !== 'object'
+      || Array.isArray(request.data)
+      || Object.keys(request.data as Record<string, unknown>).some((key) => key !== 'orderId')
+      || typeof (request.data as Record<string, unknown>).orderId !== 'string'
+    ) {
+      throw new HttpsError('invalid-argument', 'بيانات أمر الصرف غير صالحة.');
+    }
+    const orderId = String((request.data as Record<string, unknown>).orderId).trim();
+    if (!orderId) throw new HttpsError('invalid-argument', 'معرّف أمر الصرف مطلوب.');
+    if (orderId.includes('/') || orderId.length > 256) {
+      throw new HttpsError('invalid-argument', 'معرّف أمر الصرف غير صالح.');
+    }
+    return issueProductionIssueOrderForActor(actor, orderId);
   },
 );

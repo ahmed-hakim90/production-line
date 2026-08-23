@@ -53,6 +53,33 @@ function callableUserError(error: unknown, fallback: string): Error {
   const cleaned = message.replace(/^Firebase:\s*/i, '').replace(/\s*\(.*\)$/, '').trim();
   return new Error(cleaned || fallback);
 }
+
+function callableShortages(error: unknown): ProductionIssueShortageRow[] {
+  const details = (error as { details?: unknown })?.details;
+  if (!details || typeof details !== 'object' || Array.isArray(details)) return [];
+  const rows = (details as { shortages?: unknown }).shortages;
+  return Array.isArray(rows) ? rows as ProductionIssueShortageRow[] : [];
+}
+
+function isFirestorePermissionError(error: unknown): boolean {
+  const code = String((error as { code?: unknown })?.code || '').toLowerCase();
+  const message = String((error as { message?: unknown })?.message || '').toLowerCase();
+  return code.includes('permission-denied')
+    || message.includes('missing or insufficient permissions')
+    || message.includes('permission-denied');
+}
+
+async function runProductionIssueStage<T>(stage: string, task: () => Promise<T>): Promise<T> {
+  try {
+    return await task();
+  } catch (error) {
+    console.error(`[productionIssueService] ${stage} failed`, error);
+    if (isFirestorePermissionError(error)) {
+      throw new Error(`رفضت قاعدة البيانات خطوة «${stage}». راجع صلاحية صرف الإنتاج وقواعد المجموعة الخاصة بهذه الخطوة.`);
+    }
+    throw error;
+  }
+}
 import { assemblableCapacityService } from './assemblableCapacityService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { allocateNextProductionIssueReference } from './productionIssueSequence';
@@ -119,7 +146,7 @@ function sourceQty(source: WorkOrder | ProductionPlan): number {
   return Number(remaining || plan.plannedQuantity || 0);
 }
 
-async function resolveMaterialStockLine(materialId: string, fallbackName = ''): Promise<{
+type ResolvedMaterialStockLine = {
   materialId: string;
   itemType: InventoryItemType;
   itemId: string;
@@ -127,8 +154,15 @@ async function resolveMaterialStockLine(materialId: string, fallbackName = ''): 
   itemCode: string;
   unit: string;
   minStock?: number;
-}> {
-  const material = await materialService.getById(materialId);
+};
+
+function resolveMaterialStockLine(
+  materialId: string,
+  fallbackName: string,
+  materialsById: Map<string, Awaited<ReturnType<typeof materialService.getByIds>>[number]>,
+  rawRows: Awaited<ReturnType<typeof rawMaterialService.getAll>>,
+): ResolvedMaterialStockLine {
+  const material = materialsById.get(materialId);
   if (material?.id) {
     return {
       materialId: material.id,
@@ -140,7 +174,6 @@ async function resolveMaterialStockLine(materialId: string, fallbackName = ''): 
       minStock: material.minStock,
     };
   }
-  const rawRows = await rawMaterialService.getAll();
   const raw = rawRows.find((row) => row.id === materialId || row.name.trim().toLowerCase() === fallbackName.trim().toLowerCase());
   if (!raw?.id) {
     throw new Error(`تعذر تحديد مكون BOM: ${fallbackName || materialId}`);
@@ -157,54 +190,107 @@ async function resolveMaterialStockLine(materialId: string, fallbackName = ''): 
 }
 
 async function buildLines(productId: string, quantity: number, warehouseId: string): Promise<ProductionIssueOrderLine[]> {
-  const { items } = await bomService.getActiveBomWithLegacyFallback('product', productId);
+  const { items } = await runProductionIssueStage(
+    'قراءة تعريف BOM وبنوده',
+    () => bomService.getActiveBomWithLegacyFallback('product', productId),
+  );
   if (!items.length) throw new Error('لا يوجد BOM نشط أو مكونات legacy لهذا المنتج.');
-  const byItem = new Map<string, ProductionIssueOrderLine>();
-  for (const item of items) {
-    if (item.itemType !== 'material') continue;
+  const eligibleItems = items.filter((item) =>
+    item.itemType === 'material' && Number(item.qtyPerUnit || 0) > 0);
+  const materialIds = [...new Set(eligibleItems.map((item) => item.itemId).filter(Boolean))];
+  const materials = await runProductionIssueStage(
+    'قراءة كتالوج مكونات BOM',
+    () => materialService.getByIds(materialIds),
+  );
+  const materialsById = new Map(materials.map((material) => [material.id || '', material]));
+  const needsLegacyRows = eligibleItems.some((item) => !materialsById.has(item.itemId));
+  const rawRows = needsLegacyRows
+    ? await runProductionIssueStage('قراءة كتالوج الخامات القديم', () => rawMaterialService.getAll())
+    : [];
+
+  type AggregatedLine = {
+    stockLine: ResolvedMaterialStockLine;
+    qtyPerUnit: number;
+    baseRequiredQty: number;
+    wastePercent: number;
+    plannedWasteQty: number;
+    requiredQty: number;
+  };
+  const aggregates = new Map<string, AggregatedLine>();
+  for (const item of eligibleItems) {
     const qtyPerUnit = Number(item.qtyPerUnit || 0);
-    // Catalog-only spare lines (qty 0) are not issued on production floors.
-    if (!(qtyPerUnit > 0)) continue;
-    const stockLine = await resolveMaterialStockLine(item.itemId, item.itemName || '');
+    const stockLine = resolveMaterialStockLine(
+      item.itemId,
+      item.itemName || '',
+      materialsById,
+      rawRows,
+    );
     const wastePercent = Number(item.wastePercent || 0);
     const baseRequiredQty = qtyPerUnit * quantity;
     const plannedWasteQty = baseRequiredQty * (wastePercent / 100);
     const requiredQty = baseRequiredQty + plannedWasteQty;
-    const locationBalances = await stockService.getLocationBalances({
-      warehouseId,
-      itemType: stockLine.itemType,
-      itemId: stockLine.itemId,
-    });
-    const defaultLocation = await defaultItemLocationService.get({
-      warehouseId,
-      itemType: stockLine.itemType,
-      itemId: stockLine.itemId,
-    });
-    const allocation = allocateProductionIssueFromLocations(locationBalances, requiredQty, defaultLocation?.locationId);
-    const existing = byItem.get(`${stockLine.itemType}__${stockLine.itemId}`);
+    const key = `${stockLine.itemType}__${stockLine.itemId}`;
+    const existing = aggregates.get(key);
     if (existing) {
       existing.qtyPerUnit += qtyPerUnit;
       existing.baseRequiredQty += baseRequiredQty;
       existing.plannedWasteQty += plannedWasteQty;
       existing.requiredQty += requiredQty;
-      const nextAllocation = allocateProductionIssueFromLocations(locationBalances, existing.requiredQty, defaultLocation?.locationId);
-      existing.allocations = nextAllocation.allocations;
-      existing.availableQty = nextAllocation.availableQty;
-      existing.shortageQty = nextAllocation.shortageQty;
       continue;
     }
-    byItem.set(`${stockLine.itemType}__${stockLine.itemId}`, {
+    aggregates.set(key, {
+      stockLine,
+      qtyPerUnit,
+      baseRequiredQty,
+      wastePercent,
+      plannedWasteQty,
+      requiredQty,
+    });
+  }
+
+  const itemKeys = [...aggregates.values()].map(({ stockLine }) => ({
+    warehouseId,
+    itemType: stockLine.itemType,
+    itemId: stockLine.itemId,
+  }));
+  const [allLocationBalances, defaultLocations] = await Promise.all([
+    runProductionIssueStage(
+      'قراءة أرصدة لوكيشنات مكونات BOM',
+      () => stockService.getLocationBalancesForItems({ warehouseId, items: itemKeys }),
+    ),
+    runProductionIssueStage(
+      'قراءة اللوكيشنات الافتراضية لمكونات BOM',
+      () => defaultItemLocationService.getMany(itemKeys),
+    ),
+  ]);
+  const balancesByItem = new Map<string, typeof allLocationBalances>();
+  allLocationBalances.forEach((balance) => {
+    const key = `${balance.itemType}__${balance.itemId}`;
+    balancesByItem.set(key, [...(balancesByItem.get(key) || []), balance]);
+  });
+  const defaultByItem = new Map(
+    defaultLocations.map((location) => [`${location.itemType}__${location.itemId}`, location]),
+  );
+
+  return [...aggregates.entries()].map(([key, aggregate]) => {
+    const { stockLine } = aggregate;
+    const allocation = allocateProductionIssueFromLocations(
+      balancesByItem.get(key) || [],
+      aggregate.requiredQty,
+      defaultByItem.get(key)?.locationId,
+    );
+    return {
       materialId: stockLine.materialId,
       itemType: stockLine.itemType,
       itemId: stockLine.itemId,
       itemName: stockLine.itemName,
       itemCode: stockLine.itemCode,
       unit: stockLine.unit,
-      qtyPerUnit,
-      baseRequiredQty,
-      wastePercent,
-      plannedWasteQty,
-      requiredQty,
+      qtyPerUnit: aggregate.qtyPerUnit,
+      baseRequiredQty: aggregate.baseRequiredQty,
+      wastePercent: aggregate.wastePercent,
+      plannedWasteQty: aggregate.plannedWasteQty,
+      requiredQty: aggregate.requiredQty,
       issuedQty: 0,
       returnedQty: 0,
       compensatedQty: 0,
@@ -212,9 +298,8 @@ async function buildLines(productId: string, quantity: number, warehouseId: stri
       availableQty: allocation.availableQty,
       shortageQty: allocation.shortageQty,
       allocations: allocation.allocations,
-    });
-  }
-  return Array.from(byItem.values());
+    };
+  });
 }
 
 async function loadSource(params: {
@@ -405,61 +490,34 @@ export const productionIssueService = {
     quantityOverride?: number;
     note?: string;
   }): Promise<string | null> {
-    if (!isConfigured) return null;
+    if (!isConfigured || !functionsClient) {
+      throw new Error('النظام غير مهيأ أو لم تُنشر دوال الخادم.');
+    }
 
     // صرف الإنتاج من تقرير إنتاج لم يعد مدعومًا — المصدر المسموح: أمر شغل أو خطة فقط.
     if (input.productionReportId) {
       throw new Error('لا يمكن إنشاء صرف إنتاج من تقرير إنتاج. اختر أمر شغل أو خطة إنتاج.');
     }
 
-    const activeField = input.workOrderId ? 'workOrderId' : 'productionPlanId';
-    const activeValue = input.workOrderId || input.productionPlanId;
-    if (activeValue) {
-      await assertNoBlockingOpenIssue({
+    const callable = httpsCallable<{
+      workOrderId?: string;
+      productionPlanId?: string;
+      sourceWarehouseId: string;
+      quantity: number;
+      note?: string;
+    }, { ok: boolean; order: ProductionIssueOrder }>(functionsClient, 'createProductionIssueDraft');
+    try {
+      const result = await callable({
         workOrderId: input.workOrderId,
         productionPlanId: input.productionPlanId,
+        sourceWarehouseId: input.sourceWarehouseId,
+        quantity: Number(input.quantityOverride || 0),
+        note: input.note,
       });
+      return result.data.order.id || null;
+    } catch (error: unknown) {
+      throw callableUserError(error, 'تعذر إنشاء مسودة صرف الإنتاج.');
     }
-
-    const { sourceType, source } = await loadSource(input);
-    const quantity = Number(input.quantityOverride || sourceQty(source));
-    if (quantity <= 0) throw new Error('كمية أمر الصرف يجب أن تكون أكبر من صفر.');
-    const product = await productService.getById(source.productId) as FirestoreProduct | null;
-    if (!product?.id) throw new Error('تعذر تحميل المنتج المرتبط.');
-    const warehouses = await warehouseService.getAllWarehouses();
-    const warehouse = warehouses.find((w) => w.id === input.sourceWarehouseId) as Warehouse | undefined;
-    if (!warehouse?.id) throw new Error('حدد مخزن صرف المكونات.');
-    const floorWarehouse = await resolveProductionFloorWarehouse();
-    const lines = await buildLines(product.id, quantity, warehouse.id);
-    const now = toIsoNow();
-    const referenceNo = await allocateNextProductionIssueReference();
-    const payload: ProductionIssueOrder = {
-      referenceNo,
-      sourceType,
-      workOrderId: sourceType === 'work_order' ? source.id : undefined,
-      productionPlanId: sourceType === 'production_plan' ? source.id : undefined,
-      productId: product.id,
-      productName: product.name,
-      productCode: product.code,
-      lineId: source.lineId,
-      quantity,
-      sourceWarehouseId: warehouse.id,
-      sourceWarehouseName: warehouse.name,
-      targetWarehouseId: floorWarehouse.id,
-      targetWarehouseName: floorWarehouse.name,
-      status: 'draft',
-      origin: 'warehouse',
-      lines,
-      createdBy: input.createdBy,
-      createdByUserId: input.createdByUserId,
-      createdAt: now,
-      note: input.note,
-    };
-    const ref = await addDoc(collection(db, COLLECTION), stripUndefined({
-      ...payload,
-      tenantId: getCurrentTenantId(),
-    }));
-    return ref.id;
   },
 
   /**
@@ -565,44 +623,23 @@ export const productionIssueService = {
     id: string,
     options?: { quantityOverride?: number; sourceWarehouseId?: string },
   ): Promise<ProductionIssueOrder> {
-    if (!isConfigured || !id) throw new Error('طلب الصرف غير موجود.');
-    const order = await this.getById(id);
-    if (!order?.id) throw new Error('طلب الصرف غير موجود.');
-    if (order.status !== 'requested' && order.status !== 'draft') {
-      throw new Error('يمكن تجهيز بنود المكونات للطلبات أو المسودات فقط.');
+    if (!isConfigured || !functionsClient || !id) throw new Error('طلب الصرف غير موجود.');
+    const callable = httpsCallable<{
+      orderId: string;
+      quantity?: number;
+      sourceWarehouseId?: string;
+      saveAsDraft?: boolean;
+    }, { ok: boolean; order: ProductionIssueOrder }>(functionsClient, 'prepareProductionIssueOrder');
+    try {
+      const result = await callable({
+        orderId: id,
+        quantity: options?.quantityOverride,
+        sourceWarehouseId: options?.sourceWarehouseId,
+      });
+      return result.data.order;
+    } catch (error: unknown) {
+      throw callableUserError(error, 'تعذر تجهيز بنود صرف الإنتاج.');
     }
-
-    const quantity = Number(
-      options?.quantityOverride != null ? options.quantityOverride : order.quantity,
-    );
-    if (!(quantity > 0)) throw new Error('كمية الاعتماد يجب أن تكون أكبر من صفر.');
-
-    const warehouseId = String(options?.sourceWarehouseId || order.sourceWarehouseId || '').trim();
-    const warehouses = await warehouseService.getAllWarehouses();
-    const warehouse = warehouses.find((w) => w.id === warehouseId);
-    if (!warehouse?.id) throw new Error('حدد مخزن صرف المكونات.');
-
-    const capacityRows = await assemblableCapacityService.getForWarehouse(warehouse.id);
-    const capacity = capacityRows.find((row) => row.productId === order.productId);
-    const maxAssemblable = Math.max(0, Number(capacity?.maxAssemblable || 0));
-    if (!(maxAssemblable > 0)) {
-      throw new Error('لا يمكن تجهيز البنود: المتاح للتجميع = 0 في مخزن المستلزمات.');
-    }
-    if (quantity > maxAssemblable + 0.000001) {
-      throw new Error(`الكمية أكبر من المتاح للتجميع (${maxAssemblable}).`);
-    }
-
-    const lines = await buildLines(order.productId, quantity, warehouse.id);
-    await updateDoc(doc(db, COLLECTION, order.id), stripUndefined({
-      quantity,
-      lines,
-      sourceWarehouseId: warehouse.id,
-      sourceWarehouseName: warehouse.name,
-    }));
-
-    const refreshed = await this.getById(order.id);
-    if (!refreshed?.id) throw new Error('تعذر تحديث طلب الصرف.');
-    return refreshed;
   },
 
   /**
@@ -612,17 +649,24 @@ export const productionIssueService = {
     id: string,
     options?: { quantityOverride?: number; sourceWarehouseId?: string },
   ): Promise<ProductionIssueOrder> {
-    const prepared = await this.prepareRequestLines(id, options);
-    if (prepared.status === 'draft') return prepared;
-    if (prepared.status !== 'requested') {
-      throw new Error('يمكن حفظ المسودة من طلبات الإنتاج فقط.');
+    if (!isConfigured || !functionsClient || !id) throw new Error('طلب الصرف غير موجود.');
+    const callable = httpsCallable<{
+      orderId: string;
+      quantity?: number;
+      sourceWarehouseId?: string;
+      saveAsDraft: boolean;
+    }, { ok: boolean; order: ProductionIssueOrder }>(functionsClient, 'prepareProductionIssueOrder');
+    try {
+      const result = await callable({
+        orderId: id,
+        quantity: options?.quantityOverride,
+        sourceWarehouseId: options?.sourceWarehouseId,
+        saveAsDraft: true,
+      });
+      return result.data.order;
+    } catch (error: unknown) {
+      throw callableUserError(error, 'تعذر حفظ مسودة صرف الإنتاج.');
     }
-    await updateDoc(doc(db, COLLECTION, prepared.id!), {
-      status: 'draft',
-    });
-    const refreshed = await this.getById(prepared.id!);
-    if (!refreshed?.id) throw new Error('تعذر حفظ المسودة.');
-    return refreshed;
   },
 
   /**
@@ -633,35 +677,23 @@ export const productionIssueService = {
     actor: string,
     options?: { quantityOverride?: number; sourceWarehouseId?: string },
   ): Promise<void> {
-    if (!isConfigured || !id) return;
-    const order = await this.getById(id);
-    if (!order?.id) throw new Error('طلب الصرف غير موجود.');
-    if (order.status !== 'requested' && !(order.status === 'draft' && order.origin === 'production_request')) {
-      throw new Error('يمكن اعتماد طلبات الإنتاج أو مسوداتها فقط.');
+    if (!isConfigured || !functionsClient || !id) return;
+    const callable = httpsCallable<{
+      orderId: string;
+      quantity?: number;
+      sourceWarehouseId?: string;
+    }, { ok: boolean; order: ProductionIssueOrder }>(functionsClient, 'approveAndIssueProductionIssue');
+    try {
+      await callable({
+        orderId: id,
+        quantity: options?.quantityOverride,
+        sourceWarehouseId: options?.sourceWarehouseId,
+      });
+    } catch (error: unknown) {
+      const shortages = callableShortages(error);
+      if (shortages.length) throw new ProductionIssueApprovalError(shortages);
+      throw callableUserError(error, 'تعذر اعتماد وترحيل صرف الإنتاج.');
     }
-
-    const quantity = Number(
-      options?.quantityOverride != null ? options.quantityOverride : order.quantity,
-    );
-    const needsRebuild =
-      order.lines.length === 0
-      || Math.abs(Number(order.quantity || 0) - quantity) > 0.000001
-      || (options?.sourceWarehouseId
-        && String(options.sourceWarehouseId) !== String(order.sourceWarehouseId || ''));
-
-    if (needsRebuild || order.status === 'requested') {
-      await this.prepareRequestLines(id, options);
-    }
-
-    const now = toIsoNow();
-    await updateDoc(doc(db, COLLECTION, order.id), stripUndefined({
-      status: 'submitted',
-      submittedAt: now,
-      approvedBy: actor,
-      approvedAt: now,
-    }));
-
-    await this.issue(order.id, actor);
   },
 
   async submit(id: string): Promise<void> {
