@@ -25,8 +25,8 @@ assert.deepEqual(
 
 const store = readFileSync('store/useAppStore.ts', 'utf8');
 assert.match(store, /resolveBootstrapDataAccess/);
-assert.match(store, /bootstrapAccess\.costCenters \? costCenterService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
-assert.match(store, /bootstrapAccess\.costDetails \? costCenterValueService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
-assert.match(store, /bootstrapAccess\.costDetails \? costAllocationService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
+assert.match(store, /costAccess\.costCenters \? costCenterService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
+assert.match(store, /costAccess\.costDetails \? costCenterValueService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
+assert.match(store, /costAccess\.costDetails \? costAllocationService\.getAll\(\) : Promise\.resolve\(\[\]\)/);
 
 console.log('bootstrap-data-access.test.ts passed');

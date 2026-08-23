@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { resolveTransferSourceWarehouses } from '../modules/inventory/lib/transferSourceWarehouses.ts';
+import type { Warehouse } from '../modules/inventory/types.ts';
 
-const warehouses = [
+const warehouses: Array<Pick<Warehouse, 'id' | 'name' | 'warehouseRole'>> = [
   { id: 'sp', name: 'قطع', warehouseRole: 'spare_parts_central' },
   { id: 'stg', name: 'بانتظار', warehouseRole: 'finished_staging' },
   { id: 'fin', name: 'تام', warehouseRole: 'final_product' },
-] as const;
+];
 
 const scopedToSpare = (rows: typeof warehouses) => rows.filter((w) => w.id === 'sp');
 

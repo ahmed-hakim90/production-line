@@ -297,6 +297,24 @@ export const GlobalCreateReportModal: React.FC = () => {
     return map;
   }, [products, t]);
 
+  const workOrderOptions = useMemo(
+    () => [
+      { value: '', label: t('modalManager.createReport.workOrderNone') },
+      ...activeWorkOrders.map((wo) => {
+        const productName = productNameById.get(wo.productId) ?? t('modalManager.createReport.unknownProduct');
+        const lineName = lines.find((line) => line.id === wo.lineId)?.name ?? '';
+        const orderNumber = String(wo.workOrderNumber || '').trim();
+        const remaining = Math.max(0, Number(wo.quantity || 0) - Number(wo.producedQuantity || 0));
+        return {
+          value: wo.id!,
+          label: `${orderNumber ? `${orderNumber} — ` : ''}${productName}${lineName ? ` — ${lineName}` : ''} — ${t('modalManager.createReport.remaining')}: ${remaining} ${t('modalManager.createReport.units')}`,
+          keywords: [orderNumber, productName, lineName, wo.id].filter(Boolean).join(' '),
+        };
+      }),
+    ],
+    [activeWorkOrders, lines, productNameById, t],
+  );
+
   useEffect(() => {
     if (!isOpen || !shouldLockEmployeeToCurrent || !currentEmployee?.id) return;
     setForm((prev) => (
@@ -759,11 +777,11 @@ export const GlobalCreateReportModal: React.FC = () => {
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">
               {isDelegatedEntry ? t('modalManager.createReport.workOrderRequired') : t('modalManager.createReport.workOrderOptional')}
             </label>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-bold transition-all"
+            <SearchableSelect
+              options={workOrderOptions}
               value={form.workOrderId}
-              onChange={(e) => {
-                const wo = activeWorkOrders.find((w) => w.id === e.target.value);
+              onChange={(value) => {
+                const wo = activeWorkOrders.find((w) => w.id === value);
                 if (!wo) {
                   setForm((prev) => ({ ...prev, workOrderId: '' }));
                   return;
@@ -804,14 +822,9 @@ export const GlobalCreateReportModal: React.FC = () => {
                   lastAutoFilledWorkersCountRef.current = prefill.workersCount;
                 }
               }}
-            >
-              <option value="">{t('modalManager.createReport.workOrderNone')}</option>
-              {activeWorkOrders.map((wo) => (
-                <option key={wo.id} value={wo.id!}>
-                  {`${productNameById.get(wo.productId) ?? t('modalManager.createReport.unknownProduct')} — ${t('modalManager.createReport.remaining')}: ${Math.max(0, Number(wo.quantity || 0) - Number(wo.producedQuantity || 0))} ${t('modalManager.createReport.units')}`}
-                </option>
-              ))}
-            </select>
+              placeholder={t('modalManager.createReport.workOrderNone')}
+              searchPlaceholder="ابحث برقم أمر الشغل أو الصنف أو الخط"
+            />
             {isDelegatedEntry && (
               <p className="text-[11px] font-medium text-[rgb(var(--color-warning))]">
                 {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}

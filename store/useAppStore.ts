@@ -10,6 +10,12 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  doc as firestoreDoc,
+  runTransaction as runFirestoreTransaction,
+  serverTimestamp as firestoreServerTimestamp,
+  type DocumentReference,
+} from 'firebase/firestore';
+import {
   ProductionLine,
   Product,
   Employee,
@@ -33,6 +39,7 @@ import {
   WorkOrderLiveSummary,
   ReportComponentScrapItem,
   ProductionPlanFollowUp,
+  PlanStatus,
   Asset,
   AssetDepreciation,
   AssetDepreciationRunResult,
@@ -45,21 +52,30 @@ import {
   registerWithEmail,
   resetPassword,
   auth,
+  db as firestoreDb,
+  isConfigured as isFirebaseConfigured,
   runAssetDepreciationCallable,
+  syncBuiltInRolePermissionGrants,
+  createProductionReportFastCallable,
 } from '../services/firebase';
-import { getCurrentTenantId, setCurrentTenant } from '../lib/currentTenant';
+import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
+import { resolveActivityPacks, type ActivityPackId } from '../lib/activityPacks';
 import {
   clearCachedAppSession,
   readCachedAppSession,
   writeCachedAppSession,
 } from '../lib/appSessionCache';
-import { resolveActivityPacks, type ActivityPackId } from '../lib/activityPacks';
-import { resolveBootstrapDataAccess } from '../lib/bootstrapDataAccess';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
 import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 import { reportService } from '../modules/production/services/reportService';
+import {
+  createRole as createRoleUseCase,
+  updateRole as updateRoleUseCase,
+  deleteRole as deleteRoleUseCase,
+} from '../modules/system/usecases/manageRole';
+import { unwrapOrThrow } from '../shared/usecases';
 import {
   excludePackagingLineReportsForWorkOrderProduction,
   isPackagingLineId,
@@ -72,6 +88,19 @@ import {
   resolveReportType,
   workOrderMatchesReportType,
 } from '../modules/production/utils/reportTypes';
+import {
+  deriveProductionPlanAutoStatus,
+  filterReportsForProductionPlan,
+} from '../modules/production/utils/productionPlanReports';
+import {
+  deriveWorkOrderStatusFromProduced,
+  filterUnlinkedReportsEligibleForWorkOrder,
+  getWorkOrderEffectiveStartDate,
+  lastProducingReportDateFromReports,
+  pickBestAutoLinkedWorkOrder,
+  reportDateEligibleForWorkOrder,
+  sumProducedFromWorkOrderReports,
+} from '../modules/production/utils/workOrderReportLinking';
 import { supplyCycleService } from '../modules/production/services/supplyCycleService';
 import { lineStatusService } from '../modules/production/services/lineStatusService';
 import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
@@ -82,11 +111,13 @@ import { productionPlanFollowUpService } from '../modules/production/services/pr
 import { workOrderService } from '../modules/production/services/workOrderService';
 import { notificationService } from '../services/notificationService';
 import { costCenterService } from '../modules/costs/services/costCenterService';
+import { createCostCenter as createCostCenterUseCase } from '../modules/costs/usecases/createCostCenter';
 import { costCenterValueService } from '../modules/costs/services/costCenterValueService';
 import { costAllocationService } from '../modules/costs/services/costAllocationService';
 import { laborSettingsService } from '../modules/costs/services/laborSettingsService';
 import { monthlyProductionCostService } from '../modules/costs/services/monthlyProductionCostService';
 import { roleService } from '../modules/system/services/roleService';
+import { getBuiltInRoleKey } from '../modules/system/lib/visibleRoles';
 import { userService } from '../services/userService';
 import { tenantService } from '../services/tenantService';
 import { activityLogService } from '../modules/system/services/activityLogService';
@@ -94,12 +125,31 @@ import { systemSettingsService } from '../modules/system/services/systemSettings
 import { scanEventService } from '../modules/production/services/scanEventService';
 import { stockService } from '../modules/inventory/services/stockService';
 import { transferApprovalService } from '../modules/inventory/services/transferApprovalService';
+import { createTransferRequest } from '../modules/inventory/usecases/createTransferRequest';
+import { rejectTransferRequest } from '../modules/inventory/usecases/approveTransferRequest';
 import { productionInventoryService } from '../modules/inventory/services/productionInventoryService';
-import { resolveInventoryRoutingV1Async } from '../modules/inventory/services/inventoryRoutingService';
+import { productionIssueService } from '../modules/inventory/services/productionIssueService';
+import {
+  removeWorkerDailyPerformanceForReport,
+  syncWorkerDailyPerformanceFromReport,
+} from '../modules/production/utils/syncWorkerDailyPerformanceFromReport';
+import {
+  clearInventoryRoutingCache,
+  resolveInventoryRoutingV1Async,
+} from '../modules/inventory/services/inventoryRoutingService';
+import { resolveSystemSettings } from '../modules/system/lib/resolveSystemSettings';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { catalogRawMaterialService as rawMaterialService } from '../modules/catalog/services/catalogRawMaterialService';
+import { materialService } from '../modules/manufacturing/services/materialService';
+import { bomService } from '../modules/manufacturing/services/bomService';
+import { calculateBomItemUnitCost } from '../modules/manufacturing/engines/materialCostEngine';
+import {
+  calculateFullProductionCost,
+  type ProductionCostSourceLine,
+} from '../modules/costs/lib/fullProductionCost';
+import { resolveCostingPolicy } from '../utils/costingPolicy';
+import { loadReportsComponentLabelOptions } from '../modules/production/utils/injectionComponentOptions';
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
-import { productMaterialService } from '../modules/production/services/productMaterialService';
 import {
   categoryService,
   isProductCategoryRow,
@@ -113,8 +163,11 @@ import { DUPLICATE_ENTITY_CODE } from '../modules/shared/services/entityCodeSequ
 import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
-import { DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
-import type { ProductionReportCreatePath } from '../modules/system/lib/operationPathSettings';
+import { checkPermission, isPackagingOnlyPermissions, normalizeRolePermissions, type Permission } from '../utils/permissions';
+import { applyPackagingOnlyPermissionLocks } from '../utils/packagingOnlyPermissions';
+import { applyBuiltinRolePermissionLocks } from '../utils/builtinRolePermissionLocks';
+import { resolveBootstrapDataAccess } from '../lib/bootstrapDataAccess';
+import { DEFAULT_PLAN_SETTINGS, DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
 import {
   applyAppTheme,
   cacheTenantTheme,
@@ -140,13 +193,50 @@ import { eventBus, SystemEvents } from '../shared/events';
 import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
 import { REPORT_DUPLICATE_MESSAGE, INJECTION_REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
-import { isInjectionShiftSelected, isDuplicateProductionReport } from '../modules/production/utils/injectionReportShift';
-import { resolveReportBehaviorSettings } from '../modules/production/lib/reportBehaviorSettings';
-import { getProductAssemblyMode, hasLineSpecificWorkerTarget } from '../modules/production/selectors/workerTargetSelector';
+import {
+  isInjectionShiftSelected,
+  normalizeInjectionShift,
+} from '../modules/production/utils/injectionReportShift';
+import {
+  resolveReportBehaviorSettings,
+} from '../modules/production/lib/reportBehaviorSettings';
+import {
+  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
+  productionIssueRequiredMessage,
+} from '../modules/production/lib/reportSaveFeedback';
+import { resolveRequiresProductionIssueOnReport } from '../modules/production/lib/requiresProductionIssue';
+import { buildAggregateCostDeltas } from '../modules/production/lib/reportAggregateCostReconciliation';
+import {
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  PRODUCTION_REPORT_RECONCILE_PATHS,
+  PRODUCTION_REPORT_UPDATE_PATHS,
+  PRODUCTION_PLAN_OPERATION_KEYS,
+  PRODUCT_OPERATION_KEYS,
+  WORK_ORDER_OPERATION_KEYS,
+  assertOperationPathEnabled,
+  isOperationPathEnabled,
+  type ProductCreatePath,
+  type ProductUpdatePath,
+  type ProductionPlanCreatePath,
+  type ProductionPlanUpdatePath,
+  type ProductionReportCreatePath,
+  type ProductionReportReconcilePath,
+  type ProductionReportUpdatePath,
+  type WorkOrderCreatePath,
+  type WorkOrderUpdatePath,
+} from '../modules/system/lib/operationPathSettings';
+import {
+  computeAchievementPercent,
+  getProductAssemblyMode,
+  hasLineSpecificWorkerTarget,
+} from '../modules/production/selectors/workerTargetSelector';
 import {
   buildProductionReportCostSnapshotPatch,
   buildSupervisorHourlyRatesMap,
   estimateReportCost,
+  getProductionReportCostBreakdown,
+  isProductionAllocationCostCenter,
 } from '../utils/costCalculations';
 import { zktecoSyncService } from '../modules/hr/attendance/services/zktecoSyncService';
 import { attendanceProcessingService } from '../modules/hr/attendance/services/attendanceProcessingService';
@@ -160,9 +250,8 @@ import type {
 } from '../modules/hr/attendance/types';
 
 function emptyPermissions(): Record<string, boolean> {
-  // Missing permission keys are already treated as false. Keeping the initial
-  // map empty also avoids a circular module dependency with utils/permissions,
-  // whose React hooks import this store.
+  // Missing permission keys already fail closed in checkPermission().
+  // Grants are loaded from Firestore roles.permissions only.
   return {};
 }
 
@@ -247,18 +336,6 @@ async function resolveProductionWarehouseId(systemSettings: SystemSettings): Pro
   return '';
 }
 
-/** @deprecated Use resolveInventoryRoutingV1Async from inventoryRoutingService */
-async function resolveInventoryRouting(systemSettings: SystemSettings) {
-  const routing = await resolveInventoryRoutingV1Async(systemSettings);
-  return {
-    decomposedSourceWarehouseId: routing.decomposedWarehouseId,
-    finishedReceiveWarehouseId: routing.finishedStagingWarehouseId,
-    wasteReceiveWarehouseId: routing.wasteWarehouseId,
-    finalProductWarehouseId: routing.finalProductWarehouseId,
-    allowNegativeDecomposedStock: routing.allowNegativeDecomposedStock,
-  };
-}
-
 const PACKAGING_STOCK_TRANSFER_NOTE_PREFIX = 'Packaging stock transfer from report';
 const packagingStockTransferNote = (reportId: string) => `${PACKAGING_STOCK_TRANSFER_NOTE_PREFIX} ${reportId}`;
 
@@ -340,6 +417,280 @@ function calculateIndustrialReportTotalCost(params: {
   );
   return Number(estimate.totalCost || 0);
 }
+
+type ReportAggregateCostState = ProductionReport & {
+  aggregateCostPostingState?: 'pending' | 'applied' | 'deleting';
+  aggregateCostPostingUpdatedAt?: unknown;
+  workOrderCostPostedTargetId?: string;
+  productionPlanCostPostedTargetId?: string;
+};
+
+type ReportInventoryPostingState = {
+  inventoryAppliedAt?: unknown;
+  inventoryAppliedBy?: unknown;
+  inventoryAppliedByUserId?: unknown;
+  inventoryPostingState?: 'applying' | 'applied' | 'reversing' | 'reversed';
+  inventoryPostingUpdatedAt?: unknown;
+  inventoryReversedAt?: unknown;
+  inventoryReversedBy?: unknown;
+  inventoryReversedByUserId?: unknown;
+};
+
+const WORK_ORDERS_COLLECTION = 'work_orders';
+const PRODUCTION_PLANS_COLLECTION = 'production_plans';
+const PRODUCTION_REPORTS_COLLECTION = 'production_reports';
+
+function finiteCost(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function reportAggregateCostBasis(report: ProductionReport): string {
+  return JSON.stringify([
+    String(report.workOrderId || '').trim(),
+    String(report.productionPlanId || '').trim(),
+    String(report.reportType || '').trim(),
+    String(report.lineId || '').trim(),
+    String(report.employeeId || '').trim(),
+    String(report.date || '').trim(),
+    Number(report.workersCount || 0),
+    Number(report.workHours || 0),
+    Number(report.quantityProduced || 0),
+  ]);
+}
+
+function assertAggregateTenant(
+  data: Record<string, unknown>,
+  tenantId: string,
+  entityLabel: string,
+): void {
+  if (String(data.tenantId || '').trim() !== tenantId) {
+    throw new Error(`${entityLabel} غير تابع للشركة الحالية.`);
+  }
+}
+
+async function ensureReportAggregateCostBaseline(
+  reportId: string,
+  baselineReport: ProductionReport,
+  fallbackIndustrialCost: number,
+  skipsAggregates: boolean,
+): Promise<void> {
+  if (!isFirebaseConfigured) return;
+  const tenantId = getCurrentTenantId();
+  const reportRef = firestoreDoc(firestoreDb, PRODUCTION_REPORTS_COLLECTION, reportId);
+  await runFirestoreTransaction(firestoreDb, async (tx) => {
+    const reportSnap = await tx.get(reportRef);
+    if (!reportSnap.exists()) throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
+    const current = { id: reportSnap.id, ...reportSnap.data() } as ReportAggregateCostState;
+    assertAggregateTenant(reportSnap.data(), tenantId, 'التقرير');
+    if (current.aggregateCostPostingState === 'deleting') {
+      throw new Error('بدأ حذف التقرير بالفعل ولا يمكن تعديله.');
+    }
+    if (reportAggregateCostBasis(current) !== reportAggregateCostBasis(baselineReport)) {
+      throw new Error('تم تعديل التقرير من جلسة أخرى. أعد تحميل البيانات ثم حاول مجدداً.');
+    }
+
+    const workOrderTarget = skipsAggregates ? '' : String(baselineReport.workOrderId || '').trim();
+    const planTarget = skipsAggregates ? '' : String(baselineReport.productionPlanId || '').trim();
+    const needsWorkOrderBaseline = current.workOrderCostPostedTargetId === undefined;
+    const needsPlanBaseline = current.productionPlanCostPostedTargetId === undefined;
+    const targetRefs = [
+      ...(needsWorkOrderBaseline && workOrderTarget
+        ? [firestoreDoc(firestoreDb, WORK_ORDERS_COLLECTION, workOrderTarget)]
+        : []),
+      ...(needsPlanBaseline && planTarget
+        ? [firestoreDoc(firestoreDb, PRODUCTION_PLANS_COLLECTION, planTarget)]
+        : []),
+    ];
+    for (const targetRef of targetRefs) {
+      const targetSnap = await tx.get(targetRef);
+      if (!targetSnap.exists()) throw new Error('تعذر العثور على سجل التجميع المرتبط بالتقرير.');
+      assertAggregateTenant(targetSnap.data(), tenantId, 'سجل التجميع');
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (needsWorkOrderBaseline) {
+      patch.workOrderCostPostedTargetId = workOrderTarget;
+      patch.workOrderCostPostedSnapshot = workOrderTarget
+        ? finiteCost(current.workOrderCostPostedSnapshot, fallbackIndustrialCost)
+        : 0;
+    }
+    if (needsPlanBaseline) {
+      patch.productionPlanCostPostedTargetId = planTarget;
+      patch.productionPlanCostPostedSnapshot = planTarget
+        ? finiteCost(current.productionPlanCostPostedSnapshot, fallbackIndustrialCost)
+        : 0;
+    }
+    if (Object.keys(patch).length > 0) {
+      tx.update(reportRef, {
+        ...patch,
+        aggregateCostPostingState: 'applied',
+        aggregateCostPostingUpdatedAt: firestoreServerTimestamp(),
+      });
+    }
+  });
+}
+
+async function reconcileReportAggregateCosts(params: {
+  reportId: string;
+  expectedReport: ProductionReport;
+  industrialCost: number;
+  skipsAggregates: boolean;
+}): Promise<void> {
+  if (!isFirebaseConfigured) return;
+  const tenantId = getCurrentTenantId();
+  const expectedBasis = reportAggregateCostBasis(params.expectedReport);
+  const desiredCost = finiteCost(params.industrialCost);
+  const reportRef = firestoreDoc(firestoreDb, PRODUCTION_REPORTS_COLLECTION, params.reportId);
+
+  await runFirestoreTransaction(firestoreDb, async (tx) => {
+    const reportSnap = await tx.get(reportRef);
+    if (!reportSnap.exists()) throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
+    const report = { id: reportSnap.id, ...reportSnap.data() } as ReportAggregateCostState;
+    assertAggregateTenant(reportSnap.data(), tenantId, 'التقرير');
+    if (report.aggregateCostPostingState === 'deleting') {
+      throw new Error('بدأ حذف التقرير بالفعل ولا يمكن ترحيل تكلفته.');
+    }
+    if (reportAggregateCostBasis(report) !== expectedBasis) {
+      throw new Error('تغير التقرير أثناء ترحيل التكلفة. أعد تحميل البيانات ثم حاول مجدداً.');
+    }
+
+    const oldWorkOrderTarget = String(report.workOrderCostPostedTargetId || '').trim();
+    const oldPlanTarget = String(report.productionPlanCostPostedTargetId || '').trim();
+    const oldWorkOrderCost = oldWorkOrderTarget
+      ? finiteCost(report.workOrderCostPostedSnapshot)
+      : 0;
+    const oldPlanCost = oldPlanTarget
+      ? finiteCost(report.productionPlanCostPostedSnapshot)
+      : 0;
+    const nextWorkOrderTarget = params.skipsAggregates
+      ? ''
+      : String(report.workOrderId || '').trim();
+    const nextPlanTarget = params.skipsAggregates
+      ? ''
+      : String(report.productionPlanId || '').trim();
+
+    const workOrderDeltas = buildAggregateCostDeltas(
+      { targetId: oldWorkOrderTarget, amount: oldWorkOrderCost },
+      { targetId: nextWorkOrderTarget, amount: desiredCost },
+    );
+    const planDeltas = buildAggregateCostDeltas(
+      { targetId: oldPlanTarget, amount: oldPlanCost },
+      { targetId: nextPlanTarget, amount: desiredCost },
+    );
+
+    const workOrderTargets = new Map<string, { ref: DocumentReference; actualCost: number }>();
+    for (const targetId of workOrderDeltas.keys()) {
+      const targetRef = firestoreDoc(firestoreDb, WORK_ORDERS_COLLECTION, targetId);
+      const targetSnap = await tx.get(targetRef);
+      if (!targetSnap.exists()) throw new Error('أمر الشغل المرتبط غير موجود.');
+      assertAggregateTenant(targetSnap.data(), tenantId, 'أمر الشغل');
+      workOrderTargets.set(targetId, {
+        ref: targetSnap.ref,
+        actualCost: finiteCost(targetSnap.data().actualCost),
+      });
+    }
+    const planTargets = new Map<string, { ref: DocumentReference; actualCost: number }>();
+    for (const targetId of planDeltas.keys()) {
+      const targetRef = firestoreDoc(firestoreDb, PRODUCTION_PLANS_COLLECTION, targetId);
+      const targetSnap = await tx.get(targetRef);
+      if (!targetSnap.exists()) throw new Error('خطة الإنتاج المرتبطة غير موجودة.');
+      assertAggregateTenant(targetSnap.data(), tenantId, 'خطة الإنتاج');
+      planTargets.set(targetId, {
+        ref: targetSnap.ref,
+        actualCost: finiteCost(targetSnap.data().actualCost),
+      });
+    }
+
+    for (const [targetId, delta] of workOrderDeltas) {
+      if (Math.abs(delta) <= 0.000001) continue;
+      const target = workOrderTargets.get(targetId)!;
+      tx.update(target.ref, { actualCost: target.actualCost + delta });
+    }
+    for (const [targetId, delta] of planDeltas) {
+      if (Math.abs(delta) <= 0.000001) continue;
+      const target = planTargets.get(targetId)!;
+      tx.update(target.ref, { actualCost: target.actualCost + delta });
+    }
+    tx.update(reportRef, {
+      workOrderCostPostedTargetId: nextWorkOrderTarget,
+      workOrderCostPostedSnapshot: nextWorkOrderTarget ? desiredCost : 0,
+      productionPlanCostPostedTargetId: nextPlanTarget,
+      productionPlanCostPostedSnapshot: nextPlanTarget ? desiredCost : 0,
+      aggregateCostPostingState: 'applied',
+      aggregateCostPostingUpdatedAt: firestoreServerTimestamp(),
+    });
+  });
+}
+
+async function reverseReportAggregateCostsForDelete(params: {
+  reportId: string;
+  fallbackIndustrialCost: number;
+  skipsAggregates: boolean;
+}): Promise<void> {
+  if (!isFirebaseConfigured) return;
+  const tenantId = getCurrentTenantId();
+  const reportRef = firestoreDoc(firestoreDb, PRODUCTION_REPORTS_COLLECTION, params.reportId);
+  await runFirestoreTransaction(firestoreDb, async (tx) => {
+    const reportSnap = await tx.get(reportRef);
+    if (!reportSnap.exists()) return;
+    const report = { id: reportSnap.id, ...reportSnap.data() } as ReportAggregateCostState;
+    assertAggregateTenant(reportSnap.data(), tenantId, 'التقرير');
+
+    const workOrderTarget = report.workOrderCostPostedTargetId !== undefined
+      ? String(report.workOrderCostPostedTargetId || '').trim()
+      : params.skipsAggregates
+        ? ''
+        : String(report.workOrderId || '').trim();
+    const planTarget = report.productionPlanCostPostedTargetId !== undefined
+      ? String(report.productionPlanCostPostedTargetId || '').trim()
+      : params.skipsAggregates
+        ? ''
+        : String(report.productionPlanId || '').trim();
+    const workOrderCost = workOrderTarget
+      ? finiteCost(report.workOrderCostPostedSnapshot, params.fallbackIndustrialCost)
+      : 0;
+    const planCost = planTarget
+      ? finiteCost(report.productionPlanCostPostedSnapshot, params.fallbackIndustrialCost)
+      : 0;
+    const workOrderRef = workOrderTarget
+      ? firestoreDoc(firestoreDb, WORK_ORDERS_COLLECTION, workOrderTarget)
+      : null;
+    const planRef = planTarget
+      ? firestoreDoc(firestoreDb, PRODUCTION_PLANS_COLLECTION, planTarget)
+      : null;
+    const workOrderSnap = workOrderRef ? await tx.get(workOrderRef) : null;
+    const planSnap = planRef ? await tx.get(planRef) : null;
+    if (workOrderSnap) {
+      if (!workOrderSnap.exists()) throw new Error('أمر الشغل المرتبط غير موجود.');
+      assertAggregateTenant(workOrderSnap.data(), tenantId, 'أمر الشغل');
+    }
+    if (planSnap) {
+      if (!planSnap.exists()) throw new Error('خطة الإنتاج المرتبطة غير موجودة.');
+      assertAggregateTenant(planSnap.data(), tenantId, 'خطة الإنتاج');
+    }
+
+    if (workOrderSnap && workOrderCost !== 0) {
+      tx.update(workOrderSnap.ref, {
+        actualCost: finiteCost(workOrderSnap.data().actualCost) - workOrderCost,
+      });
+    }
+    if (planSnap && planCost !== 0) {
+      tx.update(planSnap.ref, {
+        actualCost: finiteCost(planSnap.data().actualCost) - planCost,
+      });
+    }
+    tx.update(reportRef, {
+      workOrderCostPostedTargetId: '',
+      workOrderCostPostedSnapshot: 0,
+      productionPlanCostPostedTargetId: '',
+      productionPlanCostPostedSnapshot: 0,
+      aggregateCostPostingState: 'deleting',
+      aggregateCostPostingUpdatedAt: firestoreServerTimestamp(),
+    });
+  });
+}
+
 function calendarMonthRangeFromYearMonth(yearMonth: string): { start: string; end: string } | null {
   const m = /^(\d{4})-(\d{2})$/.exec(String(yearMonth || '').trim());
   if (!m) return null;
@@ -359,26 +710,143 @@ type CostSnapshotStoreGet = () => {
   costCenters: CostCenter[];
   costCenterValues: CostCenterValue[];
   costAllocations: CostAllocation[];
+  assets: Asset[];
+  assetDepreciations: AssetDepreciation[];
   systemSettings: SystemSettings;
 };
+
+function buildEffectiveDepreciationRows(
+  period: string,
+  assets: Asset[],
+  actualRows: AssetDepreciation[],
+): { rows: AssetDepreciation[]; hasScheduledRows: boolean } {
+  const actualByAssetId = new Map(
+    actualRows
+      .filter((row) => row.period === period)
+      .map((row) => [String(row.assetId || ''), row]),
+  );
+  let hasScheduledRows = false;
+  const rows: AssetDepreciation[] = [];
+  for (const asset of assets) {
+    const assetId = String(asset.id || '');
+    if (!assetId || asset.status !== 'active' || !asset.centerId) continue;
+    const actual = actualByAssetId.get(assetId);
+    if (actual) {
+      rows.push(actual);
+      continue;
+    }
+    if (String(asset.purchaseDate || '').slice(0, 7) > period) continue;
+    const scheduledAmount = Math.max(0, Number(asset.monthlyDepreciation || 0));
+    if (scheduledAmount <= 0 || Number(asset.currentValue || 0) <= Number(asset.salvageValue || 0)) continue;
+    hasScheduledRows = true;
+    rows.push({
+      id: `scheduled__${assetId}__${period}`,
+      assetId,
+      period,
+      depreciationAmount: scheduledAmount,
+      accumulatedDepreciation: Number(asset.accumulatedDepreciation || 0) + scheduledAmount,
+      bookValue: Math.max(Number(asset.salvageValue || 0), Number(asset.currentValue || 0) - scheduledAmount),
+    });
+  }
+  return { rows, hasScheduledRows };
+}
+
+async function buildReportMaterialCostSources(
+  report: ProductionReport,
+): Promise<ProductionCostSourceLine[]> {
+  const bomOwnerType = report.reportType === 'component_injection' ? 'material' : 'product';
+  const [bomBundle, materials, movements] = await Promise.all([
+    bomService.getActiveBomWithLegacyFallback(bomOwnerType, String(report.productId || '')),
+    materialService.getAll(),
+    report.id
+      ? stockService.getTransactionsBySource({ sourceModule: 'production_report', sourceId: report.id })
+          .catch(() => [])
+      : Promise.resolve([]),
+  ]);
+  const materialByIdentity = new Map<string, (typeof materials)[number]>();
+  materials.forEach((material) => {
+    if (material.id) materialByIdentity.set(String(material.id), material);
+    if (material.legacyRawMaterialId) materialByIdentity.set(String(material.legacyRawMaterialId), material);
+    materialByIdentity.set(String(material.name || '').trim().toLowerCase(), material);
+  });
+
+  const canonicalMaterialIdentity = (value: unknown, fallbackName?: unknown): string => {
+    const raw = String(value || '').trim();
+    const byId = materialByIdentity.get(raw)
+      || materialByIdentity.get(String(fallbackName || '').trim().toLowerCase());
+    return String(byId?.id || byId?.legacyRawMaterialId || raw || fallbackName || '')
+      .trim()
+      .toLowerCase();
+  };
+
+  const actualItemIds = new Set<string>();
+  const actualLines: ProductionCostSourceLine[] = movements
+    .filter((movement) => movement.movementType === 'OUT' && Number(movement.totalCostSnapshot || 0) > 0)
+    .map((movement, index) => {
+      const itemId = String(movement.itemId || '');
+      const material = materialByIdentity.get(itemId)
+        || materialByIdentity.get(String(movement.itemName || '').trim().toLowerCase());
+      actualItemIds.add(canonicalMaterialIdentity(itemId, movement.itemName));
+      const category = material?.type === 'packaging' || movement.itemType === 'packaging'
+        ? 'packaging'
+        : 'material';
+      return {
+        sourceKey: `stock:${String(movement.id || index)}`,
+        sourceType: 'stock_issue',
+        sourceId: String(movement.id || ''),
+        category,
+        label: String(movement.itemName || material?.name || itemId),
+        amount: Number(movement.totalCostSnapshot || 0),
+        status: 'actual',
+        quantity: Number(movement.quantity || 0),
+        unitCost: Number(movement.unitCostSnapshot || 0),
+      } satisfies ProductionCostSourceLine;
+    });
+
+  const estimatedLines: ProductionCostSourceLine[] = bomBundle.items
+    .filter((item) => !actualItemIds.has(canonicalMaterialIdentity(item.itemId, item.itemName)))
+    .map((item, index) => {
+      const material = materialByIdentity.get(String(item.itemId || ''))
+        || materialByIdentity.get(String(item.itemName || '').trim().toLowerCase())
+        || null;
+      const row = calculateBomItemUnitCost(material, item, Number(report.quantityProduced || 0));
+      return {
+        sourceKey: `bom:${String(bomBundle.bom?.id || 'missing')}:${String(item.id || item.itemId || index)}`,
+        sourceType: bomBundle.isLegacy ? 'legacy_bom_estimate' : 'bom_estimate',
+        sourceId: String(item.id || item.itemId || ''),
+        category: material?.type === 'packaging' ? 'packaging' : 'material',
+        label: String(item.itemName || material?.name || item.itemId),
+        amount: Number(row.totalCost || 0),
+        status: 'estimated',
+        quantity: Number(item.qtyPerUnit || 0) * Number(report.quantityProduced || 0),
+        unitCost: Number(item.qtyPerUnit || 0) > 0
+          ? Number(row.totalCost || 0) / (Number(item.qtyPerUnit || 0) * Number(report.quantityProduced || 0) || 1)
+          : 0,
+        costCenterId: item.costCenterId,
+      } satisfies ProductionCostSourceLine;
+    });
+
+  return [...actualLines, ...estimatedLines];
+}
 
 async function persistProductionReportCostSnapshot(
   reportId: string,
   get: CostSnapshotStoreGet,
-): Promise<void> {
+): Promise<ProductionReport | null> {
   const row = await reportService.getById(reportId);
-  if (!row?.date) return;
+  if (!row?.date) return null;
   const ym = String(row.date).slice(0, 7);
   const range = calendarMonthRangeFromYearMonth(ym);
-  if (!range) return;
+  if (!range) return null;
   const monthRows = await reportService.getByDateRange(range.start, range.end);
   const st = get();
+  const costingPolicy = resolveCostingPolicy(st.systemSettings.costingPolicy);
   const supervisorHourlyRates = buildSupervisorHourlyRatesMap(st._rawEmployees);
   const productCategoryById = new Map<string, string>();
   st._rawProducts.forEach((p) => {
     if (p.id) productCategoryById.set(String(p.id), String(p.category || ''));
   });
-  const patch = buildProductionReportCostSnapshotPatch(row, monthRows, {
+  const legacyPatch = buildProductionReportCostSnapshotPatch(row, monthRows, {
     hourlyRate: Number(st.laborSettings?.hourlyRate ?? 0),
     costCenters: st.costCenters,
     costCenterValues: st.costCenterValues,
@@ -386,90 +854,323 @@ async function persistProductionReportCostSnapshot(
     supervisorHourlyRates,
     workingDaysByMonth: st.systemSettings.costMonthlyWorkingDays,
     productCategoryById,
+  }) || {
+    costSnapshotAt: new Date().toISOString(),
+    unitCostSnapshot: 0,
+    laborCostSnapshot: 0,
+    lineIndirectShareSnapshot: 0,
+    supervisorIndirectSnapshot: 0,
+    indirectByCenterSnapshot: {},
+  };
+
+  const effectiveDepreciation = buildEffectiveDepreciationRows(
+    ym,
+    st.assets,
+    st.assetDepreciations,
+  );
+  const withDepreciation = getProductionReportCostBreakdown(
+    row,
+    monthRows,
+    Number(st.laborSettings?.hourlyRate ?? 0),
+    st.costCenters,
+    st.costCenterValues,
+    st.costAllocations,
+    supervisorHourlyRates,
+    st.systemSettings.costMonthlyWorkingDays,
+    productCategoryById,
+    st.assets,
+    effectiveDepreciation.rows,
+  );
+  const legacyConversionCost = Number(legacyPatch.unitCostSnapshot || 0)
+    * Number(row.quantityProduced || 0);
+  const conversionWithDepreciation = Number(withDepreciation?.totalCost ?? legacyConversionCost);
+  const depreciationCost = Math.max(0, conversionWithDepreciation - legacyConversionCost);
+  const rawMaterialSources = await buildReportMaterialCostSources(row);
+  const materialSources = costingPolicy.fullManufacturingEnabled
+    ? rawMaterialSources.filter((source) => {
+        if (source.category === 'packaging') return costingPolicy.includePackaging;
+        if (source.category !== 'material') return true;
+        if (source.status === 'actual') return costingPolicy.includeActualMaterials;
+        return costingPolicy.allowBomEstimateFallback;
+      })
+    : [];
+  const applicableCenterIds = new Set(
+    st.costCenters
+      .filter(isProductionAllocationCostCenter)
+      .map((center) => String(center.id || '')),
+  );
+  const applicableCenterValues = st.costCenterValues.filter(
+    (value) => value.month === ym && applicableCenterIds.has(String(value.costCenterId || '')),
+  );
+  const overheadIsActual = applicableCenterValues.length > 0
+    && applicableCenterValues.every((value) => ['actual', 'closed'].includes(String(value.costingStatus || '')));
+  const sourceLines: ProductionCostSourceLine[] = [
+    ...materialSources,
+    ...(costingPolicy.fullManufacturingEnabled && costingPolicy.includeDirectLabor ? [{
+      sourceKey: `labor:${reportId}`,
+      sourceType: 'labor_standard',
+      sourceId: reportId,
+      category: 'direct_labor',
+      label: 'العمالة المباشرة',
+      amount: Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0),
+      status: 'actual' as const,
+    } satisfies ProductionCostSourceLine] : []),
+    ...(costingPolicy.fullManufacturingEnabled && costingPolicy.includeIndirectCenters ? [{
+      sourceKey: `overhead:${reportId}:${ym}`,
+      sourceType: 'cost_center_absorption',
+      sourceId: ym,
+      category: 'factory_overhead',
+      label: 'التكاليف الصناعية المحملة',
+      amount: Math.max(
+        0,
+        conversionWithDepreciation
+          - Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0)
+          - depreciationCost
+          - (costingPolicy.includeSupervisor ? 0 : Number(legacyPatch.supervisorIndirectSnapshot || 0)),
+      ),
+      status: overheadIsActual ? 'actual' : 'estimated',
+    } satisfies ProductionCostSourceLine] : []),
+  ];
+  if (costingPolicy.fullManufacturingEnabled && costingPolicy.includeDepreciation && depreciationCost > 0) {
+    sourceLines.push({
+      sourceKey: `depreciation:${reportId}:${ym}`,
+      sourceType: effectiveDepreciation.hasScheduledRows ? 'asset_schedule' : 'asset_depreciation',
+      sourceId: ym,
+      category: 'depreciation',
+      label: 'إهلاك أصول المصنع',
+      amount: depreciationCost,
+      status: effectiveDepreciation.hasScheduledRows ? 'scheduled' : 'actual',
+    });
+  }
+  const previousRevision = Math.max(0, Number(row.manufacturingCostRevision || 0));
+  const fullCost = calculateFullProductionCost({
+    reportId,
+    quantityProduced: Number(row.quantityProduced || 0),
+    lines: sourceLines,
+    revision: previousRevision + 1,
   });
-  if (patch) await reportService.update(reportId, patch);
+  const unchanged = row.manufacturingCostVersion === fullCost.version
+    && Number(row.fullManufacturingCostSnapshot || 0) === fullCost.fullManufacturingCost
+    && JSON.stringify(row.manufacturingCostSourcesSnapshot || []) === JSON.stringify(fullCost.sourceLines);
+  const revision = unchanged ? Math.max(1, previousRevision) : fullCost.revision;
+  const finalPatch: Partial<ProductionReport> = {
+    ...legacyPatch,
+    legacyConversionCostSnapshot: legacyConversionCost,
+    manufacturingCostVersion: fullCost.version,
+    manufacturingCostRevision: revision,
+    manufacturingCostStatus: fullCost.status,
+    manufacturingCostPostingState: 'calculated',
+    manufacturingCostPostingError: '',
+    manufacturingCostCalculatedAt: unchanged
+      ? row.manufacturingCostCalculatedAt || new Date().toISOString()
+      : new Date().toISOString(),
+    materialCostSnapshot: fullCost.materialCost,
+    packagingCostSnapshot: fullCost.packagingCost,
+    directLaborCostSnapshot: fullCost.directLaborCost,
+    factoryOverheadCostSnapshot: fullCost.factoryOverheadCost,
+    depreciationCostSnapshot: fullCost.depreciationCost,
+    fullManufacturingCostSnapshot: fullCost.fullManufacturingCost,
+    fullManufacturingUnitCostSnapshot: fullCost.unitManufacturingCost,
+    manufacturingCostSourceQualitySnapshot: fullCost.sourceQuality,
+    manufacturingCostSourcesSnapshot: fullCost.sourceLines,
+  };
+  await reportService.update(reportId, finalPatch);
+  return { ...row, ...finalPatch };
+}
+
+function replaceLoadedReportRow(
+  rows: ProductionReport[],
+  report: ProductionReport,
+): ProductionReport[] {
+  if (!report.id || !rows.some((row) => row.id === report.id)) return rows;
+  return rows.map((row) => row.id === report.id ? report : row);
+}
+
+/** Insert or replace a report in an in-memory list without a full Firestore reload. */
+function upsertLoadedReportRow(
+  rows: ProductionReport[],
+  report: ProductionReport,
+): ProductionReport[] {
+  if (!report.id) return rows;
+  if (rows.some((row) => row.id === report.id)) {
+    return rows.map((row) => (row.id === report.id ? { ...row, ...report } : row));
+  }
+  return [report, ...rows];
+}
+
+/** Insert or replace a work order in the in-memory list without a full Firestore reload. */
+function upsertLoadedWorkOrder(
+  rows: WorkOrder[],
+  workOrder: WorkOrder,
+): WorkOrder[] {
+  if (!workOrder.id) return rows;
+  if (rows.some((row) => row.id === workOrder.id)) {
+    return rows.map((row) => (row.id === workOrder.id ? { ...row, ...workOrder } : row));
+  }
+  return [workOrder, ...rows];
+}
+
+/** Insert or replace a production plan in the in-memory list without a full Firestore reload. */
+function upsertLoadedProductionPlan(
+  rows: ProductionPlan[],
+  plan: ProductionPlan,
+): ProductionPlan[] {
+  if (!plan.id) return rows;
+  if (rows.some((row) => row.id === plan.id)) {
+    return rows.map((row) => (row.id === plan.id ? { ...row, ...plan } : row));
+  }
+  return [plan, ...rows];
+}
+
+/** Prefer cached reports already loaded for dashboards/lists when rebuilding planReports. */
+function buildPlanReportsFromCachedReports(
+  plans: ProductionPlan[],
+  cachedReports: ProductionReport[],
+  previousPlanReports: Record<string, ProductionReport[]>,
+): Record<string, ProductionReport[]> {
+  const next: Record<string, ProductionReport[]> = { ...previousPlanReports };
+  for (const plan of plans) {
+    if (!plan.id && !plan.productId) continue;
+    const key = plan.id || `product_${plan.productId}`;
+    if (cachedReports.length > 0) {
+      next[key] = filterReportsForProductionPlan(plan, cachedReports);
+    } else if (!next[key]) {
+      next[key] = [];
+    }
+  }
+  return next;
 }
 
 function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
-  return status === 'pending' || status === 'in_progress';
+  return status === 'pending' || status === 'in_progress' || status === 'paused';
 }
 
-function getSortableDateMs(value: any): number {
-  if (!value) return 0;
-  if (typeof value?.toDate === 'function') return value.toDate().getTime();
-  if (typeof value?.seconds === 'number') return value.seconds * 1000;
-  const ms = new Date(value).getTime();
-  return Number.isNaN(ms) ? 0 : ms;
-}
+type ProductionReportLinkInput = Pick<
+  ProductionReport,
+  'lineId' | 'productId' | 'employeeId' | 'date' | 'workOrderId' | 'productionPlanId' | 'reportType'
+>;
 
-function pickBestAutoLinkedWorkOrder(
-  workOrders: WorkOrder[],
-  criteria: {
-    lineId: string;
-    productId: string;
-    supervisorId?: string;
-    reportType: NonNullable<ProductionReport['reportType']>;
-    includeCompleted?: boolean;
-  },
-): WorkOrder | null {
-  const allowedStatuses = criteria.includeCompleted
-    ? new Set<WorkOrder['status']>(['pending', 'in_progress', 'completed'])
-    : new Set<WorkOrder['status']>(['pending', 'in_progress']);
-  const filtered = workOrders.filter((wo) => (
-    Boolean(wo?.id)
-    && allowedStatuses.has(wo.status)
-    && wo.productId === criteria.productId
-    && workOrderMatchesReportType(wo, criteria.reportType)
-  ));
-  if (filtered.length === 0) return null;
+async function resolveProductionReportExecutionLinks(
+  input: ProductionReportLinkInput,
+  _cachedWorkOrders: WorkOrder[],
+  options?: { preserveCompletedWorkOrder?: boolean },
+): Promise<{
+  activeWorkOrder: WorkOrder | null;
+  activePlan: ProductionPlan | null;
+  productionPlanLinkMode?: ProductionReport['productionPlanLinkMode'];
+  hasMatchingPlanContext: boolean;
+}> {
+  const reportType = resolveReportType(input.reportType);
+  let activeWorkOrder: WorkOrder | null = null;
+  const requestedWorkOrderId = String(input.workOrderId || '').trim();
 
-  const supervisorId = String(criteria.supervisorId || '').trim();
-  const ranked = [...filtered].sort((a, b) => {
-    const score = (wo: WorkOrder) => {
-      let value = 0;
-      if (wo.lineId === criteria.lineId) value += 8;
-      if (supervisorId && wo.supervisorId === supervisorId) value += 4;
-      if (wo.status === 'in_progress') value += 2;
-      if (wo.status === 'pending') value += 1;
-      if (wo.status === 'completed') value += 0.5;
-      return value;
-    };
-    const scoreDiff = score(b) - score(a);
-    if (scoreDiff !== 0) return scoreDiff;
-    const targetDateDiff = String(b.targetDate || '').localeCompare(String(a.targetDate || ''));
-    if (targetDateDiff !== 0) return targetDateDiff;
-    const createdAtDiff = getSortableDateMs(b.createdAt) - getSortableDateMs(a.createdAt);
-    if (createdAtDiff !== 0) return createdAtDiff;
-    return String(b.id || '').localeCompare(String(a.id || ''));
-  });
+  if (requestedWorkOrderId) {
+    const selected = await workOrderService.getById(requestedWorkOrderId);
+    if (
+      selected
+      && (
+        isActiveWorkOrderStatus(selected.status)
+        || (options?.preserveCompletedWorkOrder === true && selected.status === 'completed')
+      )
+      && selected.productId === input.productId
+      && workOrderMatchesReportType(selected, reportType)
+      && reportDateEligibleForWorkOrder(input.date, selected)
+    ) {
+      activeWorkOrder = selected;
+    }
+  }
 
-  return ranked[0] ?? null;
+  // Do not silently attach a work order when the operator left it empty.
+  // Auto-attach made optional-WO saves fail on صرف إنتاج / supervisor mismatch.
+
+  const explicitPlanId = String(input.productionPlanId || '').trim();
+  const explicitPlan = explicitPlanId
+    ? await productionPlanService.getById(explicitPlanId)
+    : null;
+  const workOrderPlanId = String(activeWorkOrder?.planId || '').trim();
+  const workOrderPlan = workOrderPlanId && workOrderPlanId !== explicitPlanId
+    ? await productionPlanService.getById(workOrderPlanId)
+    : explicitPlanId && workOrderPlanId === explicitPlanId
+      ? explicitPlan
+      : null;
+  const activePlans = await productionPlanService.getActiveByProduct(input.productId);
+  const planReportType = effectivePlanReportType(reportType);
+  const matchesReportContext = (plan: ProductionPlan | null): boolean => {
+    if (!plan || plan.productId !== input.productId) return false;
+    const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
+    return planType === planReportType;
+  };
+  const acceptsReport = (plan: ProductionPlan | null): boolean => (
+    matchesReportContext(plan) && plan?.acceptsProductionFromReports !== false
+  );
+  const matchingActivePlans = activePlans.filter((plan) => acceptsReport(plan));
+
+  if (!explicitPlan && !workOrderPlan && matchingActivePlans.length > 1) {
+    throw new Error(
+      'يوجد أكثر من خطة نشطة لنفس المنتج. أنشئ التقرير من الخطة المطلوبة لضمان الربط الصحيح.',
+    );
+  }
+
+  const activePlan = acceptsReport(explicitPlan)
+    ? explicitPlan
+    : acceptsReport(workOrderPlan)
+      ? workOrderPlan
+      : matchingActivePlans.length === 1
+        ? matchingActivePlans[0]
+        : null;
+
+  return {
+    activeWorkOrder,
+    activePlan,
+    productionPlanLinkMode: activePlan?.id
+      ? (acceptsReport(explicitPlan) || acceptsReport(workOrderPlan) ? 'manual' : 'auto')
+      : undefined,
+    hasMatchingPlanContext:
+      matchesReportContext(explicitPlan)
+      || matchesReportContext(workOrderPlan)
+      || activePlans.some(matchesReportContext),
+  };
 }
 
 function deriveProductionPlanAutoPatch(
   plan: ProductionPlan,
   reports: ProductionReport[],
+  todayDate: string = getTodayDateString(),
 ): Partial<ProductionPlan> | null {
   const plannedQty = Number(plan.plannedQuantity || 0);
-  const producedQty = Number(plan.producedQuantity || 0);
-  const hasReportProgress = reports.some((report) => Number(report.quantityProduced || 0) > 0);
-  const hasProgress = producedQty > 0 || hasReportProgress;
-
-  let nextStatus = plan.status;
-  if (plannedQty > 0 && producedQty >= plannedQty && plan.status !== 'completed') {
-    nextStatus = 'completed';
-  } else if (plan.status === 'planned' && hasProgress) {
-    nextStatus = 'in_progress';
-  }
-
-  const firstReportDate = reports
+  const planReports = filterReportsForProductionPlan(plan, reports);
+  const producedQty = planReports.reduce((sum, report) => sum + Number(report.quantityProduced || 0), 0);
+  const remainingQty = Math.max(0, plannedQty - producedQty);
+  const achievementPercent = plannedQty > 0
+    ? Math.round((producedQty / plannedQty) * 1000) / 10
+    : 0;
+  const producingDates = planReports
     .filter((report) => Number(report.quantityProduced || 0) > 0 && Boolean(report.date))
-    .map((report) => report.date)
-    .sort((a, b) => a.localeCompare(b))[0];
+    .map((report) => String(report.date).slice(0, 10))
+    .sort((a, b) => a.localeCompare(b));
+  const firstReportDate = producingDates[0];
+  const lastReportDate = producingDates[producingDates.length - 1] || null;
+  const hasProgress = producedQty > 0 || Boolean(firstReportDate);
+
+  const nextStatus = deriveProductionPlanAutoStatus(
+    plan,
+    producedQty,
+    lastReportDate,
+    todayDate,
+  );
 
   const patch: Partial<ProductionPlan> = {};
   if (nextStatus !== plan.status) {
     patch.status = nextStatus;
+  }
+  if (Number(plan.producedQuantity ?? -1) !== producedQty) {
+    patch.producedQuantity = producedQty;
+  }
+  if (Number(plan.remainingQuantity ?? -1) !== remainingQty) {
+    patch.remainingQuantity = remainingQty;
+  }
+  if (Number(plan.achievementPercent ?? -1) !== achievementPercent) {
+    patch.achievementPercent = achievementPercent;
   }
   if (hasProgress && firstReportDate) {
     const currentStart = String(plan.startDate || '');
@@ -491,7 +1192,7 @@ function hasPermission(
   permissions: Record<string, boolean>,
   key: string,
 ): boolean {
-  return permissions[key] === true;
+  return checkPermission(permissions, key as Permission);
 }
 
 function collectHiddenProductIdsFromRawMaster(
@@ -532,6 +1233,38 @@ async function filterProductsByRawMaterialWarehouse(
   } catch {
     return rawProducts;
   }
+}
+
+async function resolveProductionReportItemSnapshot(
+  reportType: NonNullable<ProductionReport['reportType']>,
+  productId: string,
+  products: FirestoreProduct[],
+  cachedComponentOptions: ReportsUiRawMaterialOption[] = [],
+): Promise<Pick<ProductionReport, 'productNameSnapshot' | 'productCodeSnapshot'>> {
+  const normalizedProductId = String(productId || '').trim();
+  if (!normalizedProductId) return {};
+
+  if (reportType !== 'component_injection') {
+    const product = products.find((row) => row.id === normalizedProductId);
+    return product
+      ? {
+        productNameSnapshot: String(product.name || '').trim(),
+        productCodeSnapshot: String(product.code || '').trim(),
+      }
+      : {};
+  }
+
+  let component = cachedComponentOptions.find((row) => row.id === normalizedProductId);
+  if (!component) {
+    const componentOptions = await loadReportsComponentLabelOptions();
+    component = componentOptions.find((row) => row.id === normalizedProductId);
+  }
+  return component
+    ? {
+      productNameSnapshot: String(component.name || '').trim(),
+      productCodeSnapshot: String(component.code || '').trim(),
+    }
+    : {};
 }
 
 async function syncProductAvgDailyProduction(productId: string): Promise<void> {
@@ -613,7 +1346,7 @@ export type CreateComponentWasteReportInput = {
   lineId: string;
   productId: string;
   date: string;
-  component: ReportComponentScrapItem;
+  components: ReportComponentScrapItem[];
   notes?: string;
 };
 
@@ -689,7 +1422,7 @@ interface AppState {
   userProfile: FirestoreUser | null;
   /** من مستند tenants/{id}.name — بيانات الشركة */
   tenantCompanyName: string;
-  /** Effective product modules for this tenant; always normalized and non-empty. */
+  /** Effective activity packs for this tenant (always resolved; never empty). */
   tenantActivityPacks: ActivityPackId[];
 
   // Dynamic RBAC
@@ -705,6 +1438,7 @@ interface AppState {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   register: (email: string, password: string, displayName: string) => Promise<void>;
+  /** Sync hydrate from local session cache (warm resume). Returns true when applied. */
   hydrateFromCachedSession: (uid: string) => boolean;
   initializeApp: () => Promise<void>;
   checkApprovalStatus: () => Promise<boolean>;
@@ -718,14 +1452,16 @@ interface AppState {
 
   // Roles management (admin CRUD)
   fetchRoles: () => Promise<void>;
+  /** Manual only: create missing default roles + additive grants. Never auto on login. */
+  seedDefaultRolesCatalog: () => Promise<{ rolesCreatedOrPatched: boolean; serverGrantedKeys: number }>;
   createRole: (data: Omit<FirestoreRole, 'id'>) => Promise<string | null>;
   updateRole: (id: string, data: Partial<Omit<FirestoreRole, 'id'>>) => Promise<void>;
   deleteRole: (id: string) => Promise<void>;
 
-  // Fetch (one-time)
-  fetchProducts: () => Promise<void>;
-  fetchLines: () => Promise<void>;
-  fetchEmployees: () => Promise<void>;
+  // Fetch (one-time) — optional TTL cache so route remounts do not refetch cold
+  fetchProducts: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
+  fetchLines: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
+  fetchEmployees: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
   fetchAttendanceLogs: (startDate: string, endDate: string) => Promise<void>;
   fetchAttendanceRecords: (startDate: string, endDate: string) => Promise<void>;
   importAttendanceFingerprintCsv: (input: {
@@ -763,12 +1499,19 @@ interface AppState {
   fetchLineStatuses: () => Promise<void>;
   fetchLineProductConfigs: () => Promise<void>;
   fetchRoutingPlanTotals: () => Promise<void>;
-  fetchProductionPlans: () => Promise<void>;
+  fetchProductionPlans: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
   fetchProductionPlanFollowUps: (planId?: string) => Promise<void>;
 
   // Mutations — Products
-  createProduct: (data: Omit<FirestoreProduct, 'id'>) => Promise<string | null>;
-  updateProduct: (id: string, data: Partial<FirestoreProduct>) => Promise<void>;
+  createProduct: (
+    data: Omit<FirestoreProduct, 'id'>,
+    context: { path: ProductCreatePath },
+  ) => Promise<string>;
+  updateProduct: (
+    id: string,
+    data: Partial<FirestoreProduct>,
+    context: { path: ProductUpdatePath },
+  ) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
 
   // Mutations — Lines
@@ -782,15 +1525,22 @@ interface AppState {
   deleteEmployee: (id: string) => Promise<void>;
 
   // Mutations — Reports
-  createReport: (data: Omit<ProductionReport, 'id' | 'createdAt'>) => Promise<string | null>;
+  createReport: (
+    data: Omit<ProductionReport, 'id' | 'createdAt'>,
+    context: { path: ProductionReportCreatePath },
+  ) => Promise<string | null>;
   queueReportCreate: (
     data: Omit<ProductionReport, 'id' | 'createdAt'>,
     context: { path: ProductionReportCreatePath },
   ) => { optimisticId: string; completion: Promise<string | null> };
   retryQueuedReportCreate: (optimisticId: string) => Promise<string | null>;
   createComponentWasteReport: (data: CreateComponentWasteReportInput) => Promise<string | null>;
-  updateReport: (id: string, data: Partial<ProductionReport>) => Promise<void>;
-  deleteReport: (id: string) => Promise<void>;
+  updateReport: (
+    id: string,
+    data: Partial<ProductionReport>,
+    context: { path: ProductionReportUpdatePath },
+  ) => Promise<void>;
+  deleteReport: (id: string, context: { path: 'reports_page' | 'bulk_delete' }) => Promise<void>;
   reapplyReportInventory: (id: string) => Promise<void>;
   syncMissingProductionEntryTransfers: (
     startDate: string,
@@ -810,6 +1560,24 @@ interface AppState {
       }) => void;
     }
   ) => Promise<{ processed: number; linked: number; skipped: number; failed: number }>;
+  /** Link eligible reports from WO start date onward, then set producedQuantity from linked report sum (idempotent). */
+  reconcileWorkOrderFromReports: (
+    workOrderId: string,
+    context: (
+      | { path: ProductionReportReconcilePath }
+      | { internal: true }
+    ) & { mode?: 'full' | 'linkedOnly' },
+  ) => Promise<{
+    linked: number;
+    reportCount: number;
+    producedQuantity: number;
+  }>;
+  /** Recompute produced/status for one plan from its linked reports (includes completed → reopen). */
+  reconcileProductionPlanFromReports: (planId: string) => Promise<{
+    producedQuantity: number;
+    status: PlanStatus;
+    patched: boolean;
+  } | null>;
   unlinkReportsWorkOrdersInRange: (
     startDate: string,
     endDate: string,
@@ -833,17 +1601,31 @@ interface AppState {
   deleteLineProductConfig: (id: string) => Promise<void>;
 
   // Mutations — Production Plans
-  createProductionPlan: (data: Omit<ProductionPlan, 'id' | 'createdAt'>) => Promise<string | null>;
-  updateProductionPlan: (id: string, data: Partial<ProductionPlan>) => Promise<void>;
+  createProductionPlan: (
+    data: Omit<ProductionPlan, 'id' | 'createdAt'>,
+    context: { path: ProductionPlanCreatePath },
+  ) => Promise<string | null>;
+  updateProductionPlan: (
+    id: string,
+    data: Partial<ProductionPlan>,
+    context: { path: ProductionPlanUpdatePath },
+  ) => Promise<void>;
   autoGeneratePlanMaterialRequirements: (plan: ProductionPlan) => Promise<void>;
   deleteProductionPlan: (id: string) => Promise<void>;
   createProductionPlanFollowUp: (data: Omit<ProductionPlanFollowUp, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string | null>;
   updateProductionPlanFollowUp: (id: string, data: Partial<ProductionPlanFollowUp>) => Promise<void>;
 
   // Mutations — Work Orders
-  fetchWorkOrders: () => Promise<void>;
-  createWorkOrder: (data: Omit<WorkOrder, 'id' | 'createdAt'>) => Promise<string | null>;
-  updateWorkOrder: (id: string, data: Partial<WorkOrder>) => Promise<void>;
+  fetchWorkOrders: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
+  createWorkOrder: (
+    data: Omit<WorkOrder, 'id' | 'createdAt'>,
+    context: { path: WorkOrderCreatePath },
+  ) => Promise<string | null>;
+  updateWorkOrder: (
+    id: string,
+    data: Partial<WorkOrder>,
+    context: { path: WorkOrderUpdatePath },
+  ) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
 
   // Notifications
@@ -862,7 +1644,7 @@ interface AppState {
 
   // System Settings
   fetchSystemSettings: () => Promise<void>;
-  updateSystemSettings: (data: SystemSettings) => Promise<void>;
+  updateSystemSettings: (data: Partial<SystemSettings>) => Promise<void>;
 
   // Mutations — Cost Management
   fetchCostData: () => Promise<void>;
@@ -969,9 +1751,37 @@ function pruneProductionReportsRangeCache(
 
 const DEFAULT_REPORTS_RANGE_STALE_MS = 5 * 60 * 1000;
 const DEFAULT_REPORTS_UI_REF_STALE_MS = 10 * 60 * 1000;
+const DEFAULT_CATALOG_STALE_MS = 5 * 60 * 1000;
+const DEFAULT_OPS_STALE_MS = 2 * 60 * 1000;
 
 let _productionReportsRangeInFlight = new Map<string, Promise<ProductionReport[]>>();
 let _reportsUiReferenceInFlight: Promise<void> | null = null;
+
+type StoreFetchCacheOptions = { force?: boolean; maxAgeMs?: number; silent?: boolean };
+
+let _productsFetchedAt = 0;
+let _linesFetchedAt = 0;
+let _employeesFetchedAt = 0;
+let _plansFetchedAt = 0;
+let _workOrdersFetchedAt = 0;
+let _productsInFlight: Promise<void> | null = null;
+let _linesInFlight: Promise<void> | null = null;
+let _employeesInFlight: Promise<void> | null = null;
+let _plansInFlight: Promise<void> | null = null;
+let _workOrdersInFlight: Promise<void> | null = null;
+
+function resetStoreFetchCaches() {
+  _productsFetchedAt = 0;
+  _linesFetchedAt = 0;
+  _employeesFetchedAt = 0;
+  _plansFetchedAt = 0;
+  _workOrdersFetchedAt = 0;
+  _productsInFlight = null;
+  _linesInFlight = null;
+  _employeesInFlight = null;
+  _plansInFlight = null;
+  _workOrdersInFlight = null;
+}
 
 function invalidateProductionReportsRangeCacheForDates(
   dates: string[],
@@ -984,6 +1794,10 @@ function invalidateProductionReportsRangeCacheForDates(
     if (!(key in next)) _productionReportsRangeInFlight.delete(key);
   }
   set({ productionReportsRangeCache: next });
+}
+
+function getReportOperationalDateString(systemSettings: Pick<SystemSettings, 'planSettings'> | null | undefined): string {
+  return getOperationalDateString(resolveReportBehaviorSettings(systemSettings).operationalDayStartHour);
 }
 
 // Flag to prevent onAuthStateChanged from running initializeApp during admin user creation
@@ -1000,19 +1814,6 @@ function reapplyThemeFromAppStore(get: () => AppState, options?: { syncTenantDoc
     applyAppTheme(m, theme);
     cacheTenantTheme(m);
   });
-}
-
-
-/** Insert or replace a report in an in-memory list without a full Firestore reload. */
-function upsertLoadedReportRow(
-  rows: ProductionReport[],
-  report: ProductionReport,
-): ProductionReport[] {
-  if (!report.id) return rows;
-  if (rows.some((row) => row.id === report.id)) {
-    return rows.map((row) => (row.id === report.id ? { ...row, ...report } : row));
-  }
-  return [report, ...rows];
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
@@ -1074,7 +1875,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   userDisplayName: null,
   userProfile: null,
   tenantCompanyName: '',
-  tenantActivityPacks: resolveActivityPacks(),
+  tenantActivityPacks: ['manufacturing', 'repair'],
 
   // Dynamic RBAC defaults (empty until login)
   roles: [],
@@ -1086,11 +1887,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: apply a role to the store ─────────────────────────────────────
 
   _applyRole: (role: FirestoreRole) => {
+    // Grants come from Firestore roles.permissions only (DB source of truth).
+    // Default catalog seed/heal runs only via Roles Management button (or company Setup).
     set({
       userRoleId: role.id!,
       userRoleName: role.name,
       userRoleColor: role.color,
-      userPermissions: role.permissions,
+      userPermissions: applyPackagingOnlyPermissionLocks(
+        applyBuiltinRolePermissionLocks(
+          normalizeRolePermissions(role.permissions),
+          getBuiltInRoleKey(role),
+        ),
+      ),
     });
   },
 
@@ -1110,17 +1918,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const cred = await registerWithEmail(email, password);
       const uid = cred.user.uid;
-
-      const roles = await roleService.seedIfEmpty();
-      set({ roles });
-
-      const defaultRole = roles[roles.length - 1] ?? roles[0];
-      if (!defaultRole) throw new Error('Failed to seed roles');
+      // Registration is not an authorized role-migration path. Pending users
+      // receive the deterministic least-privilege role id provisioned by admins.
+      const defaultRoleId = roleService.defaultRoleId('inventory_viewer');
 
       await userService.set(uid, {
         email,
         displayName,
-        roleId: defaultRole.id!,
+        roleId: defaultRoleId,
         tenantId: getCurrentTenantId(),
         isActive: false,
         createdBy: 'self-register',
@@ -1136,7 +1941,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           id: uid,
           email,
           displayName,
-          roleId: defaultRole.id!,
+          roleId: defaultRoleId,
           tenantId: getCurrentTenantId(),
           isActive: false,
         },
@@ -1177,16 +1982,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Auth: Logout ──────────────────────────────────────────────────────────
 
   logout: async () => {
-    setCurrentTenant(null);
+    const tenantId = getCurrentTenantIdOrNull();
     const { uid, userEmail } = get();
     clearCachedAppSession(uid);
-    if (uid && userEmail) {
-      activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج');
+    if (uid && userEmail && tenantId) {
+      void activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج').catch(() => {});
     }
     await signOut();
+    setCurrentTenant(null);
     useJobsStore.getState().resetUiState();
     _productionReportsRangeInFlight.clear();
     _reportsUiReferenceInFlight = null;
+    resetStoreFetchCaches();
+    try {
+      const { invalidatePageDataCache } = await import('../modules/shared/lib/pageDataCache');
+      invalidatePageDataCache();
+    } catch {
+      /* ignore */
+    }
     set({
       isAuthenticated: false,
       isPendingApproval: false,
@@ -1195,7 +2008,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       userDisplayName: null,
       userProfile: null,
       tenantCompanyName: '',
-      tenantActivityPacks: resolveActivityPacks(),
+      tenantActivityPacks: ['manufacturing', 'repair'],
       userRoleId: '',
       userRoleName: '',
       userRoleColor: '',
@@ -1267,7 +2080,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // ── Warm resume: apply local session before server validation ────────────
+  // ── Warm resume: apply local session before server validate ─────────────
 
   hydrateFromCachedSession: (uid: string) => {
     const cachedSession = readCachedAppSession(uid);
@@ -1305,6 +2118,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, error: null, authError: null });
     try {
       const uid = currentUser.uid;
+      get().hydrateFromCachedSession(uid);
 
       const userDoc = await userService.get(uid);
       if (!userDoc) {
@@ -1335,10 +2149,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         return;
       }
 
-      const roles = await roleService.seedIfEmpty();
-      set({ roles });
+      // Role templates / grants run only from Roles Management button (or company Setup).
+      // Do not auto-migrate or re-grant on every admin login.
+      const roles = await roleService.getAll();
+      const role = roles.find((r) => r.id === userDoc.roleId);
 
-      const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
+      set({ roles });
+      if (!role) throw new Error('دور المستخدم غير موجود. تواصل مع مدير النظام.');
 
       set({
         isAuthenticated: true,
@@ -1350,6 +2167,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
 
       get()._applyRole(role);
+      writeCachedAppSession({
+        uid,
+        userEmail: userDoc.email,
+        userDisplayName: userDoc.displayName,
+        userProfile: userDoc,
+        role,
+        tenantCompanyName: get().tenantCompanyName,
+        tenantActivityPacks: get().tenantActivityPacks,
+      });
       await get()._loadAppData();
       writeCachedAppSession({
         uid,
@@ -1379,9 +2205,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       setCurrentTenant(userDoc.tenantId);
 
-      const roles = get().roles.length > 0 ? get().roles : await roleService.seedIfEmpty();
+      const roles = get().roles.length > 0 ? get().roles : await roleService.getAll();
       if (roles.length > 0 && get().roles.length === 0) set({ roles });
-      const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
+      const role = roles.find((r) => r.id === userDoc.roleId);
+      if (!role) return false;
 
       set({
         isPendingApproval: false,
@@ -1401,244 +2228,66 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: Load all app data (after auth) ────────────────────────────
 
   _loadAppData: async () => {
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const tenantId = get().userProfile?.tenantId;
-    const bootstrapAccess = resolveBootstrapDataAccess((permission) =>
-      hasPermission(get().userPermissions, permission),
-    );
-    const [
-      rawProducts,
-      allCategories,
-      rawLines,
-      rawEmployees,
-      configs,
-      productionPlans,
-      productionPlanFollowUps,
-      workOrders,
-      costCenters,
-      costCenterValues,
-      costAllocations,
-      laborSettings,
-      assets,
-      assetDepreciations,
-      systemSettingsRaw,
-      tenantDoc,
-    ] = await Promise.all([
-      productService.getAll(),
-      categoryService.getAll(),
-      lineService.getAll(),
-      employeeService.getAll(),
-      lineProductConfigService.getAll(),
-      productionPlanService.getAll(),
-      productionPlanFollowUpService.getAll(),
-      workOrderService.getAll(),
-      bootstrapAccess.costCenters ? costCenterService.getAll() : Promise.resolve([]),
-      bootstrapAccess.costDetails ? costCenterValueService.getAll() : Promise.resolve([]),
-      bootstrapAccess.costDetails ? costAllocationService.getAll() : Promise.resolve([]),
-      laborSettingsService.get(),
-      assetService.getAll(),
-      assetDepreciationService.getByPeriod(currentMonth),
+    const uid = get().uid;
+    // Login bootstrap is intentionally point-read only. Catalogs, operations,
+    // finance and reports are loaded by their owning routes/actions.
+    const [systemSettingsRaw, tenantDoc, currentEmployee, laborSettings] = await Promise.all([
       systemSettingsService.get(),
       tenantId ? tenantService.getById(tenantId) : Promise.resolve(null),
+      uid ? employeeService.getByUserId(uid) : Promise.resolve(null),
+      laborSettingsService.get(),
     ]);
-
-    const today = getOperationalDateString(8);
-    const [todayReports, lineStatuses] = await Promise.all([
-      reportService.getByDateRange(today, today),
-      lineStatusService.getAll(),
-    ]);
-    const rangeCacheNow = Date.now();
-    const rkToday = getProductionReportsRangeCacheKey(today, today);
-
-    /** Filled after idle — keeps first paint after login lighter. */
-    const planReports: Record<string, ProductionReport[]> = {};
-
-    const mergedSettings = systemSettingsRaw
-      ? {
-          ...DEFAULT_SYSTEM_SETTINGS,
-          ...systemSettingsRaw,
-          attendanceIntegration: {
-            ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
-            ...(systemSettingsRaw.attendanceIntegration || {}),
-          },
-        }
-      : DEFAULT_SYSTEM_SETTINGS;
-    const filteredRawProducts = await filterProductsByRawMaterialWarehouse(
-      rawProducts,
-      mergedSettings.planSettings?.rawMaterialWarehouseId,
-    );
-
-    let routingTotalTimeSecondsByProduct: Record<string, number> = {};
-    let routingVarianceBasisSecondsByProduct: Record<string, number> = {};
-    let routingTargetUnitSecondsByProduct: Record<string, number> = {};
-    let routingProductTargetUnitSecondsByProduct: Record<string, number> =
-      buildProductRoutingTargetSecondsByProductId(filteredRawProducts);
-    try {
-      const activeRoutingPlans = await routingPlanService.getActivePlans();
-      routingTotalTimeSecondsByProduct = buildRoutingTotalSecondsByProductId(activeRoutingPlans);
-      const varianceFromPlans = buildRoutingVarianceBasisSecondsByProductId(activeRoutingPlans);
-      routingTargetUnitSecondsByProduct =
-        buildRoutingTargetSecondsOnlyByProductId(activeRoutingPlans);
-      routingProductTargetUnitSecondsByProduct =
-        buildProductRoutingTargetSecondsByProductId(filteredRawProducts);
-      routingVarianceBasisSecondsByProduct = mergeProductTargetsIntoRoutingVarianceBasis(
-        varianceFromPlans,
-        routingProductTargetUnitSecondsByProduct,
-      );
-    } catch (routingErr) {
-      console.warn('routingPlanService.getActivePlans failed', routingErr);
-      routingVarianceBasisSecondsByProduct = mergeProductTargetsIntoRoutingVarianceBasis(
-        {},
-        routingProductTargetUnitSecondsByProduct,
-      );
-    }
-
-    // Resolve current employee record for the logged-in user
-    const uid = get().uid;
-    const currentEmployee = uid
-      ? rawEmployees.find((e) => e.userId === uid) ?? null
-      : null;
-
+    const mergedSettings = resolveSystemSettings(systemSettingsRaw);
     set({
-      _rawProducts: filteredRawProducts,
-      _productCategories: allCategories.filter(isProductCategoryRow),
-      _rawLines: rawLines,
-      _rawEmployees: rawEmployees,
+      _rawProducts: [],
+      _productCategories: [],
+      _rawLines: [],
+      _rawEmployees: currentEmployee ? [currentEmployee] : [],
       currentEmployee,
-      lineProductConfigs: configs,
-      routingTotalTimeSecondsByProduct,
-      routingVarianceBasisSecondsByProduct,
-      routingTargetUnitSecondsByProduct,
-      routingProductTargetUnitSecondsByProduct,
-      todayReports,
+      lineProductConfigs: [],
+      routingTotalTimeSecondsByProduct: {},
+      routingVarianceBasisSecondsByProduct: {},
+      routingTargetUnitSecondsByProduct: {},
+      routingProductTargetUnitSecondsByProduct: {},
+      todayReports: [],
       monthlyReports: [],
       productionReports: [],
-      productionReportsRangeCache: {
-        ...get().productionReportsRangeCache,
-        [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-      },
-      lineStatuses,
-      productionPlans,
-      productionPlanFollowUps,
-      planReports,
-      workOrders,
-      costCenters,
-      costCenterValues,
-      costAllocations,
+      productionReportsRangeCache: {},
+      lineStatuses: [],
+      productionPlans: [],
+      productionPlanFollowUps: [],
+      planReports: {},
+      workOrders: [],
+      costCenters: [],
+      costCenterValues: [],
+      costAllocations: [],
       laborSettings,
-      assets,
-      assetDepreciations,
+      assets: [],
+      assetDepreciations: [],
       systemSettings: mergedSettings,
       tenantCompanyName: tenantDoc?.name?.trim() ?? '',
       tenantActivityPacks: resolveActivityPacks(tenantDoc?.activityPacks),
+      products: [],
+      productionLines: [],
+      employees: currentEmployee ? [{
+        id: currentEmployee.id!,
+        name: currentEmployee.name,
+        departmentId: currentEmployee.departmentId ?? '',
+        jobPositionId: currentEmployee.jobPositionId ?? '',
+        level: currentEmployee.level ?? 1,
+        managerId: currentEmployee.managerId,
+        employmentType: currentEmployee.employmentType ?? 'full_time',
+        baseSalary: currentEmployee.baseSalary ?? 0,
+        hourlyRate: currentEmployee.hourlyRate ?? 0,
+        shiftId: currentEmployee.shiftId,
+        vehicleId: currentEmployee.vehicleId,
+        hasSystemAccess: currentEmployee.hasSystemAccess ?? false,
+        isActive: currentEmployee.isActive !== false,
+        code: currentEmployee.code,
+      }] : [],
     });
-
     reapplyThemeFromAppStore(get);
-
-    const allReports = todayReports;
-    const productCategories = allCategories.filter(isProductCategoryRow);
-    const products = buildProducts(
-      filteredRawProducts,
-      allReports,
-      configs,
-      routingTotalTimeSecondsByProduct,
-      productCategories,
-    );
-    const productionLines = buildProductionLines(
-      rawLines, rawProducts, rawEmployees, todayReports, lineStatuses, configs,
-      productionPlans, planReports, workOrders
-    );
-    const employees: Employee[] = rawEmployees.map((e) => ({
-      id: e.id!,
-      name: e.name,
-      departmentId: e.departmentId ?? '',
-      jobPositionId: e.jobPositionId ?? '',
-      level: e.level ?? 1,
-      managerId: e.managerId,
-      employmentType: e.employmentType ?? 'full_time',
-      baseSalary: e.baseSalary ?? 0,
-      hourlyRate: e.hourlyRate ?? 0,
-      shiftId: e.shiftId,
-      vehicleId: e.vehicleId,
-      hasSystemAccess: e.hasSystemAccess ?? false,
-      isActive: e.isActive !== false,
-      code: e.code,
-    }));
-
-    set({ products, productionLines, employees });
-
-    const scheduleDeferredBootstrap = () => {
-      const idle =
-        typeof requestIdleCallback !== 'undefined'
-          ? (cb: IdleRequestCallback) => requestIdleCallback(cb, { timeout: 4500 })
-          : (cb: IdleRequestCallback) =>
-              window.setTimeout(
-                () => cb({ didTimeout: true, timeRemaining: () => 0 } as IdleDeadline),
-                50,
-              );
-
-      idle(() => {
-        void (async () => {
-          try {
-            const { start: ms, end: me } = getMonthDateRange();
-            const monthly = await reportService.getByDateRange(ms, me);
-            const rkMonth = getProductionReportsRangeCacheKey(ms, me);
-            set((st) => ({
-              monthlyReports: monthly,
-              productionReportsRangeCache: {
-                ...st.productionReportsRangeCache,
-                [rkMonth]: { rows: monthly, fetchedAt: Date.now() },
-              },
-            }));
-            get()._rebuildProducts();
-            get()._rebuildLines();
-          } catch (err) {
-            console.warn('_loadAppData: deferred monthly reports failed', err);
-          }
-
-          try {
-            const plans = get().productionPlans;
-            const activePlans = plans.filter(
-              (p) => p.status === 'in_progress' || p.status === 'planned',
-            );
-            const nextPlanReports: Record<string, ProductionReport[]> = {};
-            const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
-            const planReportResults = await Promise.allSettled(
-              activePlans.map(async (plan) => {
-                const key = `${plan.lineId}_${plan.productId}`;
-                const reports = await reportService.getByLineAndProduct(
-                  plan.lineId,
-                  plan.productId,
-                  plan.startDate,
-                );
-                return { plan, key, reports };
-              }),
-            );
-            planReportResults.forEach((result) => {
-              if (result.status !== 'fulfilled') return;
-              const { plan, key, reports } = result.value;
-              nextPlanReports[key] = reports;
-              if (!plan.id) return;
-              const patch = deriveProductionPlanAutoPatch(plan, reports);
-              if (!patch) return;
-              planAutoPatches.push({ id: plan.id, patch });
-              Object.assign(plan, patch);
-            });
-            if (planAutoPatches.length > 0) {
-              await Promise.allSettled(
-                planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
-              );
-            }
-            set({ planReports: nextPlanReports, productionPlans: [...plans] });
-            get()._rebuildLines();
-          } catch (err) {
-            console.warn('_loadAppData: deferred plan reports failed', err);
-          }
-        })();
-      });
-    };
-    scheduleDeferredBootstrap();
   },
 
   // ── Role Switching ─────────────────────────────────────────────────────────
@@ -1671,11 +2320,37 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  seedDefaultRolesCatalog: async () => {
+    const roles = await roleService.migrateDefaultRoles();
+    set({ roles });
+    let serverGrantedKeys = 0;
+    try {
+      const syncResult = await syncBuiltInRolePermissionGrants();
+      serverGrantedKeys = Number(syncResult?.grantedKeys || 0);
+      if (serverGrantedKeys > 0) {
+        const refreshed = await roleService.getAll();
+        set({ roles: refreshed });
+      }
+    } catch (syncError) {
+      console.warn('syncBuiltInRolePermissionGrants (manual) failed:', syncError);
+    }
+    return { rolesCreatedOrPatched: true, serverGrantedKeys };
+  },
+
   createRole: async (data) => {
     try {
-      const id = await roleService.create(data);
-      if (id) await get().fetchRoles();
-      return id;
+      const created = unwrapOrThrow(await createRoleUseCase(
+        {
+          ...data,
+          permissions: normalizeRolePermissions(data.permissions),
+        },
+        {
+          userId: get().uid ?? undefined,
+          userName: get().userDisplayName ?? get().userEmail ?? undefined,
+        },
+      ));
+      await get().fetchRoles();
+      return created.roleId;
     } catch (error) {
       set({ error: (error as Error).message });
       return null;
@@ -1684,7 +2359,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateRole: async (id, data) => {
     try {
-      await roleService.update(id, data);
+      const payload = data.permissions
+        ? { ...data, permissions: normalizeRolePermissions(data.permissions) }
+        : data;
+      unwrapOrThrow(await updateRoleUseCase(id, payload, {
+        userId: get().uid ?? undefined,
+        userName: get().userDisplayName ?? get().userEmail ?? undefined,
+      }));
       await get().fetchRoles();
 
       if (id === get().userRoleId) {
@@ -1698,7 +2379,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteRole: async (id) => {
     try {
-      await roleService.delete(id);
+      unwrapOrThrow(await deleteRoleUseCase(id, {
+        userId: get().uid ?? undefined,
+        userName: get().userDisplayName ?? get().userEmail ?? undefined,
+      }));
       await get().fetchRoles();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1709,61 +2393,108 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Fetch Actions ─────────────────────────────────────────────────────────
 
-  fetchProducts: async () => {
-    set({ productsLoading: true, error: null });
-    try {
-      const [rawProducts, allCategories] = await Promise.all([
-        productService.getAll(),
-        categoryService.getAll(),
-      ]);
-      const productCategories = allCategories.filter(isProductCategoryRow);
-      const rawMaterialWarehouseId = get().systemSettings.planSettings?.rawMaterialWarehouseId;
-      const filteredRawProducts = await filterProductsByRawMaterialWarehouse(rawProducts, rawMaterialWarehouseId);
-      set({ _rawProducts: filteredRawProducts, _productCategories: productCategories });
-      get()._rebuildProducts();
-      await get().fetchRoutingPlanTotals();
-      set({ productsLoading: false });
-    } catch (error) {
-      set({ error: (error as Error).message, productsLoading: false });
+  fetchProducts: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_CATALOG_STALE_MS;
+    const hasData = get()._rawProducts.length > 0;
+    if (!force && hasData && Date.now() - _productsFetchedAt < maxAgeMs) return;
+    if (_productsInFlight) {
+      await _productsInFlight;
+      return;
     }
+    const silent = options.silent ?? hasData;
+    if (!silent) set({ productsLoading: true, error: null });
+    const run = (async () => {
+      try {
+        const [rawProducts, allCategories] = await Promise.all([
+          productService.getAll(),
+          categoryService.getAll(),
+        ]);
+        const productCategories = allCategories.filter(isProductCategoryRow);
+        const rawMaterialWarehouseId = get().systemSettings.planSettings?.rawMaterialWarehouseId;
+        const filteredRawProducts = await filterProductsByRawMaterialWarehouse(rawProducts, rawMaterialWarehouseId);
+        set({ _rawProducts: filteredRawProducts, _productCategories: productCategories });
+        get()._rebuildProducts();
+        await get().fetchRoutingPlanTotals();
+        _productsFetchedAt = Date.now();
+        set({ productsLoading: false });
+      } catch (error) {
+        set({ error: (error as Error).message, productsLoading: false });
+      } finally {
+        _productsInFlight = null;
+      }
+    })();
+    _productsInFlight = run;
+    await run;
   },
 
-  fetchLines: async () => {
-    set({ linesLoading: true, error: null });
-    try {
-      const rawLines = await lineService.getAll();
-      set({ _rawLines: rawLines });
-      get()._rebuildLines();
-      set({ linesLoading: false });
-    } catch (error) {
-      set({ error: (error as Error).message, linesLoading: false });
+  fetchLines: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_CATALOG_STALE_MS;
+    const hasData = get()._rawLines.length > 0;
+    if (!force && hasData && Date.now() - _linesFetchedAt < maxAgeMs) return;
+    if (_linesInFlight) {
+      await _linesInFlight;
+      return;
     }
+    const silent = options.silent ?? hasData;
+    if (!silent) set({ linesLoading: true, error: null });
+    const run = (async () => {
+      try {
+        const rawLines = await lineService.getAll();
+        set({ _rawLines: rawLines });
+        get()._rebuildLines();
+        _linesFetchedAt = Date.now();
+        set({ linesLoading: false });
+      } catch (error) {
+        set({ error: (error as Error).message, linesLoading: false });
+      } finally {
+        _linesInFlight = null;
+      }
+    })();
+    _linesInFlight = run;
+    await run;
   },
 
-  fetchEmployees: async () => {
-    try {
-      const rawEmployees = await employeeService.getAll();
-      set({ _rawEmployees: rawEmployees });
-      const employees: Employee[] = rawEmployees.map((e) => ({
-        id: e.id!,
-        name: e.name,
-        departmentId: e.departmentId ?? '',
-        jobPositionId: e.jobPositionId ?? '',
-        level: e.level ?? 1,
-        managerId: e.managerId,
-        employmentType: e.employmentType ?? 'full_time',
-        baseSalary: e.baseSalary ?? 0,
-        hourlyRate: e.hourlyRate ?? 0,
-        shiftId: e.shiftId,
-        vehicleId: e.vehicleId,
-        hasSystemAccess: e.hasSystemAccess ?? false,
-        isActive: e.isActive !== false,
-        code: e.code,
-      }));
-      set({ employees });
-    } catch (error) {
-      set({ error: (error as Error).message });
+  fetchEmployees: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_CATALOG_STALE_MS;
+    const hasData = get()._rawEmployees.length > 0;
+    if (!force && hasData && Date.now() - _employeesFetchedAt < maxAgeMs) return;
+    if (_employeesInFlight) {
+      await _employeesInFlight;
+      return;
     }
+    const run = (async () => {
+      try {
+        const rawEmployees = await employeeService.getAll();
+        set({ _rawEmployees: rawEmployees });
+        const employees: Employee[] = rawEmployees.map((e) => ({
+          id: e.id!,
+          name: e.name,
+          departmentId: e.departmentId ?? '',
+          jobPositionId: e.jobPositionId ?? '',
+          level: e.level ?? 1,
+          managerId: e.managerId,
+          employmentType: e.employmentType ?? 'full_time',
+          baseSalary: e.baseSalary ?? 0,
+          hourlyRate: e.hourlyRate ?? 0,
+          shiftId: e.shiftId,
+          vehicleId: e.vehicleId,
+          hasSystemAccess: e.hasSystemAccess ?? false,
+          isActive: e.isActive !== false,
+          code: e.code,
+        }));
+        set({ employees });
+        _employeesFetchedAt = Date.now();
+      } catch (error) {
+        set({ error: (error as Error).message });
+      } finally {
+        _employeesInFlight = null;
+      }
+    })();
+    _employeesInFlight = run;
+    await run;
   },
 
   fetchAttendanceLogs: async (startDate, endDate) => {
@@ -2045,7 +2776,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchReports: async (startDate?: string, endDate?: string) => {
     set({ reportsLoading: true, error: null });
     try {
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const from = startDate || today;
       const to = endDate || today;
       const reports: ProductionReport[] = [];
@@ -2133,30 +2864,32 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (needSpinner) set({ reportsUiReferenceLoading: true });
     const run = (async () => {
       try {
-        const [balances, warehousesRows] = await Promise.all([
+        const [balancesResult, warehousesResult, categoriesResult, componentOptionsResult] = await Promise.allSettled([
           stockService.getBalances(),
           warehouseService.getAllWarehouses(),
+          categoryService.getByType('product'),
+          loadReportsComponentLabelOptions(),
         ]);
-        const rawRows = await rawMaterialService.getAll();
-        const catRows = await categoryService.getByType('product');
+        const catRows = categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
         const names = catRows
           .filter((row) => row.isActive !== false)
           .map((row) => String(row.name || '').trim())
           .filter(Boolean);
-        const rawMaterialOptions: ReportsUiRawMaterialOption[] = rawRows
-          .filter((row) => Boolean(row.id))
-          .map((row) => ({
-            id: String(row.id),
-            name: String(row.name || '').trim(),
-            code: String(row.code || '').trim(),
-            categoryName: String(row.categoryName || '').trim(),
-          }));
+        const previous = get().reportsUiReferenceCache;
         set({
           reportsUiReferenceCache: {
-            stockBalances: balances || [],
-            warehouses: warehousesRows || [],
-            rawMaterialOptions,
-            categoryOptions: Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')),
+            stockBalances: balancesResult.status === 'fulfilled'
+              ? balancesResult.value || []
+              : previous?.stockBalances || [],
+            warehouses: warehousesResult.status === 'fulfilled'
+              ? warehousesResult.value || []
+              : previous?.warehouses || [],
+            rawMaterialOptions: componentOptionsResult.status === 'fulfilled'
+              ? componentOptionsResult.value
+              : previous?.rawMaterialOptions || [],
+            categoryOptions: categoriesResult.status === 'fulfilled'
+              ? Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar'))
+              : previous?.categoryOptions || [],
             fetchedAt: Date.now(),
           },
           reportsUiReferenceLoading: false,
@@ -2219,39 +2952,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  fetchProductionPlans: async () => {
-    try {
-      const productionPlans = await productionPlanService.getAll();
-      const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
-      const activePlans = productionPlans.filter(
-        (p) => p.status === 'in_progress' || p.status === 'planned'
-      );
-      const planReports: Record<string, ProductionReport[]> = {};
-      const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
-      await Promise.all(
-        activePlans.map(async (plan) => {
-          const key = `${plan.lineId}_${plan.productId}`;
-          const reports = await reportService.getByLineAndProduct(
-            plan.lineId, plan.productId, plan.startDate
-          );
-          planReports[key] = reports;
-          if (!plan.id) return;
-          const patch = deriveProductionPlanAutoPatch(plan, reports);
-          if (!patch) return;
-          planAutoPatches.push({ id: plan.id, patch });
-          Object.assign(plan, patch);
-        })
-      );
-      if (planAutoPatches.length > 0) {
-        await Promise.allSettled(
-          planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
-        );
-      }
-      set({ productionPlans, productionPlanFollowUps, planReports });
-      get()._rebuildLines();
-    } catch (error) {
-      set({ error: (error as Error).message });
+  fetchProductionPlans: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_OPS_STALE_MS;
+    const hasData = get().productionPlans.length > 0;
+    if (!force && hasData && Date.now() - _plansFetchedAt < maxAgeMs) return;
+    if (_plansInFlight) {
+      await _plansInFlight;
+      return;
     }
+    const run = (async () => {
+      try {
+        // List load only — do not N+1 scan reports per plan here.
+        // Progress/status reconcile stays on report save + reconcileProductionPlanFromReports.
+        const productionPlans = await productionPlanService.getAll();
+        const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
+        const state = get();
+        const cachedReports = state.monthlyReports.length > 0
+          ? state.monthlyReports
+          : state.productionReports;
+        const planReports = buildPlanReportsFromCachedReports(
+          productionPlans,
+          cachedReports,
+          state.planReports,
+        );
+        set({ productionPlans, productionPlanFollowUps, planReports });
+        get()._rebuildLines();
+        _plansFetchedAt = Date.now();
+      } catch (error) {
+        set({ error: (error as Error).message });
+      } finally {
+        _plansInFlight = null;
+      }
+    })();
+    _plansInFlight = run;
+    await run;
   },
 
   fetchProductionPlanFollowUps: async (planId) => {
@@ -2267,8 +3002,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Production Plan Mutations ────────────────────────────────────────────
 
-  createProductionPlan: async (data) => {
+  createProductionPlan: async (data, context) => {
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCTION_PLAN_OPERATION_KEYS.create,
+        context.path,
+      );
       const planType = data.planType === 'component_injection' ? 'component_injection' : 'finished_product';
       const permissions = get().userPermissions;
       if (planType === 'finished_product' && !hasPermission(permissions, 'plans.create')) {
@@ -2286,11 +3026,62 @@ export const useAppStore = create<AppState>((set, get) => ({
         planType,
       });
       if (id) {
-        await get().fetchProductionPlans();
-        const saved = await productionPlanService.getById(id);
-        if (saved) {
-          void get().autoGeneratePlanMaterialRequirements(saved);
-        }
+        const localPlan: ProductionPlan = {
+          ...data,
+          id,
+          planType,
+          createdAt: new Date().toISOString(),
+        };
+        set((state) => ({
+          error: null,
+          productionPlans: upsertLoadedProductionPlan(state.productionPlans, localPlan),
+          planReports: {
+            ...state.planReports,
+            [id]: state.planReports[id] ?? [],
+          },
+        }));
+        get()._rebuildLines();
+
+        void (async () => {
+          try {
+            const saved = await productionPlanService.getById(id);
+            const planForSideEffects = saved ?? localPlan;
+            if (saved) {
+              set((state) => ({
+                productionPlans: upsertLoadedProductionPlan(state.productionPlans, saved),
+              }));
+            }
+            void get().autoGeneratePlanMaterialRequirements(planForSideEffects);
+            const supervisorId = String(data.supervisorId || planForSideEffects.supervisorId || '').trim();
+            if (!supervisorId) return;
+            const { _rawProducts, systemSettings } = get();
+            const productId = data.productId || planForSideEffects.productId;
+            let productName = _rawProducts.find((p) => p.id === productId)?.name ?? '';
+            if (!productName && planType === 'component_injection' && productId) {
+              try {
+                const { loadInjectionComponentOptions } = await import('../modules/production/utils/injectionComponentOptions');
+                const keywords = systemSettings.planSettings?.injectionRawMaterialCategoryKeywords;
+                const components = await loadInjectionComponentOptions(keywords);
+                productName = components.find((row) => row.id === productId)?.name ?? '';
+              } catch {
+                productName = '';
+              }
+            }
+            const qty = Number(data.plannedQuantity ?? planForSideEffects.plannedQuantity ?? 0);
+            await notificationService.create({
+              recipientId: supervisorId,
+              type: 'production_plan_assigned',
+              title: 'خطة إنتاج جديدة',
+              message: `خطة إنتاج — ${productName} — ${Number.isFinite(qty) ? qty : 0} وحدة`,
+              referenceId: id,
+              isRead: false,
+            }).catch((notifyError) => {
+              console.warn('production plan notify failed:', notifyError);
+            });
+          } catch (sideEffectError) {
+            console.warn('createProductionPlan background side effects failed:', sideEffectError);
+          }
+        })();
       }
       return id;
     } catch (error) {
@@ -2299,16 +3090,53 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  updateProductionPlan: async (id, data) => {
+  updateProductionPlan: async (id, data, context) => {
     try {
-      await productionPlanService.update(id, data);
-      await get().fetchProductionPlans();
-      const saved = await productionPlanService.getById(id);
-      if (saved) {
-        void get().autoGeneratePlanMaterialRequirements(saved);
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCTION_PLAN_OPERATION_KEYS.update,
+        context.path,
+      );
+      const existingPlan = get().productionPlans.find((plan) => plan.id === id)
+        ?? await productionPlanService.getById(id);
+      const planType = data.planType ?? existingPlan?.planType ?? 'finished_product';
+      const permissions = get().userPermissions;
+      const canEdit = planType === 'component_injection'
+        ? hasPermission(permissions, 'plans.componentInjection.manage')
+        : hasPermission(permissions, 'plans.edit');
+      if (!canEdit) {
+        throw new Error('غير مصرح بتعديل خطة الإنتاج.');
       }
+      await productionPlanService.update(id, data);
+      const localPlan: ProductionPlan = {
+        ...(existingPlan ?? { id, productId: '', plannedQuantity: 0, producedQuantity: 0, startDate: '', plannedStartDate: '', plannedEndDate: '', estimatedDurationDays: 0, avgDailyTarget: 0, priority: 'medium', estimatedCost: 0, actualCost: 0, status: 'planned', createdBy: '' }),
+        ...data,
+        id,
+        planType,
+      };
+      set((state) => ({
+        error: null,
+        productionPlans: upsertLoadedProductionPlan(state.productionPlans, localPlan),
+      }));
+      get()._rebuildLines();
+      void (async () => {
+        try {
+          const saved = await productionPlanService.getById(id);
+          if (saved) {
+            set((state) => ({
+              productionPlans: upsertLoadedProductionPlan(state.productionPlans, saved),
+            }));
+            void get().autoGeneratePlanMaterialRequirements(saved);
+          } else {
+            void get().autoGeneratePlanMaterialRequirements(localPlan);
+          }
+        } catch (sideEffectError) {
+          console.warn('updateProductionPlan background side effects failed:', sideEffectError);
+        }
+      })();
     } catch (error) {
       set({ error: (error as Error).message });
+      throw error;
     }
   },
 
@@ -2329,7 +3157,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteProductionPlan: async (id) => {
     try {
       await productionPlanService.delete(id);
-      await get().fetchProductionPlans();
+      set((state) => {
+        const { [id]: _removed, ...restPlanReports } = state.planReports;
+        return {
+          productionPlans: state.productionPlans.filter((plan) => plan.id !== id),
+          planReports: restPlanReports,
+        };
+      });
+      get()._rebuildLines();
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2357,16 +3192,31 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Work Orders ──────────────────────────────────────────────────────────
 
-  fetchWorkOrders: async () => {
-    try {
-      const workOrders = await workOrderService.getAll();
-      set({ workOrders });
-    } catch (error) {
-      set({ error: (error as Error).message });
+  fetchWorkOrders: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_OPS_STALE_MS;
+    const hasData = get().workOrders.length > 0;
+    if (!force && hasData && Date.now() - _workOrdersFetchedAt < maxAgeMs) return;
+    if (_workOrdersInFlight) {
+      await _workOrdersInFlight;
+      return;
     }
+    const run = (async () => {
+      try {
+        const workOrders = await workOrderService.getAll();
+        set({ workOrders });
+        _workOrdersFetchedAt = Date.now();
+      } catch (error) {
+        set({ error: (error as Error).message });
+      } finally {
+        _workOrdersInFlight = null;
+      }
+    })();
+    _workOrdersInFlight = run;
+    await run;
   },
 
-  createWorkOrder: async (data) => {
+  createWorkOrder: async (data, context) => {
     const { uid, userDisplayName, userEmail } = get();
     const actor = {
       userId: uid ?? undefined,
@@ -2388,6 +3238,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       description: 'Create work order',
     });
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        WORK_ORDER_OPERATION_KEYS.create,
+        context.path,
+      );
       let inferredType: WorkOrder['workOrderType'] = data.workOrderType;
       if (!inferredType && data.planId) {
         const linkedPlan = await productionPlanService.getById(data.planId);
@@ -2405,28 +3260,30 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         throw new Error(msg);
       }
+      let workOrderNumber = String(data.workOrderNumber || '').trim();
+      if (!workOrderNumber) {
+        workOrderNumber = await workOrderService.generateNextNumber();
+      }
       const id = await workOrderService.create({
         ...data,
+        workOrderNumber,
         workOrderType,
       });
       trackedOperation.entityId = id ?? trackedOperation.entityId;
       trackedOperation.batchId = id ?? trackedOperation.batchId;
       if (id) {
-        await get().fetchWorkOrders();
-        const { _rawProducts } = get();
-        const product = _rawProducts.find((p) => p.id === data.productId);
-        if (data.supervisorId) {
-          await notificationService.create({
-            recipientId: data.supervisorId,
-            type: 'work_order_assigned',
-            title: 'أمر شغل جديد',
-            message: `أمر شغل ${data.workOrderNumber} — ${product?.name ?? ''} — ${data.quantity} وحدة`,
-            referenceId: id,
-            isRead: false,
-          });
-        }
+        const localWorkOrder: WorkOrder = {
+          ...data,
+          workOrderNumber,
+          id,
+          workOrderType,
+          createdAt: new Date().toISOString(),
+        };
+        set((state) => ({
+          error: null,
+          workOrders: upsertLoadedWorkOrder(state.workOrders, localWorkOrder),
+        }));
 
-        const { uid, userDisplayName, userEmail } = get();
         eventBus.emit(SystemEvents.WORK_ORDER_CREATED, {
           module: 'production',
           entityType: 'work_order',
@@ -2439,13 +3296,39 @@ export const useAppStore = create<AppState>((set, get) => ({
             userName: userDisplayName ?? userEmail ?? undefined,
           },
           metadata: {
-            workOrderNumber: data.workOrderNumber,
+            workOrderNumber,
             lineId: data.lineId,
             productId: data.productId,
             quantity: data.quantity,
             status: data.status,
           },
         });
+
+        void (async () => {
+          try {
+            if (data.supervisorId) {
+              const { _rawProducts } = get();
+              const product = _rawProducts.find((p) => p.id === data.productId);
+              await notificationService.create({
+                recipientId: data.supervisorId,
+                type: 'work_order_assigned',
+                title: 'أمر شغل جديد',
+                message: `أمر شغل ${workOrderNumber} — ${product?.name ?? ''} — ${data.quantity} وحدة`,
+                referenceId: id,
+                isRead: false,
+              }).catch((notifyError) => {
+                console.warn('work order notify failed:', notifyError);
+              });
+            }
+            try {
+              await get().reconcileWorkOrderFromReports(id, { internal: true });
+            } catch (reconcileError) {
+              console.warn('reconcileWorkOrderFromReports after create failed:', reconcileError);
+            }
+          } catch (sideEffectError) {
+            console.warn('createWorkOrder background side effects failed:', sideEffectError);
+          }
+        })();
       }
       actionTrackerService.succeedOperation(trackedOperation, {
         metadata: {
@@ -2467,7 +3350,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  updateWorkOrder: async (id, data) => {
+  updateWorkOrder: async (id, data, context) => {
     const { uid, userDisplayName, userEmail } = get();
     const operation =
       data.status === 'completed'
@@ -2500,6 +3383,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       description: `Update work order (${operation})`,
     });
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        WORK_ORDER_OPERATION_KEYS.update,
+        context.path,
+      );
       let existing = get().workOrders.find((w) => w.id === id);
       if (data.status === 'completed' && !existing) {
         const fetched = await workOrderService.getById(id);
@@ -2538,8 +3426,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
       await workOrderService.update(id, data);
-      await get().fetchWorkOrders();
-      const updatedWorkOrder = get().workOrders.find((w) => w.id === id) ?? (existing ? { ...existing, ...data } : null);
+      const updatedWorkOrder: WorkOrder = existing
+        ? { ...existing, ...data, id }
+        : { ...(data as WorkOrder), id };
+      set((state) => ({
+        error: null,
+        workOrders: upsertLoadedWorkOrder(state.workOrders, updatedWorkOrder),
+      }));
 
       if (existing && data.status && data.status !== existing.status) {
         if (data.status === 'in_progress') {
@@ -2576,140 +3469,101 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      if (data.status === 'completed' && updatedWorkOrder) {
-        const existingReports = await reportService.getByWorkOrderId(id);
-        const reportsForAutoClose = excludePackagingLineReportsForWorkOrderProduction(
-          existingReports,
-          get()._rawLines,
-        );
-        if (reportsForAutoClose.length === 0) {
-          const toLocalDateString = (value: any): string => {
-            if (!value) return getOperationalDateString(8);
-            if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-            const dt = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
-            if (Number.isNaN(dt.getTime())) return getOperationalDateString(8);
-            const y = dt.getFullYear();
-            const m = String(dt.getMonth() + 1).padStart(2, '0');
-            const day = String(dt.getDate()).padStart(2, '0');
-            return `${y}-${m}-${day}`;
-          };
+      void (async () => {
+        try {
+          if (data.status === 'completed' && updatedWorkOrder) {
+            const existingReports = await reportService.getByWorkOrderId(id);
+            const reportsForAutoClose = excludePackagingLineReportsForWorkOrderProduction(
+              existingReports,
+              get()._rawLines,
+            );
+            if (
+              reportsForAutoClose.length === 0
+              && isOperationPathEnabled(
+                get().systemSettings,
+                PRODUCTION_REPORT_OPERATION_KEYS.create,
+                PRODUCTION_REPORT_CREATE_PATHS.workOrderCompletion,
+              )
+            ) {
+              const toLocalDateString = (value: any): string => {
+                if (!value) return getReportOperationalDateString(get().systemSettings);
+                if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+                const dt = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
+                if (Number.isNaN(dt.getTime())) return getReportOperationalDateString(get().systemSettings);
+                const y = dt.getFullYear();
+                const m = String(dt.getMonth() + 1).padStart(2, '0');
+                const day = String(dt.getDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+              };
 
-          if (!updatedWorkOrder.supervisorId) {
-            throw new Error('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
-          }
+              if (!updatedWorkOrder.supervisorId) {
+                console.warn('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
+              } else {
+                const woCloseReportType =
+                  updatedWorkOrder.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
+                const woCloseProducedQty = Number(
+                  updatedWorkOrder.actualProducedFromScans ??
+                  updatedWorkOrder.producedQuantity ??
+                  0,
+                );
+                const woCloseReportPayload: Omit<ProductionReport, 'id' | 'createdAt'> = {
+                  employeeId: updatedWorkOrder.supervisorId,
+                  productId: updatedWorkOrder.productId,
+                  lineId: updatedWorkOrder.lineId,
+                  reportType: woCloseReportType,
+                  date: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
+                  quantityProduced: woCloseProducedQty,
+                  workersCount: Number(
+                    updatedWorkOrder.actualWorkersCount ??
+                    updatedWorkOrder.maxWorkers ??
+                    0,
+                  ),
+                  workersProductionCount: 0,
+                  workersPackagingCount: 0,
+                  workersQualityCount: 0,
+                  workersMaintenanceCount: 0,
+                  workersExternalCount: 0,
+                  workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
+                  notes: updatedWorkOrder.notes ?? '',
+                  workOrderId: id,
+                  productionPlanId: updatedWorkOrder.planId || undefined,
+                };
 
-          const woCloseProducedQty = Number(
-            updatedWorkOrder.actualProducedFromScans ??
-            updatedWorkOrder.producedQuantity ??
-            0,
-          );
-          const woCloseReportPayload: Omit<ProductionReport, 'id' | 'createdAt'> = {
-            employeeId: updatedWorkOrder.supervisorId,
-            productId: updatedWorkOrder.productId,
-            lineId: updatedWorkOrder.lineId,
-            reportType: updatedWorkOrder.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product',
-            date: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
-            quantityProduced: woCloseProducedQty,
-            workersCount: Number(
-              updatedWorkOrder.actualWorkersCount ??
-              updatedWorkOrder.maxWorkers ??
-              0,
-            ),
-            workersProductionCount: 0,
-            workersPackagingCount: 0,
-            workersQualityCount: 0,
-            workersMaintenanceCount: 0,
-            workersExternalCount: 0,
-            workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
-            notes: updatedWorkOrder.notes ?? '',
-            workOrderId: id,
-          };
-
-          const closeReportId = await reportService.create(woCloseReportPayload);
-
-          const autoCloseIndustrialCost = calculateIndustrialReportTotalCost({
-            workersCount: Number(
-              updatedWorkOrder.actualWorkersCount ??
-              updatedWorkOrder.maxWorkers ??
-              0,
-            ),
-            workHours: Number(updatedWorkOrder.actualWorkHours ?? data.actualWorkHours ?? 0),
-            quantityProduced: Number(
-              updatedWorkOrder.actualProducedFromScans ??
-              updatedWorkOrder.producedQuantity ??
-              0,
-            ),
-            lineId: updatedWorkOrder.lineId,
-            reportDate: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
-            employeeId: updatedWorkOrder.supervisorId,
-            laborSettings: get().laborSettings,
-            costCenters: get().costCenters,
-            costCenterValues: get().costCenterValues,
-            costAllocations: get().costAllocations,
-            employees: get()._rawEmployees,
-          });
-          await workOrderService.incrementProduced(id, 0, autoCloseIndustrialCost);
-
-          if (closeReportId) {
-            try {
-              await productionInventoryService.applyProductionReportInventory({
-                reportId: closeReportId,
-                report: { ...woCloseReportPayload, id: closeReportId },
-                systemSettings: get().systemSettings,
-                actor: {
-                  name: get().userDisplayName || get().userEmail || 'System',
-                  userId: get().uid || undefined,
-                },
-                products: get()._rawProducts,
-                componentScrapItems: [],
-              });
-            } catch (invErr) {
-              console.warn('work order close inventory:', invErr);
+                const closeReportId = await get().createReport(woCloseReportPayload, {
+                  path: PRODUCTION_REPORT_CREATE_PATHS.workOrderCompletion,
+                });
+                if (!closeReportId) {
+                  console.warn(get().error || 'تعذر إنشاء تقرير إغلاق أمر الشغل.');
+                }
+              }
             }
           }
 
-          const today = getOperationalDateString(8);
-          const { start: monthStart, end: monthEnd } = getMonthDateRange();
-          const [todayReports, monthlyReports] = await Promise.all([
-            reportService.getByDateRange(today, today),
-            reportService.getByDateRange(monthStart, monthEnd),
-          ]);
-          const rangeCacheNow = Date.now();
-          const rkToday = getProductionReportsRangeCacheKey(today, today);
-          const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-          set((state) => ({
-            todayReports,
-            monthlyReports,
-            productionReports: monthlyReports,
-            productionReportsRangeCache: {
-              ...state.productionReportsRangeCache,
-              [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-              [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
-            },
-          }));
-          get()._rebuildProducts();
-          get()._rebuildLines();
+          const notificationRecipientId = data.supervisorId ?? updatedWorkOrder?.supervisorId ?? existing?.supervisorId;
+          if (notificationRecipientId && data.status !== existing?.status) {
+            const { _rawProducts } = get();
+            const productId = updatedWorkOrder?.productId ?? existing?.productId;
+            const product = _rawProducts.find((p) => p.id === productId);
+            const statusLabels: Record<string, string> = { in_progress: 'بدأ التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
+            const statusLabel = statusLabels[data.status || ''];
+            if (statusLabel && existing) {
+              await notificationService.create({
+                recipientId: notificationRecipientId,
+                type: data.status === 'completed' ? 'work_order_completed' : 'work_order_updated',
+                title: `تحديث أمر شغل — ${statusLabel}`,
+                message: `أمر شغل ${existing.workOrderNumber} — ${product?.name ?? ''} — ${statusLabel}`,
+                referenceId: id,
+                isRead: false,
+              }).catch((notifyError) => {
+                console.warn('work order status notify failed:', notifyError);
+              });
+            }
+          }
+        } catch (sideEffectError) {
+          console.warn('updateWorkOrder background side effects failed:', sideEffectError);
         }
-      }
+      })();
 
-      const notificationRecipientId = data.supervisorId ?? updatedWorkOrder?.supervisorId ?? existing?.supervisorId;
-      if (notificationRecipientId && data.status !== existing?.status) {
-        const { _rawProducts } = get();
-        const productId = updatedWorkOrder?.productId ?? existing?.productId;
-        const product = _rawProducts.find((p) => p.id === productId);
-        const statusLabels: Record<string, string> = { in_progress: 'بدأ التنفيذ', completed: 'مكتمل', cancelled: 'ملغي' };
-        const statusLabel = statusLabels[data.status || ''];
-        if (statusLabel) {
-          await notificationService.create({
-            recipientId: notificationRecipientId,
-            type: data.status === 'completed' ? 'work_order_completed' : 'work_order_updated',
-            title: `تحديث أمر شغل — ${statusLabel}`,
-            message: `أمر شغل ${existing.workOrderNumber} — ${product?.name ?? ''} — ${statusLabel}`,
-            referenceId: id,
-            isRead: false,
-          });
-        }
-      }
       actionTrackerService.succeedOperation(trackedOperation, {
         metadata: {
           status: data.status ?? null,
@@ -2731,7 +3585,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteWorkOrder: async (id) => {
     try {
       await workOrderService.delete(id);
-      await get().fetchWorkOrders();
+      set((state) => ({
+        workOrders: state.workOrders.filter((wo) => wo.id !== id),
+      }));
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
@@ -2810,35 +3666,67 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Mutations ─────────────────────────────────────────────────────────────
 
-  createProduct: async (data) => {
+  createProduct: async (data, context) => {
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCT_OPERATION_KEYS.create,
+        context.path,
+      );
+      if (!hasPermission(get().userPermissions, 'products.create')) {
+        throw new Error('غير مصرح بإنشاء منتج.');
+      }
       const normalized = await normalizeProductCategoryOnSave(data);
       const id = await productService.create(normalized as Omit<FirestoreProduct, 'id'>);
-      if (id) await get().fetchProducts();
+      if (!id) throw new Error('تعذر حفظ المنتج. حاول مرة أخرى.');
+      const fresh = await productService.getById(id);
+      if (fresh) {
+        set((state) => ({ _rawProducts: [fresh, ...state._rawProducts.filter((row) => row.id !== id)] }));
+        get()._rebuildProducts();
+      }
       return id;
     } catch (error) {
-      if (isDuplicateEntityCodeError(error)) throw error;
-      set({ error: (error as Error).message });
-      return null;
+      const message = error instanceof Error ? error.message : 'تعذر حفظ المنتج. حاول مرة أخرى.';
+      set({ error: message });
+      throw error instanceof Error ? error : new Error(message);
     }
   },
 
-  updateProduct: async (id, data) => {
+  updateProduct: async (id, data, context) => {
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCT_OPERATION_KEYS.update,
+        context.path,
+      );
+      if (!hasPermission(get().userPermissions, 'products.edit')) {
+        throw new Error('غير مصرح بتعديل المنتج.');
+      }
       const normalized = await normalizeProductCategoryOnSave(data);
       await productService.update(id, normalized);
-      await get().fetchProducts();
+      const fresh = await productService.getById(id);
+      if (fresh) {
+        set((state) => ({ _rawProducts: state._rawProducts.map((row) => row.id === id ? fresh : row) }));
+        get()._rebuildProducts();
+      }
     } catch (error) {
       set({ error: (error as Error).message });
+      throw error;
     }
   },
 
   deleteProduct: async (id) => {
     try {
       await productService.delete(id);
-      await get().fetchProducts();
+      set((state) => ({ _rawProducts: state._rawProducts.filter((row) => row.id !== id) }));
+      get()._rebuildProducts();
     } catch (error) {
-      set({ error: (error as Error).message });
+      const rawMessage = error instanceof Error ? error.message : '';
+      const message = rawMessage.includes('مرتبط بتقارير إنتاج')
+        ? rawMessage
+        : 'تعذر حذف المنتج. حاول مرة أخرى.';
+      set({ error: message });
+      throw new Error(message);
     }
   },
 
@@ -2847,7 +3735,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   createLine: async (data) => {
     try {
       const id = await lineService.create(data);
-      if (id) await get().fetchLines();
+      if (id) await get().fetchLines({ force: true });
       return id;
     } catch (error) {
       set({ error: (error as Error).message });
@@ -2858,7 +3746,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateLine: async (id, data) => {
     try {
       await lineService.update(id, data);
-      await get().fetchLines();
+      await get().fetchLines({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2867,7 +3755,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteLine: async (id) => {
     try {
       await lineService.delete(id);
-      await get().fetchLines();
+      await get().fetchLines({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2878,7 +3766,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   createEmployee: async (data) => {
     try {
       const id = await employeeService.create(data);
-      if (id) await get().fetchEmployees();
+      if (id) await get().fetchEmployees({ force: true });
       return id;
     } catch (error) {
       set({ error: (error as Error).message });
@@ -2889,7 +3777,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateEmployee: async (id, data) => {
     try {
       await employeeService.update(id, data);
-      await get().fetchEmployees();
+      await get().fetchEmployees({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2903,7 +3791,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         try { await userService.delete(emp.userId); } catch { /* best effort */ }
       }
       await employeeService.delete(id);
-      await get().fetchEmployees();
+      await get().fetchEmployees({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2914,6 +3802,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   createComponentWasteReport: async (data) => {
     let trackedOperation: ReturnType<typeof actionTrackerService.startOperation> | null = null;
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCTION_REPORT_OPERATION_KEYS.create,
+        PRODUCTION_REPORT_CREATE_PATHS.componentWaste,
+      );
       const permissions = get().userPermissions;
       if (!hasPermission(permissions, 'reports.componentWaste.create')) {
         const msg = 'غير مصرح بإنشاء تقرير هالك مكونات.';
@@ -2925,19 +3818,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       const lineId = String(data.lineId || '').trim();
       const productId = String(data.productId || '').trim();
       const date = String(data.date || '').trim();
-      const component: ReportComponentScrapItem = {
-        materialId: String(data.component?.materialId || '').trim(),
-        materialName: String(data.component?.materialName || '').trim(),
-        quantity: Number(data.component?.quantity || 0),
-      };
+      const inputComponents = Array.isArray(data.components) ? data.components : [];
 
       if (!employeeId || !lineId || !productId || !date) {
         const msg = 'أكمل بيانات الموظف والخط والمنتج والتاريخ.';
         set({ error: msg });
         return null;
       }
-      if (!component.materialId || component.quantity <= 0) {
-        const msg = 'اختر مكوناً وأدخل كمية هالك أكبر من صفر.';
+
+      const normalizedInputs = inputComponents
+        .map((item) => ({
+          materialId: String(item?.materialId || '').trim(),
+          materialName: String(item?.materialName || '').trim(),
+          quantity: Number(item?.quantity || 0),
+        }))
+        .filter((item) => item.materialId && item.quantity > 0);
+
+      if (normalizedInputs.length === 0) {
+        const msg = 'أضف مكوناً واحداً على الأقل بكمية هالك أكبر من صفر.';
+        set({ error: msg });
+        return null;
+      }
+
+      const uniqueIds = new Set(normalizedInputs.map((item) => item.materialId));
+      if (uniqueIds.size !== normalizedInputs.length) {
+        const msg = 'لا يمكن تكرار نفس المكون أكثر من مرة في التقرير.';
         set({ error: msg });
         return null;
       }
@@ -2950,17 +3855,41 @@ export const useAppStore = create<AppState>((set, get) => ({
         return null;
       }
 
-      const rawMaterials = await rawMaterialService.getAll();
-      const raw = rawMaterials.find((row) => String(row.id) === component.materialId);
-      if (!raw?.id) {
-        const msg = 'المكون المختار غير موجود في المواد الخام.';
-        set({ error: msg });
-        return null;
+      const [rawMaterials, materials] = await Promise.all([
+        rawMaterialService.getAll(),
+        materialService.getAll(),
+      ]);
+      const rawById = new Map(rawMaterials.filter((row) => row.id).map((row) => [String(row.id), row]));
+      const materialById = new Map(
+        materials.filter((row) => row.id && row.isActive !== false).map((row) => [String(row.id), row]),
+      );
+      const componentScrapItems: ReportComponentScrapItem[] = [];
+      for (const item of normalizedInputs) {
+        const material = materialById.get(item.materialId);
+        const raw = rawById.get(item.materialId);
+        if (!material?.id && !raw?.id) {
+          const msg = `المكون «${item.materialName || item.materialId}» غير موجود في المكونات أو المواد الخام.`;
+          set({ error: msg });
+          return null;
+        }
+        componentScrapItems.push({
+          materialId: material?.id || raw!.id!,
+          materialName: item.materialName || material?.name || raw!.name,
+          quantity: item.quantity,
+        });
       }
 
-      const reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
+      const totalScrapQty = componentScrapItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+      const reportItemSnapshot = await resolveProductionReportItemSnapshot(
+        'component_waste',
+        productId,
+        get()._rawProducts,
+      );
+      let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
         employeeId,
         productId,
+        ...reportItemSnapshot,
         lineId,
         date,
         quantityProduced: 0,
@@ -2975,11 +3904,15 @@ export const useAppStore = create<AppState>((set, get) => ({
         workOrderId: '',
         reportType: 'component_waste',
         packagingLines: [],
-        componentScrapItems: [{
-          materialId: raw.id,
-          materialName: component.materialName || raw.name,
-          quantity: component.quantity,
-        }],
+        componentScrapItems,
+        createdByUid: uid || undefined,
+        createdByNameSnapshot: userDisplayName || userEmail || undefined,
+        entryMode: 'direct',
+        processingVersion: 2,
+        processingState: 'pending',
+        processingStage: 'created',
+        processingError: '',
+        processingAttempts: 0,
       };
 
       trackedOperation = actionTrackerService.startOperation({
@@ -2994,14 +3927,32 @@ export const useAppStore = create<AppState>((set, get) => ({
         metadata: {
           lineId,
           productId,
-          materialId: raw.id,
-          quantity: component.quantity,
+          materialIds: componentScrapItems.map((item) => item.materialId),
+          quantity: totalScrapQty,
+          componentsCount: componentScrapItems.length,
           reportType: 'component_waste',
         },
         description: 'Create component waste report',
       });
 
-      const id = await reportService.create(reportData);
+      let id: string;
+      try {
+        const created = await createProductionReportFastCallable(
+          reportData as unknown as Record<string, unknown>,
+        );
+        id = created.reportId;
+        reportData = { ...reportData, reportCode: created.reportCode };
+      } catch (createError) {
+        const createErr = createError instanceof Error ? createError : new Error(String(createError));
+        if (trackedOperation) {
+          actionTrackerService.failOperation(trackedOperation, {
+            error: createErr,
+            errorCode: 'REPORT_CREATE_FAILED',
+          });
+        }
+        set({ error: createErr.message || 'تعذر حفظ تقرير الهالك' });
+        return null;
+      }
       if (!id) {
         if (trackedOperation) {
           actionTrackerService.failOperation(trackedOperation, {
@@ -3016,25 +3967,33 @@ export const useAppStore = create<AppState>((set, get) => ({
       trackedOperation.entityId = id;
       trackedOperation.batchId = id;
 
-      let postSaveWarning: string | null = null;
-      try {
-        await productionInventoryService.applyProductionReportInventory({
-          reportId: id,
-          report: { ...reportData, id },
-          systemSettings,
-          actor: {
-            name: userDisplayName || userEmail || 'System',
-            userId: uid || undefined,
-          },
-          products: get()._rawProducts,
-          componentScrapItems: reportData.componentScrapItems,
+      const wasteCreatedRow: ProductionReport = { ...reportData, id };
+      const wasteToday = getReportOperationalDateString(get().systemSettings);
+      const { start: wasteMonthStart, end: wasteMonthEnd } = getMonthDateRange();
+      set((state) => ({
+        error: null,
+        todayReports: date === wasteToday
+          ? upsertLoadedReportRow(state.todayReports, wasteCreatedRow)
+          : state.todayReports,
+        monthlyReports: date >= wasteMonthStart && date <= wasteMonthEnd
+          ? upsertLoadedReportRow(state.monthlyReports, wasteCreatedRow)
+          : state.monthlyReports,
+        productionReports: date >= wasteMonthStart && date <= wasteMonthEnd
+          ? upsertLoadedReportRow(state.productionReports, wasteCreatedRow)
+          : state.productionReports,
+      }));
+      get().invalidateReportsUiReferenceCache();
+      if (trackedOperation) {
+        actionTrackerService.succeedOperation(trackedOperation, {
+          metadata: { reportId: id, processingState: 'pending' },
         });
-      } catch (error) {
-        postSaveWarning = (error as Error)?.message || 'تم حفظ تقرير الهالك ولكن تعذر تنفيذ حركات المخزون الآلية';
       }
 
+      void (async () => {
+      let postSaveWarning: string | null = null;
+
       try {
-        const today = getOperationalDateString(8);
+        const today = getReportOperationalDateString(get().systemSettings);
         const { start: monthStart, end: monthEnd } = getMonthDateRange();
         const [todayReports, monthlyReports] = await Promise.all([
           reportService.getByDateRange(today, today),
@@ -3073,8 +4032,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           metadata: {
             lineId,
             productId,
-            materialId: raw.id,
-            quantity: component.quantity,
+            materialIds: componentScrapItems.map((item) => item.materialId),
+            quantity: totalScrapQty,
+            componentsCount: componentScrapItems.length,
             reportType: 'component_waste',
           },
         });
@@ -3086,16 +4046,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         console.warn('createComponentWasteReport post-save warning:', postSaveWarning);
       }
       set({ error: postSaveWarning });
-      if (trackedOperation) {
-        actionTrackerService.succeedOperation(trackedOperation, {
-          metadata: {
-            reportId: id,
-            warning: postSaveWarning ?? null,
-          },
-        });
-      }
-
       get().invalidateReportsUiReferenceCache();
+      })().catch((backgroundError) => {
+        console.warn('createComponentWasteReport background processing:', backgroundError);
+      });
       return id;
     } catch (error) {
       if (trackedOperation) {
@@ -3104,7 +4058,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           metadata: {
             lineId: data.lineId,
             productId: data.productId,
-            materialId: data.component?.materialId,
+            materialIds: (data.components || []).map((item) => item?.materialId).filter(Boolean),
           },
         });
       }
@@ -3113,7 +4067,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  createReport: async (data) => {
+  createReport: async (data, context) => {
     let trackedOperation: ReturnType<typeof actionTrackerService.startOperation> | null = null;
     let cachedRawMaterials: Awaited<ReturnType<typeof rawMaterialService.getAll>> | null = null;
     const getRawMaterialsOnce = async () => {
@@ -3122,13 +4076,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       return cachedRawMaterials;
     };
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCTION_REPORT_OPERATION_KEYS.create,
+        context.path,
+      );
       const reportType = resolveReportType(data.reportType);
       const permissions = get().userPermissions;
+      const isWorkOrderCompletionPath =
+        context.path === PRODUCTION_REPORT_CREATE_PATHS.workOrderCompletion;
+      const canCreateFromWorkOrderCompletion =
+        isWorkOrderCompletionPath && hasPermission(permissions, 'workOrders.edit');
       const canCreateFinishedReports = hasPermission(permissions, 'reports.create');
       const canCreatePackagingReports =
         hasPermission(permissions, 'reports.create')
         || hasPermission(permissions, 'reports.packaging.create');
-      const forcePackagingOnly = hasPermission(permissions, 'reports.packaging.only');
+      const forcePackagingOnly = isPackagingOnlyPermissions(permissions);
       const forceInjectionOnly =
         hasPermission(permissions, 'reports.componentInjection.only') && !canCreateFinishedReports;
       const canManageComponentInjection =
@@ -3138,23 +4101,25 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         return null;
       }
-      if (reportType === 'finished_product' && (forceInjectionOnly || !canCreateFinishedReports)) {
+      if (
+        reportType === 'finished_product'
+        && (forceInjectionOnly || (!canCreateFinishedReports && !canCreateFromWorkOrderCompletion))
+      ) {
         const msg = 'غير مصرح بإنشاء تقرير إنتاج.';
         set({ error: msg });
         return null;
       }
-      if (reportType === 'component_injection' && !canManageComponentInjection) {
+      if (
+        reportType === 'component_injection'
+        && !canManageComponentInjection
+        && !canCreateFromWorkOrderCompletion
+      ) {
         const msg = 'غير مصرح بإنشاء تقرير مكونات الحقن.';
         set({ error: msg });
         return null;
       }
       if (reportType === 'packaging' && !canCreatePackagingReports) {
         const msg = 'غير مصرح بإنشاء تقرير تغليف.';
-        set({ error: msg });
-        return null;
-      }
-      if (reportType === 'packaging' && !isPackagingLineId(data.lineId, get()._rawLines)) {
-        const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
         set({ error: msg });
         return null;
       }
@@ -3165,7 +4130,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         costCenterValues,
         costAllocations,
         _rawEmployees,
+        _rawProducts,
+        lineProductConfigs,
       } = get();
+      const reportBehavior = resolveReportBehaviorSettings(systemSettings);
+      if (
+        reportType === 'packaging'
+        && reportBehavior.restrictPackagingReportsToPackagingLines
+        && !isPackagingLineId(data.lineId, get()._rawLines)
+      ) {
+        const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
+        set({ error: msg });
+        return null;
+      }
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
       const componentScrapItems = reportType === 'packaging'
         ? []
@@ -3181,13 +4158,62 @@ export const useAppStore = create<AppState>((set, get) => ({
         const n = Math.floor(Number(get()._rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0));
         return n > 0 ? n : undefined;
       };
+      const {
+        productNameSnapshot: _untrustedProductNameSnapshot,
+        productCodeSnapshot: _untrustedProductCodeSnapshot,
+        operationPathSnapshot: _untrustedOperationPathSnapshot,
+        lastOperationPathSnapshot: _untrustedLastOperationPathSnapshot,
+        workOrderCostPostedSnapshot: _untrustedWorkOrderCostSnapshot,
+        productionPlanCostPostedSnapshot: _untrustedPlanCostSnapshot,
+        workOrderCostPostedTargetId: _untrustedWorkOrderCostTarget,
+        productionPlanCostPostedTargetId: _untrustedPlanCostTarget,
+        aggregateCostPostingState: _untrustedAggregateCostState,
+        aggregateCostPostingUpdatedAt: _untrustedAggregateCostUpdatedAt,
+        inventoryAppliedAt: _untrustedInventoryAppliedAt,
+        inventoryAppliedBy: _untrustedInventoryAppliedBy,
+        inventoryAppliedByUserId: _untrustedInventoryAppliedByUserId,
+        inventoryPostingState: _untrustedInventoryPostingState,
+        inventoryPostingUpdatedAt: _untrustedInventoryPostingUpdatedAt,
+        inventoryReversedAt: _untrustedInventoryReversedAt,
+        inventoryReversedBy: _untrustedInventoryReversedBy,
+        inventoryReversedByUserId: _untrustedInventoryReversedByUserId,
+        createdByUid: _untrustedCreatedByUid,
+        createdByNameSnapshot: _untrustedCreatedByNameSnapshot,
+        entryMode: _untrustedEntryMode,
+        processingVersion: _untrustedProcessingVersion,
+        processingState: _untrustedProcessingState,
+        processingStage: _untrustedProcessingStage,
+        processingError: _untrustedProcessingError,
+        processingAttempts: _untrustedProcessingAttempts,
+        processingUpdatedAt: _untrustedProcessingUpdatedAt,
+        ...trustedReportInput
+      } = data as typeof data & Partial<ReportAggregateCostState> & ReportInventoryPostingState;
       const savePayload = normalizePackagingLinesForSave(
-        { ...data, componentScrapItems } as Omit<ProductionReport, 'id' | 'createdAt'>,
+        { ...trustedReportInput, componentScrapItems } as Omit<ProductionReport, 'id' | 'createdAt'>,
         getUnitsPerCarton,
       );
+      if (reportType === 'component_injection') {
+        if (reportBehavior.requireInjectionShift && !isInjectionShiftSelected((data as ProductionReport).shift)) {
+          const msg = 'يجب اختيار الوردية (صباحي أو مسائي) قبل حفظ تقرير الحقن.';
+          set({ error: msg });
+          return null;
+        }
+        if (isInjectionShiftSelected((data as ProductionReport).shift)) {
+          savePayload.shift = (data as ProductionReport).shift;
+        } else {
+          delete savePayload.shift;
+        }
+      } else {
+        delete savePayload.shift;
+      }
 
-      if (Number(savePayload.quantityProduced || 0) <= 0 || Number(savePayload.workHours || 0) <= 0) {
-        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة وساعات عمل.';
+      if (reportBehavior.requirePositiveQuantityOnReports && Number(savePayload.quantityProduced || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة.';
+        set({ error: msg });
+        return null;
+      }
+      if (reportBehavior.requireWorkHoursOnReports && Number(savePayload.workHours || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون ساعات عمل.';
         set({ error: msg });
         return null;
       }
@@ -3197,9 +4223,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         + Number(savePayload.workersMaintenanceCount || 0)
         + Number(savePayload.workersExternalCount || 0);
       const packagingLaborOptional =
-        (reportType === 'finished_product' && isPackagingLineId(savePayload.lineId, get()._rawLines))
-        || reportType === 'packaging';
+        reportBehavior.allowPackagingLaborOptional
+        && (
+          (reportType === 'finished_product' && isPackagingLineId(savePayload.lineId, get()._rawLines))
+          || reportType === 'packaging'
+        );
       if (
+        reportBehavior.requireLaborForFinishedReports
+        &&
         reportType === 'finished_product'
         && !packagingLaborOptional
         && Number(savePayload.workersCount || 0) <= 0
@@ -3210,94 +4241,205 @@ export const useAppStore = create<AppState>((set, get) => ({
         return null;
       }
 
-      if (reportType !== 'packaging') {
-        const sameDayReports = await reportService.getByDateRange(savePayload.date, savePayload.date);
-        const hasDuplicate = sameDayReports.some(
-          (r) =>
-            r.lineId === savePayload.lineId &&
-            r.employeeId === savePayload.employeeId &&
-            r.productId === savePayload.productId &&
-            resolveReportType(r.reportType) === reportType,
-        );
+      if (reportBehavior.preventDuplicateReports && reportType !== 'packaging') {
+        const duplicateCandidate = {
+          date: savePayload.date,
+          lineId: savePayload.lineId,
+          employeeId: savePayload.employeeId,
+          productId: savePayload.productId,
+          workOrderId: savePayload.workOrderId,
+          reportType,
+          shift: reportType === 'component_injection' && isInjectionShiftSelected((data as ProductionReport).shift)
+            ? (data as ProductionReport).shift
+            : undefined,
+        };
+        const hasDuplicate = await reportService.hasConflictingUniqueKey(duplicateCandidate);
         if (hasDuplicate) {
-          set({ error: REPORT_DUPLICATE_MESSAGE });
+          set({
+            error: reportType === 'component_injection'
+              ? INJECTION_REPORT_DUPLICATE_MESSAGE
+              : REPORT_DUPLICATE_MESSAGE,
+          });
           return null;
         }
       }
 
-      const activePlans = await productionPlanService.getActiveByLineAndProduct(savePayload.lineId, savePayload.productId);
-      const planMatchType = effectivePlanReportType(reportType);
-      const activePlan = activePlans.find((plan) => {
-        const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
-        return planType === planMatchType;
-      }) ?? activePlans[0] ?? null;
+      const {
+        activeWorkOrder: activeWO,
+        activePlan,
+        productionPlanLinkMode,
+        hasMatchingPlanContext,
+      } = await resolveProductionReportExecutionLinks(
+        { ...savePayload, reportType },
+        get().workOrders,
+        { preserveCompletedWorkOrder: isWorkOrderCompletionPath },
+      );
+      const actorUid = String(get().uid || '').trim();
+      const actorEmployee = _rawEmployees.find((row) => row.userId === actorUid) ?? null;
+      const targetEmployee = _rawEmployees.find((row) => row.id === savePayload.employeeId) ?? null;
+      const canCreateForAnySupervisor = hasPermission(permissions, 'reports.createForAnySupervisor');
+      const targetsAnotherEmployee = Boolean(
+        actorEmployee?.id
+        && savePayload.employeeId
+        && savePayload.employeeId !== actorEmployee.id,
+      );
+      const isDelegatedEntry = canCreateForAnySupervisor && targetsAnotherEmployee;
+      const requestedWorkOrderId = String(savePayload.workOrderId || '').trim();
+      if (actorEmployee?.level === 2 && targetsAnotherEmployee && !canCreateForAnySupervisor) {
+        set({ error: 'غير مصرح بإنشاء تقرير لمشرف آخر.' });
+        return null;
+      }
+      if (requestedWorkOrderId && activeWO?.id !== requestedWorkOrderId) {
+        set({ error: 'أمر الشغل غير موجود أو غير نشط أو لا يطابق بيانات التقرير.' });
+        return null;
+      }
+      if (requestedWorkOrderId && (
+        !activeWO?.supervisorId
+        || activeWO.supervisorId !== savePayload.employeeId
+        || !targetEmployee
+        || targetEmployee.isActive === false
+      )) {
+        set({ error: 'يجب أن يكون التقرير باسم المشرف النشط المعيّن على أمر الشغل.' });
+        return null;
+      }
+      if (isDelegatedEntry && (
+        !canCreateForAnySupervisor
+        || !requestedWorkOrderId
+        || activeWO?.id !== requestedWorkOrderId
+        || activeWO.supervisorId !== savePayload.employeeId
+        || !targetEmployee
+        || targetEmployee.isActive === false
+      )) {
+        set({ error: DELEGATED_WORK_ORDER_REQUIRED_MESSAGE });
+        return null;
+      }
+      const shouldPostToPlan =
+        Boolean(activePlan?.id) &&
+        reportType !== 'packaging';
 
-      if (!planSettings.allowReportWithoutPlan && !activePlan) {
+      if (!activePlan && !activeWO && !hasMatchingPlanContext && !planSettings.allowReportWithoutPlan) {
         set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
         return null;
       }
 
-      if (!planSettings.allowOverProduction && activePlan) {
+      if (reportType === 'finished_product' && Number(savePayload.quantityProduced || 0) > 0) {
+        const inventoryRouting = await resolveInventoryRoutingV1Async(systemSettings);
+        const requiresIssue = resolveRequiresProductionIssueOnReport({
+          workOrderRequiresProductionIssue: activeWO?.requiresProductionIssue,
+          planRequiresProductionIssue: activePlan?.requiresProductionIssue,
+          companyRequire: inventoryRouting.requireIssuedProductionIssueOnReport,
+        });
+        if (requiresIssue) {
+          const hasIssuedProductionComponents = await productionIssueService.hasIssuedForProduction({
+            workOrderId: activeWO?.id || savePayload.workOrderId || undefined,
+            productionPlanId: activePlan?.id || undefined,
+          });
+          if (!hasIssuedProductionComponents) {
+            const msg = productionIssueRequiredMessage(Boolean(
+              activeWO?.id || activePlan?.id || savePayload.workOrderId,
+            ));
+            set({ error: msg });
+            return null;
+          }
+        }
+      }
+
+      if (shouldPostToPlan && !planSettings.allowOverProduction && activePlan) {
         if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
           set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
           return null;
         }
       }
 
-      let activeWO: WorkOrder | null = null;
-      if (savePayload.workOrderId) {
-        const selectedWO = await workOrderService.getById(savePayload.workOrderId);
-        if (
-          selectedWO
-          && isActiveWorkOrderStatus(selectedWO.status)
-          && workOrderMatchesReportType(selectedWO, reportType)
-        ) {
-          activeWO = selectedWO;
+      const reportProduct = _rawProducts.find((p) => p.id === savePayload.productId) ?? null;
+      const assemblyModeSnapshot = getProductAssemblyMode(reportProduct);
+      // Team + plan: achievement is at team/plan level — do not write per-worker shares on save.
+      const individualWorkerTargetsEnabled = reportType === 'finished_product'
+        && assemblyModeSnapshot === 'individual'
+        && hasLineSpecificWorkerTarget(lineProductConfigs, savePayload.lineId, savePayload.productId);
+      const workerTargetsApplied = individualWorkerTargetsEnabled;
+      const scopedWorkerOutputs = (savePayload.workerOutputs || []).filter((row) => (
+        row.productId === savePayload.productId && row.lineId === savePayload.lineId
+      ));
+      const workerOutputs = individualWorkerTargetsEnabled
+        ? scopedWorkerOutputs.map((row) => {
+          const isPresent = row.isPresent ?? true;
+          const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+          return {
+            ...row,
+            isPresent,
+            outputQty,
+            achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+          };
+        })
+        : [];
+      const workerTargetSource = individualWorkerTargetsEnabled
+        ? 'line_product'
+        : 'none';
+      const requireWorkerOutputMatch =
+        systemSettings.productionWorkerSettings?.performance?.productionWorkerOutputMustMatchReportQty === true;
+      if (
+        requireWorkerOutputMatch
+        && reportType === 'finished_product'
+        && individualWorkerTargetsEnabled
+        && scopedWorkerOutputs.length > 0
+      ) {
+        const workerOutputTotal = scopedWorkerOutputs.reduce((sum, row) => (
+          sum + (row.isPresent === false ? 0 : Number(row.outputQty || 0))
+        ), 0);
+        if (workerOutputTotal !== Number(savePayload.quantityProduced || 0)) {
+          const msg = 'مجموع إنتاج العمال يجب أن يطابق كمية التقرير';
+          set({ error: msg });
+          return null;
         }
       }
-      if (!activeWO) {
-        const candidateMap = new Map<string, WorkOrder>();
-        const upsertCandidate = (wo: WorkOrder | null | undefined) => {
-          if (!wo?.id) return;
-          candidateMap.set(String(wo.id), wo);
-        };
 
-        try {
-          const activeWOs = await workOrderService.getActiveByLineAndProduct(savePayload.lineId, savePayload.productId);
-          activeWOs.forEach(upsertCandidate);
-        } catch {
-          // fallback to cached/all work orders when index/query fails.
-        }
-
-        const cachedActiveWOs = get().workOrders.filter((wo) => (
-          isActiveWorkOrderStatus(wo.status) && wo.productId === savePayload.productId
-        ));
-        cachedActiveWOs.forEach(upsertCandidate);
-
-        if (candidateMap.size === 0) {
-          const allWorkOrders = await workOrderService.getAll();
-          allWorkOrders.forEach(upsertCandidate);
-        }
-
-        activeWO = pickBestAutoLinkedWorkOrder(Array.from(candidateMap.values()), {
-          lineId: savePayload.lineId,
-          productId: savePayload.productId,
-          supervisorId: savePayload.employeeId,
-          reportType,
-        });
-      }
-
+      const reportItemSnapshot = await resolveProductionReportItemSnapshot(
+        reportType,
+        savePayload.productId,
+        _rawProducts,
+        get().reportsUiReferenceCache?.rawMaterialOptions,
+      );
       let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
         ...savePayload,
+        ...reportItemSnapshot,
         reportType,
+        operationPathSnapshot: context.path,
+        lastOperationPathSnapshot: context.path,
         componentScrapItems,
-        workOrderId: activeWO?.id || savePayload.workOrderId || '',
+        workOrderId: activeWO?.id || '',
+        productionPlanId: activePlan?.id || undefined,
+        productionPlanLinkMode,
+        ...({
+          aggregateCostPostingState: 'pending',
+          workOrderCostPostedTargetId: '',
+          workOrderCostPostedSnapshot: 0,
+          productionPlanCostPostedTargetId: '',
+          productionPlanCostPostedSnapshot: 0,
+        } satisfies Partial<ReportAggregateCostState>),
+        assemblyModeSnapshot,
+        workerTargetsApplied,
+        workerTargetSource,
+        laborAssignmentSource: Number(savePayload.workersCount || 0) > 0 || detailedWorkersTotal > 0
+          ? 'line_worker_assignments'
+          : 'none',
+        manufacturingCostPostingState: 'pending',
+        manufacturingCostPostingError: '',
+        workerOutputs,
+        createdByUid: actorUid || undefined,
+        createdByNameSnapshot: get().userDisplayName || get().userEmail || undefined,
+        entryMode: isDelegatedEntry ? 'hall_supervisor_delegate' : 'direct',
+        processingVersion: 2,
+        processingState: 'pending',
+        processingStage: 'created',
+        processingError: '',
+        processingAttempts: 0,
       };
       const rawCycleId =
         typeof (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId === 'string'
           ? (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId!.trim()
           : '';
-      if (!rawCycleId) {
+      if (!rawCycleId && reportBehavior.autoLinkSupplyCycleOnReportSave) {
         try {
           const linkedCycleId = await supplyCycleService.findAutoLinkForReport({
             productId: String(savePayload.productId || '').trim(),
@@ -3313,7 +4455,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const packagingStockTransferEnabled =
-        reportType === 'packaging' && Boolean(systemSettings.planSettings?.enablePackagingStockTransfer);
+        reportBehavior.autoApplyInventoryOnReportSave &&
+        reportType === 'packaging' &&
+        Boolean(systemSettings.planSettings?.enablePackagingStockTransfer);
       if (packagingStockTransferEnabled) {
         const packagingSourceWarehouseId = String(systemSettings.planSettings?.packagingSourceWarehouseId || '').trim();
         const packagingTargetWarehouseId = String(systemSettings.planSettings?.packagingTargetWarehouseId || '').trim();
@@ -3351,13 +4495,31 @@ export const useAppStore = create<AppState>((set, get) => ({
           productId: savePayload.productId,
           quantityProduced: savePayload.quantityProduced,
           reportType,
+          operationPath: context.path,
           workOrderId: activeWO?.id ?? savePayload.workOrderId ?? '',
           productionPlanId: activePlan?.id ?? '',
         },
         description: 'Create production report',
       });
 
-      const id = await reportService.create(reportData);
+      let id: string;
+      try {
+        const created = await createProductionReportFastCallable(
+          reportData as unknown as Record<string, unknown>,
+        );
+        id = created.reportId;
+        reportData = { ...reportData, reportCode: created.reportCode };
+      } catch (createError) {
+        const createErr = createError instanceof Error ? createError : new Error(String(createError));
+        if (trackedOperation) {
+          actionTrackerService.failOperation(trackedOperation, {
+            error: createErr,
+            errorCode: 'REPORT_CREATE_FAILED',
+          });
+        }
+        set({ error: createErr.message || 'تعذر حفظ التقرير' });
+        return null;
+      }
       if (!id) {
         if (trackedOperation) {
           actionTrackerService.failOperation(trackedOperation, {
@@ -3371,6 +4533,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       trackedOperation.entityId = id;
       trackedOperation.batchId = reportData.workOrderId || id;
 
+      const createdRow: ProductionReport = { ...reportData, id };
+      const operationalToday = getReportOperationalDateString(get().systemSettings);
+      const { start: currentMonthStart, end: currentMonthEnd } = getMonthDateRange();
+      const createdInToday = String(reportData.date || '') === operationalToday;
+      const createdInMonth = String(reportData.date || '') >= currentMonthStart
+        && String(reportData.date || '') <= currentMonthEnd;
+      invalidateProductionReportsRangeCacheForDates([reportData.date], get, set);
+      const immediateCacheTime = Date.now();
+      const immediateTodayKey = getProductionReportsRangeCacheKey(operationalToday, operationalToday);
+      const immediateMonthKey = getProductionReportsRangeCacheKey(currentMonthStart, currentMonthEnd);
+      set((state) => {
+        const nextToday = createdInToday
+          ? upsertLoadedReportRow(state.todayReports, createdRow)
+          : state.todayReports;
+        const nextMonth = createdInMonth
+          ? upsertLoadedReportRow(state.monthlyReports, createdRow)
+          : state.monthlyReports;
+        return {
+          error: null,
+          todayReports: nextToday,
+          monthlyReports: nextMonth,
+          productionReports: createdInMonth
+            ? upsertLoadedReportRow(state.productionReports, createdRow)
+            : state.productionReports,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            ...(createdInToday ? { [immediateTodayKey]: { rows: nextToday, fetchedAt: immediateCacheTime } } : {}),
+            ...(createdInMonth ? { [immediateMonthKey]: { rows: nextMonth, fetchedAt: immediateCacheTime } } : {}),
+          },
+        };
+      });
+      get().invalidateReportsUiReferenceCache();
+      if (trackedOperation) {
+        actionTrackerService.succeedOperation(trackedOperation, {
+          metadata: { reportId: id, processingState: 'pending' },
+        });
+      }
+
+      void (async () => {
       let postSaveWarning: string | null = null;
       const reportIndustrialCost = calculateIndustrialReportTotalCost({
         workersCount: Number(savePayload.workersCount || 0),
@@ -3397,89 +4598,97 @@ export const useAppStore = create<AppState>((set, get) => ({
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث متوسط الإنتاج اليومي';
       }
 
-      try {
-        await productionInventoryService.applyProductionReportInventory({
-          reportId: id,
-          report: reportData,
-          systemSettings,
-          actor: {
-            name: get().userDisplayName || get().userEmail || 'System',
-            userId: get().uid || undefined,
-          },
-          products: get()._rawProducts,
-          componentScrapItems,
-        });
-      } catch (error) {
-        postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
-      }
+      // Inventory posting is server-authoritative and runs from the report background trigger.
 
-      const skipWoPlanProgress = isPackagingThroughputReport(
+      const skipWoProgress = isPackagingThroughputReport(
         { lineId: reportData.lineId, reportType },
         get()._rawLines,
       );
       try {
-        if (activeWO?.id && !skipWoPlanProgress) {
-          await workOrderService.incrementProduced(activeWO.id, reportData.quantityProduced, reportIndustrialCost);
-          const newProduced = (activeWO.producedQuantity ?? 0) + reportData.quantityProduced;
-          if (newProduced >= activeWO.quantity) {
-            await workOrderService.update(activeWO.id, { status: 'completed', completedAt: new Date().toISOString() });
-          } else if (activeWO.status === 'pending') {
-            await workOrderService.update(activeWO.id, { status: 'in_progress' });
-          }
+        await reconcileReportAggregateCosts({
+          reportId: id,
+          expectedReport: { ...reportData, id },
+          industrialCost: reportIndustrialCost,
+          skipsAggregates: skipWoProgress,
+        });
+        if (activeWO?.id && !skipWoProgress) {
+          await get().reconcileWorkOrderFromReports(activeWO.id, { internal: true });
         }
-
-        if (activePlan?.id && !skipWoPlanProgress) {
-          if (activePlan.status === 'planned') {
-            await productionPlanService.update(activePlan.id, {
-              status: 'in_progress',
-              startDate: reportData.date,
-              plannedStartDate: reportData.date,
-            });
-            activePlan.status = 'in_progress';
-            activePlan.startDate = reportData.date;
-            activePlan.plannedStartDate = reportData.date;
-          }
-          await productionPlanService.incrementProduced(activePlan.id, reportData.quantityProduced, reportIndustrialCost);
-          const newProduced = (activePlan.producedQuantity ?? 0) + reportData.quantityProduced;
-          if (newProduced >= activePlan.plannedQuantity) {
-            await productionPlanService.update(activePlan.id, { status: 'completed' });
-          }
+        if (activePlan?.id && shouldPostToPlan && !skipWoProgress) {
+          await get().reconcileProductionPlanFromReports(activePlan.id);
         }
       } catch (error) {
-        postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث أمر الشغل أو خطة الإنتاج';
+        postSaveWarning = (error as Error)?.message
+          || 'تم حفظ التقرير ولكن تعذر ترحيل تكلفته إلى أمر الشغل أو الخطة.';
       }
 
       try {
-        const today = getOperationalDateString(8);
+        const today = getReportOperationalDateString(get().systemSettings);
         const { start: monthStart, end: monthEnd } = getMonthDateRange();
-        const [todayReports, monthlyReports, workOrders] = await Promise.all([
-          reportService.getByDateRange(today, today),
-          reportService.getByDateRange(monthStart, monthEnd),
-          workOrderService.getAll(),
-        ]);
+        const createdRow: ProductionReport = { ...reportData, id };
+        const inToday = String(reportData.date || '') === today;
+        const inMonth =
+          String(reportData.date || '') >= monthStart && String(reportData.date || '') <= monthEnd;
         invalidateProductionReportsRangeCacheForDates([reportData.date], get, set);
         const rangeCacheNow = Date.now();
         const rkToday = getProductionReportsRangeCacheKey(today, today);
         const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-        set((state) => ({
-          todayReports,
-          monthlyReports,
-          productionReports: monthlyReports,
-          workOrders,
-          productionReportsRangeCache: {
-            ...state.productionReportsRangeCache,
-            [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-            [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
-          },
-        }));
+        set((state) => {
+          const nextToday = inToday
+            ? upsertLoadedReportRow(state.todayReports, createdRow)
+            : state.todayReports;
+          const nextMonth = inMonth
+            ? upsertLoadedReportRow(state.monthlyReports, createdRow)
+            : state.monthlyReports;
+          const nextProduction = inMonth
+            ? upsertLoadedReportRow(state.productionReports, createdRow)
+            : state.productionReports;
+          return {
+            todayReports: nextToday,
+            monthlyReports: nextMonth,
+            productionReports: nextProduction,
+            productionReportsRangeCache: {
+              ...state.productionReportsRangeCache,
+              ...(inToday
+                ? { [rkToday]: { rows: nextToday, fetchedAt: rangeCacheNow } }
+                : {}),
+              ...(inMonth
+                ? { [rkMonth]: { rows: nextMonth, fetchedAt: rangeCacheNow } }
+                : {}),
+            },
+          };
+        });
         get()._rebuildProducts();
         get()._rebuildLines();
         try {
-          await persistProductionReportCostSnapshot(id, get);
+          const costedReport = await persistProductionReportCostSnapshot(id, get);
+          if (costedReport) {
+            set((state) => ({
+              todayReports: replaceLoadedReportRow(state.todayReports, costedReport),
+              monthlyReports: replaceLoadedReportRow(state.monthlyReports, costedReport),
+              productionReports: replaceLoadedReportRow(state.productionReports, costedReport),
+              productionReportsRangeCache: Object.fromEntries(
+                Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+                  key,
+                  { ...value, rows: replaceLoadedReportRow(value.rows, costedReport) },
+                ]),
+              ),
+            }));
+          }
         } catch (snapErr) {
           console.warn('persistProductionReportCostSnapshot (create):', snapErr);
+          const costErrorMessage = (snapErr as Error)?.message || 'تعذر حساب تكلفة التصنيع الكاملة.';
+          postSaveWarning = `تم حفظ التقرير ولكن ${costErrorMessage}`;
+          await reportService.update(id, {
+            manufacturingCostPostingState: 'failed',
+            manufacturingCostPostingError: costErrorMessage,
+          }).catch(() => undefined);
         }
-        if (activePlan) await get().fetchProductionPlans();
+        try {
+          void syncWorkerDailyPerformanceFromReport(id, { ...reportData, id });
+        } catch (syncErr) {
+          console.warn('syncWorkerDailyPerformanceFromReport (create):', syncErr);
+        }
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث البيانات المعروضة';
       }
@@ -3501,6 +4710,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             productId: data.productId,
             quantityProduced: data.quantityProduced,
             reportType,
+            operationPath: context.path,
             workOrderId: activeWO?.id ?? '',
             productionPlanId: activePlan?.id ?? '',
           },
@@ -3511,18 +4721,29 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (postSaveWarning) {
         console.warn('createReport post-save warning:', postSaveWarning);
+        set({ error: postSaveWarning });
+        try {
+          const { toast } = await import('../components/Toast');
+          toast.warning(
+            `${postSaveWarning} — يمكنك إعادة ترحيل المخزون من شاشة التقرير إن لزم.`,
+          );
+        } catch {
+          // toast is best-effort
+        }
+      } else {
+        set({ error: null });
       }
-      set({ error: null });
-      if (trackedOperation) {
-        actionTrackerService.succeedOperation(trackedOperation, {
-          metadata: {
-            reportId: id,
-            warning: postSaveWarning ?? null,
-          },
-        });
-      }
+      await reportService.update(id, {
+        processingState: postSaveWarning ? 'failed' : 'completed',
+        processingStage: postSaveWarning ? 'client_background_failed' : 'completed',
+        processingError: postSaveWarning || '',
+        processingUpdatedAt: new Date().toISOString(),
+      }).catch(() => undefined);
 
       get().invalidateReportsUiReferenceCache();
+      })().catch((backgroundError) => {
+        console.warn('createReport background processing:', backgroundError);
+      });
       return id;
     } catch (error) {
       if (trackedOperation) {
@@ -3538,7 +4759,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       return null;
     }
   },
-
 
   queueReportCreate: (data, context) => {
     const randomPart = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -3571,7 +4791,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       clientCreatePath: context.path,
       clientCreatePayload: data as unknown as Record<string, unknown>,
     };
-    const operationalToday = getOperationalDateString(8);
+    const operationalToday = getReportOperationalDateString(get().systemSettings);
     const { start: monthStart, end: monthEnd } = getMonthDateRange();
     const inToday = String(data.date || '') === operationalToday;
     const inMonth = String(data.date || '') >= monthStart && String(data.date || '') <= monthEnd;
@@ -3605,7 +4825,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
 
     const completion = (async (): Promise<string | null> => {
-      const createdId = await get().createReport(data);
+      const createdId = await get().createReport(data, context);
       if (!createdId) {
         const message = get().error || 'تعذر حفظ التقرير.';
         set((state) => {
@@ -3689,7 +4909,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...get().productionReports,
     ].find((row) => row.id === optimisticId && row.clientSaveState === 'failed');
     const payload = optimistic?.clientCreatePayload;
-    if (!optimistic || !payload) return null;
+    const path = optimistic?.clientCreatePath as ProductionReportCreatePath | undefined;
+    if (!optimistic || !payload || !path) return null;
 
     set((state) => {
       const markSaving = (rows: ProductionReport[]) => rows.map((row) => (
@@ -3712,6 +4933,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const createdId = await get().createReport(
       payload as Omit<ProductionReport, 'id' | 'createdAt'>,
+      { path },
     );
     if (!createdId) {
       const message = get().error || 'تعذر حفظ التقرير.';
@@ -3746,7 +4968,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     return createdId;
   },
 
-  updateReport: async (id, data) => {
+  updateReport: async (id, data, context) => {
     const { uid, userDisplayName, userEmail } = get();
     const trackedOperation = actionTrackerService.startOperation({
       module: 'production',
@@ -3760,18 +4982,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
       metadata: {
         reportId: id,
+        operationPath: context.path,
       },
       description: 'Update production report',
     });
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCTION_REPORT_OPERATION_KEYS.update,
+        context.path,
+      );
       const existingReport = await reportService.getById(id);
+      if (!existingReport) {
+        throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
+      }
       const nextReportType = resolveReportType(data.reportType ?? existingReport?.reportType);
       const permissions = get().userPermissions;
       const canEditFinishedReports = hasPermission(permissions, 'reports.edit');
       const canEditPackagingReports =
         hasPermission(permissions, 'reports.edit')
         || hasPermission(permissions, 'reports.packaging.create');
-      const forcePackagingOnly = hasPermission(permissions, 'reports.packaging.only');
+      const forcePackagingOnly = isPackagingOnlyPermissions(permissions);
       const forceInjectionOnly =
         hasPermission(permissions, 'reports.componentInjection.only') && !canEditFinishedReports;
       const canManageComponentInjection =
@@ -3785,7 +5016,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         throw new Error(msg);
       }
-      if (nextReportType === 'packaging' && !isPackagingLineId(nextLineId, lines)) {
+      if (
+        nextReportType === 'packaging'
+        && reportBehavior.restrictPackagingReportsToPackagingLines
+        && !isPackagingLineId(nextLineId, lines)
+      ) {
         const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
         set({ error: msg });
         throw new Error(msg);
@@ -3805,7 +5040,79 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         throw new Error(msg);
       }
-      let updatePayload: Partial<ProductionReport> = { ...data };
+      const {
+        productNameSnapshot: _untrustedProductNameSnapshot,
+        productCodeSnapshot: _untrustedProductCodeSnapshot,
+        operationPathSnapshot: _untrustedOperationPathSnapshot,
+        lastOperationPathSnapshot: _untrustedLastOperationPathSnapshot,
+        workOrderCostPostedSnapshot: _untrustedWorkOrderCostSnapshot,
+        productionPlanCostPostedSnapshot: _untrustedPlanCostSnapshot,
+        workOrderCostPostedTargetId: _untrustedWorkOrderCostTarget,
+        productionPlanCostPostedTargetId: _untrustedPlanCostTarget,
+        aggregateCostPostingState: _untrustedAggregateCostState,
+        aggregateCostPostingUpdatedAt: _untrustedAggregateCostUpdatedAt,
+        inventoryAppliedAt: _untrustedInventoryAppliedAt,
+        inventoryAppliedBy: _untrustedInventoryAppliedBy,
+        inventoryAppliedByUserId: _untrustedInventoryAppliedByUserId,
+        inventoryPostingState: _untrustedInventoryPostingState,
+        inventoryPostingUpdatedAt: _untrustedInventoryPostingUpdatedAt,
+        inventoryReversedAt: _untrustedInventoryReversedAt,
+        inventoryReversedBy: _untrustedInventoryReversedBy,
+        inventoryReversedByUserId: _untrustedInventoryReversedByUserId,
+        ...trustedUpdateInput
+      } = data as typeof data & Partial<ReportAggregateCostState> & ReportInventoryPostingState;
+      let updatePayload: Partial<ProductionReport> = {
+        ...trustedUpdateInput,
+        lastOperationPathSnapshot: context.path,
+      };
+      if (nextReportType === 'component_injection') {
+        const rawShift = data.shift !== undefined ? data.shift : existingReport?.shift;
+        if (reportBehavior.requireInjectionShift && !isInjectionShiftSelected(rawShift)) {
+          const msg = 'يجب اختيار الوردية (صباحي أو مسائي) قبل حفظ تقرير الحقن.';
+          set({ error: msg });
+          throw new Error(msg);
+        }
+        if (isInjectionShiftSelected(rawShift)) {
+          updatePayload.shift = rawShift;
+        } else {
+          delete updatePayload.shift;
+        }
+      } else {
+        delete updatePayload.shift;
+      }
+      const mergedReport = { ...(existingReport ?? {}), ...updatePayload } as ProductionReport;
+      if (reportBehavior.requirePositiveQuantityOnReports && Number(mergedReport.quantityProduced || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      if (reportBehavior.requireWorkHoursOnReports && Number(mergedReport.workHours || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون ساعات عمل.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      const detailedWorkersTotal = Number(mergedReport.workersProductionCount || 0)
+        + Number(mergedReport.workersPackagingCount || 0)
+        + Number(mergedReport.workersQualityCount || 0)
+        + Number(mergedReport.workersMaintenanceCount || 0)
+        + Number(mergedReport.workersExternalCount || 0);
+      const packagingLaborOptional =
+        reportBehavior.allowPackagingLaborOptional
+        && (
+          (nextReportType === 'finished_product' && isPackagingLineId(nextLineId, lines))
+          || nextReportType === 'packaging'
+        );
+      if (
+        reportBehavior.requireLaborForFinishedReports
+        && nextReportType === 'finished_product'
+        && !packagingLaborOptional
+        && Number(mergedReport.workersCount || 0) <= 0
+        && detailedWorkersTotal <= 0
+      ) {
+        const msg = 'لا يمكن حفظ تقرير بدون عمالة.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
       if (nextReportType === 'packaging') {
         updatePayload.componentScrapItems = [];
         const { id: _rid, createdAt: _rca, ...existingBody } = (existingReport || {}) as ProductionReport;
@@ -3827,18 +5134,60 @@ export const useAppStore = create<AppState>((set, get) => ({
           componentScrapItems: [],
         };
       }
+      const snapshotProductId = String(updatePayload.productId ?? existingReport?.productId ?? '').trim();
+      const reportItemSnapshot = await resolveProductionReportItemSnapshot(
+        nextReportType,
+        snapshotProductId,
+        get()._rawProducts,
+        get().reportsUiReferenceCache?.rawMaterialOptions,
+      );
+      updatePayload = { ...updatePayload, ...reportItemSnapshot };
+      const preliminaryMergedReport = {
+        ...(existingReport ?? {}),
+        ...updatePayload,
+        reportType: nextReportType,
+      } as ProductionReport;
+      const shouldResolveExecutionLinks =
+        context.path === PRODUCTION_REPORT_UPDATE_PATHS.shiftClose
+        || ['lineId', 'productId', 'date', 'employeeId', 'workOrderId', 'productionPlanId', 'reportType']
+          .some((field) => Object.prototype.hasOwnProperty.call(trustedUpdateInput, field));
+      if (shouldResolveExecutionLinks) {
+        const resolvedLinks = await resolveProductionReportExecutionLinks(
+          preliminaryMergedReport,
+          get().workOrders,
+          { preserveCompletedWorkOrder: true },
+        );
+        updatePayload = {
+          ...updatePayload,
+          workOrderId: resolvedLinks.activeWorkOrder?.id || '',
+          productionPlanId: resolvedLinks.activePlan?.id || undefined,
+          productionPlanLinkMode: resolvedLinks.productionPlanLinkMode,
+        };
+        const planSettings = get().systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS;
+        if (
+          !resolvedLinks.activePlan
+          && !resolvedLinks.activeWorkOrder
+          && !resolvedLinks.hasMatchingPlanContext
+          && planSettings.allowReportWithoutPlan === false
+        ) {
+          throw new Error('لا يمكن حفظ التقرير بدون خطة إنتاج نشطة أو أمر شغل مناسب.');
+        }
+      }
       const finalMergedReport = { ...(existingReport ?? {}), ...updatePayload } as ProductionReport;
       if (reportBehavior.preventDuplicateReports && nextReportType !== 'packaging') {
-        const sameDayReports = await reportService.getByDateRange(finalMergedReport.date, finalMergedReport.date);
-        const duplicateCandidate = {
-          ...finalMergedReport,
-          reportType: nextReportType,
-          shift: nextReportType === 'component_injection' && isInjectionShiftSelected(finalMergedReport.shift)
-            ? finalMergedReport.shift
-            : undefined,
-        };
-        const hasDuplicate = sameDayReports.some((report) =>
-          report.id !== id && isDuplicateProductionReport(report, duplicateCandidate)
+        const hasDuplicate = await reportService.hasConflictingUniqueKey(
+          {
+            date: finalMergedReport.date,
+            lineId: finalMergedReport.lineId,
+            employeeId: finalMergedReport.employeeId,
+            productId: finalMergedReport.productId,
+            workOrderId: finalMergedReport.workOrderId,
+            reportType: nextReportType,
+            shift: nextReportType === 'component_injection' && isInjectionShiftSelected(finalMergedReport.shift)
+              ? finalMergedReport.shift
+              : undefined,
+          },
+          id,
         );
         if (hasDuplicate) {
           const msg = nextReportType === 'component_injection'
@@ -3871,24 +5220,132 @@ export const useAppStore = create<AppState>((set, get) => ({
           throw new Error(msg);
         }
       }
-      await reportService.update(id, updatePayload);
-      const affectedProductIds = new Set<string>();
-      if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
-      if (updatePayload.productId) affectedProductIds.add(updatePayload.productId);
-      (updatePayload.packagingLines || []).forEach((l) => {
-        if (l.productId) affectedProductIds.add(l.productId);
-      });
-      await Promise.all(
-        Array.from(affectedProductIds).map((productId) =>
-          syncProductAvgDailyProduction(productId)
+      const inventoryAffectingFields: Array<keyof ProductionReport> = [
+        'productId',
+        'lineId',
+        'reportType',
+        'quantityProduced',
+        'componentScrapItems',
+        'packagingLines',
+      ];
+      const changesAppliedInventory = inventoryAffectingFields.some((field) => (
+        Object.prototype.hasOwnProperty.call(updatePayload, field)
+        && JSON.stringify(existingReport[field] ?? null) !== JSON.stringify(finalMergedReport[field] ?? null)
+      ));
+      if (
+        changesAppliedInventory
+        && (
+          Boolean((existingReport as ProductionReport & ReportInventoryPostingState).inventoryAppliedAt)
+          || ['applying', 'applied', 'reversing'].includes(String(
+            (existingReport as ProductionReport & ReportInventoryPostingState).inventoryPostingState || '',
+          ))
         )
+      ) {
+        throw new Error(
+          'لا يمكن تغيير الصنف أو الخط أو نوع/كمية التقرير بعد ترحيل المخزون. اعكس أثر المخزون أولاً ثم أعد المحاولة.',
+        );
+      }
+      if (
+        context.path === PRODUCTION_REPORT_UPDATE_PATHS.shiftClose
+        && nextReportType === 'finished_product'
+        && Number(finalMergedReport.quantityProduced || 0) > 0
+      ) {
+        const routing = await resolveInventoryRoutingV1Async(get().systemSettings);
+        const linkedWorkOrder = finalMergedReport.workOrderId
+          ? (get().workOrders.find((wo) => wo.id === finalMergedReport.workOrderId)
+            ?? await workOrderService.getById(finalMergedReport.workOrderId).catch(() => null))
+          : null;
+        const linkedPlanId = finalMergedReport.productionPlanId || linkedWorkOrder?.planId || undefined;
+        const linkedPlan = linkedPlanId
+          ? (get().productionPlans.find((p) => p.id === linkedPlanId)
+            ?? await productionPlanService.getById(linkedPlanId).catch(() => null))
+          : null;
+        const requiresIssue = resolveRequiresProductionIssueOnReport({
+          workOrderRequiresProductionIssue: linkedWorkOrder?.requiresProductionIssue,
+          planRequiresProductionIssue: linkedPlan?.requiresProductionIssue,
+          companyRequire: routing.requireIssuedProductionIssueOnReport,
+        });
+        if (requiresIssue) {
+          const hasIssuedProductionComponents = await productionIssueService.hasIssuedForProduction({
+            workOrderId: finalMergedReport.workOrderId || undefined,
+            productionPlanId: finalMergedReport.productionPlanId || linkedPlanId || undefined,
+          });
+          if (!hasIssuedProductionComponents) {
+            throw new Error(productionIssueRequiredMessage(Boolean(
+              finalMergedReport.workOrderId || finalMergedReport.productionPlanId || linkedPlanId,
+            )));
+          }
+        }
+      }
+      const calculateReportIndustrialCost = (report: ProductionReport) =>
+        calculateIndustrialReportTotalCost({
+          workersCount: Number(report.workersCount || 0),
+          workHours: Number(report.workHours || 0),
+          quantityProduced: Number(report.quantityProduced || 0),
+          lineId: report.lineId,
+          reportDate: report.date,
+          employeeId: report.employeeId,
+          laborSettings: get().laborSettings,
+          costCenters: get().costCenters,
+          costCenterValues: get().costCenterValues,
+          costAllocations: get().costAllocations,
+          employees: get()._rawEmployees,
+        });
+      const previousIndustrialCost = calculateReportIndustrialCost(existingReport);
+      const previousSkipsAggregates = isPackagingThroughputReport(
+        existingReport,
+        get()._rawLines,
       );
-      const today = getOperationalDateString(8);
+      await ensureReportAggregateCostBaseline(
+        id,
+        existingReport,
+        previousIndustrialCost,
+        previousSkipsAggregates,
+      );
+      await reportService.update(id, updatePayload);
+
+      // Prefer a fresh read so server fields (codes, posting state) are accurate in the list.
+      // Fail soft: merge local payload if reload fails so the UI is not blocked.
+      let savedReport: ProductionReport = { ...existingReport, ...updatePayload, id };
+      try {
+        const reloaded = await reportService.getById(id);
+        if (reloaded) savedReport = reloaded;
+      } catch (reloadError) {
+        console.warn('updateReport reload after write failed:', reloadError);
+      }
+
+      if (
+        context.path === PRODUCTION_REPORT_UPDATE_PATHS.shiftClose
+        && reportBehavior.autoApplyInventoryOnReportSave
+        && Number(savedReport.quantityProduced || 0) > 0
+      ) {
+        try {
+          await productionInventoryService.applyProductionReportInventory({
+            reportId: id,
+            report: savedReport,
+            systemSettings: get().systemSettings,
+            actor: {
+              name: get().userDisplayName || get().userEmail || 'System',
+              userId: get().uid || undefined,
+            },
+            products: get()._rawProducts,
+            componentScrapItems: savedReport.componentScrapItems || [],
+          });
+        } catch (error) {
+          throw new Error(
+            (error as Error)?.message
+            || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون المرتبطة به.',
+          );
+        }
+      }
+
+      const savedIndustrialCost = calculateReportIndustrialCost(savedReport);
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
-      const [todayReports, monthlyReports] = await Promise.all([
-        reportService.getByDateRange(today, today),
-        reportService.getByDateRange(monthStart, monthEnd),
-      ]);
+      const savedRow: ProductionReport = { ...savedReport, id };
+      const inToday = String(savedRow.date || '') === today;
+      const inMonth =
+        String(savedRow.date || '') >= monthStart && String(savedRow.date || '') <= monthEnd;
       const touchedDates = [existingReport?.date, data.date].filter(
         (d): d is string => Boolean(d && String(d).trim()),
       );
@@ -3896,23 +5353,32 @@ export const useAppStore = create<AppState>((set, get) => ({
       const rangeCacheNow = Date.now();
       const rkToday = getProductionReportsRangeCacheKey(today, today);
       const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-      set((state) => ({
-        todayReports,
-        monthlyReports,
-        productionReports: monthlyReports,
-        productionReportsRangeCache: {
-          ...state.productionReportsRangeCache,
-          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
-        },
-      }));
+      set((state) => {
+        const withoutOld = (rows: ProductionReport[]) =>
+          rows.filter((row) => row.id !== id);
+        const nextToday = inToday
+          ? upsertLoadedReportRow(withoutOld(state.todayReports), savedRow)
+          : withoutOld(state.todayReports);
+        const nextMonth = inMonth
+          ? upsertLoadedReportRow(withoutOld(state.monthlyReports), savedRow)
+          : withoutOld(state.monthlyReports);
+        const nextProduction = inMonth
+          ? upsertLoadedReportRow(withoutOld(state.productionReports), savedRow)
+          : withoutOld(state.productionReports);
+        return {
+          todayReports: nextToday,
+          monthlyReports: nextMonth,
+          productionReports: nextProduction,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            ...(inToday ? { [rkToday]: { rows: nextToday, fetchedAt: rangeCacheNow } } : {}),
+            ...(inMonth ? { [rkMonth]: { rows: nextMonth, fetchedAt: rangeCacheNow } } : {}),
+          },
+        };
+      });
       get()._rebuildProducts();
       get()._rebuildLines();
-      try {
-        await persistProductionReportCostSnapshot(id, get);
-      } catch (snapErr) {
-        console.warn('persistProductionReportCostSnapshot (update):', snapErr);
-      }
+      get().invalidateReportsUiReferenceCache();
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -3935,7 +5401,90 @@ export const useAppStore = create<AppState>((set, get) => ({
           changedFields: Object.keys(data || {}),
         },
       });
-      get().invalidateReportsUiReferenceCache();
+
+      void (async () => {
+        try {
+          const nextSkipsAggregates = isPackagingThroughputReport(savedReport, get()._rawLines);
+          await reconcileReportAggregateCosts({
+            reportId: id,
+            expectedReport: savedReport,
+            industrialCost: savedIndustrialCost,
+            skipsAggregates: nextSkipsAggregates,
+          });
+          const affectedWorkOrderIds = new Set(
+            [existingReport.workOrderId, savedReport.workOrderId]
+              .map((workOrderId) => String(workOrderId || '').trim())
+              .filter(Boolean),
+          );
+          for (const workOrderId of affectedWorkOrderIds) {
+            await get().reconcileWorkOrderFromReports(workOrderId, {
+              internal: true,
+              mode: 'linkedOnly',
+            });
+          }
+        } catch (error) {
+          console.warn('updateReport background reconcile failed:', error);
+        }
+
+        try {
+          const affectedProductIds = new Set<string>();
+          if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
+          if (updatePayload.productId) affectedProductIds.add(updatePayload.productId);
+          (updatePayload.packagingLines || []).forEach((l) => {
+            if (l.productId) affectedProductIds.add(l.productId);
+          });
+          await Promise.all(
+            Array.from(affectedProductIds).map((productId) =>
+              syncProductAvgDailyProduction(productId)
+            )
+          );
+        } catch (error) {
+          console.warn('updateReport background avg production sync failed:', error);
+        }
+
+        try {
+          const costedReport = await persistProductionReportCostSnapshot(id, get);
+          if (costedReport) {
+            set((state) => ({
+              todayReports: replaceLoadedReportRow(state.todayReports, costedReport),
+              monthlyReports: replaceLoadedReportRow(state.monthlyReports, costedReport),
+              productionReports: replaceLoadedReportRow(state.productionReports, costedReport),
+              productionReportsRangeCache: Object.fromEntries(
+                Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+                  key,
+                  { ...value, rows: replaceLoadedReportRow(value.rows, costedReport) },
+                ]),
+              ),
+            }));
+          }
+        } catch (snapErr) {
+          console.warn('persistProductionReportCostSnapshot (update):', snapErr);
+          const costErrorMessage = (snapErr as Error)?.message || 'تعذر إعادة حساب تكلفة التصنيع الكاملة.';
+          await reportService.update(id, {
+            manufacturingCostPostingState: 'failed',
+            manufacturingCostPostingError: costErrorMessage,
+          }).catch(() => undefined);
+        }
+
+        try {
+          await syncWorkerDailyPerformanceFromReport(id, savedReport);
+        } catch (syncErr) {
+          console.warn('syncWorkerDailyPerformanceFromReport (update):', syncErr);
+        }
+
+        try {
+          const affectedPlanIds = new Set(
+            [existingReport?.productionPlanId, savedReport.productionPlanId]
+              .map((planId) => String(planId || '').trim())
+              .filter(Boolean),
+          );
+          for (const planId of affectedPlanIds) {
+            await get().reconcileProductionPlanFromReports(planId);
+          }
+        } catch (planErr) {
+          console.warn('updateReport background plan reconcile failed:', planErr);
+        }
+      })();
     } catch (error) {
       actionTrackerService.failOperation(trackedOperation, {
         error,
@@ -3943,11 +5492,13 @@ export const useAppStore = create<AppState>((set, get) => ({
           reportId: id,
         },
       });
-      set({ error: (error as Error).message });
+      const message = (error as Error)?.message || 'تعذر تعديل التقرير.';
+      set({ error: message });
+      throw error instanceof Error ? error : new Error(message);
     }
   },
 
-  deleteReport: async (id) => {
+  deleteReport: async (id, context) => {
     const { uid, userDisplayName, userEmail } = get();
     const trackedOperation = actionTrackerService.startOperation({
       module: 'production',
@@ -3961,10 +5512,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
       metadata: {
         reportId: id,
+        operationPath: context.path,
       },
       description: 'Delete production report',
     });
     try {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCTION_REPORT_OPERATION_KEYS.delete,
+        context.path,
+      );
       const reportToDelete = await reportService.getById(id);
       if (!reportToDelete) {
         throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
@@ -3977,11 +5534,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           throw new Error('لا يمكن حذف التقرير بعد اعتماد دخول مخزن تم الصنع. قم بإلغاء الحركة أولاً من شاشة اعتماد التحويلات.');
         }
         if (request.status === 'pending') {
-          await transferApprovalService.rejectRequest(
-            request.id,
-            actorName,
-            'تم إلغاء طلب دخول تم الصنع تلقائياً بسبب حذف التقرير المصدر.',
-          );
+          unwrapOrThrow(await rejectTransferRequest({
+            requestId: request.id,
+            rejectedBy: actorName,
+            rejectedByUserId: uid ?? undefined,
+            reason: 'تم إلغاء طلب دخول تم الصنع تلقائياً بسبب حذف التقرير المصدر.',
+          }, { internal: true }));
         }
       }
 
@@ -3995,46 +5553,46 @@ export const useAppStore = create<AppState>((set, get) => ({
         );
       }
 
-      if (
-        reportToDelete?.workOrderId
-        && !isPackagingThroughputReport(reportToDelete, get()._rawLines)
-      ) {
-        const linkedWorkOrder = await workOrderService.getById(reportToDelete.workOrderId);
-        if (linkedWorkOrder?.id) {
-          const removedProduced = Math.max(0, Number(reportToDelete.quantityProduced) || 0);
-          const nextProduced = Math.max(0, (linkedWorkOrder.producedQuantity ?? 0) - removedProduced);
+      const skipsAggregates = isPackagingThroughputReport(reportToDelete, get()._rawLines);
+      const fallbackIndustrialCost = calculateIndustrialReportTotalCost({
+        workersCount: Number(reportToDelete.workersCount || 0),
+        workHours: Number(reportToDelete.workHours || 0),
+        quantityProduced: Number(reportToDelete.quantityProduced || 0),
+        lineId: reportToDelete.lineId,
+        reportDate: reportToDelete.date,
+        employeeId: reportToDelete.employeeId,
+        laborSettings: get().laborSettings,
+        costCenters: get().costCenters,
+        costCenterValues: get().costCenterValues,
+        costAllocations: get().costAllocations,
+        employees: get()._rawEmployees,
+      });
+      const linkedWorkOrderId = skipsAggregates
+        ? ''
+        : String(reportToDelete.workOrderId || '').trim();
+      await reverseReportAggregateCostsForDelete({
+        reportId: id,
+        fallbackIndustrialCost,
+        skipsAggregates,
+      });
 
-          const nextStatus =
-            nextProduced <= 0
-              ? 'pending'
-              : nextProduced < (linkedWorkOrder.quantity ?? 0)
-                ? 'in_progress'
-                : 'completed';
-
-          await workOrderService.update(linkedWorkOrder.id, {
-            producedQuantity: nextProduced,
-            status: nextStatus,
-            completedAt: nextStatus === 'completed' ? (linkedWorkOrder.completedAt ?? new Date().toISOString()) : null,
-          });
-        }
+      try {
+        await removeWorkerDailyPerformanceForReport(id);
+      } catch (syncErr) {
+        console.warn('removeWorkerDailyPerformanceForReport (delete):', syncErr);
       }
 
       await reportService.delete(id);
+
+      const linkedPlanId = String(reportToDelete.productionPlanId || '').trim();
       const productIdsToResync = new Set<string>();
       if (reportToDelete.productId) productIdsToResync.add(String(reportToDelete.productId));
       (reportToDelete.packagingLines || []).forEach((l) => {
         if (l.productId) productIdsToResync.add(String(l.productId));
       });
-      await Promise.all(
-        Array.from(productIdsToResync).map((pid) => syncProductAvgDailyProduction(pid)),
-      );
-      const today = getOperationalDateString(8);
+
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
-      const [todayReports, monthlyReports, workOrders] = await Promise.all([
-        reportService.getByDateRange(today, today),
-        reportService.getByDateRange(monthStart, monthEnd),
-        workOrderService.getAll(),
-      ]);
       invalidateProductionReportsRangeCacheForDates(
         [reportToDelete.date].filter((d) => Boolean(d && String(d).trim())),
         get,
@@ -4043,19 +5601,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       const rangeCacheNow = Date.now();
       const rkToday = getProductionReportsRangeCacheKey(today, today);
       const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-      set((state) => ({
-        todayReports,
-        monthlyReports,
-        productionReports: monthlyReports,
-        workOrders,
-        productionReportsRangeCache: {
-          ...state.productionReportsRangeCache,
-          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
-        },
-      }));
+      set((state) => {
+        const removeRow = (rows: ProductionReport[]) => rows.filter((row) => row.id !== id);
+        const nextToday = removeRow(state.todayReports);
+        const nextMonth = removeRow(state.monthlyReports);
+        const nextProduction = removeRow(state.productionReports);
+        return {
+          todayReports: nextToday,
+          monthlyReports: nextMonth,
+          productionReports: nextProduction,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            [rkToday]: { rows: nextToday, fetchedAt: rangeCacheNow },
+            [rkMonth]: { rows: nextMonth, fetchedAt: rangeCacheNow },
+          },
+        };
+      });
       get()._rebuildProducts();
       get()._rebuildLines();
+      get().invalidateReportsUiReferenceCache();
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -4078,7 +5642,29 @@ export const useAppStore = create<AppState>((set, get) => ({
           productId: reportToDelete.productId,
         },
       });
-      get().invalidateReportsUiReferenceCache();
+
+      void (async () => {
+        try {
+          if (linkedWorkOrderId) {
+            await get().reconcileWorkOrderFromReports(linkedWorkOrderId, {
+              internal: true,
+              mode: 'linkedOnly',
+            });
+          }
+          if (linkedPlanId) {
+            await get().reconcileProductionPlanFromReports(linkedPlanId);
+          }
+        } catch (reconcileError) {
+          console.warn('deleteReport background reconcile failed:', reconcileError);
+        }
+        try {
+          await Promise.all(
+            Array.from(productIdsToResync).map((pid) => syncProductAvgDailyProduction(pid)),
+          );
+        } catch (avgError) {
+          console.warn('deleteReport background avg production sync failed:', avgError);
+        }
+      })();
     } catch (error) {
       actionTrackerService.failOperation(trackedOperation, {
         error,
@@ -4108,16 +5694,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
       }
 
-      const [productionTx, packagingTx, linkedRequests] = await Promise.all([
-        stockService.getTransactionsBySource({ sourceModule: 'production_report', sourceId: reportId }),
-        stockService.getTransactionsBySource({ sourceModule: 'packaging', sourceId: reportId }),
-        transferApprovalService.getBySourceReportId(reportId),
-      ]);
-      const activeRequests = linkedRequests.filter((request) => (
-        request.status !== 'rejected' && request.status !== 'cancelled'
-      ));
-      if (productionTx.length > 0 || packagingTx.length > 0 || activeRequests.length > 0) {
-        throw new Error('لا يمكن إعادة ترحيل المخزون لهذا التقرير لأن له حركات أو طلبات اعتماد مخزنية مرتبطة بالفعل.');
+      if (resolveReportType(report.reportType) !== 'finished_product') {
+        const [productionTx, packagingTx, linkedRequests] = await Promise.all([
+          stockService.getTransactionsBySource({ sourceModule: 'production_report', sourceId: reportId }),
+          stockService.getTransactionsBySource({ sourceModule: 'packaging', sourceId: reportId }),
+          transferApprovalService.getBySourceReportId(reportId),
+        ]);
+        const activeRequests = linkedRequests.filter((request) => (
+          request.status !== 'rejected' && request.status !== 'cancelled'
+        ));
+        if (productionTx.length > 0 || packagingTx.length > 0 || activeRequests.length > 0) {
+          throw new Error('لا يمكن إعادة ترحيل المخزون لهذا التقرير لأن له حركات أو طلبات اعتماد مخزنية مرتبطة بالفعل.');
+        }
       }
 
       await productionInventoryService.applyProductionReportInventory({
@@ -4156,6 +5744,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   syncMissingProductionEntryTransfers: async (startDate, endDate) => {
     set({ error: null });
+    assertOperationPathEnabled(
+      get().systemSettings,
+      PRODUCTION_REPORT_OPERATION_KEYS.reconcile,
+      PRODUCTION_REPORT_RECONCILE_PATHS.reportsPage,
+    );
     let processed = 0;
     let created = 0;
     let skipped = 0;
@@ -4169,12 +5762,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const systemSettings = get().systemSettings;
-      const requiresFinishedApproval = systemSettings.planSettings?.requireFinishedStockApprovalForReports !== false;
-      if (!requiresFinishedApproval) {
+      const routing = await resolveInventoryRoutingV1Async(systemSettings);
+      if (!routing.requireApprovalForProductionEntry) {
         return { processed: 0, created: 0, skipped: 0, failed: 0 };
       }
-
-      const routing = await resolveInventoryRoutingV1Async(systemSettings);
       if (!routing.productionWipWarehouseId) {
         throw new Error('لم يتم تحديد مخزن إنتاج تحت التشغيل في إعدادات توجيه المخزون.');
       }
@@ -4209,12 +5800,11 @@ export const useAppStore = create<AppState>((set, get) => ({
             continue;
           }
 
-          await transferApprovalService.createRequest({
+          unwrapOrThrow(await createTransferRequest({
             requestType: 'production_entry',
             fromWarehouseId: '__production_report__',
             fromWarehouseName: 'تقارير الإنتاج',
             toWarehouseId: routing.productionWipWarehouseId,
-            toWarehouseName: 'مخزن إنتاج تحت التشغيل',
             note: `Backfill production entry from report ${report.id}`,
             sourceReportId: report.id,
             lines: [{
@@ -4227,7 +5817,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             }],
             createdBy: actorName,
             createdByUserId: actorUserId,
-          });
+          }, { internal: true }));
           created += 1;
         } catch {
           failed += 1;
@@ -4243,6 +5833,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   backfillUnlinkedReportsWorkOrders: async (startDate, endDate, options) => {
     set({ error: null });
+    assertOperationPathEnabled(
+      get().systemSettings,
+      PRODUCTION_REPORT_OPERATION_KEYS.reconcile,
+      PRODUCTION_REPORT_RECONCILE_PATHS.reportsPage,
+    );
     let processed = 0;
     let linked = 0;
     let skipped = 0;
@@ -4264,12 +5859,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const workOrders = await workOrderService.getAll();
-      const workOrderById = new Map(
-        workOrders
-          .filter((wo) => Boolean(wo.id))
-          .map((wo) => [String(wo.id), wo]),
-      );
-      const laborRate = Number(get().laborSettings?.hourlyRate ?? 0);
+      const touchedWorkOrderIds = new Set<string>();
 
       for (const report of candidates) {
         if (!report.id) continue;
@@ -4280,6 +5870,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             productId: report.productId,
             supervisorId: report.employeeId,
             reportType: resolveReportType(report.reportType),
+            reportDate: report.date,
             includeCompleted: true,
           });
           if (!target?.id) {
@@ -4287,47 +5878,14 @@ export const useAppStore = create<AppState>((set, get) => ({
             continue;
           }
 
-          await reportService.update(report.id, { workOrderId: target.id });
-
-          const qty = Number(report.quantityProduced || 0);
-          const workers = Number(report.workersCount || 0);
-          const hours = Number(report.workHours || 0);
-          const laborCost = laborRate * hours * workers;
-          if (qty > 0 && !isPackagingThroughputReport(report, get()._rawLines)) {
-            await workOrderService.incrementProduced(target.id, qty, laborCost);
+          const planId = String(target.planId || '').trim();
+          const patch: Partial<ProductionReport> = { workOrderId: target.id };
+          if (planId && !String(report.productionPlanId || '').trim()) {
+            patch.productionPlanId = planId;
+            patch.productionPlanLinkMode = 'auto';
           }
-
-          const cached = workOrderById.get(String(target.id));
-          const currentProduced = Number(cached?.producedQuantity ?? target.producedQuantity ?? 0);
-          const nextProduced = Math.max(0, currentProduced + qty);
-          const targetQty = Number(cached?.quantity ?? target.quantity ?? 0);
-          const previousStatus = cached?.status ?? target.status;
-          const nextStatus: WorkOrder['status'] =
-            nextProduced <= 0
-              ? 'pending'
-              : nextProduced >= targetQty
-                ? 'completed'
-                : 'in_progress';
-
-          if (nextStatus !== previousStatus || (nextStatus === 'completed' && !(cached?.completedAt ?? target.completedAt))) {
-            await workOrderService.update(target.id, {
-              status: nextStatus,
-              completedAt:
-                nextStatus === 'completed'
-                  ? (cached?.completedAt ?? target.completedAt ?? new Date().toISOString())
-                  : null,
-            });
-          }
-
-          if (cached) {
-            cached.producedQuantity = nextProduced;
-            cached.actualCost = Number(cached.actualCost || 0) + (qty > 0 ? laborCost : 0);
-            cached.status = nextStatus;
-            cached.completedAt =
-              nextStatus === 'completed'
-                ? (cached.completedAt ?? new Date().toISOString())
-                : null;
-          }
+          await reportService.update(report.id, patch);
+          touchedWorkOrderIds.add(String(target.id));
           linked += 1;
         } catch {
           failed += 1;
@@ -4341,11 +5899,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       }
 
+      for (const workOrderId of touchedWorkOrderIds) {
+        try {
+          await get().reconcileWorkOrderFromReports(workOrderId, { internal: true });
+        } catch {
+          // reconcile failures are surfaced via store error; keep linking progress
+        }
+      }
+
       const touchedDates = candidates
         .map((r) => String(r.date || '').trim())
         .filter(Boolean);
       invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -4376,8 +5942,169 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  reconcileProductionPlanFromReports: async (planId) => {
+    const id = String(planId || '').trim();
+    if (!id) return null;
+    try {
+      const plan = await productionPlanService.getById(id);
+      if (!plan?.id) {
+        throw new Error('خطة الإنتاج غير موجودة.');
+      }
+      const reports = await reportService.getByProduct(plan.productId);
+      const patch = deriveProductionPlanAutoPatch(plan, reports);
+      if (patch) {
+        await productionPlanService.update(id, patch);
+      }
+      const refreshed = { ...plan, ...patch, id };
+      const planReportsForPlan = filterReportsForProductionPlan(refreshed, reports);
+      set((state) => ({
+        productionPlans: upsertLoadedProductionPlan(state.productionPlans, refreshed),
+        planReports: {
+          ...state.planReports,
+          [id]: planReportsForPlan,
+        },
+      }));
+      get()._rebuildLines();
+      const producedQuantity = planReportsForPlan.reduce(
+        (sum, report) => sum + Number(report.quantityProduced || 0),
+        0,
+      );
+      return {
+        producedQuantity,
+        status: refreshed.status,
+        patched: Boolean(patch),
+      };
+    } catch (error) {
+      console.warn('reconcileProductionPlanFromReports failed:', error);
+      throw error;
+    }
+  },
+
+  reconcileWorkOrderFromReports: async (workOrderId, context) => {
+    set({ error: null });
+    if ('path' in context) {
+      assertOperationPathEnabled(
+        get().systemSettings,
+        PRODUCTION_REPORT_OPERATION_KEYS.reconcile,
+        context.path,
+      );
+    }
+    const id = String(workOrderId || '').trim();
+    if (!id) {
+      throw new Error('معرّف أمر الشغل غير صالح.');
+    }
+    const mode = context.mode === 'linkedOnly' ? 'linkedOnly' : 'full';
+
+    try {
+      const wo = await workOrderService.getById(id);
+      if (!wo?.id) {
+        throw new Error('أمر الشغل غير موجود.');
+      }
+
+      const planId = String(wo.planId || '').trim();
+      let linked = 0;
+
+      if (mode === 'full') {
+        const startDate = getWorkOrderEffectiveStartDate(wo) || getReportOperationalDateString(get().systemSettings);
+        const today = getReportOperationalDateString(get().systemSettings);
+        const targetDate = String(wo.targetDate || '').trim();
+        // Include reports after targetDate while the WO is still open (common after a line move).
+        const endDate = [targetDate, today].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort().at(-1) || today;
+        const rangeStart = startDate <= endDate ? startDate : endDate;
+        const rangeEnd = startDate <= endDate ? endDate : startDate;
+
+        const [rangeReports, productReports] = await Promise.all([
+          reportService.getByDateRange(rangeStart, rangeEnd),
+          reportService.getByProduct(wo.productId).catch(() => [] as ProductionReport[]),
+        ]);
+        const reportById = new Map<string, ProductionReport>();
+        for (const report of [...rangeReports, ...productReports]) {
+          if (report.id) reportById.set(String(report.id), report);
+        }
+        const toLink = filterUnlinkedReportsEligibleForWorkOrder(wo, Array.from(reportById.values()));
+
+        for (const report of toLink) {
+          if (!report.id) continue;
+          const patch: Partial<ProductionReport> = { workOrderId: id };
+          if (planId && !String(report.productionPlanId || '').trim()) {
+            patch.productionPlanId = planId;
+            patch.productionPlanLinkMode = 'auto';
+          }
+          await reportService.update(report.id, patch);
+          linked += 1;
+        }
+      }
+
+      const linkedReports = await reportService.getByWorkOrderId(id);
+      if (planId && mode === 'full') {
+        for (const report of linkedReports) {
+          if (!report.id) continue;
+          if (String(report.productionPlanId || '').trim()) continue;
+          await reportService.update(report.id, {
+            productionPlanId: planId,
+            productionPlanLinkMode: report.productionPlanLinkMode || 'auto',
+          });
+        }
+      }
+
+      const refreshedLinked = (planId && mode === 'full')
+        ? await reportService.getByWorkOrderId(id)
+        : linkedReports;
+      const producedQuantity = sumProducedFromWorkOrderReports(id, refreshedLinked);
+      const targetQty = Number(wo.quantity || 0);
+      const lastProducingReportDate = lastProducingReportDateFromReports(refreshedLinked);
+      const nextStatus = deriveWorkOrderStatusFromProduced(
+        producedQuantity,
+        targetQty,
+        wo.status,
+        lastProducingReportDate,
+        getTodayDateString(),
+      );
+      const statusPatch: Partial<WorkOrder> = {
+        producedQuantity,
+        status: nextStatus,
+      };
+      if (nextStatus === 'completed') {
+        statusPatch.completedAt = wo.completedAt || new Date().toISOString();
+      } else if (wo.status === 'completed') {
+        statusPatch.completedAt = null;
+      }
+      await workOrderService.update(id, statusPatch);
+
+      set((state) => ({
+        workOrders: upsertLoadedWorkOrder(state.workOrders, { ...wo, ...statusPatch, id }),
+      }));
+      if (planId) {
+        try {
+          await get().reconcileProductionPlanFromReports(planId);
+        } catch (planErr) {
+          console.warn('reconcileProductionPlanFromReports after WO reconcile failed:', planErr);
+        }
+      }
+
+      const touchedDates = refreshedLinked
+        .map((r) => String(r.date || '').trim())
+        .filter(Boolean);
+      invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
+
+      return {
+        linked,
+        reportCount: refreshedLinked.length,
+        producedQuantity,
+      };
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
   unlinkReportsWorkOrdersInRange: async (startDate, endDate, options) => {
     set({ error: null });
+    assertOperationPathEnabled(
+      get().systemSettings,
+      PRODUCTION_REPORT_OPERATION_KEYS.reconcile,
+      PRODUCTION_REPORT_RECONCILE_PATHS.reportsPage,
+    );
     let processed = 0;
     let unlinked = 0;
     let skipped = 0;
@@ -4470,7 +6197,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .map((r) => String(r.date || '').trim())
         .filter(Boolean);
       invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -4554,11 +6281,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   fetchCostData: async () => {
     try {
+      const costAccess = resolveBootstrapDataAccess((permission) =>
+        hasPermission(get().userPermissions, permission),
+      );
       const [costCenters, costCenterValues, costAllocations, laborSettings] =
         await Promise.all([
-          costCenterService.getAll(),
-          costCenterValueService.getAll(),
-          costAllocationService.getAll(),
+          costAccess.costCenters ? costCenterService.getAll() : Promise.resolve([]),
+          costAccess.costDetails ? costCenterValueService.getAll() : Promise.resolve([]),
+          costAccess.costDetails ? costAllocationService.getAll() : Promise.resolve([]),
           laborSettingsService.get(),
         ]);
       set({ costCenters, costCenterValues, costAllocations, laborSettings });
@@ -4569,9 +6299,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createCostCenter: async (data) => {
     try {
-      const id = await costCenterService.create(data);
-      if (id) await get().fetchCostData();
-      return id;
+      const { costCenterId } = unwrapOrThrow(await createCostCenterUseCase(data, {
+        userId: get().uid ?? undefined,
+        userName: get().userDisplayName ?? get().userEmail ?? undefined,
+      }));
+      await get().fetchCostData();
+      return costCenterId;
     } catch (error) {
       set({ error: (error as Error).message });
       return null;
@@ -4735,40 +6468,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const data = await systemSettingsService.get();
       if (data) {
-        const merged = {
-          ...DEFAULT_SYSTEM_SETTINGS,
-          ...data,
-          attendanceIntegration: {
-            ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
-            ...(data.attendanceIntegration || {}),
-          },
-        };
+        const merged = resolveSystemSettings(data);
         set({ systemSettings: merged });
         reapplyThemeFromAppStore(get);
-        await get().fetchProducts();
+        await get().fetchProducts({ force: true });
       }
     } catch (error) {
       console.error('fetchSystemSettings error:', error);
     }
   },
 
-  updateSystemSettings: async (data: SystemSettings) => {
+  updateSystemSettings: async (data: Partial<SystemSettings>) => {
     try {
-      const merged: SystemSettings = {
-        ...DEFAULT_SYSTEM_SETTINGS,
-        ...data,
-        attendanceIntegration: {
-          ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
-          ...(data.attendanceIntegration || {}),
-        },
-      };
-      await systemSettingsService.set(merged);
+      const patch = { ...data };
+      if (
+        patch.operationPaths
+        && JSON.stringify(patch.operationPaths) === JSON.stringify(get().systemSettings.operationPaths)
+      ) {
+        delete patch.operationPaths;
+      }
+      const saved = await systemSettingsService.patch(patch);
+      const merged = resolveSystemSettings(saved);
       set({ systemSettings: merged });
+      clearInventoryRoutingCache();
       reapplyThemeFromAppStore(get, { syncTenantDoc: true });
 
       // Post-save refresh is best-effort and should not flip a successful settings write into a failure.
       try {
-        await get().fetchProducts();
+        await get().fetchProducts({ force: true });
       } catch (refreshError) {
         console.warn('updateSystemSettings post-save refresh failed:', refreshError);
       }
@@ -4782,7 +6509,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Real-time Subscriptions ───────────────────────────────────────────────
 
   subscribeToDashboard: () => {
-    const today = getOperationalDateString(8);
+    const today = getReportOperationalDateString(get().systemSettings);
     return reportService.subscribeToday(today, (reports) => {
       set({ todayReports: reports });
       get()._rebuildProducts();
@@ -4826,7 +6553,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   subscribeToScanEventsToday: () => {
-    const today = getOperationalDateString(8);
+    const today = getReportOperationalDateString(get().systemSettings);
     return scanEventService.subscribeLiveToday(today, (events) => {
       const validWorkOrderIds = new Set(
         get().workOrders

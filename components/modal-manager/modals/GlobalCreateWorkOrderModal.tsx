@@ -19,10 +19,7 @@ import {
   isOperationPathEnabled,
 } from '../../../modules/system/lib/operationPathSettings';
 import { filterProductionProducts } from '../../../modules/production/utils/isProductionProduct';
-import {
-  defaultRequiresProductionIssueFromCompany,
-  resolveRequiresProductionIssueOnReport,
-} from '../../../modules/production/lib/requiresProductionIssue';
+import { defaultRequiresProductionIssueFromCompany } from '../../../modules/production/lib/requiresProductionIssue';
 import { resolveInventoryRoutingV1 } from '@/modules/inventory/services/inventoryRoutingService';
 import {
   loadInjectionComponentOptions,
@@ -114,11 +111,6 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const companyRequiresProductionIssue = defaultRequiresProductionIssueFromCompany(
     resolveInventoryRoutingV1(systemSettings).requireIssuedProductionIssueOnReport,
   );
-  const inheritRequiresFromPlan = (plan: typeof plans[number] | null | undefined): boolean =>
-    resolveRequiresProductionIssueOnReport({
-      companyRequire: companyRequiresProductionIssue,
-      planRequiresProductionIssue: plan?.requiresProductionIssue,
-    });
   const [form, setForm] = useState<WorkOrderFormState>(() => emptyForm(true));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
@@ -329,29 +321,16 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       const base = emptyForm(companyRequiresProductionIssue);
       const payloadPlanId = payload && typeof payload.planId === 'string' ? payload.planId.trim() : '';
       const payloadProductId = payload && typeof payload.productId === 'string' ? payload.productId.trim() : '';
-      const selectedPayloadPlan = payloadPlanId ? plans.find((p) => p.id === payloadPlanId) : null;
-      const planStartDate = selectedPayloadPlan?.plannedStartDate || selectedPayloadPlan?.startDate || base.startDate;
-      const planTargetDate = selectedPayloadPlan?.plannedEndDate || base.targetDate;
-      const planRemaining = selectedPayloadPlan
-        ? Math.max((selectedPayloadPlan.plannedQuantity || 0) - (selectedPayloadPlan.producedQuantity || 0), 0)
-        : 0;
-      const inferredTypeFromPlan = selectedPayloadPlan?.planType === 'component_injection'
-        ? 'component_injection' as const
-        : base.workOrderType;
       const defaultType = !canCreateFinishedWorkOrders && canManageComponentInjectionWorkOrders
         ? 'component_injection' as const
-        : inferredTypeFromPlan;
+        : base.workOrderType;
       const prefilled = {
         ...base,
-        planId: selectedPayloadPlan?.id || payloadPlanId,
+        planId: payloadPlanId,
         workOrderType: defaultType,
-        productId: selectedPayloadPlan?.productId || payloadProductId,
-        lineId: selectedPayloadPlan?.lineId || '',
-        quantity: planRemaining,
-        startDate: planStartDate,
-        targetDate: planTargetDate,
-        durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
-        requiresProductionIssue: inheritRequiresFromPlan(selectedPayloadPlan),
+        // When opened from a plan, keep only the link. All work-order fields
+        // must be entered independently instead of being copied from the plan.
+        productId: payloadPlanId ? '' : payloadProductId,
       };
       setForm(prefilled);
       setError(null);
@@ -388,7 +367,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         workdayEndTime: wo.workdayEndTime || DEFAULT_WORKDAY_END,
         requiresProductionIssue: typeof wo.requiresProductionIssue === 'boolean'
           ? wo.requiresProductionIssue
-          : inheritRequiresFromPlan(plans.find((p) => p.id === wo.planId) ?? null),
+          : companyRequiresProductionIssue,
       });
     });
 
@@ -563,32 +542,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             <SearchableSelect
               options={planOptions}
               value={form.planId}
-              onChange={(value) => {
-                const plan = plans.find((p) => p.id === value);
-                const planStartDate = plan?.plannedStartDate || plan?.startDate || form.startDate;
-                const planTargetDate = plan?.plannedEndDate || form.targetDate;
-                const remaining = plan
-                  ? Math.max((plan.plannedQuantity || 0) - (plan.producedQuantity || 0), 0)
-                  : form.quantity;
-                setForm((f) => ({
-                  ...f,
-                  planId: value,
-                  workOrderType: !plan
-                    ? f.workOrderType
-                    : plan.planType === 'component_injection'
-                      ? 'component_injection'
-                      : 'finished_product',
-                  productId: plan?.productId || (value ? '' : f.productId),
-                  lineId: plan?.lineId || (value ? '' : f.lineId),
-                  quantity: remaining,
-                  startDate: planStartDate,
-                  targetDate: planTargetDate,
-                  durationDays: durationDaysBetweenInclusive(planStartDate, planTargetDate),
-                  requiresProductionIssue: plan
-                    ? inheritRequiresFromPlan(plan)
-                    : companyRequiresProductionIssue,
-                }));
-              }}
+              onChange={(value) => setForm((f) => ({ ...f, planId: value }))}
               placeholder="اختر خطة أو اتركه بدون خطة"
               className="bg-[var(--color-card)]"
             />
@@ -618,6 +572,9 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                     ? 'هذه الخطة لا تستقبل إنتاج أوامر الشغل؛ سيتم تتبع كمية أمر الشغل منفصلة عن تقدم الخطة.'
                     : 'أمر الشغل مرتبط بالخطة، وتقاريره تُحسب على تقدم الخطة.'}
                 </p>
+                <p className="text-[var(--color-text-muted)]">
+                  الربط بالخطة مرجعي فقط ولا يغيّر بيانات أمر الشغل.
+                </p>
               </div>
             )}
           </div>
@@ -642,47 +599,43 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             </div>
           )}
 
-          {!selectedPlan && (
-            <>
-              <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)]">
-                {form.workOrderType === 'component_injection'
-                  ? 'بيانات أمر شغل بدون خطة: اختر مكون الحقن وخط الحقن يدوياً.'
-                  : 'بيانات أمر شغل بدون خطة: اختر المنتج وخط الإنتاج يدوياً.'}
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
-                  {form.workOrderType === 'component_injection'
-                    ? 'مكون الحقن *'
-                    : t('modalManager.createWorkOrder.productRequired')}
-                </label>
-                <VoucherItemCombobox
-                  options={selectableProductPicker.options}
-                  catalog={selectableProductPicker.catalog}
-                  value={form.productId}
-                  onChange={(value) => setForm((f) => ({ ...f, productId: value }))}
-                  placeholder={
-                    form.workOrderType === 'component_injection'
-                      ? 'ابحث أو امسح كود مكون الحقن'
-                      : t('modalManager.createWorkOrder.searchAndSelectProduct')
-                  }
-                  className="bg-[var(--color-card)]"
-                />
-              </div>
-            </>
-          )}
+          <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)]">
+            {selectedPlan
+              ? 'الخطة مرتبطة للمرجعية فقط؛ أدخل بيانات أمر الشغل يدوياً.'
+              : form.workOrderType === 'component_injection'
+                ? 'اختر مكون الحقن وخط الحقن يدوياً.'
+                : 'اختر المنتج وخط الإنتاج يدوياً.'}
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+              {form.workOrderType === 'component_injection'
+                ? 'مكون الحقن *'
+                : t('modalManager.createWorkOrder.productRequired')}
+            </label>
+            <VoucherItemCombobox
+              options={selectableProductPicker.options}
+              catalog={selectableProductPicker.catalog}
+              value={form.productId}
+              onChange={(value) => setForm((f) => ({ ...f, productId: value }))}
+              placeholder={
+                form.workOrderType === 'component_injection'
+                  ? 'ابحث أو امسح كود مكون الحقن'
+                  : t('modalManager.createWorkOrder.searchAndSelectProduct')
+              }
+              className="bg-[var(--color-card)]"
+            />
+          </div>
 
-          {(!selectedPlan || !selectedPlan.lineId) && (
-              <div>
-                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productionLineRequired')}</label>
-                <SearchableSelect
-                  options={lineOptions}
-                  value={form.lineId}
-                  onChange={(value) => setForm((f) => ({ ...f, lineId: value }))}
-                  placeholder={t('modalManager.createWorkOrder.selectLine')}
-                  className="bg-[var(--color-card)]"
-                />
-              </div>
-          )}
+          <div>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.productionLineRequired')}</label>
+            <SearchableSelect
+              options={lineOptions}
+              value={form.lineId}
+              onChange={(value) => setForm((f) => ({ ...f, lineId: value }))}
+              placeholder={t('modalManager.createWorkOrder.selectLine')}
+              className="bg-[var(--color-card)]"
+            />
+          </div>
 
           <div>
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.supervisorRequired')}</label>
@@ -811,7 +764,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             <span className="space-y-0.5">
               <span className="block text-sm font-black text-[var(--color-text)]">تحتاج صرف إنتاج؟</span>
               <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
-                عند اختيار خطة يُنسخ الخيار منها تلقائياً. يمكن تعديله لأمر الشغل.
+                يُحدد هذا الخيار لأمر الشغل نفسه ولا يُنسخ من الخطة.
               </span>
             </span>
           </label>

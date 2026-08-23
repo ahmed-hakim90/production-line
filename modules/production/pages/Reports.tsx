@@ -5091,16 +5091,31 @@ export const Reports: React.FC = () => {
                   && form.employeeId
                   && form.employeeId !== currentEmployee.id,
                 );
+                const workOrderOptions = [
+                  ...(!delegated ? [{ value: '', label: 'بدون أمر شغل' }] : []),
+                  ...activeWOs.map((wo) => {
+                    const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
+                    const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
+                    const remaining = wo.quantity - (wo.producedQuantity || 0);
+                    const orderNumber = String(wo.workOrderNumber || '').trim();
+                    return {
+                      value: wo.id!,
+                      label: `${orderNumber ? `${orderNumber} — ` : ''}${pName} — ${lName} — متبقي: ${remaining} وحدة`,
+                      keywords: [orderNumber, pName, lName, wo.id].filter(Boolean).join(' '),
+                    };
+                  }),
+                ];
                 return (
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                       <ReportIcon name="assignment" className="text-sm align-middle ml-1 text-primary inline" />
                       {delegated ? 'أمر شغل موجّه للمشرف (إلزامي)' : 'أمر شغل (اختياري)'}
                     </label>
-                    <Select
-                      value={form.workOrderId || (delegated ? undefined : 'none')}
-                      onValueChange={(value) => {
-                        if (value === 'none') {
+                    <SearchableSelect
+                      options={workOrderOptions}
+                      value={form.workOrderId}
+                      onChange={(value) => {
+                        if (!value) {
                           if (delegated) return;
                           setForm({ ...form, workOrderId: '' });
                           return;
@@ -5119,26 +5134,10 @@ export const Reports: React.FC = () => {
                           employeeId: shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
                         });
                       }}
-                    >
-                      <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
-                        <SelectValue placeholder={delegated ? 'اختر أمر شغل موجّه للمشرف' : 'بدون أمر شغل'} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {!delegated && (
-                          <SelectItem value="none">بدون أمر شغل</SelectItem>
-                        )}
-                        {activeWOs.map((wo) => {
-                          const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
-                          const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
-                          const remaining = wo.quantity - (wo.producedQuantity || 0);
-                          return (
-                            <SelectItem key={wo.id} value={wo.id!}>
-                              {pName} — {lName} — متبقي: {remaining} وحدة
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
+                      placeholder={delegated ? 'اختر أمر شغل موجّه للمشرف' : 'بدون أمر شغل'}
+                      searchPlaceholder="ابحث برقم أمر الشغل أو الصنف أو الخط"
+                      className="w-full"
+                    />
                     {delegated ? (
                       <p className="text-[11px] font-medium text-[rgb(var(--color-warning))]">
                         {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}

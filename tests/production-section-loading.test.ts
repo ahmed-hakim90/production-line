@@ -61,7 +61,10 @@ const reportsSrc = readFileSync(
 );
 assert.doesNotMatch(reportsSrc, /PageContentSkeleton/);
 assert.doesNotMatch(reportsSrc, /if \(referenceDataLoading\)/);
-assert.match(reportsSrc, /useEnsureStoreData\(\[\s*'products',\s*'lines',\s*'employees',\s*\]\)/);
+assert.match(
+  reportsSrc,
+  /useEnsureStoreData\(\[\s*'products',\s*'lines',\s*'employees',\s*'workOrders',\s*\]\)/,
+);
 assert.match(reportsSrc, /loading=\{rangeLoading\}/);
 assert.match(reportsSrc, /loading=\{referenceDataLoading\}/);
 assert.doesNotMatch(

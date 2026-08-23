@@ -202,6 +202,9 @@ export const ProductionIssues: React.FC = () => {
   const actor = userDisplayName || userEmail || 'Current User';
 
   const load = async (force = false) => {
+    // Clear any stale permission/error banner from a previous failed attempt
+    // before retrying — otherwise a transient denial keeps showing forever.
+    setMessage((prev) => (/permission|فهرس|تعذر تحميل/i.test(prev) ? '' : prev));
     try {
       const cached = peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY);
       if (cached) {

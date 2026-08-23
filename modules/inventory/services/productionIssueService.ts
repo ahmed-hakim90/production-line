@@ -63,31 +63,18 @@ const COLLECTION = 'production_issue_orders';
 async function loadWarehouseScopedIssueOrders(
   ...constraints: QueryConstraint[]
 ): Promise<ProductionIssueOrder[]> {
-  let boundWarehouseId: string | null = null;
-  try {
-    boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
-  } catch (error) {
-    console.warn('[productionIssueService] failed resolving bound warehouse, treating as bound-unknown', error);
-  }
+  const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
   const load = async (warehouseField?: 'sourceWarehouseId' | 'targetWarehouseId') => {
-    try {
-      const snap = await getDocs(tenantQuery(
-        db,
-        COLLECTION,
-        ...(warehouseField
-          ? [where(warehouseField, '==', boundWarehouseId)]
-          : []),
-        ...constraints,
-      ));
-      return snap.docs;
-    } catch (error) {
-      console.warn('[productionIssueService] failed loading issue orders', warehouseField || 'unscoped', error);
-      return [];
-    }
+    const snap = await getDocs(tenantQuery(
+      db,
+      COLLECTION,
+      ...(warehouseField
+        ? [where(warehouseField, '==', boundWarehouseId)]
+        : []),
+      ...constraints,
+    ));
+    return snap.docs;
   };
-  // Bound operators can only run field-equality-scoped queries (Firestore rules
-  // reject an unfiltered list for them); a boundWarehouseId that failed to resolve
-  // must not silently fall through to the unscoped query below.
   const docs = boundWarehouseId
     ? [...await load('sourceWarehouseId'), ...await load('targetWarehouseId')]
     : await load();
@@ -287,13 +274,7 @@ async function resolveProductionFloorWarehouse(): Promise<Warehouse> {
   if (!settings) throw new Error('تعذر تحميل إعدادات النظام.');
   const routing = resolveInventoryRoutingV1(settings);
   const floorId = String(routing.productionFloorWarehouseId || '').trim();
-  const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
-  // A supplies operator is intentionally scoped to their own source warehouse.
-  // Trust the admin-configured routing target instead of trying to validate a
-  // destination warehouse that the operator is not authorized to inspect.
-  const loaded = floorId && !boundWarehouseId
-    ? await warehouseService.getById(floorId)
-    : null;
+  const loaded = floorId ? await warehouseService.getById(floorId) : null;
   return resolveProductionFloorWarehouseForIssue({
     routingFloorWarehouseId: floorId,
     decomposedWarehouseId: routing.decomposedWarehouseId,
