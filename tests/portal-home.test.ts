@@ -179,4 +179,16 @@ assert.equal(
   'system admin keeps the admin portal',
 );
 
+assert.equal(
+  resolvePortalKind({ can: (p) => p === 'production.gate.register' }),
+  'production_gate',
+  'gate-only role lands directly on production gate',
+);
+
+assert.equal(
+  resolvePortalKind({ can: (p) => p === 'adminDashboard.view' || p === 'production.gate.register' }),
+  'admin',
+  'admin keeps the admin portal when gate permission is also granted',
+);
+
 console.log('portal-home.test.ts passed');

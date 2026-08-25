@@ -84,6 +84,10 @@ async function main() {
   );
   assert.equal(resolvePortalKind({ can: () => false }), 'generic');
   assert.equal(
+    resolvePortalKind({ can: (p) => p === 'production.gate.register' }),
+    'production_gate',
+  );
+  assert.equal(
     resolvePortalKind({
       can: (p) => p === 'inventory.view',
       roleKey: 'materials_warehouse',

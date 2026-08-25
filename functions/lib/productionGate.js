@@ -57,6 +57,51 @@ const requirePermission = (actor, key) => {
     if (!actor.superAdmin && actor.permissions[key] !== true)
         throw new HttpsError('permission-denied', 'ليس لديك صلاحية تنفيذ الإجراء.');
 };
+const findActiveEmployeeByCode = async (tenantId, code) => {
+    const employeeSnap = await db.collection('employees')
+        .where('tenantId', '==', tenantId).where('code', '==', code).limit(2).get();
+    const activeEmployees = employeeSnap.docs.filter((doc) => doc.data().isActive === true);
+    if (activeEmployees.length > 1)
+        throw new HttpsError('failed-precondition', 'كود الموظف مكرر؛ يرجى تصحيحه من ملف الموظفين.');
+    const employeeDoc = activeEmployees[0];
+    if (!employeeDoc)
+        throw new HttpsError('not-found', 'كود الموظف غير موجود أو الموظف غير نشط.');
+    return employeeDoc;
+};
+export const previewProductionGateEmployee = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {
+    const actor = await loadActor(request);
+    requirePermission(actor, 'production.gate.register');
+    const code = String(request.data?.employeeCode || '').trim();
+    if (!code || code.length > 80)
+        throw new HttpsError('invalid-argument', 'أدخل كود موظف صحيح.');
+    const employeeDoc = await findActiveEmployeeByCode(actor.tenantId, code);
+    const employee = employeeDoc.data();
+    const now = new Date();
+    const local = cairoParts(now);
+    const seconds = local.hour * 3600 + local.minute * 60 + local.second;
+    const stateSnap = await db.collection(STATES).doc(`${actor.tenantId}__${employeeDoc.id}`).get();
+    const openSessionId = String(stateSnap.data()?.openSessionId || '').trim();
+    const openSnap = openSessionId ? await db.collection(SESSIONS).doc(openSessionId).get() : null;
+    const isOutside = Boolean(openSnap?.exists && openSnap.data()?.tenantId === actor.tenantId && openSnap.data()?.status === 'open');
+    const exitAt = isOutside ? openSnap?.data()?.exitAt : null;
+    const todaySnap = await db.collection(SESSIONS)
+        .where('tenantId', '==', actor.tenantId)
+        .where('employeeId', '==', employeeDoc.id)
+        .where('date', '==', local.dateKey)
+        .get();
+    const todayExitCount = todaySnap.docs.filter((item) => item.data().status !== 'cancelled').length;
+    return {
+        employeeId: employeeDoc.id,
+        employeeName: String(employee.name || code),
+        employeeCode: code,
+        currentStatus: isOutside ? 'outside' : 'inside',
+        nextAction: isOutside ? 'entry' : 'exit',
+        exitAt: exitAt ? exitAt.toDate().toISOString() : null,
+        currentDurationMinutes: exitAt ? Math.max(0, Math.floor((now.getTime() - exitAt.toMillis()) / 60_000)) : 0,
+        todayExitCount,
+        registrationAllowed: seconds >= 8 * 3600 && seconds < 16 * 3600,
+    };
+});
 export const registerProductionGateAction = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {
     const actor = await loadActor(request);
     requirePermission(actor, 'production.gate.register');
@@ -69,14 +114,7 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
     if (seconds < 8 * 3600 || seconds >= 16 * 3600) {
         throw new HttpsError('failed-precondition', 'غير مصرح بالإدخال خارج الفترة من 8 صباحًا إلى 4 مساءً.');
     }
-    const employeeSnap = await db.collection('employees')
-        .where('tenantId', '==', actor.tenantId).where('code', '==', code).limit(2).get();
-    const activeEmployees = employeeSnap.docs.filter((doc) => doc.data().isActive === true);
-    if (activeEmployees.length > 1)
-        throw new HttpsError('failed-precondition', 'كود الموظف مكرر؛ يرجى تصحيحه من ملف الموظفين.');
-    const employeeDoc = activeEmployees[0];
-    if (!employeeDoc)
-        throw new HttpsError('not-found', 'كود الموظف غير موجود أو الموظف غير نشط.');
+    const employeeDoc = await findActiveEmployeeByCode(actor.tenantId, code);
     const employee = employeeDoc.data();
     const stateId = `${actor.tenantId}__${employeeDoc.id}`;
     const stateRef = db.collection(STATES).doc(stateId);

@@ -1791,6 +1791,38 @@ await seed();
   );
 }
 
+// 12d) Production gate operator can read same-tenant sessions only; all client writes stay server-owned.
+{
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adb = context.firestore();
+    await adb.collection('roles').doc('tenantA-gate-role').set({
+      tenantId: 'tenantA',
+      permissions: { 'production.gate.register': true },
+    });
+    await adb.collection('users').doc('userAGate').set({
+      tenantId: 'tenantA', isActive: true, isSuperAdmin: false, roleId: 'tenantA-gate-role',
+    });
+    await adb.collection('production_gate_sessions').doc('gate-a').set({
+      tenantId: 'tenantA', employeeId: 'employee-a', employeeCode: '100', date: '2026-08-25', status: 'open',
+    });
+    await adb.collection('production_gate_sessions').doc('gate-b').set({
+      tenantId: 'tenantB', employeeId: 'employee-b', employeeCode: '200', date: '2026-08-25', status: 'open',
+    });
+  });
+
+  const gateDb = testEnv.authenticatedContext('userAGate').firestore();
+  await assertSucceeds(gateDb.collection('production_gate_sessions').doc('gate-a').get());
+  await assertFails(gateDb.collection('production_gate_sessions').doc('gate-b').get());
+  await assertSucceeds(
+    gateDb.collection('production_gate_sessions').where('tenantId', '==', 'tenantA').get(),
+  );
+  await assertFails(
+    gateDb.collection('production_gate_sessions').doc('gate-client-write').set({
+      tenantId: 'tenantA', employeeId: 'employee-a', date: '2026-08-25', status: 'open',
+    }),
+  );
+}
+
 // 13) Repair expenses are server-owned approval requests; clients can only read their scope.
 {
   await testEnv.withSecurityRulesDisabled(async (context) => {

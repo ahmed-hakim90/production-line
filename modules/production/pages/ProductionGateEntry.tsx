@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
-import { productionGateService, type GateActionResult, type ProductionGateSession } from '../services/productionGateService';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { productionGateService, type GateActionResult, type GateEmployeePreview, type ProductionGateSession } from '../services/productionGateService';
 import { formatDuration, gateDate, gateTime, liveDuration, sortGateRows } from '../utils/productionGate';
 
 const statusLabel = (status: ProductionGateSession['status']) => ({
@@ -15,9 +16,14 @@ export const ProductionGateEntry: React.FC = () => {
   const [rows, setRows] = useState<ProductionGateSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [preview, setPreview] = useState<GateEmployeePreview | null>(null);
+  const [previewError, setPreviewError] = useState('');
   const [lastResult, setLastResult] = useState<GateActionResult | null>(null);
   const [, tick] = useState(0);
   const today = gateDate();
+  const normalizedCode = code.trim();
+  const debouncedCode = useDebouncedValue(normalizedCode, 350);
 
   const load = useCallback(async () => {
     try { setRows(await productionGateService.list(today, today)); }
@@ -29,14 +35,47 @@ export const ProductionGateEntry: React.FC = () => {
   useEffect(() => { const timer = window.setInterval(() => tick((v) => v + 1), 30_000); return () => clearInterval(timer); }, []);
   useEffect(() => { inputRef.current?.focus(); }, [saving]);
 
+  useEffect(() => {
+    let active = true;
+    if (!debouncedCode) {
+      setPreview(null);
+      setPreviewError('');
+      setPreviewLoading(false);
+      return () => { active = false; };
+    }
+    setPreviewLoading(true);
+    setPreviewError('');
+    void productionGateService.preview(debouncedCode)
+      .then((result) => {
+        if (!active) return;
+        setPreview(result);
+      })
+      .catch((error: Error) => {
+        if (!active) return;
+        setPreview(null);
+        setPreviewError(error.message || 'تعذر تحميل بيانات الموظف.');
+      })
+      .finally(() => { if (active) setPreviewLoading(false); });
+    return () => { active = false; };
+  }, [debouncedCode]);
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!code.trim() || saving) return;
+    if (!normalizedCode || saving || previewLoading) return;
+    if (!preview || preview.employeeCode !== normalizedCode) {
+      showAppToast('error', 'انتظر ظهور بيانات الموظف أولًا.');
+      return;
+    }
+    if (!preview.registrationAllowed) {
+      showAppToast('error', 'غير مصرح بالإدخال خارج الفترة من 8 صباحًا إلى 4 مساءً.');
+      return;
+    }
     setSaving(true);
     try {
       const result = await productionGateService.register(code);
       setLastResult(result);
       setCode('');
+      setPreview(null);
       showAppToast('success', result.action === 'exit' ? `تم تسجيل خروج ${result.employeeName}` : `تم تسجيل دخول ${result.employeeName}`);
       await load();
     } catch (error) { showAppToast('error', (error as Error).message); }
@@ -77,11 +116,27 @@ export const ProductionGateEntry: React.FC = () => {
               placeholder="اكتب الكود واضغط Enter"
               className="min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-4 text-center text-2xl font-black outline-none focus:border-primary"
             />
-            <button disabled={saving || !code.trim()} className="rounded-xl bg-primary px-7 font-bold text-white disabled:opacity-50">
-              {saving ? 'جاري التسجيل...' : 'تسجيل'}
+            <button disabled={saving || previewLoading || !preview || preview.employeeCode !== normalizedCode || !preview.registrationAllowed} className="rounded-xl bg-primary px-7 font-bold text-white disabled:opacity-50">
+              {saving ? 'جاري التسجيل...' : preview?.nextAction === 'entry' ? 'تسجيل دخول' : 'تسجيل خروج'}
             </button>
           </div>
         </form>
+        {previewLoading && <div className="mx-auto mt-4 max-w-2xl rounded-xl bg-[var(--color-surface-soft)] p-4 text-center font-bold text-[var(--color-text-muted)]">جاري تحميل بيانات الموظف...</div>}
+        {!previewLoading && previewError && <div className="mx-auto mt-4 max-w-2xl rounded-xl border border-red-200 bg-red-50 p-4 text-center font-bold text-red-700">{previewError}</div>}
+        {!previewLoading && preview && preview.employeeCode === normalizedCode && (
+          <div className={`mx-auto mt-4 max-w-2xl rounded-xl border p-4 ${preview.currentStatus === 'outside' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-300 bg-emerald-50 text-emerald-900'}`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="text-xl font-black">{preview.employeeName}</p><p className="text-sm font-bold">كود {preview.employeeCode}</p></div>
+              <div className="text-end"><p className="text-lg font-black">{preview.currentStatus === 'outside' ? 'خارج حاليًا' : 'داخل حاليًا'}</p><p className="text-sm font-bold">سيتم تسجيل {preview.nextAction === 'entry' ? 'دخول' : 'خروج'}</p></div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-4 border-t border-current/15 pt-3 text-sm font-bold">
+              <span>مرات الخروج اليوم: {preview.todayExitCount}</span>
+              {preview.exitAt && <span>وقت الخروج: {new Intl.DateTimeFormat('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' }).format(new Date(preview.exitAt))}</span>}
+              {preview.currentStatus === 'outside' && <span>المدة الحالية: {formatDuration(preview.exitAt ? Math.max(0, Math.floor((Date.now() - new Date(preview.exitAt).getTime()) / 60_000)) : preview.currentDurationMinutes)}</span>}
+            </div>
+            {!preview.registrationAllowed && <p className="mt-3 rounded-lg bg-red-100 p-2 text-center font-black text-red-700">غير مصرح بالإدخال الآن — التسجيل متاح من 8 صباحًا إلى 4 مساءً</p>}
+          </div>
+        )}
         {lastResult && (
           <div className={`mx-auto mt-5 max-w-2xl rounded-xl border p-4 text-center ${lastResult.action === 'exit' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-300 bg-emerald-50 text-emerald-900'}`}>
             <p className="text-xl font-black">{lastResult.employeeName} — {lastResult.action === 'exit' ? 'خروج' : 'دخول'}</p>

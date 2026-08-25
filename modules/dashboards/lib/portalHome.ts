@@ -13,6 +13,7 @@ export type PortalKind =
   | 'packaging'
   | 'repair'
   | 'repair_technician'
+  | 'production_gate'
   | 'generic';
 
 export type PortalPermissionChecker = {
@@ -98,6 +99,8 @@ export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind 
   if (checker.can('employeeDashboard.view')) return 'employee';
 
   if (isRepairTechnicianPortal(checker)) return 'repair_technician';
+
+  if (checker.can('production.gate.register')) return 'production_gate';
 
   return 'generic';
 }

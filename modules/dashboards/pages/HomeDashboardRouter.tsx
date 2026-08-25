@@ -1,9 +1,11 @@
 import React, { Suspense, useMemo } from 'react';
+import { Navigate, useParams } from 'react-router-dom';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { lazyNamed } from '../../shared/routes/lazyNamed';
 import { resolvePortalKind, shouldUseSupervisorDashboard } from '../lib/portalHome';
+import { defaultTenantSlug, withTenantPath } from '@/lib/tenantPaths';
 
 const AdminDashboard = lazyNamed(() => import('./AdminDashboard'), 'AdminDashboard');
 const Dashboard = lazyNamed(() => import('./Dashboard'), 'Dashboard');
@@ -38,6 +40,8 @@ const PackagingControl = lazyNamed(
  * (admin / factory / employee / warehouse / repair / repair technician / generic).
  */
 export const HomeDashboardRouter: React.FC = () => {
+  const { tenantSlug: tenantSlugParam } = useParams<{ tenantSlug: string }>();
+  const tenantSlug = tenantSlugParam || defaultTenantSlug();
   const { can } = usePermission();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
@@ -70,6 +74,7 @@ export const HomeDashboardRouter: React.FC = () => {
   else if (portal === 'warehouse_manager') body = <WarehouseManagerHome />;
   else if (portal === 'repair') body = <RepairDashboard />;
   else if (portal === 'repair_technician') body = <RepairTechnicianHome />;
+  else if (portal === 'production_gate') body = <Navigate to={withTenantPath(tenantSlug, '/production/gate')} replace />;
 
   return (
     <Suspense fallback={<PageContentSkeleton variant="dashboard" kpiCount={4} />}>

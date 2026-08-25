@@ -2611,5 +2611,6 @@ export { purgeRepairOperationalData } from './purgeRepairOperationalData.js';
 export {
   closeOpenProductionGateSessions,
   correctProductionGateSession,
+  previewProductionGateEmployee,
   registerProductionGateAction,
 } from './productionGate.js';

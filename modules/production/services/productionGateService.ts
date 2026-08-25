@@ -28,6 +28,18 @@ export interface GateActionResult {
   durationMinutes: number | null;
 }
 
+export interface GateEmployeePreview {
+  employeeId: string;
+  employeeName: string;
+  employeeCode: string;
+  currentStatus: 'inside' | 'outside';
+  nextAction: 'exit' | 'entry';
+  exitAt: string | null;
+  currentDurationMinutes: number;
+  todayExitCount: number;
+  registrationAllowed: boolean;
+}
+
 const requireFirebase = () => {
   if (!isConfigured || !functionsClient) throw new Error('Firebase غير مهيأ.');
   return functionsClient;
@@ -39,6 +51,15 @@ const friendlyError = (error: unknown, fallback: string) => {
 };
 
 export const productionGateService = {
+  async preview(employeeCode: string): Promise<GateEmployeePreview> {
+    try {
+      const callable = httpsCallable<{ employeeCode: string }, GateEmployeePreview>(requireFirebase(), 'previewProductionGateEmployee');
+      return (await callable({ employeeCode: employeeCode.trim() })).data;
+    } catch (error) {
+      throw friendlyError(error, 'تعذر تحميل بيانات الموظف.');
+    }
+  },
+
   async register(employeeCode: string): Promise<GateActionResult> {
     try {
       const callable = httpsCallable<{ employeeCode: string }, GateActionResult>(requireFirebase(), 'registerProductionGateAction');

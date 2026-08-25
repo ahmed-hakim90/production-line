@@ -790,6 +790,23 @@
       return pl_authSignedIn() && request.auth.uid == userId;
     }
 
+    match /production_gate_sessions/{docId} {
+      allow read: if pl_sameTenantOrLegacyRead()
+        && (pl_hasErpPermission('production.gate.register')
+          || pl_hasErpPermission('production.gate.analytics')
+          || pl_hasErpPermission('production.gate.correct'));
+      allow create, update, delete: if false;
+    }
+
+    match /production_gate_states/{docId} {
+      allow read, write: if false;
+    }
+
+    match /production_gate_audit_logs/{docId} {
+      allow read: if pl_sameTenantOrLegacyRead() && pl_hasErpPermission('production.gate.correct');
+      allow create, update, delete: if false;
+    }
+
     match /tenant_slugs/{slug} {
       allow read: if pl_authSignedIn();
       allow write: if pl_isSuperAdmin();
