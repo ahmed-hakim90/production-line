@@ -74,6 +74,17 @@ const findActiveEmployeeByCode = async (tenantId: string, code: string) => {
   return employeeDoc;
 };
 
+const findActiveEmployeeForRegistration = async (tenantId: string, code: string, employeeId?: string) => {
+  const normalizedId = String(employeeId || '').trim();
+  if (!normalizedId) return findActiveEmployeeByCode(tenantId, code);
+  const employeeDoc = await db.collection('employees').doc(normalizedId).get();
+  const employee = employeeDoc.data();
+  if (!employeeDoc.exists || employee?.tenantId !== tenantId || employee?.isActive !== true || String(employee?.code || '').trim() !== code) {
+    throw new HttpsError('not-found', 'كود الموظف غير موجود أو الموظف غير نشط.');
+  }
+  return employeeDoc;
+};
+
 export const previewProductionGateEmployee = onCall(
   { region: 'us-central1', memory: '256MiB' },
   async (request) => {
@@ -83,7 +94,7 @@ export const previewProductionGateEmployee = onCall(
     if (!code || code.length > 80) throw new HttpsError('invalid-argument', 'أدخل كود موظف صحيح.');
 
     const employeeDoc = await findActiveEmployeeByCode(actor.tenantId, code);
-    const employee = employeeDoc.data();
+    const employee = employeeDoc.data() || {};
     const now = new Date();
     const local = cairoParts(now);
     const seconds = local.hour * 3600 + local.minute * 60 + local.second;
@@ -120,7 +131,8 @@ export const registerProductionGateAction = onCall(
   async (request) => {
     const actor = await loadActor(request);
     requirePermission(actor, 'production.gate.register');
-    const code = String((request.data as { employeeCode?: string })?.employeeCode || '').trim();
+    const data = request.data as { employeeCode?: string; employeeId?: string };
+    const code = String(data?.employeeCode || '').trim();
     if (!code || code.length > 80) throw new HttpsError('invalid-argument', 'أدخل كود موظف صحيح.');
 
     const now = new Date();
@@ -130,8 +142,8 @@ export const registerProductionGateAction = onCall(
       throw new HttpsError('failed-precondition', 'غير مصرح بالإدخال خارج الفترة من 8 صباحًا إلى 4 مساءً.');
     }
 
-    const employeeDoc = await findActiveEmployeeByCode(actor.tenantId, code);
-    const employee = employeeDoc.data();
+    const employeeDoc = await findActiveEmployeeForRegistration(actor.tenantId, code, data?.employeeId);
+    const employee = employeeDoc.data() || {};
     const stateId = `${actor.tenantId}__${employeeDoc.id}`;
     const stateRef = db.collection(STATES).doc(stateId);
     const sessionRef = db.collection(SESSIONS).doc();
@@ -156,7 +168,7 @@ export const registerProductionGateAction = onCall(
             entryRecordedByName: actor.name, updatedAt: FieldValue.serverTimestamp(),
           });
           tx.set(stateRef, { tenantId: actor.tenantId, employeeId: employeeDoc.id, openSessionId: null, lastActionAt: nowTs }, { merge: true });
-          return { action: 'entry', sessionId: openRef.id, employeeId: employeeDoc.id, employeeName: employee.name, employeeCode: code, actionAt: now.toISOString(), durationMinutes };
+          return { action: 'entry', sessionId: openRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes };
         }
       }
 
@@ -167,7 +179,7 @@ export const registerProductionGateAction = onCall(
         createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
       });
       tx.set(stateRef, { tenantId: actor.tenantId, employeeId: employeeDoc.id, openSessionId: sessionRef.id, lastActionAt: nowTs }, { merge: true });
-      return { action: 'exit', sessionId: sessionRef.id, employeeId: employeeDoc.id, employeeName: employee.name, employeeCode: code, actionAt: now.toISOString(), durationMinutes: null };
+      return { action: 'exit', sessionId: sessionRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes: null };
     });
   },
 );

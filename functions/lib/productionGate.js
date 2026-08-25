@@ -68,6 +68,17 @@ const findActiveEmployeeByCode = async (tenantId, code) => {
         throw new HttpsError('not-found', 'كود الموظف غير موجود أو الموظف غير نشط.');
     return employeeDoc;
 };
+const findActiveEmployeeForRegistration = async (tenantId, code, employeeId) => {
+    const normalizedId = String(employeeId || '').trim();
+    if (!normalizedId)
+        return findActiveEmployeeByCode(tenantId, code);
+    const employeeDoc = await db.collection('employees').doc(normalizedId).get();
+    const employee = employeeDoc.data();
+    if (!employeeDoc.exists || employee?.tenantId !== tenantId || employee?.isActive !== true || String(employee?.code || '').trim() !== code) {
+        throw new HttpsError('not-found', 'كود الموظف غير موجود أو الموظف غير نشط.');
+    }
+    return employeeDoc;
+};
 export const previewProductionGateEmployee = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {
     const actor = await loadActor(request);
     requirePermission(actor, 'production.gate.register');
@@ -75,7 +86,7 @@ export const previewProductionGateEmployee = onCall({ region: 'us-central1', mem
     if (!code || code.length > 80)
         throw new HttpsError('invalid-argument', 'أدخل كود موظف صحيح.');
     const employeeDoc = await findActiveEmployeeByCode(actor.tenantId, code);
-    const employee = employeeDoc.data();
+    const employee = employeeDoc.data() || {};
     const now = new Date();
     const local = cairoParts(now);
     const seconds = local.hour * 3600 + local.minute * 60 + local.second;
@@ -107,7 +118,8 @@ export const previewProductionGateEmployee = onCall({ region: 'us-central1', mem
 export const registerProductionGateAction = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {
     const actor = await loadActor(request);
     requirePermission(actor, 'production.gate.register');
-    const code = String(request.data?.employeeCode || '').trim();
+    const data = request.data;
+    const code = String(data?.employeeCode || '').trim();
     if (!code || code.length > 80)
         throw new HttpsError('invalid-argument', 'أدخل كود موظف صحيح.');
     const now = new Date();
@@ -116,8 +128,8 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
     if (seconds < 8 * 3600 || seconds >= 16 * 3600) {
         throw new HttpsError('failed-precondition', 'غير مصرح بالإدخال خارج الفترة من 8 صباحًا إلى 4 مساءً.');
     }
-    const employeeDoc = await findActiveEmployeeByCode(actor.tenantId, code);
-    const employee = employeeDoc.data();
+    const employeeDoc = await findActiveEmployeeForRegistration(actor.tenantId, code, data?.employeeId);
+    const employee = employeeDoc.data() || {};
     const stateId = `${actor.tenantId}__${employeeDoc.id}`;
     const stateRef = db.collection(STATES).doc(stateId);
     const sessionRef = db.collection(SESSIONS).doc();
@@ -140,7 +152,7 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
                     entryRecordedByName: actor.name, updatedAt: FieldValue.serverTimestamp(),
                 });
                 tx.set(stateRef, { tenantId: actor.tenantId, employeeId: employeeDoc.id, openSessionId: null, lastActionAt: nowTs }, { merge: true });
-                return { action: 'entry', sessionId: openRef.id, employeeId: employeeDoc.id, employeeName: employee.name, employeeCode: code, actionAt: now.toISOString(), durationMinutes };
+                return { action: 'entry', sessionId: openRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes };
             }
         }
         tx.set(sessionRef, {
@@ -150,7 +162,7 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
             createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
         });
         tx.set(stateRef, { tenantId: actor.tenantId, employeeId: employeeDoc.id, openSessionId: sessionRef.id, lastActionAt: nowTs }, { merge: true });
-        return { action: 'exit', sessionId: sessionRef.id, employeeId: employeeDoc.id, employeeName: employee.name, employeeCode: code, actionAt: now.toISOString(), durationMinutes: null };
+        return { action: 'exit', sessionId: sessionRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes: null };
     });
 });
 export const correctProductionGateSession = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {

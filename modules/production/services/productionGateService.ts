@@ -21,6 +21,7 @@ export interface ProductionGateSession {
 export interface GateActionResult {
   action: 'exit' | 'entry';
   sessionId: string;
+  tenantId: string;
   employeeId: string;
   employeeName: string;
   employeeCode: string;
@@ -60,10 +61,10 @@ export const productionGateService = {
     }
   },
 
-  async register(employeeCode: string): Promise<GateActionResult> {
+  async register(employeeCode: string, employeeId?: string): Promise<GateActionResult> {
     try {
-      const callable = httpsCallable<{ employeeCode: string }, GateActionResult>(requireFirebase(), 'registerProductionGateAction');
-      return (await callable({ employeeCode: employeeCode.trim() })).data;
+      const callable = httpsCallable<{ employeeCode: string; employeeId?: string }, GateActionResult>(requireFirebase(), 'registerProductionGateAction');
+      return (await callable({ employeeCode: employeeCode.trim(), employeeId })).data;
     } catch (error) {
       throw friendlyError(error, 'تعذر تسجيل الحركة.');
     }

@@ -85,12 +85,34 @@ export const ProductionGateEntry: React.FC = () => {
     }
     setSaving(true);
     try {
-      const result = await productionGateService.register(code);
+      const result = await productionGateService.register(code, preview.employeeId);
+      setRows((current) => {
+        if (result.action === 'entry') {
+          return current.map((row) => row.id === result.sessionId ? {
+            ...row,
+            entryAt: result.actionAt,
+            durationMinutes: result.durationMinutes,
+            status: 'completed',
+          } : row);
+        }
+        return [{
+          id: result.sessionId,
+          tenantId: result.tenantId,
+          employeeId: result.employeeId,
+          employeeName: result.employeeName,
+          employeeCode: result.employeeCode,
+          date: today,
+          exitAt: result.actionAt,
+          entryAt: null,
+          durationMinutes: null,
+          status: 'open',
+        }, ...current];
+      });
       setLastResult(result);
       setCode('');
       setPreview(null);
       showAppToast('success', result.action === 'exit' ? `تم تسجيل خروج ${result.employeeName}` : `تم تسجيل دخول ${result.employeeName}`);
-      await load();
+      void load();
     } catch (error) { showAppToast('error', (error as Error).message); }
     finally { setSaving(false); }
   };
@@ -167,35 +189,35 @@ export const ProductionGateEntry: React.FC = () => {
       <OpsDashPanel title="حركات اليوم — غير المسجل لهم دخول أولًا" accent="production" bodyClassName="p-0">
         <table className="hidden w-full table-fixed text-sm lg:table">
           <thead className="bg-[var(--color-surface-soft)] text-[var(--color-text-muted)]"><tr>
-            <th className="w-[30%] p-3 text-start">الموظف</th><th className="p-3">الخروج</th><th className="p-3">الدخول</th>
-            <th className="p-3">المدة</th><th className="p-3">الحالة</th><th className="p-3">مرات اليوم</th>
+            <th className="w-[30%] p-2 text-start">الموظف</th><th className="p-2">الخروج</th><th className="p-2">الدخول</th>
+            <th className="p-2">المدة</th><th className="p-2">الحالة</th><th className="p-2">مرات اليوم</th>
           </tr></thead>
           <tbody>
             {visibleRows.map((row) => <tr key={row.id} className={`border-t border-[var(--color-border)] ${row.status === 'open' ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>
-              <td className="p-3"><p className="font-bold">{row.employeeName}</p><p className="text-xs text-[var(--color-text-muted)]">{row.employeeCode}</p></td>
-              <td className="p-3 text-center">{gateTime(row.exitAt)}</td><td className="p-3 text-center">{gateTime(row.entryAt)}</td>
-              <td className="p-3 text-center font-bold">{formatDuration(liveDuration(row))}</td>
-              <td className="p-3 text-center"><span className={`rounded-full px-3 py-1 text-xs font-bold ${row.status === 'open' ? 'bg-amber-100 text-amber-800' : row.status === 'auto_closed' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{statusLabel(row.status)}</span></td>
-              <td className="p-3 text-center font-bold">{employeeCounts.get(row.employeeId)}</td>
+              <td className="p-2"><p className="font-bold">{row.employeeName}</p><p className="text-[10px] text-[var(--color-text-muted)]">{row.employeeCode}</p></td>
+              <td className="p-2 text-center">{gateTime(row.exitAt)}</td><td className="p-2 text-center">{gateTime(row.entryAt)}</td>
+              <td className="p-2 text-center font-bold">{formatDuration(liveDuration(row))}</td>
+              <td className="p-2 text-center"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${row.status === 'open' ? 'bg-amber-100 text-amber-800' : row.status === 'auto_closed' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{statusLabel(row.status)}</span></td>
+              <td className="p-2 text-center font-bold">{employeeCounts.get(row.employeeId)}</td>
             </tr>)}
             {!loading && visibleRows.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-[var(--color-text-muted)]">لا توجد حركات مسجلة اليوم.</td></tr>}
           </tbody>
         </table>
         <div className="divide-y divide-[var(--color-border)] lg:hidden">
-          {visibleRows.map((row) => <article key={row.id} className={`p-3 sm:p-4 ${row.status === 'open' ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>
-            <div className="flex min-w-0 items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-black text-[var(--color-text)]">{row.employeeName}</p>
-                <p className="mt-0.5 text-xs font-bold text-[var(--color-text-muted)]">كود {row.employeeCode}</p>
-              </div>
-              <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold ${row.status === 'open' ? 'bg-amber-100 text-amber-800' : row.status === 'auto_closed' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{statusLabel(row.status)}</span>
+          {visibleRows.map((row) => <article key={row.id} className={`px-3 py-2.5 ${row.status === 'open' ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <p className="min-w-0 truncate text-sm font-black text-[var(--color-text)] sm:text-base">{row.employeeName}</p>
+              <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-bold ${row.status === 'open' ? 'bg-amber-100 text-amber-800' : row.status === 'auto_closed' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{statusLabel(row.status)}</span>
             </div>
-            <div className="mt-3 grid grid-cols-3 divide-x divide-x-reverse divide-[var(--color-border)] rounded-lg bg-[var(--color-surface-soft)] py-2 text-center">
-              <div className="px-2"><p className="text-[10px] font-bold text-[var(--color-text-muted)]">الخروج</p><p className="mt-1 whitespace-nowrap font-black tabular-nums">{gateTime(row.exitAt)}</p></div>
-              <div className="px-2"><p className="text-[10px] font-bold text-[var(--color-text-muted)]">الدخول</p><p className="mt-1 whitespace-nowrap font-black tabular-nums">{gateTime(row.entryAt)}</p></div>
-              <div className="px-2"><p className="text-[10px] font-bold text-[var(--color-text-muted)]">المدة</p><p className="mt-1 whitespace-nowrap font-black tabular-nums text-primary">{formatDuration(liveDuration(row))}</p></div>
+            <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] font-bold text-[var(--color-text-muted)] sm:text-[11px]">
+              <span>كود {row.employeeCode}</span>
+              <span>مرات اليوم: <b className="text-[var(--color-text)]">{employeeCounts.get(row.employeeId)}</b></span>
             </div>
-            <p className="mt-2 text-xs font-bold text-[var(--color-text-muted)]">مرات الخروج اليوم: <span className="text-[var(--color-text)]">{employeeCounts.get(row.employeeId)}</span></p>
+            <div className="mt-2 grid grid-cols-3 divide-x divide-x-reverse divide-[var(--color-border)] rounded-md bg-[var(--color-surface-soft)] py-1.5 text-center">
+              <div className="px-1.5"><p className="text-[9px] font-bold text-[var(--color-text-muted)]">الخروج</p><p className="mt-0.5 whitespace-nowrap text-sm font-black tabular-nums">{gateTime(row.exitAt)}</p></div>
+              <div className="px-1.5"><p className="text-[9px] font-bold text-[var(--color-text-muted)]">الدخول</p><p className="mt-0.5 whitespace-nowrap text-sm font-black tabular-nums">{gateTime(row.entryAt)}</p></div>
+              <div className="px-1.5"><p className="text-[9px] font-bold text-[var(--color-text-muted)]">المدة</p><p className="mt-0.5 whitespace-nowrap text-sm font-black tabular-nums text-primary">{formatDuration(liveDuration(row))}</p></div>
+            </div>
           </article>)}
           {!loading && visibleRows.length === 0 && <p className="p-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد حركات مسجلة اليوم.</p>}
         </div>
