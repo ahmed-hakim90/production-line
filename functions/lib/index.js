@@ -1969,3 +1969,4 @@ export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.j
 export { syncBuiltInRolePermissionGrants } from './rolePermissionMigration.js';
 export { onRepairJobCreatedCustody } from './repairCustomerPortalOps.js';
 export { purgeRepairOperationalData } from './purgeRepairOperationalData.js';
+export { closeOpenProductionGateSessions, correctProductionGateSession, registerProductionGateAction, } from './productionGate.js';

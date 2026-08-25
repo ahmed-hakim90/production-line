@@ -361,6 +361,21 @@ export const MENU_CONFIG: MenuGroup[] = [
         permission: 'production.attendance.view',
         anyOfPermissions: ['production.attendance.view', 'production.attendance.manage', 'reports.view'],
       },
+      {
+        key: 'production-gate',
+        label: 'بوابة الإنتاج',
+        icon: 'meeting_room',
+        path: '/production/gate',
+        permission: 'production.gate.register',
+      },
+      {
+        key: 'production-gate-analytics',
+        label: 'تحليل خروج العمال',
+        icon: 'query_stats',
+        path: '/production/gate/analytics',
+        permission: 'production.gate.analytics',
+        anyOfPermissions: ['production.gate.analytics', 'production.gate.correct'],
+      },
       { key: 'reports', label: 'التقارير', icon: 'bar_chart', path: '/reports', permission: 'reports.view' },
       {
         key: 'routing-list',

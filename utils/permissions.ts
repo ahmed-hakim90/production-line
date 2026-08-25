@@ -55,6 +55,7 @@ export type Permission =
   | 'production.workerRatings.view' | 'production.workerRatings.manage'
   | 'production.workerBonus.view' | 'production.workerBonus.manage'
   | 'production.attendance.view' | 'production.attendance.manage'
+  | 'production.gate.register' | 'production.gate.analytics' | 'production.gate.correct'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
   | 'reports.view' | 'reports.create' | 'reports.createForAnySupervisor' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
@@ -195,6 +196,9 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'production.workerBonus.manage', label: 'إدارة مكافآت عمال الإنتاج' },
       { key: 'production.attendance.view', label: 'عرض سجل حضور الإنتاج' },
       { key: 'production.attendance.manage', label: 'إدارة سجل حضور الإنتاج' },
+      { key: 'production.gate.register', label: 'تسجيل حركة بوابة الإنتاج' },
+      { key: 'production.gate.analytics', label: 'عرض وتصدير تحليل خروج العمال' },
+      { key: 'production.gate.correct', label: 'تصحيح وإلغاء حركات بوابة الإنتاج' },
       { key: 'lineWorkers.view', label: 'عرض وإدارة ربط العمالة' },
       { key: 'supervisorAssignments.manage', label: 'إدارة توزيع المشرفين على الخطوط' },
       { key: 'plans.view', label: 'عرض خطط الإنتاج' },
