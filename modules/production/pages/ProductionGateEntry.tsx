@@ -12,6 +12,7 @@ const statusLabel = (status: ProductionGateSession['status']) => ({
 
 export const ProductionGateEntry: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
+  const previewRequestIdRef = useRef(0);
   const [code, setCode] = useState('');
   const [rows, setRows] = useState<ProductionGateSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +24,7 @@ export const ProductionGateEntry: React.FC = () => {
   const [, tick] = useState(0);
   const today = gateDate();
   const normalizedCode = code.trim();
-  const debouncedCode = useDebouncedValue(normalizedCode, 350);
+  const debouncedCode = useDebouncedValue(normalizedCode, 100);
 
   const load = useCallback(async () => {
     try { setRows(await productionGateService.list(today, today)); }
@@ -43,21 +44,33 @@ export const ProductionGateEntry: React.FC = () => {
       setPreviewLoading(false);
       return () => { active = false; };
     }
+    const requestId = ++previewRequestIdRef.current;
     setPreviewLoading(true);
     setPreviewError('');
     void productionGateService.preview(debouncedCode)
       .then((result) => {
-        if (!active) return;
+        if (!active || requestId !== previewRequestIdRef.current) return;
         setPreview(result);
       })
       .catch((error: Error) => {
-        if (!active) return;
+        if (!active || requestId !== previewRequestIdRef.current) return;
         setPreview(null);
         setPreviewError(error.message || 'تعذر تحميل بيانات الموظف.');
       })
-      .finally(() => { if (active) setPreviewLoading(false); });
+      .finally(() => {
+        if (active && requestId === previewRequestIdRef.current) setPreviewLoading(false);
+      });
     return () => { active = false; };
   }, [debouncedCode]);
+
+  const handleCodeChange = useCallback((value: string) => {
+    previewRequestIdRef.current += 1;
+    setCode(value);
+    setPreview(null);
+    setPreviewError('');
+    setPreviewLoading(false);
+    setLastResult(null);
+  }, []);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -104,22 +117,28 @@ export const ProductionGateEntry: React.FC = () => {
     >
       <OpsDashPanel title="تسجيل الحركة" accent="production" bodyClassName="p-5">
         <form onSubmit={submit} className="mx-auto max-w-2xl">
-          <label className="mb-2 block text-sm font-bold">كود الموظف</label>
-          <div className="flex gap-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <label htmlFor="production-gate-employee-code" className="text-sm font-bold">كود الموظف</label>
+            <span className="rounded-full bg-[var(--color-surface-soft)] px-2.5 py-1 text-[10px] font-bold text-[var(--color-text-muted)]">يدعم قارئ الباركود USB</span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <input
+              id="production-gate-employee-code"
               ref={inputRef}
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => handleCodeChange(e.target.value)}
+              onFocus={(e) => e.currentTarget.select()}
               disabled={saving}
               autoComplete="off"
               inputMode="numeric"
-              placeholder="اكتب الكود واضغط Enter"
-              className="min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-4 text-center text-2xl font-black outline-none focus:border-primary"
+              placeholder="اكتب الكود أو امسح الباركود"
+              className="min-w-0 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3 text-center text-xl font-black outline-none focus:border-primary sm:text-2xl"
             />
-            <button disabled={saving || previewLoading || !preview || preview.employeeCode !== normalizedCode || !preview.registrationAllowed} className="rounded-xl bg-primary px-7 font-bold text-white disabled:opacity-50">
+            <button disabled={saving || previewLoading || !preview || preview.employeeCode !== normalizedCode || !preview.registrationAllowed} className="min-h-12 rounded-xl bg-primary px-6 font-bold text-white disabled:opacity-50">
               {saving ? 'جاري التسجيل...' : preview?.nextAction === 'entry' ? 'تسجيل دخول' : 'تسجيل خروج'}
             </button>
           </div>
+          <p className="mt-2 text-center text-[11px] font-bold text-[var(--color-text-muted)]">قارئ USB يقرأ نفس كود الموظف المطبوع — بعد ظهور البيانات اضغط تسجيل</p>
         </form>
         {previewLoading && <div className="mx-auto mt-4 max-w-2xl rounded-xl bg-[var(--color-surface-soft)] p-4 text-center font-bold text-[var(--color-text-muted)]">جاري تحميل بيانات الموظف...</div>}
         {!previewLoading && previewError && <div className="mx-auto mt-4 max-w-2xl rounded-xl border border-red-200 bg-red-50 p-4 text-center font-bold text-red-700">{previewError}</div>}
@@ -145,10 +164,10 @@ export const ProductionGateEntry: React.FC = () => {
         )}
       </OpsDashPanel>
 
-      <OpsDashPanel title="حركات اليوم — غير المسجل لهم دخول أولًا" accent="production" bodyClassName="p-0 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+      <OpsDashPanel title="حركات اليوم — غير المسجل لهم دخول أولًا" accent="production" bodyClassName="p-0">
+        <table className="hidden w-full table-fixed text-sm lg:table">
           <thead className="bg-[var(--color-surface-soft)] text-[var(--color-text-muted)]"><tr>
-            <th className="p-3 text-start">الموظف</th><th className="p-3">الخروج</th><th className="p-3">الدخول</th>
+            <th className="w-[30%] p-3 text-start">الموظف</th><th className="p-3">الخروج</th><th className="p-3">الدخول</th>
             <th className="p-3">المدة</th><th className="p-3">الحالة</th><th className="p-3">مرات اليوم</th>
           </tr></thead>
           <tbody>
@@ -162,6 +181,24 @@ export const ProductionGateEntry: React.FC = () => {
             {!loading && visibleRows.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-[var(--color-text-muted)]">لا توجد حركات مسجلة اليوم.</td></tr>}
           </tbody>
         </table>
+        <div className="divide-y divide-[var(--color-border)] lg:hidden">
+          {visibleRows.map((row) => <article key={row.id} className={`p-3 sm:p-4 ${row.status === 'open' ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate font-black text-[var(--color-text)]">{row.employeeName}</p>
+                <p className="mt-0.5 text-xs font-bold text-[var(--color-text-muted)]">كود {row.employeeCode}</p>
+              </div>
+              <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-bold ${row.status === 'open' ? 'bg-amber-100 text-amber-800' : row.status === 'auto_closed' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{statusLabel(row.status)}</span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 divide-x divide-x-reverse divide-[var(--color-border)] rounded-lg bg-[var(--color-surface-soft)] py-2 text-center">
+              <div className="px-2"><p className="text-[10px] font-bold text-[var(--color-text-muted)]">الخروج</p><p className="mt-1 whitespace-nowrap font-black tabular-nums">{gateTime(row.exitAt)}</p></div>
+              <div className="px-2"><p className="text-[10px] font-bold text-[var(--color-text-muted)]">الدخول</p><p className="mt-1 whitespace-nowrap font-black tabular-nums">{gateTime(row.entryAt)}</p></div>
+              <div className="px-2"><p className="text-[10px] font-bold text-[var(--color-text-muted)]">المدة</p><p className="mt-1 whitespace-nowrap font-black tabular-nums text-primary">{formatDuration(liveDuration(row))}</p></div>
+            </div>
+            <p className="mt-2 text-xs font-bold text-[var(--color-text-muted)]">مرات الخروج اليوم: <span className="text-[var(--color-text)]">{employeeCounts.get(row.employeeId)}</span></p>
+          </article>)}
+          {!loading && visibleRows.length === 0 && <p className="p-8 text-center text-sm text-[var(--color-text-muted)]">لا توجد حركات مسجلة اليوم.</p>}
+        </div>
       </OpsDashPanel>
     </ModuleOpsPageShell>
   );

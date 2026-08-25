@@ -79,16 +79,18 @@ export const previewProductionGateEmployee = onCall({ region: 'us-central1', mem
     const now = new Date();
     const local = cairoParts(now);
     const seconds = local.hour * 3600 + local.minute * 60 + local.second;
-    const stateSnap = await db.collection(STATES).doc(`${actor.tenantId}__${employeeDoc.id}`).get();
+    const [stateSnap, todaySnap] = await Promise.all([
+        db.collection(STATES).doc(`${actor.tenantId}__${employeeDoc.id}`).get(),
+        db.collection(SESSIONS)
+            .where('tenantId', '==', actor.tenantId)
+            .where('employeeId', '==', employeeDoc.id)
+            .where('date', '==', local.dateKey)
+            .get(),
+    ]);
     const openSessionId = String(stateSnap.data()?.openSessionId || '').trim();
     const openSnap = openSessionId ? await db.collection(SESSIONS).doc(openSessionId).get() : null;
     const isOutside = Boolean(openSnap?.exists && openSnap.data()?.tenantId === actor.tenantId && openSnap.data()?.status === 'open');
     const exitAt = isOutside ? openSnap?.data()?.exitAt : null;
-    const todaySnap = await db.collection(SESSIONS)
-        .where('tenantId', '==', actor.tenantId)
-        .where('employeeId', '==', employeeDoc.id)
-        .where('date', '==', local.dateKey)
-        .get();
     const todayExitCount = todaySnap.docs.filter((item) => item.data().status !== 'cancelled').length;
     return {
         employeeId: employeeDoc.id,
