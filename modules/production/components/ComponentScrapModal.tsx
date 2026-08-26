@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Package2, Plus, Save, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from './UI';
+import { Button, SearchableSelect } from './UI';
 import { loadProductComponents } from '../../catalog/lib/productComponents';
 import { stockService } from '../../inventory/services/stockService';
 import { useAppStore } from '../../../store/useAppStore';
@@ -175,7 +175,7 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
           )}
           {!loading && options.length > 0 && (
             <>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center">
                 <div className="text-xs text-[var(--color-text-muted)]">
                   {t('modalManager.componentScrap.selectedCount', { selected: rows.length, total: options.length })}
                 </div>
@@ -200,28 +200,24 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
                     >
                       <div className="space-y-1">
                         <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.componentScrap.component')}</label>
-                        <select
-                          className={cn(
-                            'w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm text-foreground',
-                            'ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                          )}
+                        <SearchableSelect
+                          options={rowOptions.map((opt) => ({
+                            value: opt.materialId,
+                            label: opt.materialName,
+                            keywords: opt.materialId,
+                          }))}
                           value={row.materialId}
-                          onChange={(e) => {
-                            const option = options.find((opt) => opt.materialId === e.target.value);
+                          onChange={(value) => {
+                            const option = options.find((opt) => opt.materialId === value);
                             if (!option) return;
                             updateRow(index, {
                               materialId: option.materialId,
                               materialName: option.materialName,
                             });
                           }}
-                        >
-                          <option value="">{t('modalManager.componentScrap.selectComponent')}</option>
-                          {rowOptions.map((opt) => (
-                            <option key={opt.materialId} value={opt.materialId}>
-                              {opt.materialName}
-                            </option>
-                          ))}
-                        </select>
+                          placeholder={t('modalManager.componentScrap.selectComponent')}
+                          searchPlaceholder={t('modalManager.componentScrap.selectComponent')}
+                        />
                         {selectedOption && (
                           <p className="text-[11px] text-[var(--color-text-muted)]">
                             {t('modalManager.componentScrap.componentMeta', {
@@ -247,11 +243,11 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
                           placeholder="0"
                         />
                       </div>
-                      <div className="flex items-end">
+                      <div className="flex items-end md:justify-end">
                         <Button
                           type="button"
                           variant="outline"
-                          className="px-3 py-2.5"
+                          className="w-full px-3 py-2.5 md:w-auto"
                           onClick={() => removeRow(index)}
                           iconName="delete"
                           tone="delete"
@@ -272,7 +268,7 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
             </>
           )}
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
+        <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-end sm:px-6 sm:py-4">
           <Button variant="outline" onClick={onClose} iconName="close" tone="neutral">
             {t('ui.close')}
           </Button>

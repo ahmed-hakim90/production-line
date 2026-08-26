@@ -1248,6 +1248,24 @@ export const QuickAction: React.FC = () => {
     && employeeId !== currentEmployee.id,
   );
   const workOrderRequired = reportBehavior.requireWorkOrderOnQuickAction || isDelegatedEntry;
+  const quickWorkOrderOptions = useMemo(() => {
+    const productNames = new Map(_rawProducts.map((product) => [product.id, product.name]));
+    const lineNames = new Map(_rawLines.map((line) => [line.id, line.name]));
+    return [
+      ...(!workOrderRequired ? [{ value: '', label: 'بدون أمر شغل' }] : []),
+      ...scopedActiveWOs.map((wo) => {
+        const productName = productNames.get(wo.productId) ?? '';
+        const lineName = lineNames.get(wo.lineId) ?? '';
+        const remaining = Number(wo.quantity || 0) - Number(wo.producedQuantity || 0);
+        const orderNumber = String(wo.workOrderNumber || '').trim();
+        return {
+          value: wo.id!,
+          label: `${orderNumber ? `${orderNumber} — ` : ''}${productName} — ${lineName} — متبقي: ${formatNumber(remaining)} وحدة`,
+          keywords: [orderNumber, productName, lineName, wo.id].filter(Boolean).join(' '),
+        };
+      }),
+    ];
+  }, [_rawLines, _rawProducts, scopedActiveWOs, workOrderRequired]);
 
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
@@ -1715,10 +1733,11 @@ export const QuickAction: React.FC = () => {
                   <span className="text-[rgb(var(--color-danger))]" aria-hidden>*</span>
                 )}
               </label>
-              <Select
-                value={selectedWorkOrderId || (workOrderRequired ? undefined : 'none')}
-                onValueChange={(value) => {
-                  if (value === 'none') {
+              <SearchableSelect
+                value={selectedWorkOrderId}
+                options={quickWorkOrderOptions}
+                onChange={(value) => {
+                  if (!value) {
                     if (workOrderRequired) return;
                     setSelectedWorkOrderId('');
                     return;
@@ -1726,32 +1745,9 @@ export const QuickAction: React.FC = () => {
                   setSelectedWorkOrderId(value);
                   handleSelectWO(value);
                 }}
-              >
-                <SelectTrigger className="w-full px-4 py-2.5 bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
-                  <SelectValue
-                    placeholder={
-                      workOrderRequired
-                        ? 'اختر أمر شغل موجّه للمشرف'
-                        : 'اختر أمر شغل لتعبئة البيانات تلقائياً'
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {!workOrderRequired && (
-                    <SelectItem value="none">بدون أمر شغل</SelectItem>
-                  )}
-                  {scopedActiveWOs.map((wo) => {
-                    const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
-                    const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
-                    const remaining = wo.quantity - (wo.producedQuantity || 0);
-                    return (
-                      <SelectItem key={wo.id} value={wo.id!}>
-                        {wo.workOrderNumber} — {pName} — {lName} — متبقي: {formatNumber(remaining)} وحدة
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+                placeholder={workOrderRequired ? 'اختر أمر شغل موجّه للمشرف' : 'اختر أمر شغل لتعبئة البيانات تلقائياً'}
+                searchPlaceholder="ابحث برقم أمر الشغل أو الصنف أو الخط"
+              />
               {scopedActiveWOs.length === 0 && (
                 <p className={`mt-1.5 text-[11px] font-medium ${workOrderRequired ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
                   {workOrderRequired
@@ -1773,9 +1769,9 @@ export const QuickAction: React.FC = () => {
               )}
             </div>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-5">
             {canChooseReportType && (
-              <div className="sm:col-span-2">
+              <div className="col-span-2">
                 <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">نوع التقرير</label>
                 <Select
                   value={reportType}
@@ -1849,7 +1845,7 @@ export const QuickAction: React.FC = () => {
                 disabled={canCreateForAnySupervisor && Boolean(selectedWorkOrderId)}
               />
             </div>
-            <div>
+            <div className="col-span-2">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">تاريخ التقرير *</label>
               <input
                 type="date"
@@ -1891,7 +1887,7 @@ export const QuickAction: React.FC = () => {
               </div>
             )}
             {reportType === 'packaging' ? (
-              <div className="sm:col-span-2 space-y-3">
+              <div className="col-span-2 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1">
                     <label className="text-sm font-bold text-[var(--color-text-muted)]">المنتجات المغلفة</label>
@@ -2056,7 +2052,7 @@ export const QuickAction: React.FC = () => {
               </div>
             ) : (
               <>
-                <div>
+                <div className="col-span-2">
                   <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">{reportType === 'component_injection' ? 'اسم المكون *' : 'المنتج *'}</label>
                   <VoucherItemCombobox
                     placeholder={reportType === 'component_injection' ? 'ابحث أو امسح كود المكون' : 'ابحث بالاسم أو امسح الباركود'}
@@ -2125,7 +2121,7 @@ export const QuickAction: React.FC = () => {
               />
             </div>
             {reportType === 'component_injection' ? (
-            <div className="md:col-span-2 space-y-2">
+            <div className="col-span-2 space-y-2">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">إجمالي العمالة</label>
               <input
                 type="number"
@@ -2137,7 +2133,7 @@ export const QuickAction: React.FC = () => {
               />
             </div>
             ) : reportType === 'packaging' ? (
-            <div className="md:col-span-2 space-y-2">
+            <div className="col-span-2 space-y-2">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">إجمالي العمالة (اختياري)</label>
               <input
                 type="number"
@@ -2149,7 +2145,7 @@ export const QuickAction: React.FC = () => {
               />
             </div>
             ) : (
-            <div className="md:col-span-2 space-y-2">
+            <div className="col-span-2 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="text-sm font-bold text-[var(--color-text-muted)] block">تفصيل العمالة </label>
                 <Button
@@ -2162,16 +2158,12 @@ export const QuickAction: React.FC = () => {
                   عرض عمالة الخط
                 </Button>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div className="sm:col-span-2 lg:col-span-1">
-                  <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">الإجمالي *</label>
-                  <input
-                    type="number"
-                    readOnly
-                    value={workersTotal || ''}
-                    className="w-full px-3 py-2.5 bg-[var(--color-surface-hover)]/70 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-black text-primary"
-                    placeholder="0"
-                  />
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                <div className="col-span-2 flex items-center justify-between gap-3 rounded-[var(--border-radius-lg)] border border-primary/20 bg-primary/5 px-3 py-2.5 lg:col-span-1">
+                  <span className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي العمالة</span>
+                  <output className="text-lg font-black tabular-nums text-primary" aria-label="إجمالي العمالة">
+                    {workersTotal || 0}
+                  </output>
                 </div>
                 <div>
                   <label className="text-xs font-bold text-[var(--color-text-muted)] mb-1 block">إنتاج</label>
@@ -2247,7 +2239,7 @@ export const QuickAction: React.FC = () => {
             {reportType === 'finished_product'
               && lineId && productId
               && workerOutputEntryEnabled ? (
-              <div className="md:col-span-2">
+              <div className="col-span-2">
                 <ReportWorkerOutputsSection
                   lineId={lineId}
                   productId={productId}
@@ -2296,7 +2288,7 @@ export const QuickAction: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-3 mt-6 pt-4 border-t border-[var(--color-border)]">
+          <div className="mt-6 flex flex-col-reverse gap-3 border-t border-[var(--color-border)] pt-4 sm:flex-row sm:flex-wrap">
             <Button
               onClick={handleSave}
               disabled={

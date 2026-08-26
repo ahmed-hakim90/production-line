@@ -5010,11 +5010,11 @@ export const Reports: React.FC = () => {
         <ManagedModalPortal>
         <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
           <div
-            className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden"
+            className="relative flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-              <h3 className="text-lg font-bold">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+              <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">
                 {editId
                   ? (form.reportType === 'component_injection'
                     ? 'تعديل تقرير مكون حقن'
@@ -5796,7 +5796,7 @@ export const Reports: React.FC = () => {
                 </>
               );
             })()}
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3 shrink-0">
+            <div className="grid shrink-0 gap-3 border-t border-[var(--color-border)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-4">
               {/* {can('print') && (
                 <Button
                   variant="outline"

@@ -1315,9 +1315,10 @@ export const GlobalCreateReportModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={closeModal} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
+        <div className="grid shrink-0 grid-cols-2 gap-3 border-t border-[var(--color-border)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex sm:items-center sm:justify-end sm:px-6 sm:py-4">
+          <Button className="w-full sm:w-auto" variant="outline" onClick={closeModal} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button
+            className="w-full sm:w-auto"
             variant="primary"
             onClick={handleSave}
             disabled={

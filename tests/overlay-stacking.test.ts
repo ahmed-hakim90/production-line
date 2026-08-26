@@ -54,6 +54,8 @@ assert.match(searchableSelect, /export const SearchableSelect/);
 assert.match(searchableSelect, /isListboxOpenKey/);
 assert.match(searchableSelect, /isListboxNavKey/);
 assert.match(searchableSelect, /\bloop\b/);
+assert.match(searchableSelect, /side="bottom"/);
+assert.match(searchableSelect, /avoidCollisions=\{false\}/);
 assert.doesNotMatch(searchableSelect, /PopoverContent[\s\S]{0,200}z-\[(?:50|70|100|200|300|500)\]/);
 
 {
