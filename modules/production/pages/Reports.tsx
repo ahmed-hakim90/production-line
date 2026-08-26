@@ -750,6 +750,7 @@ export const Reports: React.FC = () => {
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+  const [laborOnlyEdit, setLaborOnlyEdit] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const formWorkersTotal = useMemo(() => (
     (form.workersProductionCount || 0)
@@ -1046,6 +1047,7 @@ export const Reports: React.FC = () => {
 
   const openCreate = useCallback(() => {
     setEditId(null);
+    setLaborOnlyEdit(false);
     setSaveToast(null);
     setForm({
       ...emptyForm,
@@ -2421,7 +2423,14 @@ export const Reports: React.FC = () => {
       setTimeout(() => setSaveToast(null), 3000);
       return;
     }
+    const inventoryState = report as ProductionReport & {
+      inventoryAppliedAt?: unknown;
+      inventoryPostingState?: string;
+    };
+    const hasAppliedInventory = Boolean(inventoryState.inventoryAppliedAt)
+      || ['applying', 'applied', 'reversing'].includes(String(inventoryState.inventoryPostingState || ''));
     setEditId(report.id!);
+    setLaborOnlyEdit(rt === 'finished_product' && hasAppliedInventory);
     setSaveToast(null);
     const editLineName = _rawLines.find((line) => line.id === report.lineId)?.name ?? report.lineId;
     const editProductName = _rawProducts.find((product) => product.id === report.productId)?.name ?? report.productId;
@@ -2836,7 +2845,18 @@ export const Reports: React.FC = () => {
 
     if (editId) {
       try {
-        await updateReport(editId, payload, { path: PRODUCTION_REPORT_UPDATE_PATHS.reportsPage });
+        const updatePayload: Partial<ProductionReport> = laborOnlyEdit
+          ? {
+            workersCount: effectiveFormWorkersCount,
+            workersProductionCount: Number(form.workersProductionCount || 0),
+            workersPackagingCount: Number(form.workersPackagingCount || 0),
+            workersQualityCount: Number(form.workersQualityCount || 0),
+            workersMaintenanceCount: Number(form.workersMaintenanceCount || 0),
+            workersExternalCount: Number(form.workersExternalCount || 0),
+            workHours: Number(form.workHours || 0),
+          }
+          : payload;
+        await updateReport(editId, updatePayload, { path: PRODUCTION_REPORT_UPDATE_PATHS.reportsPage });
         setSaving(false);
         setSaveToastType('success');
         setSaveToast('تم حفظ التعديلات بنجاح');
@@ -2870,6 +2890,7 @@ export const Reports: React.FC = () => {
         });
         setShowModal(false);
         setEditId(null);
+        setLaborOnlyEdit(false);
         setSaving(false);
         showAppToast('success', REPORT_SAVE_SUCCESS_MESSAGE, { id: REPORT_SAVE_TOAST_ID });
         if (printAfterSave && can('print')) {
@@ -5027,11 +5048,61 @@ export const Reports: React.FC = () => {
                       ? 'إنشاء تقرير تغليف'
                       : 'إنشاء تقرير إنتاج')}
               </h3>
-              <button onClick={() => { setShowModal(false); setEditId(null); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+              <button onClick={() => { setShowModal(false); setEditId(null); setLaborOnlyEdit(false); setSaveToast(null); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
                 <ReportIcon name="close" />
               </button>
             </div>
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
+              {laborOnlyEdit ? (
+                <>
+                  <div className="rounded-[var(--border-radius-lg)] border border-primary/20 bg-primary/5 p-3 text-xs font-semibold leading-relaxed text-[var(--color-text-muted)]">
+                    لهذا التقرير حركة مخزون مرتبطة؛ المتاح هنا تعديل العمالة وساعات العمل فقط.
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                    <div className="col-span-2 flex items-center justify-between gap-3 rounded-[var(--border-radius-lg)] border border-primary/20 bg-primary/5 px-3 py-2.5 lg:col-span-1">
+                      <span className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي العمالة</span>
+                      <output className="text-lg font-black tabular-nums text-primary" aria-label="إجمالي العمالة">
+                        {formWorkersTotal || 0}
+                      </output>
+                    </div>
+                    {[
+                      ['عمالة إنتاج', 'workersProductionCount'],
+                      ['عمالة تغليف', 'workersPackagingCount'],
+                      ['عمالة جودة', 'workersQualityCount'],
+                      ['عمالة صيانة', 'workersMaintenanceCount'],
+                      ['عمالة خارجية', 'workersExternalCount'],
+                    ].map(([label, field]) => (
+                      <div key={field} className="space-y-1">
+                        <label className="block text-xs font-bold text-[var(--color-text-muted)]">{label}</label>
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                          value={Number(form[field as keyof typeof form] || 0) || ''}
+                          onChange={(event) => setForm((prev) => ({
+                            ...prev,
+                            [field]: Number(event.target.value || 0),
+                          }))}
+                          placeholder="0"
+                        />
+                      </div>
+                    ))}
+                    <div className="col-span-2 space-y-1 lg:col-span-1">
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-sm font-medium outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                        value={form.workHours || ''}
+                        onChange={(event) => setForm((prev) => ({ ...prev, workHours: Number(event.target.value || 0) }))}
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+              <>
               {canChooseReportType && (
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع التقرير</label>
@@ -5709,6 +5780,8 @@ export const Reports: React.FC = () => {
                   placeholder="اكتب أي ملاحظات إضافية للتقرير..."
                 />
               </div>
+              </>
+              )}
             </div>
             {formStandardVariancePreview && (
               <div
