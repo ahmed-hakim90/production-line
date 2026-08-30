@@ -70,6 +70,8 @@ import { createRepairBranchProvisionedHandler } from './repairBranchProvision.js
 import { mutateRepairServiceCatalogHandler } from './repairServiceCatalogOps.js';
 import { updateRepairPartsPricingHandler } from './repairPartsPricingOps.js';
 import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js';
+import { postGeneralStockIssueHandler } from './generalStockIssues.js';
+import { postGeneralStockReceiptHandler } from './generalStockReceipts.js';
 import {
   createCustomerServiceRequestHandler,
   customerPortalLoginHandler,
@@ -2539,6 +2541,16 @@ export const updateRepairPartsPricing = onCall(
 export const createInventoryCountSession = onCall(
   { region: 'us-central1', memory: '512MiB' },
   createInventoryCountSessionHandler,
+);
+
+export const postGeneralStockIssue = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  wrapCallableUserSafe('تعذر ترحيل إذن الصرف.', postGeneralStockIssueHandler),
+);
+
+export const postGeneralStockReceipt = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  wrapCallableUserSafe('تعذر ترحيل إذن الإضافة.', postGeneralStockReceiptHandler),
 );
 
 export { syncRepairCenterCatalogFromInventory } from './repairCenterCatalogSync.js';

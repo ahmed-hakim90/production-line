@@ -36,6 +36,8 @@ const RawMaterialWarehouseAlerts = lazyNamed(
   () => import('../pages/RawMaterialWarehouseAlerts'),
   'RawMaterialWarehouseAlerts',
 );
+const GeneralStockIssues = lazyNamed(() => import('../pages/GeneralStockIssues'), 'GeneralStockIssues');
+const GeneralStockReceipts = lazyNamed(() => import('../pages/GeneralStockReceipts'), 'GeneralStockReceipts');
 
 export const INVENTORY_ROUTES: AppRouteDef[] = [
   { path: '/inventory', permission: 'inventory.view', component: InventoryDashboard, skeleton: 'dashboard' },
@@ -111,6 +113,8 @@ export const INVENTORY_ROUTES: AppRouteDef[] = [
     skeleton: 'dashboard',
   },
   { path: '/inventory/transactions', permission: 'inventory.view', component: StockTransactions },
+  { path: '/inventory/general-issues', permission: 'inventory.transactions.create', component: GeneralStockIssues, skeleton: 'form' },
+  { path: '/inventory/general-receipts', permission: 'inventory.transactions.create', component: GeneralStockReceipts, skeleton: 'form' },
   { path: '/inventory/production-issues', permission: 'inventory.view', component: ProductionIssues, skeleton: 'dashboard' },
   { path: '/inventory/production-floor', redirectTo: '/production/floor' },
   { path: '/inventory/production-floor/:productId', redirectTo: '/production/floor/:productId' },

@@ -1993,6 +1993,22 @@ service cloud.firestore {
       allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
     }
 
+    match /general_stock_issues/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.view') || pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
+        && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      // Creation and stock posting are owned by postGeneralStockIssue.
+      allow create, update, delete: if false;
+    }
+
+    match /general_stock_receipts/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.view') || pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
+        && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      // Creation and stock posting are owned by postGeneralStockReceipt.
+      allow create, update, delete: if false;
+    }
+
     match /inventory_transfer_requests/{docId} {
       allow read: if pl_isActiveUser()
         && (pl_hasErpPermission('inventory.view')

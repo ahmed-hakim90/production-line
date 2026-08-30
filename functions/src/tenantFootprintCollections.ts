@@ -62,6 +62,8 @@ export const TENANT_SCOPED_COLLECTIONS: readonly string[] = [
   'stock_items',
   'stock_location_balances',
   'stock_transactions',
+  'general_stock_issues',
+  'general_stock_receipts',
   'stock_counts',
   'inventory_transfer_requests',
   'inventory_counters',

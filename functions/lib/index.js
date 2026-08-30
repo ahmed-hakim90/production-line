@@ -29,6 +29,8 @@ import { createRepairBranchProvisionedHandler } from './repairBranchProvision.js
 import { mutateRepairServiceCatalogHandler } from './repairServiceCatalogOps.js';
 import { updateRepairPartsPricingHandler } from './repairPartsPricingOps.js';
 import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js';
+import { postGeneralStockIssueHandler } from './generalStockIssues.js';
+import { postGeneralStockReceiptHandler } from './generalStockReceipts.js';
 import { createCustomerServiceRequestHandler, customerPortalLoginHandler, getCustomerPortalHomeHandler, lookupPortalProductHandler, mutateRepairCustomerOpsHandler, } from './repairCustomerPortalOps.js';
 import { getCustomerFinancialAnalyticsHandler } from './customerFinancialAnalytics.js';
 import { createProductionReportFastHandler, retryProductionReportProcessingHandler, } from './productionReportFast.js';
@@ -1942,6 +1944,8 @@ export const createRepairBranchProvisioned = onCall({
 export const mutateRepairServiceCatalog = onCall({ region: 'us-central1', memory: '256MiB' }, mutateRepairServiceCatalogHandler);
 export const updateRepairPartsPricing = onCall({ region: 'us-central1', memory: '512MiB' }, updateRepairPartsPricingHandler);
 export const createInventoryCountSession = onCall({ region: 'us-central1', memory: '512MiB' }, createInventoryCountSessionHandler);
+export const postGeneralStockIssue = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر ترحيل إذن الصرف.', postGeneralStockIssueHandler));
+export const postGeneralStockReceipt = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر ترحيل إذن الإضافة.', postGeneralStockReceiptHandler));
 export { syncRepairCenterCatalogFromInventory } from './repairCenterCatalogSync.js';
 export const customerPortalLogin = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, customerPortalLoginHandler);
 export const getCustomerPortalHome = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, getCustomerPortalHomeHandler);

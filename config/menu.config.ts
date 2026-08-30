@@ -469,6 +469,8 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'inv-balances', label: 'أرصدة كل المخازن', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
       { key: 'inv-item-card', label: 'كارت الصنف', icon: 'badge', path: '/inventory/item-card', permission: 'inventory.view' },
       { key: 'inv-transactions', label: 'حركات كل المخازن', icon: 'sync_alt', path: '/inventory/transactions', permission: 'inventory.view' },
+      { key: 'inv-general-issues', label: 'إذن صرف عام', icon: 'output', path: '/inventory/general-issues', permission: 'inventory.transactions.create' },
+      { key: 'inv-general-receipts', label: 'إذن إضافة عام', icon: 'input', path: '/inventory/general-receipts', permission: 'inventory.transactions.create' },
       { key: 'inv-locations', label: 'مواقع الأرفف', icon: 'grid_view', path: '/inventory/locations', permission: 'inventory.view' },
       // عمليات مشتركة
       {

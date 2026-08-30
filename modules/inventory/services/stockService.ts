@@ -407,6 +407,27 @@ export const stockService = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
   },
 
+  async getTransactionHistory(warehouseId?: string): Promise<{
+    items: StockTransaction[];
+    truncated: boolean;
+  }> {
+    if (!isConfigured) return { items: [], truncated: false };
+    const items: StockTransaction[] = [];
+    let cursor: FirestoreCursor = null;
+    const maxPages = KPI_MAX_PAGES;
+    for (let page = 0; page < maxPages; page += 1) {
+      const result = await this.getTransactionsPaged({
+        warehouseId,
+        limit: MAX_PAGE_SIZE,
+        cursor,
+      });
+      items.push(...result.items);
+      if (!result.hasMore || !result.nextCursor) return { items, truncated: false };
+      cursor = result.nextCursor;
+    }
+    return { items, truncated: true };
+  },
+
   /**
    * Deletes all tenant-scoped inventory data tied to a warehouse (transfer requests, transactions,
    * balances, count sessions). Caller deletes the warehouse document afterward.

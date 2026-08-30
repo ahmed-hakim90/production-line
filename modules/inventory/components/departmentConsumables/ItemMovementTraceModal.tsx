@@ -24,6 +24,7 @@ type Props = {
 
 export const ItemMovementTraceModal: React.FC<Props> = ({ open, onClose, item, warehouses }) => {
   const [balances, setBalances] = useState<Array<{ warehouseName: string; qty: number }>>([]);
+  const [balancesLoading, setBalancesLoading] = useState(false);
 
   const warehouseName = useCallback((id: string) => {
     return warehouses.find((w) => w.id === id)?.name || id;
@@ -51,15 +52,26 @@ export const ItemMovementTraceModal: React.FC<Props> = ({ open, onClose, item, w
   useEffect(() => {
     if (!open || !item?.id) {
       setBalances([]);
+      setBalancesLoading(false);
       return;
     }
-    void stockService.getBalances().then((bals) => {
+    let cancelled = false;
+    setBalancesLoading(true);
+    void stockService.getBalancesForItems([item.id]).then((bals) => {
+      if (cancelled) return;
       setBalances(
         bals
           .filter((b) => b.itemType === 'material' && b.itemId === item.id)
           .map((b) => ({ warehouseName: warehouseName(b.warehouseId), qty: Number(b.quantity || 0) })),
       );
-    }).catch((error) => toast.error(error instanceof Error ? error.message : 'تعذر تحميل الأرصدة.'));
+    }).catch((error) => {
+      if (!cancelled) toast.error(error instanceof Error ? error.message : 'تعذر تحميل الأرصدة.');
+    }).finally(() => {
+      if (!cancelled) setBalancesLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [open, item?.id, warehouseName]);
 
   if (!open || !item) return null;
@@ -77,7 +89,9 @@ export const ItemMovementTraceModal: React.FC<Props> = ({ open, onClose, item, w
         <p><span className="font-bold">الكود:</span> {item.code}</p>
         <p><span className="font-bold">الوحدة:</span> {item.unit}</p>
         <p className="font-bold">الأرصدة الحالية:</p>
-        {balances.length === 0 ? (
+        {balancesLoading ? (
+          <p className="text-[var(--color-text-muted)]">جاري تحميل الرصيد...</p>
+        ) : balances.length === 0 ? (
           <p className="text-[var(--color-text-muted)]">لا يوجد رصيد.</p>
         ) : (
           balances.map((b) => (

@@ -31,6 +31,10 @@ import {
 } from '../lib/departmentConsumableIssue';
 import type { ConsumableOption } from '../lib/itemMovementTrace';
 import { filterConsumableCatalog } from '../lib/itemMovementTrace';
+import {
+  buildConsumableStockSummary,
+  type ConsumableStockTotals,
+} from '../lib/consumableStockSummary';
 import type {
   DepartmentConsumableIssue,
   DepartmentConsumableIssueLine,
@@ -162,6 +166,9 @@ export const DepartmentConsumables: React.FC = () => {
 
   const [catalogSearch, setCatalogSearch] = useState('');
   const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogStock, setCatalogStock] = useState<Map<string, ConsumableStockTotals>>(new Map());
+  const [catalogStockLoading, setCatalogStockLoading] = useState(false);
+  const [catalogStockLoaded, setCatalogStockLoaded] = useState(false);
 
   const [returnIssue, setReturnIssue] = useState<DepartmentConsumableIssue | null>(null);
   const [returnQtyByLine, setReturnQtyByLine] = useState<Record<string, number>>({});
@@ -255,6 +262,7 @@ export const DepartmentConsumables: React.FC = () => {
 
   const reloadConsumables = useCallback(async () => {
     invalidatePageDataCache(CONSUMABLES_CACHE_PREFIX);
+    setCatalogStockLoaded(false);
     await load(true);
   }, [load]);
 
@@ -276,6 +284,33 @@ export const DepartmentConsumables: React.FC = () => {
   useEffect(() => {
     setCatalogPage(1);
   }, [catalogSearch]);
+
+  useEffect(() => {
+    if (tab !== 'catalog' || catalogStockLoaded || catalogStockLoading) return;
+    let cancelled = false;
+    setCatalogStockLoading(true);
+    void Promise.all([
+      stockService.getBalances(),
+      stockService.getTransactionHistory(),
+    ]).then(([balances, history]) => {
+      if (cancelled) return;
+      const allowed = scoped ? new Set(warehouseIds) : null;
+      setCatalogStock(buildConsumableStockSummary(balances, history.items, allowed));
+      setCatalogStockLoaded(true);
+      if (history.truncated) {
+        toast.error('سجل الحركات كبير؛ أرقام الوارد والمنصرف المعروضة لا تشمل الحركات الأقدم.');
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        toast.error(toUserSafeFirestoreError(error, 'تعذر تحميل أرصدة المستهلكات.'));
+      }
+    }).finally(() => {
+      if (!cancelled) setCatalogStockLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogStockLoaded, scoped, tab, warehouseScopeKey]);
 
   const visibleWarehouses = useMemo(
     () => filterWarehouses(warehouses),
@@ -726,20 +761,23 @@ export const DepartmentConsumables: React.FC = () => {
                   <th className="erp-th">الاسم</th>
                   <th className="erp-th">الوحدة</th>
                   <th className="erp-th">سعر الوحدة</th>
+                  <th className="erp-th">الوارد</th>
+                  <th className="erp-th">المنصرف</th>
+                  <th className="erp-th">المتاح</th>
                   <th className="erp-th">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
+                    <td colSpan={8} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
                       جاري التحميل...
                     </td>
                   </tr>
                 )}
                 {!loading && pagedCatalog.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
+                    <td colSpan={8} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
                       {consumables.length === 0 ? (
                         <>
                           لا توجد مستهلكات معرفة بعد
@@ -769,6 +807,15 @@ export const DepartmentConsumables: React.FC = () => {
                     <td className="p-3 text-sm">{consumableUnitLabel(item.unit)}</td>
                     <td className="p-3 text-sm tabular-nums">
                       {moneyFmt(Number(item.purchaseCost || 0))}
+                    </td>
+                    <td className="p-3 text-sm tabular-nums">
+                      {catalogStockLoading ? '…' : fmt(catalogStock.get(item.id)?.inbound || 0)}
+                    </td>
+                    <td className="p-3 text-sm tabular-nums">
+                      {catalogStockLoading ? '…' : fmt(catalogStock.get(item.id)?.outbound || 0)}
+                    </td>
+                    <td className="p-3 text-sm font-bold tabular-nums text-[rgb(var(--color-primary))]">
+                      {catalogStockLoading ? '…' : fmt(catalogStock.get(item.id)?.available || 0)}
                     </td>
                     <td className="p-3">
                       <Button
