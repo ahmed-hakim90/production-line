@@ -139,6 +139,10 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
       setFormError('كمية الوحدة يجب أن تكون أكبر من صفر');
       return;
     }
+    if (usedMaterialIds.has(form.materialId)) {
+      setFormError('هذا المكوّن مرتبط بالمنتج بالفعل؛ عدّل السطر الموجود بدلاً من إضافته مرة أخرى.');
+      return;
+    }
     setSaving(true);
     setFormError(null);
     try {

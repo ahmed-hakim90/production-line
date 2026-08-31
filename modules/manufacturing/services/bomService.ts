@@ -3,8 +3,10 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
+  setDoc,
   updateDoc,
   where,
   writeBatch,
@@ -16,6 +18,7 @@ import { productMaterialService } from '../../production/services/productMateria
 import { BOMS_COLLECTION, BOM_ITEMS_COLLECTION } from '../collections';
 import type { Bom, BomItem, BomOwnerType, BomStatus } from '../types';
 import type { ProductMaterial } from '../../../types';
+import { assertUniqueBomItem, deterministicBomItemId } from '../lib/bomItemUniqueness';
 import {
   MANUFACTURING_OPERATION_KEYS,
   assertCurrentTenantOperationPathEnabled,
@@ -209,14 +212,10 @@ export const bomService = {
     );
     if (!isConfigured) return null;
     const tenantId = getCurrentTenantId();
-    const ref = await addDoc(
-      collection(db, BOM_ITEMS_COLLECTION),
-      stripUndefined({
-        ...item,
-        bomId,
-        tenantId,
-      }),
-    );
+    const existing = await bomService.getItemsByBomId(bomId);
+    assertUniqueBomItem(existing, item);
+    const ref = doc(db, BOM_ITEMS_COLLECTION, deterministicBomItemId(bomId, item));
+    await setDoc(ref, stripUndefined({ ...item, bomId, tenantId }));
     return ref.id;
   },
 
@@ -231,6 +230,17 @@ export const bomService = {
     );
     if (!isConfigured || !itemId) return;
     const { id: _id, tenantId: _t, bomId: _b, ...rest } = data;
+    if (data.itemId || data.itemType) {
+      const currentSnap = await getDoc(doc(db, BOM_ITEMS_COLLECTION, itemId));
+      const current = currentSnap.data() as BomItem | undefined;
+      if (!currentSnap.exists() || !current?.bomId) throw new Error('سطر المكوّن غير موجود.');
+      const candidate = {
+        itemId: data.itemId || current.itemId,
+        itemType: data.itemType || current.itemType,
+      };
+      const existing = await bomService.getItemsByBomId(current.bomId);
+      assertUniqueBomItem(existing, candidate, itemId);
+    }
     await updateDoc(doc(db, BOM_ITEMS_COLLECTION, itemId), stripUndefined(rest as Record<string, unknown>));
   },
 
