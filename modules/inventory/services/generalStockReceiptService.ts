@@ -14,16 +14,21 @@ export const GENERAL_RECEIPT_REASON_LABELS: Record<GeneralReceiptReason, string>
 export interface GeneralStockReceipt {
   id?: string;
   referenceNo: string;
-  status: 'posted';
+  status: 'draft' | 'posted' | 'voided' | 'converted';
   warehouseId: string;
   warehouseName: string;
   reason: GeneralReceiptReason;
   sourceParty?: string | null;
   sourceDocumentNo?: string | null;
+  sourceIssueId?: string | null;
   workOrderNumber?: string | null;
-  lines: Array<{ itemType: InventoryItemType; itemId: string; itemName: string; itemCode: string; unit: string; quantity: number }>;
+  note?: string | null;
+  lines: Array<{ itemType: InventoryItemType; itemId: string; itemName: string; itemCode: string; unit: string; quantity: number; locationId?: string | null; locationCode?: string }>;
   createdByName: string;
   createdAt: string;
+  postedAt?: string;
+  voidedAt?: string;
+  voidReason?: string;
 }
 
 const safeError = (error: any) => {
@@ -37,10 +42,11 @@ export const generalStockReceiptService = {
   async listRecent(max = 50): Promise<GeneralStockReceipt[]> {
     if (!isConfigured) return [];
     const snap = await getDocs(tenantQuery(db, 'general_stock_receipts'));
-    return snap.docs.map((row) => ({ id: row.id, ...row.data() } as GeneralStockReceipt))
+    return snap.docs.map((row) => ({ id: row.id, ...row.data() } as GeneralStockReceipt)).filter((row) => row.status !== 'converted')
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, Math.min(max, 100));
   },
   async post(input: {
+    draftId?: string;
     warehouseId: string; reason: GeneralReceiptReason; workOrderId?: string; workOrderNumber?: string;
     sourceIssueId?: string; sourceParty?: string; sourceDocumentNo?: string; note?: string;
     lines: Array<{ itemType: InventoryItemType; itemId: string; locationId?: string; quantity: number }>;
@@ -50,6 +56,24 @@ export const generalStockReceiptService = {
       const callable = httpsCallable<typeof input, { ok: boolean; id: string; referenceNo: string }>(functionsClient, 'postGeneralStockReceipt');
       const result = await callable(input);
       return { id: result.data.id, referenceNo: result.data.referenceNo };
+    } catch (error) { throw safeError(error); }
+  },
+  async saveDraft(input: {
+    draftId?: string; warehouseId: string; reason: GeneralReceiptReason;
+    sourceIssueId?: string; sourceParty?: string; sourceDocumentNo?: string; note?: string;
+    lines: Array<{ itemType: InventoryItemType; itemId: string; locationId?: string; quantity: number }>;
+  }): Promise<{ id: string; referenceNo: string }> {
+    if (!isConfigured || !functionsClient) throw new Error('Firebase غير مهيأ.');
+    try {
+      const callable = httpsCallable<typeof input, { ok: boolean; id: string; referenceNo: string }>(functionsClient, 'saveGeneralStockReceiptDraft');
+      const result = await callable(input);
+      return { id: result.data.id, referenceNo: result.data.referenceNo };
+    } catch (error) { throw safeError(error); }
+  },
+  async void(voucherId: string, reason: string): Promise<void> {
+    if (!isConfigured || !functionsClient) throw new Error('Firebase غير مهيأ.');
+    try {
+      await httpsCallable(functionsClient, 'voidGeneralStockReceipt')({ voucherId, reason });
     } catch (error) { throw safeError(error); }
   },
 };

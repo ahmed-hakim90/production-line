@@ -239,7 +239,12 @@ const isQuickActionFormDraftEmpty = (draft: QuickActionFormDraft) => (
   ))
 );
 
-export const QuickAction: React.FC = () => {
+type QuickActionProps = {
+  /** Preselects a work order when the page is embedded inside another screen. */
+  initialWorkOrderId?: string;
+};
+
+export const QuickAction: React.FC<QuickActionProps> = ({ initialWorkOrderId }) => {
   const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'workOrders']);
   const navigate = useTenantNavigate();
   const { can, isPackagingOnly } = usePermission();
@@ -1674,6 +1679,19 @@ export const QuickAction: React.FC = () => {
     if (scopedActiveWOs.some((wo) => wo.id === selectedWorkOrderId)) return;
     setSelectedWorkOrderId('');
   }, [selectedWorkOrderId, scopedActiveWOs]);
+
+  // When embedded (e.g. inside the general stock receipt page) the caller passes
+  // the work order it already selected, so the user does not pick it twice.
+  const appliedInitialWorkOrderRef = useRef('');
+  useEffect(() => {
+    const woId = String(initialWorkOrderId || '').trim();
+    if (!woId) return;
+    if (appliedInitialWorkOrderRef.current === woId) return;
+    if (!scopedActiveWOs.some((wo) => wo.id === woId)) return;
+    appliedInitialWorkOrderRef.current = woId;
+    setSelectedWorkOrderId(woId);
+    handleSelectWO(woId);
+  }, [initialWorkOrderId, scopedActiveWOs, handleSelectWO]);
 
   const totalComponentScrapQty = useMemo(
     () => componentScrapItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),

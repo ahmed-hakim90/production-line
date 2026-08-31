@@ -73,6 +73,12 @@ import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js'
 import { postGeneralStockIssueHandler } from './generalStockIssues.js';
 import { postGeneralStockReceiptHandler } from './generalStockReceipts.js';
 import {
+  saveGeneralStockIssueDraftHandler,
+  saveGeneralStockReceiptDraftHandler,
+  voidGeneralStockIssueHandler,
+  voidGeneralStockReceiptHandler,
+} from './generalStockVoucherLifecycle.js';
+import {
   createCustomerServiceRequestHandler,
   customerPortalLoginHandler,
   getCustomerPortalHomeHandler,
@@ -2551,6 +2557,26 @@ export const postGeneralStockIssue = onCall(
 export const postGeneralStockReceipt = onCall(
   { region: 'us-central1', memory: '512MiB' },
   wrapCallableUserSafe('تعذر ترحيل إذن الإضافة.', postGeneralStockReceiptHandler),
+);
+
+export const saveGeneralStockIssueDraft = onCall(
+  { region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' },
+  wrapCallableUserSafe('تعذر حفظ مسودة إذن الصرف.', saveGeneralStockIssueDraftHandler),
+);
+
+export const saveGeneralStockReceiptDraft = onCall(
+  { region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' },
+  wrapCallableUserSafe('تعذر حفظ مسودة إذن الإضافة.', saveGeneralStockReceiptDraftHandler),
+);
+
+export const voidGeneralStockIssue = onCall(
+  { region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' },
+  wrapCallableUserSafe('تعذر إلغاء إذن الصرف.', voidGeneralStockIssueHandler),
+);
+
+export const voidGeneralStockReceipt = onCall(
+  { region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' },
+  wrapCallableUserSafe('تعذر إلغاء إذن الإضافة.', voidGeneralStockReceiptHandler),
 );
 
 export { syncRepairCenterCatalogFromInventory } from './repairCenterCatalogSync.js';

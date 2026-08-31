@@ -38,6 +38,7 @@ export const postGeneralStockReceiptHandler = async (request: CallableRequest) =
   const sourceParty = clean(data.sourceParty);
   const sourceDocumentNo = clean(data.sourceDocumentNo);
   const note = clean(data.note, 500);
+  const draftId = clean(data.draftId);
   if (!warehouseId || !REASONS.has(reason)) throw new HttpsError('invalid-argument', 'المخزن وسبب الإضافة مطلوبان.');
   if (reason === 'production_output' && !workOrderId) throw new HttpsError('invalid-argument', 'أمر الشغل مطلوب لناتج الإنتاج.');
   if (reason === 'issue_return' && !sourceIssueId) throw new HttpsError('invalid-argument', 'إذن الصرف الأصلي مطلوب للمرتجع.');
@@ -90,12 +91,17 @@ export const postGeneralStockReceiptHandler = async (request: CallableRequest) =
   const at = new Date().toISOString();
   const referenceNo = `RCV-${at.slice(0, 10).replaceAll('-', '')}-${receiptRef.id.slice(0, 5).toUpperCase()}`;
   const actorName = clean(user?.displayName || user?.name || user?.email || uid);
+  const draftRef = draftId ? db.collection('general_stock_receipts').doc(draftId) : null;
   await db.runTransaction(async (tx) => {
     const balanceRefs = lines.map((line) => db.collection('stock_items').doc(`${warehouseId}__${line.itemType}__${line.itemId}`));
     const locationRefs = lines.map((line) => line.locationId ? db.collection('stock_location_balances').doc(`${warehouseId}__${line.locationId}__${line.itemType}__${line.itemId}`) : null);
     const balances = await Promise.all(balanceRefs.map((ref) => tx.get(ref)));
     const locationBalances = await Promise.all(locationRefs.map((ref) => ref ? tx.get(ref) : Promise.resolve(null)));
     const originalIssue = issueRef ? (await tx.get(issueRef)).data() as Record<string, unknown> : null;
+    const draftSnap = draftRef ? await tx.get(draftRef) : null;
+    if (draftSnap && (!draftSnap.exists || clean(draftSnap.data()?.tenantId) !== tenantId || draftSnap.data()?.status !== 'draft')) {
+      throw new HttpsError('failed-precondition', 'المسودة غير صالحة للترحيل أو سبق ترحيلها.');
+    }
     const returned = { ...((originalIssue?.returnedQuantities || {}) as Record<string, number>) };
     const originalLines = Array.isArray(originalIssue?.lines) ? originalIssue.lines as Array<Record<string, unknown>> : [];
 
@@ -137,7 +143,7 @@ export const postGeneralStockReceiptHandler = async (request: CallableRequest) =
         sourceIssueOrderId: sourceIssueId || null, sourceParty: sourceParty || null, sourceDocumentNo: sourceDocumentNo || null,
         note: note || null, createdBy: actorName, createdAt: at,
       });
-      return { itemType: line.itemType, itemId: line.itemId, itemName, itemCode, unit, quantity: line.quantity, locationId: line.locationId || null };
+      return { itemType: line.itemType, itemId: line.itemId, itemName, itemCode, unit, quantity: line.quantity, locationId: line.locationId || null, locationCode: clean(locationSnaps[index]?.data()?.code) || null };
     });
     if (issueRef) tx.set(issueRef, { returnedQuantities: returned, updatedAt: at }, { merge: true });
     tx.create(receiptRef, {
@@ -146,6 +152,7 @@ export const postGeneralStockReceiptHandler = async (request: CallableRequest) =
       sourceParty: sourceParty || null, sourceDocumentNo: sourceDocumentNo || null, note: note || null, lines: postedLines,
       createdBy: uid, createdByName: actorName, createdAt: at, postedAt: at,
     });
+    if (draftRef) tx.set(draftRef, { status: 'converted', postedVoucherId: receiptRef.id, postedReferenceNo: referenceNo, updatedAt: at }, { merge: true });
   });
   return { ok: true as const, id: receiptRef.id, referenceNo };
 };

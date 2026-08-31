@@ -35,6 +35,7 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
   const workOrderId = clean(data.workOrderId);
   const workOrderNumber = clean(data.workOrderNumber);
   const note = clean(data.note, 500);
+  const draftId = clean(data.draftId);
   if (!warehouseId || !PURPOSES.has(purpose)) throw new HttpsError('invalid-argument', 'المخزن وغرض الصرف مطلوبان.');
   if ((purpose === 'production' || purpose === 'packaging') && !workOrderId) {
     throw new HttpsError('invalid-argument', 'أمر الشغل مطلوب لهذا النوع من الصرف.');
@@ -76,6 +77,7 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
   const at = new Date().toISOString();
   const referenceNo = `ISS-${at.slice(0, 10).replaceAll('-', '')}-${voucherRef.id.slice(0, 5).toUpperCase()}`;
   const actorName = clean(user?.displayName || user?.name || user?.email || uid);
+  const draftRef = draftId ? db.collection('general_stock_issues').doc(draftId) : null;
 
   await db.runTransaction(async (tx) => {
     const balanceRefs = lines.map((line) => db.collection('stock_items').doc(`${warehouseId}__${line.itemType}__${line.itemId}`));
@@ -84,6 +86,10 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
       : null);
     const balanceSnaps = await Promise.all(balanceRefs.map((ref) => tx.get(ref)));
     const locationSnaps = await Promise.all(locationRefs.map((ref) => ref ? tx.get(ref) : Promise.resolve(null)));
+    const draftSnap = draftRef ? await tx.get(draftRef) : null;
+    if (draftSnap && (!draftSnap.exists || clean(draftSnap.data()?.tenantId) !== tenantId || draftSnap.data()?.status !== 'draft')) {
+      throw new HttpsError('failed-precondition', 'المسودة غير صالحة للترحيل أو سبق ترحيلها.');
+    }
     const postedLines = lines.map((line, index) => {
       const balance = balanceSnaps[index].data() as Record<string, unknown> | undefined;
       const currentQty = Number(balance?.quantity || 0);
@@ -121,6 +127,7 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
       workOrderId: workOrderId || null, workOrderNumber: workOrderNumber || null,
       note: note || null, lines: postedLines, createdBy: uid, createdByName: actorName, createdAt: at, postedAt: at,
     });
+    if (draftRef) tx.set(draftRef, { status: 'converted', postedVoucherId: voucherRef.id, postedReferenceNo: referenceNo, updatedAt: at }, { merge: true });
   });
   return { ok: true as const, id: voucherRef.id, referenceNo };
 };

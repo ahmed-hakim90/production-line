@@ -28,12 +28,37 @@ The matching general receipt workflow:
 
 The two new pages are entry gateways as well as direct general vouchers. Specialized operations never use the general posting callable:
 
-- Production issue previews the active product BOM for the selected work order and calculated quantity, then deep-links to the existing production-issue page. Allocation, shortage checks, approval, and posting remain owned by the existing production issue engine.
-- Packaging issue opens the existing packaging control workflow.
-- Center spare-parts issue/receipt opens the existing replenishment workflow, preserving preparation, responsible approval, central approval, and center receipt.
-- Production output opens the existing production-report entry workflow, preserving injection/finished-output semantics, quality, scrap, labor, and report inventory posting.
+- Production issue previews the active product BOM for the selected work order and calculated quantity, then embeds the existing production-issue engine in the general issue journey. Allocation, shortage checks, approval, and posting remain owned by that engine.
+- Packaging issue embeds the existing packaging-control engine.
+- Center spare-parts issue/receipt embeds the existing replenishment engine, preserving preparation, responsible approval, central approval, and center receipt.
+- Production output embeds the existing production-report entry engine and prefills the selected work order, preserving injection/finished-output semantics, quality, scrap, labor, and report inventory posting.
 
 This gateway rule prevents duplicate stock mutations and keeps every specialized document as the source of truth.
+
+Embedding is a migration bridge, not permission to duplicate the stock mutation logic. The final unified presentation should expose the engine's workflow content without rendering a second page shell inside the general voucher shell.
+
+## Voucher lifecycle
+
+- Direct general issue and receipt vouchers may be saved as `draft`. A draft stores the header and line snapshots but creates no ledger entry and changes no aggregate or location balance.
+- Final posting creates the stock effect atomically and marks the selected draft `converted`. The draft-status check is performed inside the same transaction so one draft cannot be posted twice.
+- A posted voucher remains immutable. Users with the delete/reversal permission may void it only through a server-owned reversal with a required reason.
+- Voiding appends linked opposite ledger entries and marks the original voucher `voided`; it never deletes or rewrites the original ledger rows.
+- An issue with linked returns cannot be voided until those receipts are reversed. Reversing an issue-return receipt also reduces the returned quantity recorded on the original issue.
+- Draft, posted, and voided vouchers can use the shared print presentation, with their status shown on the printed document.
+
+## Legacy movement form retirement gate
+
+`StockMovementForm` remains available until all of the following are implemented and verified in production:
+
+1. The general issue page covers every legacy `OUT` item and warehouse scenario, including products, raw materials/components, spare-parts contexts, locations, units/cartons, validation, drafts, and purpose snapshots.
+2. The general receipt page covers every legacy `IN` scenario, including first receipt from catalog, products, raw materials/components, spare-parts contexts, locations, units/cartons, source data, validation, and drafts/import entry points.
+3. Posted general issue and receipt vouchers have printable documents using the shared print engine.
+4. Posted general issue and receipt vouchers support server-owned void/reversal. Reversal must be atomic, append linked opposite ledger entries, restore/decrement aggregate and location balances, prevent negative stock, be idempotent, and preserve the original voucher and audit trail.
+5. `TRANSFER` and same-warehouse location transfer are moved to an explicit supported transfer journey, including multi-line entry, approvals, printing/sharing, carton conversion, and existing operation-path controls.
+6. Every inbound link currently targeting `/inventory/movements` is migrated by movement type: `IN` to general receipts, `OUT` to general issues, and `TRANSFER`/`ADJUSTMENT` to their retained destination.
+7. Targeted parity tests and rendered RTL QA pass, followed by a production observation period with no blocked warehouse journey.
+
+Until the gate is complete, do not remove the route, component export, menu/link targets, or operation-path compatibility for `StockMovementForm`.
 
 ## Consequences
 

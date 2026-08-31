@@ -5,6 +5,9 @@ import { Button, SearchableSelect } from "../components/UI";
 import { toast } from "../../../components/Toast";
 import { useAppStore } from "../../../store/useAppStore";
 import { useEnsureStoreData } from "@/hooks/useEnsureStoreData";
+import { usePrintEngine } from "@/utils/printManager";
+import { usePermission } from "../../../utils/permissions";
+import { StockTransferPrint, type StockTransferPrintData } from "../components/StockTransferPrint";
 import { warehouseService } from "../services/warehouseService";
 import { warehouseLocationService } from "../services/warehouseLocationService";
 import { materialService } from "../../manufacturing/services/materialService";
@@ -58,6 +61,9 @@ const EmbeddedQuickAction = lazy(() => import("../../production/pages/QuickActio
 const EmbeddedSparePartsReplenishment = lazy(() => import("./SparePartsReplenishment").then((module) => ({ default: module.SparePartsReplenishment })));
 
 export const GeneralStockReceipts: React.FC = () => {
+  const { printDocument } = usePrintEngine();
+  const { can } = usePermission();
+  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   useEnsureStoreData(["products", "lines"]);
   const products = useAppStore((s) => s.products);
   const productionLines = useAppStore((s) => s.productionLines);
@@ -84,6 +90,7 @@ export const GeneralStockReceipts: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [embeddedWorkflow, setEmbeddedWorkflow] = useState<GeneralReceiptReason | null>(null);
+  const [draftId, setDraftId] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -209,6 +216,53 @@ export const GeneralStockReceipts: React.FC = () => {
     setNote("");
     setLines([newLine()]);
     setEmbeddedWorkflow(null);
+    setDraftId("");
+  };
+  const normalizeDirectLines = () => lines.map((line) => ({ line, item: byKey.get(line.itemKey), quantity: Number(line.quantity) }));
+  const validateDirectLines = () => {
+    const normalized = normalizeDirectLines();
+    if (!warehouseId) throw new Error("اختر المخزن.");
+    if (reason === "issue_return" && !sourceIssueId) throw new Error("اختر إذن الصرف الأصلي.");
+    if (needsSource(reason) && !sourceParty.trim()) throw new Error("أدخل مصدر الإضافة.");
+    if (normalized.some((row) => !row.item || !(row.quantity > 0))) throw new Error("أكمل الصنف والكمية في كل بند.");
+    return normalized;
+  };
+  const saveDraft = async () => {
+    if (["production_output", "center_replenishment_receipt"].includes(reason)) return toast.error("المسار المتخصص يدير حالاته داخل محركه الحالي.");
+    try {
+      const normalized = validateDirectLines(); setPosting(true);
+      const result = await generalStockReceiptService.saveDraft({
+        draftId: draftId || undefined, warehouseId, reason, sourceIssueId: sourceIssueId || undefined,
+        sourceParty: sourceParty.trim(), sourceDocumentNo: sourceDocumentNo.trim(), note: note.trim(),
+        lines: normalized.map(({ line, item, quantity }) => ({ itemType: item!.itemType, itemId: item!.itemId, locationId: line.locationId || undefined, quantity })),
+      });
+      setDraftId(result.id); toast.success(`تم حفظ المسودة ${result.referenceNo} بدون التأثير على الرصيد.`); await load();
+    } catch (error: any) { toast.error(error?.message || "تعذر حفظ المسودة."); }
+    finally { setPosting(false); }
+  };
+  const printVoucher = (row: GeneralStockReceipt) => {
+    const data: StockTransferPrintData = {
+      transferNo: row.referenceNo, createdAt: row.postedAt || row.createdAt,
+      fromWarehouseName: row.sourceParty || GENERAL_RECEIPT_REASON_LABELS[row.reason], toWarehouseName: row.warehouseName,
+      statusLabel: row.status === "draft" ? "مسودة" : row.status === "voided" ? "ملغي" : "مرحّل",
+      documentType: "إذن إضافة عام", note: row.note || undefined, createdBy: row.createdByName,
+      items: row.lines.map((line) => ({ itemName: line.itemName, itemCode: line.itemCode, unitLabel: line.unit, quantity: line.quantity, quantityPieces: line.quantity, locationCode: line.locationCode || locations.find((location) => location.id === line.locationId)?.code || line.locationId || undefined })),
+    };
+    printDocument({ documentTitle: row.referenceNo, printSettings: printTemplate, render: (ref) => <StockTransferPrint ref={ref} data={data} printSettings={printTemplate} /> });
+  };
+  const voidVoucher = async (row: GeneralStockReceipt) => {
+    const reasonText = window.prompt(`اكتب سبب إلغاء ${row.referenceNo}:`)?.trim();
+    if (!reasonText || !row.id) return;
+    try { setPosting(true); await generalStockReceiptService.void(row.id, reasonText); toast.success("تم إلغاء السند وتسجيل الحركة العكسية."); await load(); }
+    catch (error: any) { toast.error(error?.message || "تعذر إلغاء السند."); }
+    finally { setPosting(false); }
+  };
+  const openDraft = (row: GeneralStockReceipt) => {
+    if (!row.id || row.status !== 'draft') return;
+    setDraftId(row.id); setWarehouseId(row.warehouseId); setReason(row.reason);
+    setSourceIssueId(row.sourceIssueId || ''); setSourceParty(row.sourceParty || ''); setSourceDocumentNo(row.sourceDocumentNo || ''); setNote(row.note || '');
+    setLines(row.lines.map((line) => ({ key: crypto.randomUUID(), itemKey: `${line.itemType}:${line.itemId}`, locationId: line.locationId || '', quantity: String(line.quantity) })));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const post = async () => {
     if (reason === "center_replenishment_receipt") {
@@ -241,6 +295,7 @@ export const GeneralStockReceipts: React.FC = () => {
     setPosting(true);
     try {
       const result = await generalStockReceiptService.post({
+        draftId: draftId || undefined,
         warehouseId,
         reason,
         workOrderId: selectedOrder?.id,
@@ -588,8 +643,13 @@ export const GeneralStockReceipts: React.FC = () => {
               />
             </label>
             <Button disabled={posting || loading} onClick={post}>
-              {posting ? "جاري الترحيل…" : reason === "production_output" ? "فتح تسجيل الإنتاج" : reason === "center_replenishment_receipt" ? "فتح استلام التموين" : "ترحيل إذن الإضافة"}
+              {posting ? "جاري الترحيل…" : reason === "production_output" ? "بدء تسجيل الإنتاج هنا" : reason === "center_replenishment_receipt" ? "بدء استلام التموين هنا" : "ترحيل نهائي"}
             </Button>
+            {!['production_output', 'center_replenishment_receipt'].includes(reason) && (
+              <Button variant="secondary" disabled={posting || loading} onClick={saveDraft}>
+                {posting ? "جاري الحفظ…" : draftId ? "تحديث المسودة" : "حفظ مسودة"}
+              </Button>
+            )}
           </div>
           {embeddedWorkflow && (
             <div className="mt-6 border-t border-[var(--color-border)] pt-6">
@@ -600,7 +660,9 @@ export const GeneralStockReceipts: React.FC = () => {
                 </button>
               </div>
               <Suspense fallback={<p className="py-8 text-center text-sm text-[var(--color-text-muted)]">جاري تحميل محرك التنفيذ…</p>}>
-                {embeddedWorkflow === "production_output" && <EmbeddedQuickAction />}
+                {embeddedWorkflow === "production_output" && (
+                  <EmbeddedQuickAction initialWorkOrderId={selectedOrder?.id} />
+                )}
                 {embeddedWorkflow === "center_replenishment_receipt" && <EmbeddedSparePartsReplenishment />}
               </Suspense>
             </div>
@@ -626,7 +688,7 @@ export const GeneralStockReceipts: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <strong dir="ltr">{row.referenceNo}</strong>
                     <span className="rounded-full bg-[rgb(var(--color-success)/.12)] px-2 py-1 text-xs text-[rgb(var(--color-success))]">
-                      مرحّل
+                      {row.status === 'draft' ? 'مسودة' : row.status === 'voided' ? 'ملغي' : 'مرحّل'}
                     </span>
                   </div>
                   <p className="mt-2 text-sm">
@@ -637,6 +699,13 @@ export const GeneralStockReceipts: React.FC = () => {
                     {row.lines.length} بند · {formatDate(row.createdAt)} ·{" "}
                     {row.createdByName}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {row.status === 'draft' && <Button variant="outline" onClick={() => openDraft(row)}>فتح المسودة</Button>}
+                    <Button variant="secondary" onClick={() => printVoucher(row)}>طباعة</Button>
+                    {row.status === "posted" && can('inventory.transactions.delete') && (
+                      <Button variant="danger" disabled={posting} onClick={() => void voidVoucher(row)}>إلغاء بقيد عكسي</Button>
+                    )}
+                  </div>
                 </article>
               ))}
             </div>

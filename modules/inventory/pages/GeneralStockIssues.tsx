@@ -13,6 +13,9 @@ import { organizationService } from "../../hr/services/organizationService";
 import { useMaterialsWarehouseScope } from "../hooks/useMaterialsWarehouseScope";
 import { useAppStore } from "../../../store/useAppStore";
 import { useEnsureStoreData } from "@/hooks/useEnsureStoreData";
+import { usePrintEngine } from "@/utils/printManager";
+import { usePermission } from "../../../utils/permissions";
+import { StockTransferPrint, type StockTransferPrintData } from "../components/StockTransferPrint";
 import type {
   StockItemBalance,
   StockLocationBalance,
@@ -54,6 +57,9 @@ const EmbeddedPackagingControl = lazy(() => import("../../production/pages/Packa
 const EmbeddedSparePartsReplenishment = lazy(() => import("./SparePartsReplenishment").then((module) => ({ default: module.SparePartsReplenishment })));
 
 export const GeneralStockIssues: React.FC = () => {
+  const { printDocument } = usePrintEngine();
+  const { can } = usePermission();
+  const printTemplate = useAppStore((state) => state.systemSettings.printTemplate);
   const [, setSearchParams] = useSearchParams();
   useEnsureStoreData(["products", "lines"]);
   const products = useAppStore((state) => state.products);
@@ -85,6 +91,7 @@ export const GeneralStockIssues: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [embeddedWorkflow, setEmbeddedWorkflow] = useState<GeneralIssuePurpose | null>(null);
+  const [draftId, setDraftId] = useState("");
 
   const loadBase = useCallback(async () => {
     setLoading(true);
@@ -214,6 +221,63 @@ export const GeneralStockIssues: React.FC = () => {
     setNote("");
     setLines([newLine()]);
     setEmbeddedWorkflow(null);
+    setDraftId("");
+  };
+  const normalizeDirectLines = () => lines.map((line) => ({
+    line,
+    item: byKey.get(line.itemKey),
+    quantity: Number(line.quantity),
+  }));
+
+  const validateDirectLines = () => {
+    const normalized = normalizeDirectLines();
+    if (!warehouseId) throw new Error("اختر المخزن.");
+    if (needsDestination(purpose) && !destinationName.trim()) throw new Error("حدد الجهة المستلمة.");
+    if (!normalized.length || normalized.some((row) => !row.item || !(row.quantity > 0))) throw new Error("أكمل الصنف والكمية في كل بند.");
+    return normalized;
+  };
+
+  const saveDraft = async () => {
+    if (["production", "packaging", "center_replenishment"].includes(purpose)) return toast.error("المسار المتخصص يدير حالاته داخل محركه الحالي.");
+    try {
+      const normalized = validateDirectLines();
+      setPosting(true);
+      const result = await generalStockIssueService.saveDraft({
+        draftId: draftId || undefined, warehouseId, purpose, destinationId,
+        destinationName: destinationName.trim(), note: note.trim(),
+        lines: normalized.map(({ item, line, quantity }) => ({ itemType: item!.itemType, itemId: item!.itemId, locationId: line.locationId || undefined, quantity })),
+      });
+      setDraftId(result.id);
+      toast.success(`تم حفظ المسودة ${result.referenceNo} بدون التأثير على الرصيد.`);
+      await loadBase();
+    } catch (error: any) { toast.error(error?.message || "تعذر حفظ المسودة."); }
+    finally { setPosting(false); }
+  };
+
+  const printVoucher = (row: GeneralStockIssue) => {
+    const data: StockTransferPrintData = {
+      transferNo: row.referenceNo, createdAt: row.postedAt || row.createdAt,
+      fromWarehouseName: row.warehouseName, toWarehouseName: row.destinationName || GENERAL_ISSUE_PURPOSE_LABELS[row.purpose],
+      statusLabel: row.status === "draft" ? "مسودة" : row.status === "voided" ? "ملغي" : "مرحّل",
+      documentType: "إذن منصرف عام", note: row.note || undefined, createdBy: row.createdByName,
+      items: row.lines.map((line) => ({ itemName: line.itemName, itemCode: line.itemCode, unitLabel: line.unit, quantity: line.quantity, quantityPieces: line.quantity, locationCode: line.locationCode || locationBalances.find((location) => location.locationId === line.locationId)?.locationCode || line.locationId || undefined })),
+    };
+    printDocument({ documentTitle: row.referenceNo, printSettings: printTemplate, render: (ref) => <StockTransferPrint ref={ref} data={data} printSettings={printTemplate} /> });
+  };
+
+  const voidVoucher = async (row: GeneralStockIssue) => {
+    const reason = window.prompt(`اكتب سبب إلغاء ${row.referenceNo}:`)?.trim();
+    if (!reason || !row.id) return;
+    try { setPosting(true); await generalStockIssueService.void(row.id, reason); toast.success("تم إلغاء السند وتسجيل الحركة العكسية."); await loadBase(); }
+    catch (error: any) { toast.error(error?.message || "تعذر إلغاء السند."); }
+    finally { setPosting(false); }
+  };
+  const openDraft = (row: GeneralStockIssue) => {
+    if (!row.id || row.status !== 'draft') return;
+    setDraftId(row.id); setWarehouseId(row.warehouseId); setPurpose(row.purpose);
+    setDestinationId(row.destinationId || ''); setDestinationName(row.destinationName || ''); setNote(row.note || '');
+    setLines(row.lines.map((line) => ({ key: crypto.randomUUID(), itemKey: `${line.itemType}:${line.itemId}`, locationId: line.locationId || '', quantity: String(line.quantity) })));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   const post = async () => {
     if (purpose === "center_replenishment") {
@@ -232,11 +296,7 @@ export const GeneralStockIssues: React.FC = () => {
       setEmbeddedWorkflow(purpose);
       return;
     }
-    const normalized = lines.map((line) => ({
-      line,
-      item: byKey.get(line.itemKey),
-      quantity: Number(line.quantity),
-    }));
+    const normalized = lines.map((line) => ({ line, item: byKey.get(line.itemKey), quantity: Number(line.quantity) }));
     if (!warehouseId) return toast.error("اختر المخزن.");
     if (needsWorkOrder(purpose) && !selectedOrder?.id)
       return toast.error("اختر أمر الشغل.");
@@ -277,6 +337,7 @@ export const GeneralStockIssues: React.FC = () => {
     setPosting(true);
     try {
       const result = await generalStockIssueService.post({
+        draftId: draftId || undefined,
         warehouseId,
         purpose,
         destinationId,
@@ -608,13 +669,18 @@ export const GeneralStockIssues: React.FC = () => {
               {posting
                 ? "جاري الترحيل…"
                 : purpose === "production"
-                  ? "متابعة في صرف الإنتاج"
+                  ? "بدء صرف الإنتاج هنا"
                   : purpose === "packaging"
-                    ? "فتح تحكم التغليف"
+                    ? "بدء تنفيذ التغليف هنا"
                     : purpose === "center_replenishment"
-                      ? "فتح تموين المراكز"
-                      : "ترحيل إذن الصرف"}
+                      ? "بدء تموين المراكز هنا"
+                      : "ترحيل نهائي"}
             </Button>
+            {!['production', 'packaging', 'center_replenishment'].includes(purpose) && (
+              <Button variant="secondary" disabled={posting || loading} onClick={saveDraft}>
+                {posting ? "جاري الحفظ…" : draftId ? "تحديث المسودة" : "حفظ مسودة"}
+              </Button>
+            )}
           </div>
           {embeddedWorkflow && (
             <div className="mt-6 border-t border-[var(--color-border)] pt-6">
@@ -653,7 +719,7 @@ export const GeneralStockIssues: React.FC = () => {
                   <div className="flex items-center justify-between gap-2">
                     <strong dir="ltr">{row.referenceNo}</strong>
                     <span className="rounded-full bg-[rgb(var(--color-success)/.12)] px-2 py-1 text-xs text-[rgb(var(--color-success))]">
-                      مرحّل
+                      {row.status === 'draft' ? 'مسودة' : row.status === 'voided' ? 'ملغي' : 'مرحّل'}
                     </span>
                   </div>
                   <p className="mt-2 text-sm">
@@ -664,6 +730,13 @@ export const GeneralStockIssues: React.FC = () => {
                     {row.lines.length} بند · {formatDate(row.createdAt)} ·{" "}
                     {row.createdByName}
                   </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {row.status === 'draft' && <Button variant="outline" onClick={() => openDraft(row)}>فتح المسودة</Button>}
+                    <Button variant="secondary" onClick={() => printVoucher(row)}>طباعة</Button>
+                    {row.status === "posted" && can('inventory.transactions.delete') && (
+                      <Button variant="danger" disabled={posting} onClick={() => void voidVoucher(row)}>إلغاء بقيد عكسي</Button>
+                    )}
+                  </div>
                 </article>
               ))}
             </div>

@@ -31,6 +31,7 @@ import { updateRepairPartsPricingHandler } from './repairPartsPricingOps.js';
 import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js';
 import { postGeneralStockIssueHandler } from './generalStockIssues.js';
 import { postGeneralStockReceiptHandler } from './generalStockReceipts.js';
+import { saveGeneralStockIssueDraftHandler, saveGeneralStockReceiptDraftHandler, voidGeneralStockIssueHandler, voidGeneralStockReceiptHandler, } from './generalStockVoucherLifecycle.js';
 import { createCustomerServiceRequestHandler, customerPortalLoginHandler, getCustomerPortalHomeHandler, lookupPortalProductHandler, mutateRepairCustomerOpsHandler, } from './repairCustomerPortalOps.js';
 import { getCustomerFinancialAnalyticsHandler } from './customerFinancialAnalytics.js';
 import { createProductionReportFastHandler, retryProductionReportProcessingHandler, } from './productionReportFast.js';
@@ -1946,6 +1947,10 @@ export const updateRepairPartsPricing = onCall({ region: 'us-central1', memory: 
 export const createInventoryCountSession = onCall({ region: 'us-central1', memory: '512MiB' }, createInventoryCountSessionHandler);
 export const postGeneralStockIssue = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر ترحيل إذن الصرف.', postGeneralStockIssueHandler));
 export const postGeneralStockReceipt = onCall({ region: 'us-central1', memory: '512MiB' }, wrapCallableUserSafe('تعذر ترحيل إذن الإضافة.', postGeneralStockReceiptHandler));
+export const saveGeneralStockIssueDraft = onCall({ region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' }, wrapCallableUserSafe('تعذر حفظ مسودة إذن الصرف.', saveGeneralStockIssueDraftHandler));
+export const saveGeneralStockReceiptDraft = onCall({ region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' }, wrapCallableUserSafe('تعذر حفظ مسودة إذن الإضافة.', saveGeneralStockReceiptDraftHandler));
+export const voidGeneralStockIssue = onCall({ region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' }, wrapCallableUserSafe('تعذر إلغاء إذن الصرف.', voidGeneralStockIssueHandler));
+export const voidGeneralStockReceipt = onCall({ region: 'us-central1', timeoutSeconds: 60, memory: '256MiB' }, wrapCallableUserSafe('تعذر إلغاء إذن الإضافة.', voidGeneralStockReceiptHandler));
 export { syncRepairCenterCatalogFromInventory } from './repairCenterCatalogSync.js';
 export const customerPortalLogin = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, customerPortalLoginHandler);
 export const getCustomerPortalHome = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, getCustomerPortalHomeHandler);

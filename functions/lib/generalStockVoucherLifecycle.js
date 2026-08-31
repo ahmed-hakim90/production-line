@@ -1,0 +1,210 @@
+import { HttpsError } from 'firebase-functions/v2/https';
+import { getDb } from './adminApp.js';
+const db = getDb();
+const ITEM_TYPES = new Set(['finished_good', 'raw_material', 'material', 'semi_finished', 'consumable', 'packaging']);
+const ISSUE_PURPOSES = new Set(['maintenance', 'lubricants', 'department', 'waste', 'sample', 'other']);
+const RECEIPT_REASONS = new Set(['purchase', 'issue_return', 'opening_balance', 'department_return', 'maintenance_return', 'other']);
+const clean = (value, max = 160) => String(value || '').trim().slice(0, max);
+const roundQty = (value) => {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number <= 0)
+        throw new HttpsError('invalid-argument', 'كل كمية يجب أن تكون أكبر من صفر.');
+    return Math.round(number * 10000) / 10000;
+};
+async function actor(request, permission) {
+    const uid = clean(request.auth?.uid);
+    if (!uid)
+        throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
+    const snap = await db.collection('users').doc(uid).get();
+    const user = snap.data();
+    if (!snap.exists || user?.isActive === false)
+        throw new HttpsError('permission-denied', 'الحساب غير صالح.');
+    const roleId = clean(user?.roleId);
+    const role = roleId ? await db.collection('roles').doc(roleId).get() : null;
+    const permissions = (role?.data()?.permissions || {});
+    const allowed = permission === 'create'
+        ? permissions['inventory.transactions.create'] === true
+        : permissions['inventory.transactions.delete'] === true;
+    if (user?.isSuperAdmin !== true && !allowed) {
+        throw new HttpsError('permission-denied', permission === 'create' ? 'ليس لديك صلاحية حفظ السند.' : 'ليس لديك صلاحية إلغاء السند.');
+    }
+    return {
+        uid,
+        tenantId: clean(user?.tenantId),
+        assignedWarehouseId: clean(user?.inventoryWarehouseId),
+        isSuperAdmin: user?.isSuperAdmin === true,
+        name: clean(user?.displayName || user?.name || user?.email || uid),
+    };
+}
+async function assertWarehouse(warehouseId, tenantId, assignedWarehouseId, isSuperAdmin) {
+    const snap = await db.collection('warehouses').doc(warehouseId).get();
+    if (!snap.exists || clean(snap.data()?.tenantId) !== tenantId)
+        throw new HttpsError('not-found', 'المخزن غير موجود داخل الشركة.');
+    if (!isSuperAdmin && assignedWarehouseId && assignedWarehouseId !== warehouseId)
+        throw new HttpsError('permission-denied', 'المخزن لا يطابق المخزن المرتبط بحسابك.');
+    return snap;
+}
+function parseLines(value) {
+    const rows = Array.isArray(value) ? value : [];
+    if (!rows.length || rows.length > 100)
+        throw new HttpsError('invalid-argument', 'السند يجب أن يحتوي من 1 إلى 100 بند.');
+    const seen = new Set();
+    return rows.map((row) => {
+        const itemType = clean(row.itemType);
+        const itemId = clean(row.itemId);
+        const locationId = clean(row.locationId);
+        if (!ITEM_TYPES.has(itemType) || !itemId)
+            throw new HttpsError('invalid-argument', 'يوجد بند غير صالح.');
+        const key = `${itemType}:${itemId}:${locationId}`;
+        if (seen.has(key))
+            throw new HttpsError('invalid-argument', 'لا يمكن تكرار نفس الصنف واللوكيشن.');
+        seen.add(key);
+        return { itemType, itemId, locationId, quantity: roundQty(row.quantity) };
+    });
+}
+export const saveGeneralStockIssueDraftHandler = async (request) => {
+    const current = await actor(request, 'create');
+    const data = (request.data || {});
+    const warehouseId = clean(data.warehouseId);
+    const purpose = clean(data.purpose);
+    const destinationName = clean(data.destinationName);
+    if (!warehouseId || !ISSUE_PURPOSES.has(purpose))
+        throw new HttpsError('invalid-argument', 'المخزن وغرض الصرف المباشر مطلوبان.');
+    if (['maintenance', 'lubricants', 'department', 'other'].includes(purpose) && !destinationName)
+        throw new HttpsError('invalid-argument', 'الجهة المستلمة مطلوبة.');
+    const warehouse = await assertWarehouse(warehouseId, current.tenantId, current.assignedWarehouseId, current.isSuperAdmin);
+    const lines = parseLines(data.lines);
+    const balances = await Promise.all(lines.map((line) => db.collection('stock_items').doc(`${warehouseId}__${line.itemType}__${line.itemId}`).get()));
+    const locations = await Promise.all(lines.map((line) => line.locationId ? db.collection('warehouse_locations').doc(line.locationId).get() : Promise.resolve(null)));
+    const savedLines = lines.map((line, index) => ({
+        ...line,
+        locationId: line.locationId || null,
+        locationCode: line.locationId ? clean(locations[index]?.data()?.code || line.locationId) : null,
+        itemName: clean(balances[index].data()?.itemName || line.itemId),
+        itemCode: clean(balances[index].data()?.itemCode),
+        unit: clean(balances[index].data()?.unit || 'unit'),
+    }));
+    const requestedId = clean(data.draftId);
+    const ref = requestedId ? db.collection('general_stock_issues').doc(requestedId) : db.collection('general_stock_issues').doc();
+    if (requestedId) {
+        const existing = await ref.get();
+        if (!existing.exists || clean(existing.data()?.tenantId) !== current.tenantId || existing.data()?.status !== 'draft')
+            throw new HttpsError('failed-precondition', 'المسودة غير صالحة للتعديل.');
+    }
+    const at = new Date().toISOString();
+    const referenceNo = requestedId ? clean((await ref.get()).data()?.referenceNo) : `ISS-D-${at.slice(0, 10).replaceAll('-', '')}-${ref.id.slice(0, 5).toUpperCase()}`;
+    await ref.set({
+        tenantId: current.tenantId, referenceNo, status: 'draft', warehouseId, warehouseName: clean(warehouse.data()?.name), purpose,
+        destinationId: clean(data.destinationId) || null, destinationName: destinationName || null, note: clean(data.note, 500) || null,
+        lines: savedLines, createdBy: current.uid, createdByName: current.name,
+        createdAt: requestedId ? ((await ref.get()).data()?.createdAt || at) : at, updatedAt: at,
+    }, { merge: true });
+    return { ok: true, id: ref.id, referenceNo };
+};
+const catalogCollection = (itemType) => itemType === 'finished_good' ? 'products' : itemType === 'raw_material' ? 'raw_materials' : 'materials';
+export const saveGeneralStockReceiptDraftHandler = async (request) => {
+    const current = await actor(request, 'create');
+    const data = (request.data || {});
+    const warehouseId = clean(data.warehouseId);
+    const reason = clean(data.reason);
+    if (!warehouseId || !RECEIPT_REASONS.has(reason))
+        throw new HttpsError('invalid-argument', 'المخزن وسبب الإضافة المباشرة مطلوبان.');
+    const warehouse = await assertWarehouse(warehouseId, current.tenantId, current.assignedWarehouseId, current.isSuperAdmin);
+    const lines = parseLines(data.lines);
+    const catalog = await Promise.all(lines.map((line) => db.collection(catalogCollection(line.itemType)).doc(line.itemId).get()));
+    const locations = await Promise.all(lines.map((line) => line.locationId ? db.collection('warehouse_locations').doc(line.locationId).get() : Promise.resolve(null)));
+    const savedLines = lines.map((line, index) => {
+        const row = catalog[index].data() || {};
+        if (!catalog[index].exists || clean(row.tenantId) !== current.tenantId)
+            throw new HttpsError('not-found', `الصنف ${line.itemId} غير موجود.`);
+        return { ...line, locationId: line.locationId || null, locationCode: line.locationId ? clean(locations[index]?.data()?.code || line.locationId) : null, itemName: clean(row.name || row.productName || line.itemId), itemCode: clean(row.code || row.productCode), unit: clean(row.baseUnit || row.unit || 'unit') };
+    });
+    const requestedId = clean(data.draftId);
+    const ref = requestedId ? db.collection('general_stock_receipts').doc(requestedId) : db.collection('general_stock_receipts').doc();
+    if (requestedId) {
+        const existing = await ref.get();
+        if (!existing.exists || clean(existing.data()?.tenantId) !== current.tenantId || existing.data()?.status !== 'draft')
+            throw new HttpsError('failed-precondition', 'المسودة غير صالحة للتعديل.');
+    }
+    const at = new Date().toISOString();
+    const previous = requestedId ? (await ref.get()).data() : undefined;
+    const referenceNo = clean(previous?.referenceNo) || `RCV-D-${at.slice(0, 10).replaceAll('-', '')}-${ref.id.slice(0, 5).toUpperCase()}`;
+    await ref.set({
+        tenantId: current.tenantId, referenceNo, status: 'draft', warehouseId, warehouseName: clean(warehouse.data()?.name), reason,
+        sourceIssueId: clean(data.sourceIssueId) || null, sourceParty: clean(data.sourceParty) || null, sourceDocumentNo: clean(data.sourceDocumentNo) || null,
+        note: clean(data.note, 500) || null, lines: savedLines, createdBy: current.uid, createdByName: current.name,
+        createdAt: previous?.createdAt || at, updatedAt: at,
+    }, { merge: true });
+    return { ok: true, id: ref.id, referenceNo };
+};
+async function voidVoucher(request, kind) {
+    const current = await actor(request, 'void');
+    const voucherId = clean(request.data?.voucherId);
+    const reason = clean(request.data?.reason, 500);
+    if (!voucherId || !reason)
+        throw new HttpsError('invalid-argument', 'السند وسبب الإلغاء مطلوبان.');
+    const collection = kind === 'issue' ? 'general_stock_issues' : 'general_stock_receipts';
+    const ref = db.collection(collection).doc(voucherId);
+    const at = new Date().toISOString();
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const voucher = snap.data();
+        if (!snap.exists || clean(voucher?.tenantId) !== current.tenantId)
+            throw new HttpsError('not-found', 'السند غير موجود.');
+        if (voucher?.status === 'voided')
+            return;
+        if (voucher?.status !== 'posted')
+            throw new HttpsError('failed-precondition', 'يمكن إلغاء السند المرحّل فقط.');
+        if (kind === 'issue') {
+            const returned = Object.values((voucher.returnedQuantities || {}))
+                .reduce((sum, value) => sum + Number(value || 0), 0);
+            if (returned > 0.0001)
+                throw new HttpsError('failed-precondition', 'يجب إلغاء أذونات المرتجع المرتبطة أولًا قبل إلغاء إذن الصرف.');
+        }
+        const warehouseId = clean(voucher.warehouseId);
+        if (!current.isSuperAdmin && current.assignedWarehouseId && current.assignedWarehouseId !== warehouseId)
+            throw new HttpsError('permission-denied', 'المخزن لا يطابق المخزن المرتبط بحسابك.');
+        const lines = Array.isArray(voucher.lines) ? voucher.lines : [];
+        const balanceRefs = lines.map((line) => db.collection('stock_items').doc(`${warehouseId}__${clean(line.itemType)}__${clean(line.itemId)}`));
+        const locationRefs = lines.map((line) => clean(line.locationId) ? db.collection('stock_location_balances').doc(`${warehouseId}__${clean(line.locationId)}__${clean(line.itemType)}__${clean(line.itemId)}`) : null);
+        const balances = await Promise.all(balanceRefs.map((balanceRef) => tx.get(balanceRef)));
+        const locations = await Promise.all(locationRefs.map((locationRef) => locationRef ? tx.get(locationRef) : Promise.resolve(null)));
+        const sourceIssueId = kind === 'receipt' ? clean(voucher.sourceIssueId) : '';
+        const sourceIssueRef = sourceIssueId ? db.collection('general_stock_issues').doc(sourceIssueId) : null;
+        const sourceIssueSnap = sourceIssueRef ? await tx.get(sourceIssueRef) : null;
+        lines.forEach((line, index) => {
+            const quantity = roundQty(line.quantity);
+            const currentQty = Number(balances[index].data()?.quantity || 0);
+            const nextQty = kind === 'issue' ? currentQty + quantity : currentQty - quantity;
+            if (nextQty < -0.0001)
+                throw new HttpsError('failed-precondition', `لا يمكن إلغاء السند لأن رصيد ${clean(line.itemName || line.itemId)} غير كافٍ.`);
+            tx.set(balanceRefs[index], { quantity: nextQty, updatedAt: at, lastMovementAt: at }, { merge: true });
+            if (locationRefs[index]) {
+                const currentLocationQty = Number(locations[index]?.data()?.quantity || 0);
+                const nextLocationQty = kind === 'issue' ? currentLocationQty + quantity : currentLocationQty - quantity;
+                if (nextLocationQty < -0.0001)
+                    throw new HttpsError('failed-precondition', `لا يمكن إلغاء السند لأن رصيد اللوكيشن للصنف ${clean(line.itemName || line.itemId)} غير كافٍ.`);
+                tx.set(locationRefs[index], { quantity: nextLocationQty, updatedAt: at, lastMovementAt: at }, { merge: true });
+            }
+            tx.create(db.collection('stock_transactions').doc(), {
+                tenantId: current.tenantId, warehouseId, warehouseName: clean(voucher.warehouseName), itemType: clean(line.itemType), itemId: clean(line.itemId),
+                itemName: clean(line.itemName || line.itemId), itemCode: clean(line.itemCode), unit: clean(line.unit || 'unit'), locationId: clean(line.locationId) || null,
+                locationCode: clean(line.locationCode) || null, movementType: kind === 'issue' ? 'IN' : 'OUT', quantity: kind === 'issue' ? quantity : -quantity,
+                referenceNo: `${clean(voucher.referenceNo)}-VOID`, sourceModule: 'manual_movement_reversal', sourceId: voucherId,
+                reversedSourceModule: 'manual_movement', reversedSourceId: voucherId, voidReason: reason, note: reason, createdBy: current.name, createdAt: at,
+            });
+        });
+        if (sourceIssueRef && sourceIssueSnap?.exists) {
+            const returned = { ...(sourceIssueSnap.data()?.returnedQuantities || {}) };
+            lines.forEach((line) => {
+                const key = `${clean(line.itemType)}:${clean(line.itemId)}`;
+                returned[key] = Math.max(0, Number(returned[key] || 0) - Number(line.quantity || 0));
+            });
+            tx.set(sourceIssueRef, { returnedQuantities: returned, updatedAt: at }, { merge: true });
+        }
+        tx.set(ref, { status: 'voided', voidReason: reason, voidedAt: at, voidedBy: current.uid, voidedByName: current.name, updatedAt: at }, { merge: true });
+    });
+    return { ok: true };
+}
+export const voidGeneralStockIssueHandler = (request) => voidVoucher(request, 'issue');
+export const voidGeneralStockReceiptHandler = (request) => voidVoucher(request, 'receipt');
