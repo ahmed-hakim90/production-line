@@ -4,11 +4,18 @@ import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboar
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { productionGateService, type GateActionResult, type GateEmployeePreview, type ProductionGateSession } from '../services/productionGateService';
+import { productionGateOfflineStore, type QueuedGateEvent } from '../services/productionGateOfflineStore';
 import { formatDuration, gateDate, gateTime, liveDuration, sortGateRows } from '../utils/productionGate';
 
 const statusLabel = (status: ProductionGateSession['status']) => ({
   open: 'خارج حاليًا', completed: 'عاد', auto_closed: 'لم يسجل دخول', cancelled: 'ملغاة',
 }[status]);
+
+const registrationAllowedNow = () => {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts();
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0);
+  return hour >= 8 && hour < 16;
+};
 
 export const ProductionGateEntry: React.FC = () => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +28,13 @@ export const ProductionGateEntry: React.FC = () => {
   const [preview, setPreview] = useState<GateEmployeePreview | null>(null);
   const [previewError, setPreviewError] = useState('');
   const [lastResult, setLastResult] = useState<GateActionResult | null>(null);
+  const scope = productionGateService.cacheScope();
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine);
+  const [queue, setQueue] = useState<QueuedGateEvent[]>(() => productionGateOfflineStore.snapshot(scope).queue);
+  const [cacheUpdatedAt, setCacheUpdatedAt] = useState(() => productionGateOfflineStore.snapshot(scope).updatedAt);
+  const [syncing, setSyncing] = useState(false);
+  const syncingRef = useRef(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [, tick] = useState(0);
   const today = gateDate();
   const normalizedCode = code.trim();
@@ -36,6 +50,68 @@ export const ProductionGateEntry: React.FC = () => {
   useEffect(() => { const timer = window.setInterval(() => tick((v) => v + 1), 30_000); return () => clearInterval(timer); }, []);
   useEffect(() => { inputRef.current?.focus(); }, [saving]);
 
+  const refreshLocalState = useCallback(() => {
+    const snapshot = productionGateOfflineStore.snapshot(scope);
+    setQueue(snapshot.queue);
+    setCacheUpdatedAt(snapshot.updatedAt);
+  }, [scope]);
+
+  const syncQueue = useCallback(async () => {
+    if (syncingRef.current || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+    syncingRef.current = true;
+    setSyncing(true);
+    const pending = productionGateOfflineStore.snapshot(scope).queue
+      .filter((event) => event.status === 'pending' || event.status === 'syncing')
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
+    for (const event of pending) {
+      productionGateOfflineStore.update(scope, event.eventId, { status: 'syncing', attempts: event.attempts + 1 });
+      refreshLocalState();
+      try {
+        const result = await productionGateService.register(event.employeeCode, event.employeeId, {
+          eventId: event.eventId, occurredAt: event.occurredAt, expectedAction: event.expectedAction,
+        });
+        productionGateOfflineStore.remove(scope, event.eventId);
+        const cached = productionGateOfflineStore.preview(scope, event.employeeCode);
+        if (cached) productionGateOfflineStore.cacheEmployee(scope, {
+          ...cached, currentStatus: result.action === 'exit' ? 'outside' : 'inside',
+          nextAction: result.action === 'exit' ? 'entry' : 'exit',
+          exitAt: result.action === 'exit' ? result.actionAt : null,
+          currentDurationMinutes: 0,
+        });
+        setLastResult(result);
+      } catch (error) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          productionGateOfflineStore.update(scope, event.eventId, { status: 'pending' });
+          break;
+        }
+        productionGateOfflineStore.update(scope, event.eventId, { status: 'failed', error: (error as Error).message || 'تعذر مزامنة الحركة.' });
+        refreshLocalState();
+        break;
+      }
+      refreshLocalState();
+    }
+    syncingRef.current = false;
+    setSyncing(false);
+    refreshLocalState();
+    if (navigator.onLine) void load();
+  }, [load, refreshLocalState, scope]);
+
+  useEffect(() => {
+    const handleOnline = () => { setOnline(true); window.setTimeout(() => void syncQueue(), 500); };
+    const handleOffline = () => setOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+  }, [syncQueue]);
+
+  useEffect(() => {
+    if (!online) return;
+    void productionGateService.syncEmployeeCache()
+      .then(({ employees }) => { productionGateOfflineStore.replaceEmployees(scope, employees); refreshLocalState(); })
+      .catch(() => { /* existing cache remains available */ });
+    void syncQueue();
+  }, [online, refreshLocalState, scope]);
+
   useEffect(() => {
     let active = true;
     if (!debouncedCode) {
@@ -44,24 +120,31 @@ export const ProductionGateEntry: React.FC = () => {
       setPreviewLoading(false);
       return () => { active = false; };
     }
+    const cached = productionGateOfflineStore.preview(scope, debouncedCode);
+    if (cached) setPreview({ ...cached, registrationAllowed: registrationAllowedNow() });
     const requestId = ++previewRequestIdRef.current;
-    setPreviewLoading(true);
+    setPreviewLoading(!cached && online);
     setPreviewError('');
+    if (!online) {
+      if (!cached) setPreviewError('العامل غير موجود في الكاش المحلي. يلزم الاتصال لتحديث قائمة العمال.');
+      return () => { active = false; };
+    }
     void productionGateService.preview(debouncedCode)
       .then((result) => {
         if (!active || requestId !== previewRequestIdRef.current) return;
         setPreview(result);
+        productionGateOfflineStore.cacheEmployee(scope, result);
+        refreshLocalState();
       })
       .catch((error: Error) => {
         if (!active || requestId !== previewRequestIdRef.current) return;
-        setPreview(null);
-        setPreviewError(error.message || 'تعذر تحميل بيانات الموظف.');
+        if (!cached) { setPreview(null); setPreviewError(error.message || 'تعذر تحميل بيانات الموظف.'); }
       })
       .finally(() => {
         if (active && requestId === previewRequestIdRef.current) setPreviewLoading(false);
       });
     return () => { active = false; };
-  }, [debouncedCode]);
+  }, [debouncedCode, online, refreshLocalState, scope]);
 
   const handleCodeChange = useCallback((value: string) => {
     previewRequestIdRef.current += 1;
@@ -85,7 +168,22 @@ export const ProductionGateEntry: React.FC = () => {
     }
     setSaving(true);
     try {
-      const result = await productionGateService.register(code, preview.employeeId);
+      const cachedPreview = { ...preview, cachedAt: new Date().toISOString() };
+      const queued = productionGateOfflineStore.enqueue(scope, cachedPreview);
+      refreshLocalState();
+      if (!online) {
+        setLastResult({ action: queued.expectedAction, sessionId: `local:${queued.eventId}`, tenantId: '', employeeId: queued.employeeId, employeeName: queued.employeeName, employeeCode: queued.employeeCode, actionAt: queued.occurredAt, durationMinutes: null });
+        setCode(''); setPreview(null);
+        showAppToast('success', `تم حفظ ${queued.expectedAction === 'exit' ? 'خروج' : 'دخول'} ${queued.employeeName} محليًا.`);
+        return;
+      }
+      await syncQueue();
+      const remaining = productionGateOfflineStore.snapshot(scope).queue.find((event) => event.eventId === queued.eventId);
+      if (remaining?.status === 'failed') throw new Error(remaining.error || 'تعذر مزامنة الحركة.');
+      const result = productionGateOfflineStore.snapshot(scope).queue.find((event) => event.eventId === queued.eventId)?.result || {
+        action: queued.expectedAction, sessionId: `queued:${queued.eventId}`, tenantId: '', employeeId: queued.employeeId,
+        employeeName: queued.employeeName, employeeCode: queued.employeeCode, actionAt: queued.occurredAt, durationMinutes: null,
+      };
       setRows((current) => {
         if (result.action === 'entry') {
           return current.map((row) => row.id === result.sessionId ? {
@@ -111,8 +209,7 @@ export const ProductionGateEntry: React.FC = () => {
       setLastResult(result);
       setCode('');
       setPreview(null);
-      showAppToast('success', result.action === 'exit' ? `تم تسجيل خروج ${result.employeeName}` : `تم تسجيل دخول ${result.employeeName}`);
-      void load();
+      showAppToast('success', `تم تسجيل ${result.action === 'exit' ? 'خروج' : 'دخول'} ${result.employeeName}`);
     } catch (error) { showAppToast('error', (error as Error).message); }
     finally { setSaving(false); }
   };
@@ -137,6 +234,27 @@ export const ProductionGateEntry: React.FC = () => {
       onRefresh={() => void load()}
       refreshing={loading}
     >
+      <div role="status" className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm font-bold ${online ? 'border-[rgb(var(--color-success)/0.3)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'border-[rgb(var(--color-warning)/0.3)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]'}`}>
+        <span>{online ? (syncing ? 'متصل — جاري مزامنة الحركات' : 'متصل بالإنترنت') : 'غير متصل — الحركات تُحفظ على هذا الجهاز'}</span>
+        <button type="button" onClick={() => setReviewOpen((value) => !value)} className="min-h-10 rounded-lg border border-current/25 px-3">
+          الحركات المنتظرة: {queue.filter((event) => event.status !== 'failed').length} · تحتاج مراجعة: {queue.filter((event) => event.status === 'failed').length}
+        </button>
+      </div>
+
+      {reviewOpen && (
+        <OpsDashPanel title="مراجعة الحركات المحلية" accent="production" bodyClassName="p-4">
+          <p className="mb-3 text-xs font-bold text-[var(--color-text-muted)]">آخر تحديث لكاش العمال: {cacheUpdatedAt ? new Date(cacheUpdatedAt).toLocaleString('ar-EG') : 'لم يتم بعد'}</p>
+          <div className="space-y-2">
+            {queue.map((event) => (
+              <article key={event.eventId} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--color-border)] p-3">
+                <div><p className="font-black">{event.employeeName} — {event.expectedAction === 'exit' ? 'خروج' : 'دخول'}</p><p className="text-xs text-[var(--color-text-muted)]">{new Date(event.occurredAt).toLocaleString('ar-EG')} · {event.status === 'failed' ? event.error : event.status === 'syncing' ? 'جاري الإرسال' : 'بانتظار المزامنة'}</p></div>
+                {event.status === 'failed' && <button type="button" disabled={!online || syncing} onClick={() => { productionGateOfflineStore.retry(scope, event.eventId); refreshLocalState(); window.setTimeout(() => void syncQueue(), 0); }} className="min-h-10 rounded-lg bg-primary px-4 font-bold text-white disabled:opacity-50">إعادة المحاولة</button>}
+              </article>
+            ))}
+            {!queue.length && <p className="py-6 text-center text-sm text-[var(--color-text-muted)]">لا توجد حركات محلية معلقة.</p>}
+          </div>
+        </OpsDashPanel>
+      )}
       <OpsDashPanel title="تسجيل الحركة" accent="production" bodyClassName="p-5">
         <form onSubmit={submit} className="mx-auto max-w-2xl">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -163,9 +281,9 @@ export const ProductionGateEntry: React.FC = () => {
           <p className="mt-2 text-center text-[11px] font-bold text-[var(--color-text-muted)]">قارئ USB يقرأ نفس كود الموظف المطبوع — بعد ظهور البيانات اضغط تسجيل</p>
         </form>
         {previewLoading && <div className="mx-auto mt-4 max-w-2xl rounded-xl bg-[var(--color-surface-soft)] p-4 text-center font-bold text-[var(--color-text-muted)]">جاري تحميل بيانات الموظف...</div>}
-        {!previewLoading && previewError && <div className="mx-auto mt-4 max-w-2xl rounded-xl border border-red-200 bg-red-50 p-4 text-center font-bold text-red-700">{previewError}</div>}
+        {!previewLoading && previewError && <div className="mx-auto mt-4 max-w-2xl rounded-xl border border-[rgb(var(--color-danger)/0.3)] bg-[rgb(var(--color-danger)/0.1)] p-4 text-center font-bold text-[rgb(var(--color-danger))]">{previewError}</div>}
         {!previewLoading && preview && preview.employeeCode === normalizedCode && (
-          <div className={`mx-auto mt-4 max-w-2xl rounded-xl border p-4 ${preview.currentStatus === 'outside' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-300 bg-emerald-50 text-emerald-900'}`}>
+          <div className={`mx-auto mt-4 max-w-2xl rounded-xl border p-4 ${preview.currentStatus === 'outside' ? 'border-[rgb(var(--color-warning)/0.3)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : 'border-[rgb(var(--color-success)/0.3)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'}`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-xl font-black">{preview.employeeName}</p><p className="text-sm font-bold">كود {preview.employeeCode}</p></div>
               <div className="text-end"><p className="text-lg font-black">{preview.currentStatus === 'outside' ? 'خارج حاليًا' : 'داخل حاليًا'}</p><p className="text-sm font-bold">سيتم تسجيل {preview.nextAction === 'entry' ? 'دخول' : 'خروج'}</p></div>
@@ -175,11 +293,11 @@ export const ProductionGateEntry: React.FC = () => {
               {preview.exitAt && <span>وقت الخروج: {new Intl.DateTimeFormat('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' }).format(new Date(preview.exitAt))}</span>}
               {preview.currentStatus === 'outside' && <span>المدة الحالية: {formatDuration(preview.exitAt ? Math.max(0, Math.floor((Date.now() - new Date(preview.exitAt).getTime()) / 60_000)) : preview.currentDurationMinutes)}</span>}
             </div>
-            {!preview.registrationAllowed && <p className="mt-3 rounded-lg bg-red-100 p-2 text-center font-black text-red-700">غير مصرح بالإدخال الآن — التسجيل متاح من 8 صباحًا إلى 4 مساءً</p>}
+            {!preview.registrationAllowed && <p className="mt-3 rounded-lg bg-[rgb(var(--color-danger)/0.1)] p-2 text-center font-black text-[rgb(var(--color-danger))]">غير مصرح بالإدخال الآن — التسجيل متاح من 8 صباحًا إلى 4 مساءً</p>}
           </div>
         )}
         {lastResult && (
-          <div className={`mx-auto mt-5 max-w-2xl rounded-xl border p-4 text-center ${lastResult.action === 'exit' ? 'border-amber-300 bg-amber-50 text-amber-900' : 'border-emerald-300 bg-emerald-50 text-emerald-900'}`}>
+          <div className={`mx-auto mt-5 max-w-2xl rounded-xl border p-4 text-center ${lastResult.action === 'exit' ? 'border-[rgb(var(--color-warning)/0.3)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : 'border-[rgb(var(--color-success)/0.3)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'}`}>
             <p className="text-xl font-black">{lastResult.employeeName} — {lastResult.action === 'exit' ? 'خروج' : 'دخول'}</p>
             <p className="mt-1">{new Intl.DateTimeFormat('ar-EG', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit' }).format(new Date(lastResult.actionAt))}</p>
           </div>
@@ -193,21 +311,21 @@ export const ProductionGateEntry: React.FC = () => {
             <th className="p-2">المدة</th><th className="p-2">الحالة</th><th className="p-2">مرات اليوم</th>
           </tr></thead>
           <tbody>
-            {visibleRows.map((row) => <tr key={row.id} className={`border-t border-[var(--color-border)] ${row.status === 'open' ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>
+            {visibleRows.map((row) => <tr key={row.id} className={`border-t border-[var(--color-border)] ${row.status === 'open' ? 'bg-[rgb(var(--color-warning)/0.08)]' : ''}`}>
               <td className="p-2"><p className="font-bold">{row.employeeName}</p><p className="text-[10px] text-[var(--color-text-muted)]">{row.employeeCode}</p></td>
               <td className="p-2 text-center">{gateTime(row.exitAt)}</td><td className="p-2 text-center">{gateTime(row.entryAt)}</td>
               <td className="p-2 text-center font-bold">{formatDuration(liveDuration(row))}</td>
-              <td className="p-2 text-center"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${row.status === 'open' ? 'bg-amber-100 text-amber-800' : row.status === 'auto_closed' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{statusLabel(row.status)}</span></td>
+              <td className="p-2 text-center"><span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${row.status === 'open' ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : row.status === 'auto_closed' ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'}`}>{statusLabel(row.status)}</span></td>
               <td className="p-2 text-center font-bold">{employeeCounts.get(row.employeeId)}</td>
             </tr>)}
             {!loading && visibleRows.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-[var(--color-text-muted)]">لا توجد حركات مسجلة اليوم.</td></tr>}
           </tbody>
         </table>
         <div className="divide-y divide-[var(--color-border)] lg:hidden">
-          {visibleRows.map((row) => <article key={row.id} className={`px-3 py-2.5 ${row.status === 'open' ? 'bg-amber-50/70 dark:bg-amber-950/20' : ''}`}>
+          {visibleRows.map((row) => <article key={row.id} className={`px-3 py-2.5 ${row.status === 'open' ? 'bg-[rgb(var(--color-warning)/0.08)]' : ''}`}>
             <div className="flex min-w-0 items-center justify-between gap-2">
               <p className="min-w-0 truncate text-sm font-black text-[var(--color-text)] sm:text-base">{row.employeeName}</p>
-              <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-bold ${row.status === 'open' ? 'bg-amber-100 text-amber-800' : row.status === 'auto_closed' ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'}`}>{statusLabel(row.status)}</span>
+              <span className={`shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-bold ${row.status === 'open' ? 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' : row.status === 'auto_closed' ? 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'}`}>{statusLabel(row.status)}</span>
             </div>
             <div className="mt-0.5 flex items-center justify-between gap-2 text-[10px] font-bold text-[var(--color-text-muted)] sm:text-[11px]">
               <span>كود {row.employeeCode}</span>

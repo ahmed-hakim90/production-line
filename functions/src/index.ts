@@ -2651,4 +2651,5 @@ export {
   correctProductionGateSession,
   previewProductionGateEmployee,
   registerProductionGateAction,
+  syncProductionGateEmployeeCache,
 } from './productionGate.js';

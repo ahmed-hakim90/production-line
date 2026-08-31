@@ -878,6 +878,10 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /production_gate_events/{docId} {
+      allow read, write: if false;
+    }
+
     match /tenant_slugs/{slug} {
       allow read: if pl_authSignedIn();
       allow write: if pl_isSuperAdmin();

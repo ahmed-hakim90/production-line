@@ -1,12 +1,14 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { randomUUID } from 'node:crypto';
 import { getDb } from './adminApp.js';
 const db = getDb();
 const ZONE = 'Africa/Cairo';
 const SESSIONS = 'production_gate_sessions';
 const STATES = 'production_gate_states';
 const AUDIT = 'production_gate_audit_logs';
+const EVENTS = 'production_gate_events';
 const cairoParts = (date = new Date()) => {
     const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -115,6 +117,37 @@ export const previewProductionGateEmployee = onCall({ region: 'us-central1', mem
         registrationAllowed: seconds >= 8 * 3600 && seconds < 16 * 3600,
     };
 });
+/** Minimal, permission-gated directory used by the dedicated gate device offline. */
+export const syncProductionGateEmployeeCache = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {
+    const actor = await loadActor(request);
+    requirePermission(actor, 'production.gate.register');
+    const [employeesSnap, openSnap] = await Promise.all([
+        db.collection('employees').where('tenantId', '==', actor.tenantId).where('isActive', '==', true).get(),
+        db.collection(SESSIONS).where('tenantId', '==', actor.tenantId).where('status', '==', 'open').get(),
+    ]);
+    const openByEmployee = new Map(openSnap.docs.map((item) => [String(item.data().employeeId), item.data()]));
+    const local = cairoParts();
+    const seconds = local.hour * 3600 + local.minute * 60 + local.second;
+    return {
+        syncedAt: new Date().toISOString(),
+        employees: employeesSnap.docs.map((item) => {
+            const employee = item.data();
+            const open = openByEmployee.get(item.id);
+            const exitAt = open?.exitAt;
+            return {
+                employeeId: item.id,
+                employeeName: String(employee.name || employee.code || item.id),
+                employeeCode: String(employee.code || '').trim(),
+                currentStatus: open ? 'outside' : 'inside',
+                nextAction: open ? 'entry' : 'exit',
+                exitAt: exitAt ? exitAt.toDate().toISOString() : null,
+                currentDurationMinutes: exitAt ? Math.max(0, Math.floor((Date.now() - exitAt.toMillis()) / 60_000)) : 0,
+                todayExitCount: 0,
+                registrationAllowed: seconds >= 8 * 3600 && seconds < 16 * 3600,
+            };
+        }).filter((item) => item.employeeCode),
+    };
+});
 export const registerProductionGateAction = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {
     const actor = await loadActor(request);
     requirePermission(actor, 'production.gate.register');
@@ -122,7 +155,15 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
     const code = String(data?.employeeCode || '').trim();
     if (!code || code.length > 80)
         throw new HttpsError('invalid-argument', 'أدخل كود موظف صحيح.');
-    const now = new Date();
+    const receivedAt = new Date();
+    const requestedAt = data.occurredAt ? new Date(data.occurredAt) : receivedAt;
+    if (Number.isNaN(requestedAt.getTime()) || requestedAt.getTime() > receivedAt.getTime() + 5 * 60_000 || requestedAt.getTime() < receivedAt.getTime() - 36 * 60 * 60_000) {
+        throw new HttpsError('invalid-argument', 'وقت الحركة المحلية غير صالح؛ راجع الحركة يدويًا.');
+    }
+    const eventId = String(data.eventId || '').trim() || randomUUID();
+    if (!/^[A-Za-z0-9_-]{8,80}$/.test(eventId))
+        throw new HttpsError('invalid-argument', 'معرّف الحركة غير صالح.');
+    const now = requestedAt;
     const local = cairoParts(now);
     const seconds = local.hour * 3600 + local.minute * 60 + local.second;
     if (seconds < 8 * 3600 || seconds >= 16 * 3600) {
@@ -133,11 +174,18 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
     const stateId = `${actor.tenantId}__${employeeDoc.id}`;
     const stateRef = db.collection(STATES).doc(stateId);
     const sessionRef = db.collection(SESSIONS).doc();
+    const eventRef = db.collection(EVENTS).doc(`${actor.tenantId}__${eventId}`);
     const nowTs = Timestamp.fromDate(now);
     return db.runTransaction(async (tx) => {
+        const eventSnap = await tx.get(eventRef);
+        if (eventSnap.exists)
+            return eventSnap.data()?.result;
         const stateSnap = await tx.get(stateRef);
         const state = stateSnap.data();
         const lastAction = state?.lastActionAt;
+        if (lastAction && nowTs.toMillis() <= lastAction.toMillis()) {
+            throw new HttpsError('aborted', 'توجد حركة أحدث لهذا الموظف؛ راجع الحركة قبل المزامنة.');
+        }
         if (lastAction && nowTs.toMillis() - lastAction.toMillis() < 10_000) {
             throw new HttpsError('already-exists', 'تم تسجيل حركة لهذا الموظف بالفعل خلال آخر 10 ثوانٍ.');
         }
@@ -145,6 +193,8 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
             const openRef = db.collection(SESSIONS).doc(String(state.openSessionId));
             const openSnap = await tx.get(openRef);
             if (openSnap.exists && openSnap.data()?.status === 'open') {
+                if (data.expectedAction && data.expectedAction !== 'entry')
+                    throw new HttpsError('aborted', 'حالة العامل تغيرت؛ راجع الحركة قبل المزامنة.');
                 const exitAt = openSnap.data()?.exitAt;
                 const durationMinutes = Math.max(0, Math.round((nowTs.toMillis() - exitAt.toMillis()) / 60_000));
                 tx.update(openRef, {
@@ -152,9 +202,13 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
                     entryRecordedByName: actor.name, updatedAt: FieldValue.serverTimestamp(),
                 });
                 tx.set(stateRef, { tenantId: actor.tenantId, employeeId: employeeDoc.id, openSessionId: null, lastActionAt: nowTs }, { merge: true });
-                return { action: 'entry', sessionId: openRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes };
+                const result = { action: 'entry', sessionId: openRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes };
+                tx.set(eventRef, { tenantId: actor.tenantId, eventId, source: data.occurredAt ? 'offline_queue' : 'online', occurredAt: nowTs, receivedAt: FieldValue.serverTimestamp(), result });
+                return result;
             }
         }
+        if (data.expectedAction && data.expectedAction !== 'exit')
+            throw new HttpsError('aborted', 'حالة العامل تغيرت؛ راجع الحركة قبل المزامنة.');
         tx.set(sessionRef, {
             tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code,
             date: local.dateKey, exitAt: nowTs, entryAt: null, durationMinutes: null, status: 'open',
@@ -162,7 +216,9 @@ export const registerProductionGateAction = onCall({ region: 'us-central1', memo
             createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
         });
         tx.set(stateRef, { tenantId: actor.tenantId, employeeId: employeeDoc.id, openSessionId: sessionRef.id, lastActionAt: nowTs }, { merge: true });
-        return { action: 'exit', sessionId: sessionRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes: null };
+        const result = { action: 'exit', sessionId: sessionRef.id, tenantId: actor.tenantId, employeeId: employeeDoc.id, employeeName: String(employee.name || code), employeeCode: code, actionAt: now.toISOString(), durationMinutes: null };
+        tx.set(eventRef, { tenantId: actor.tenantId, eventId, source: data.occurredAt ? 'offline_queue' : 'online', occurredAt: nowTs, receivedAt: FieldValue.serverTimestamp(), result });
+        return result;
     });
 });
 export const correctProductionGateSession = onCall({ region: 'us-central1', memory: '256MiB' }, async (request) => {

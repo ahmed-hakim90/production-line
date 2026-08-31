@@ -1,6 +1,7 @@
 import { getDocs, orderBy, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functionsClient, isConfigured } from '../../auth/services/firebase';
+import { auth } from '../../auth/services/firebase';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 
 export type ProductionGateStatus = 'open' | 'completed' | 'auto_closed' | 'cancelled';
@@ -41,6 +42,8 @@ export interface GateEmployeePreview {
   registrationAllowed: boolean;
 }
 
+export interface GateEmployeeCacheResult { employees: GateEmployeePreview[]; syncedAt: string }
+
 const requireFirebase = () => {
   if (!isConfigured || !functionsClient) throw new Error('Firebase غير مهيأ.');
   return functionsClient;
@@ -52,6 +55,16 @@ const friendlyError = (error: unknown, fallback: string) => {
 };
 
 export const productionGateService = {
+  cacheScope(): string { return auth?.currentUser?.uid || 'signed-out'; },
+
+  async syncEmployeeCache(): Promise<GateEmployeeCacheResult> {
+    try {
+      const callable = httpsCallable<Record<string, never>, GateEmployeeCacheResult>(requireFirebase(), 'syncProductionGateEmployeeCache');
+      return (await callable({})).data;
+    } catch (error) {
+      throw friendlyError(error, 'تعذر تحديث كاش العمال.');
+    }
+  },
   async preview(employeeCode: string): Promise<GateEmployeePreview> {
     try {
       const callable = httpsCallable<{ employeeCode: string }, GateEmployeePreview>(requireFirebase(), 'previewProductionGateEmployee');
@@ -61,10 +74,10 @@ export const productionGateService = {
     }
   },
 
-  async register(employeeCode: string, employeeId?: string): Promise<GateActionResult> {
+  async register(employeeCode: string, employeeId?: string, event?: { eventId: string; occurredAt: string; expectedAction: 'exit' | 'entry' }): Promise<GateActionResult> {
     try {
-      const callable = httpsCallable<{ employeeCode: string; employeeId?: string }, GateActionResult>(requireFirebase(), 'registerProductionGateAction');
-      return (await callable({ employeeCode: employeeCode.trim(), employeeId })).data;
+      const callable = httpsCallable<{ employeeCode: string; employeeId?: string; eventId?: string; occurredAt?: string; expectedAction?: 'exit' | 'entry' }, GateActionResult>(requireFirebase(), 'registerProductionGateAction');
+      return (await callable({ employeeCode: employeeCode.trim(), employeeId, ...event })).data;
     } catch (error) {
       throw friendlyError(error, 'تعذر تسجيل الحركة.');
     }

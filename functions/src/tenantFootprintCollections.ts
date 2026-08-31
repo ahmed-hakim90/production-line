@@ -26,6 +26,7 @@ export const TENANT_SCOPED_COLLECTIONS: readonly string[] = [
   'production_gate_sessions',
   'production_gate_states',
   'production_gate_audit_logs',
+  'production_gate_events',
   'work_orders',
   'notifications',
   'scan_events',
