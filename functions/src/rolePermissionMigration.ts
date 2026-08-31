@@ -101,6 +101,9 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'sparePartsReplenishment.view',
   ],
   spare_parts_central_warehouse: [
+    'inventory.view',
+    'inventory.transactions.create',
+    'inventory.transactions.print',
     'sparePartsRecall.view',
     'sparePartsRecall.create',
     'sparePartsRecall.confirm',

@@ -11,6 +11,15 @@ assert.ok(BUILTIN_ROLE_PERMISSION_LOCKS.spare_parts_central_warehouse?.includes(
 assert.ok(BUILTIN_ROLE_PERMISSION_LOCKS.spare_parts_central_warehouse?.includes('products.view'));
 assert.ok(BUILTIN_ROLE_PERMISSION_LOCKS.maintenance_center_warehouse?.includes('materials.view'));
 
+const roleServiceSource = await import('node:fs').then(({ readFileSync }) =>
+  readFileSync(new URL('../modules/system/services/roleService.ts', import.meta.url), 'utf8'),
+);
+assert.match(
+  roleServiceSource,
+  /spare_parts_central_warehouse:[\s\S]*?'inventory\.transactions\.create'/,
+  'existing central warehouse roles must receive the general voucher create permission migration',
+);
+
 const locked = applyBuiltinRolePermissionLocks(
   {
     'plans.view': true,

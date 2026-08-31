@@ -243,7 +243,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'inventory.view', label: 'عرض المخازن' },
       { key: 'inventory.analytics.view', label: 'تحليلات المخزون (ABC)' },
       { key: 'inventory.exceptions.view', label: 'استثناءات المخزون' },
-      { key: 'inventory.transactions.create', label: 'تسجيل حركات المخزون' },
+      { key: 'inventory.transactions.create', label: 'إنشاء إذن صرف عام وإذن إضافة عام وتسجيل حركات المخزون' },
       { key: 'inventory.transactions.edit', label: 'تعديل حركات المخزون' },
       { key: 'inventory.transactions.print', label: 'طباعة حركات المخزون' },
       { key: 'inventory.transactions.export', label: 'تصدير حركات المخزون' },

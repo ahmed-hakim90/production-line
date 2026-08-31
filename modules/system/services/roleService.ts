@@ -496,6 +496,9 @@ const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permis
     'sparePartsReplenishment.receive',
   ],
   spare_parts_central_warehouse: [
+    'inventory.view',
+    'inventory.transactions.create',
+    'inventory.transactions.print',
     'sparePartsRecall.view',
     'sparePartsRecall.create',
     'sparePartsRecall.confirm',
