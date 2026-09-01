@@ -2855,14 +2855,14 @@ export const Products: React.FC = () => {
                       </div>
                       <div className="min-w-0">
                         <span
-                          className="font-bold text-sm text-[var(--color-text)] hover:text-primary cursor-pointer transition-colors block truncate max-w-[280px]"
+                          className="block max-w-[280px] whitespace-normal break-words text-sm font-bold leading-5 text-[var(--color-text)] transition-colors hover:text-primary cursor-pointer"
                           title={product.name}
                           onClick={(e) => {
                             e.stopPropagation();
                             setDetailDrawerProductId(product.id);
                           }}
                         >
-                          {shortProductName(product.name)}
+                          {product.name}
                         </span>
                         <div className="flex items-center gap-2 mt-0.5">
                           <span className="font-mono text-[11px] text-[var(--color-text-muted)]">{product.code}</span>
