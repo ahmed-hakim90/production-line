@@ -155,6 +155,10 @@ import {
 } from '../utils/injectionMaterialFilter';
 import { resolveReportBehaviorSettings } from '../lib/reportBehaviorSettings';
 import {
+  buildProductionReportCategoryOptions,
+  matchesProductionReportProductCategory,
+} from '../lib/productionReportCategoryFilter';
+import {
   DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
   REPORT_SAVE_PENDING_MESSAGE,
   REPORT_SAVE_SUCCESS_MESSAGE,
@@ -646,6 +650,7 @@ export const Reports: React.FC = () => {
   const productionReports = useAppStore((s) => s.productionReports);
   const employees = useAppStore((s) => s.employees);
   const _rawProducts = useAppStore((s) => s._rawProducts);
+  const productCategories = useAppStore((s) => s._productCategories);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const lineStatuses = useAppStore((s) => s.lineStatuses);
@@ -1013,7 +1018,6 @@ export const Reports: React.FC = () => {
 
   const stockBalances: StockItemBalance[] = reportsUiReferenceCache?.stockBalances ?? [];
   const warehouses: Warehouse[] = reportsUiReferenceCache?.warehouses ?? [];
-  const categoryOptions: string[] = reportsUiReferenceCache?.categoryOptions ?? [];
   const rawMaterialOptions = reportsUiReferenceCache?.rawMaterialOptions ?? [];
   const injectionCategoryTokens = useMemo(
     () => parseInjectionCategoryTokens(planSettings.injectionRawMaterialCategoryKeywords),
@@ -1326,51 +1330,43 @@ export const Reports: React.FC = () => {
     [loadRangeReports],
   );
 
-  const reportsFilterEffectPrimed = useRef(false);
   const skipNextRangeFilterEffectRef = useRef(false);
   const searchRangeLoadKeyRef = useRef('');
-  const loadRangeReportsRef = useRef(loadRangeReports);
-  loadRangeReportsRef.current = loadRangeReports;
   const loadFullRangeReportsRef = useRef(loadFullRangeReports);
   loadFullRangeReportsRef.current = loadFullRangeReports;
   useEffect(() => {
-    if (viewMode !== 'range' && viewMode !== 'general') {
-      reportsFilterEffectPrimed.current = false;
-      return;
-    }
+    if (viewMode !== 'range' && viewMode !== 'general') return;
     if (skipNextRangeFilterEffectRef.current) {
       skipNextRangeFilterEffectRef.current = false;
-      reportsFilterEffectPrimed.current = true;
       return;
     }
-    if (!reportsFilterEffectPrimed.current) {
-      reportsFilterEffectPrimed.current = true;
-      return;
-    }
-    // General monthly preview needs the full period, not the first page only.
-    if (viewMode === 'general') {
+    if (!startDate || !endDate || startDate > endDate) return;
+
+    // Every filter change works against the complete date range. The short delay
+    // batches paired date edits and avoids duplicate Firestore reads while picking.
+    const timer = window.setTimeout(() => {
       void loadFullRangeReportsRef.current(startDate, endDate);
-      return;
-    }
-    void loadRangeReportsRef.current(startDate, endDate, false);
-    // Omit startDate/endDate from deps — period changes call fetchReports directly; avoids double-fetch.
-  }, [filterLineId, filterEmployeeId, viewMode]);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    startDate,
+    endDate,
+    filterLineId,
+    filterEmployeeId,
+    filterReportKind,
+    filterProductCategory,
+    viewMode,
+  ]);
 
   const allReports = viewMode === 'today' ? todayReports : productionReports;
   const productCategoryOptions = useMemo(() => {
-    const unique = new Set<string>();
-    categoryOptions.forEach((category) => unique.add(category));
-    _rawProducts.forEach((p: any) => {
-      const category = String(p?.category ?? '').trim();
-      if (category) unique.add(category);
-    });
-    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
-  }, [_rawProducts, categoryOptions]);
-  const productCategoryByProductId = useMemo(() => {
-    const map = new Map<string, string>();
+    return buildProductionReportCategoryOptions(_rawProducts, productCategories);
+  }, [_rawProducts, productCategories]);
+  const productByProductId = useMemo(() => {
+    const map = new Map<string, (typeof _rawProducts)[number]>();
     _rawProducts.forEach((p: any) => {
       if (!p?.id) return;
-      map.set(String(p.id), String(p.category ?? '').trim());
+      map.set(String(p.id), p);
     });
     return map;
   }, [_rawProducts]);
@@ -1396,7 +1392,11 @@ export const Reports: React.FC = () => {
     if (filterLineId) list = list.filter((r) => r.lineId === filterLineId);
     list = list.filter((r) => matchesReportKindFilter(r, filterReportKind, _rawLines));
     if (filterProductCategory) {
-      list = list.filter((r) => (productCategoryByProductId.get(r.productId) || '') === filterProductCategory);
+      list = list.filter((r) => matchesProductionReportProductCategory(
+        productByProductId.get(r.productId),
+        filterProductCategory,
+        productCategories,
+      ));
     }
     if (filterEmployeeId) list = list.filter((r) => r.employeeId === filterEmployeeId);
     if (linkedWorkOrderIdFilter) {
@@ -1406,7 +1406,7 @@ export const Reports: React.FC = () => {
       list = list.filter((r) => String(r.productionPlanId || '').trim() === linkedProductionPlanIdFilter);
     }
     return list;
-  }, [myEmployeeId, filterLineId, filterReportKind, filterProductCategory, filterEmployeeId, productCategoryByProductId, _rawLines, linkedWorkOrderIdFilter, linkedProductionPlanIdFilter]);
+  }, [myEmployeeId, filterLineId, filterReportKind, filterProductCategory, filterEmployeeId, productByProductId, productCategories, _rawLines, linkedWorkOrderIdFilter, linkedProductionPlanIdFilter]);
 
   const sortReports = useCallback((source: ProductionReport[]) => {
     const getRegisteredAtMs = (report: ProductionReport): number => {
@@ -1445,12 +1445,13 @@ export const Reports: React.FC = () => {
       return true;
     });
     filteredByLineAndEmployee.forEach((report) => {
-      const category = (productCategoryByProductId.get(report.productId) || '').trim();
-      if (!category) return;
-      counts.set(category, (counts.get(category) || 0) + 1);
+      productCategoryOptions.forEach((option) => {
+        if (!matchesProductionReportProductCategory(productByProductId.get(report.productId), option.value, productCategories)) return;
+        counts.set(option.value, (counts.get(option.value) || 0) + 1);
+      });
     });
     return counts;
-  }, [allReports, myEmployeeId, filterLineId, filterEmployeeId, filterReportKind, productCategoryByProductId, _rawLines]);
+  }, [allReports, myEmployeeId, filterLineId, filterEmployeeId, filterReportKind, productCategoryOptions, productByProductId, productCategories, _rawLines]);
 
   useEffect(() => {
     if (!linkedReportId) return;
@@ -2105,13 +2106,6 @@ export const Reports: React.FC = () => {
 
   // â”€â”€ CRUD handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  const handleFetchRange = async () => {
-    if (startDate && endDate) {
-      await fetchReports(startDate, endDate);
-      setViewMode('range');
-    }
-  };
-
   const resetPeriodFilters = useCallback(() => {
     setFactorySearch('');
     setFilterLineId('');
@@ -2134,6 +2128,7 @@ export const Reports: React.FC = () => {
 
   const handleShowYesterday = async () => {
     const yesterday = getPreviousOperationalDateString(reportBehavior.operationalDayStartHour);
+    skipNextRangeFilterEffectRef.current = true;
     resetPeriodFilters();
     setStartDate(yesterday);
     setEndDate(yesterday);
@@ -2147,6 +2142,7 @@ export const Reports: React.FC = () => {
     start.setDate(start.getDate() - 6);
     const startStr = toDateInputValue(start);
     const endStr = toDateInputValue(end);
+    skipNextRangeFilterEffectRef.current = true;
     resetPeriodFilters();
     setStartDate(startStr);
     setEndDate(endStr);
@@ -2362,8 +2358,8 @@ export const Reports: React.FC = () => {
           label: 'الفئة',
           placeholder: 'كل الفئات',
           options: productCategoryOptions.map((category) => ({
-            value: category,
-            label: `${category} (${categoryUsageCount.get(category) || 0})`,
+            value: category.value,
+            label: `${category.label} (${categoryUsageCount.get(category.value) || 0})`,
           })),
           width: 'w-[170px]',
         },
@@ -2403,11 +2399,15 @@ export const Reports: React.FC = () => {
         if (key === 'category') setFilterProductCategory(value === 'all' ? '' : value);
         if (key === 'employeeId') setFilterEmployeeId(value === 'all' ? '' : value);
         if (key === 'groupBy') setReportGroupBy(value === 'all' ? 'none' : (value as ReportGroupBy));
-        if (key === 'dateFrom') setStartDate(value);
-        if (key === 'dateTo') setEndDate(value);
+        if (key === 'dateFrom') {
+          setStartDate(value);
+          setViewMode('range');
+        }
+        if (key === 'dateTo') {
+          setEndDate(value);
+          setViewMode('range');
+        }
       }}
-      onApply={handleFetchRange}
-      applyLabel={(reportsLoading || rangeLoading) ? 'جار التحميل...' : 'عرض'}
       className="mb-0 border-0 rounded-none"
     />
   );

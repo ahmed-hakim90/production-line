@@ -24,24 +24,36 @@ export const GlobalStockCountSessionModal: React.FC = () => {
   const [adjustmentReason, setAdjustmentReason] = useState<StockAdjustmentReason>('count_correction');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
+  const [msgIsError, setMsgIsError] = useState(false);
 
   React.useEffect(() => {
     if (isOpen && data.session) {
       setSession({ ...data.session, lines: [...data.session.lines] });
       setAdjustmentReason(data.session.adjustmentReason || 'count_correction');
       setMsg('');
+      setMsgIsError(false);
     }
   }, [isOpen, data.session]);
 
   if (!isOpen || !session) return null;
 
+  const orderedRows = session.lines
+    .map((line, idx) => ({ line, idx }))
+    .sort((a, b) => session.countScope === 'rack'
+      ? (a.line.locationCode || a.line.locationId || '').localeCompare(b.line.locationCode || b.line.locationId || '') || a.line.itemName.localeCompare(b.line.itemName)
+      : 0);
+
   const saveLines = async () => {
     if (!session.id) return;
     setSaving(true);
+    setMsgIsError(false);
     try {
       await stockService.saveCountLines(session.id, session.lines);
       await data.onUpdated?.();
       setMsg('تم حفظ الكميات الفعلية. راجع فروق المطابقة ثم اعتمد.');
+    } catch (error) {
+      setMsgIsError(true);
+      setMsg(error instanceof Error ? error.message : 'تعذر حفظ الكميات.');
     } finally {
       setSaving(false);
     }
@@ -49,6 +61,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
 
   const approve = async () => {
     setSaving(true);
+    setMsgIsError(false);
     try {
       await stockService.approveCountSession(
         { ...session, adjustmentReason },
@@ -56,6 +69,9 @@ export const GlobalStockCountSessionModal: React.FC = () => {
       );
       await data.onUpdated?.();
       close();
+    } catch (error) {
+      setMsgIsError(true);
+      setMsg(error instanceof Error ? error.message : 'تعذر اعتماد الجلسة.');
     } finally {
       setSaving(false);
     }
@@ -70,7 +86,10 @@ export const GlobalStockCountSessionModal: React.FC = () => {
       >
         <div className="flex shrink-0 items-start justify-between gap-3 border-b px-4 py-3 sm:px-5 sm:py-4">
           <div className="min-w-0">
-            <h3 className="truncate text-base font-bold sm:text-lg">جرد ومطابقة: {session.warehouseName}</h3>
+            <h3 className="truncate text-base font-bold sm:text-lg">
+              جرد ومطابقة: {session.warehouseName}
+              {session.countScope === 'location' ? ` — ${session.locationCode || session.locationId}` : ''}
+            </h3>
             <p className="text-xs text-[var(--color-text-muted)]">
               {session.status === 'approved'
                 ? 'مطابق ومعتمد'
@@ -79,10 +98,14 @@ export const GlobalStockCountSessionModal: React.FC = () => {
                   : 'مفتوح للعد'}
               {' · '}
               {new Date(session.createdAt).toLocaleString('ar-EG')}
+              {session.countScope === 'rack' ? ` · راك ${session.rackName || session.rackId}` : ''}
             </p>
             {session.status !== 'approved' && (
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                أدخل الكميات الفعلية ثم طابق الفروقات واعتمدها كتسويات مخزنية.
+                أدخل الكميات الفعلية ثم طابق الفروقات واعتمدها
+                {session.countScope === 'location' || session.countScope === 'rack'
+                  ? ' على رصيد اللوكيشن وإجمالي المخزن.'
+                  : ' كتسويات مخزنية.'}
               </p>
             )}
           </div>
@@ -93,6 +116,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
           <table className="erp-table w-full min-w-[520px] text-right text-sm">
             <thead>
               <tr className="border-b bg-[var(--color-bg)]">
+                {session.countScope === 'rack' && <th className="px-2 py-2">الرف</th>}
                 <th className="px-2 py-2">الصنف</th>
                 <th className="px-2 py-2 text-center">رصيد النظام</th>
                 <th className="px-2 py-2 text-center">الفعلي</th>
@@ -100,10 +124,13 @@ export const GlobalStockCountSessionModal: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {session.lines.map((line, idx) => {
+              {orderedRows.map(({ line, idx }) => {
                 const diff = Number(line.countedQty || 0) - Number(line.expectedQty || 0);
                 return (
-                  <tr key={`${line.itemType}_${line.itemId}`} className="border-b">
+                  <tr key={`${line.itemType}_${line.itemId}_${line.locationId || idx}`} className="border-b">
+                    {session.countScope === 'rack' && (
+                      <td className="px-2 py-2 text-[var(--color-text-muted)]">{line.locationCode || line.locationId || '—'}</td>
+                    )}
                     <td className="px-2 py-2 font-medium">{line.itemName}</td>
                     <td className="px-2 py-2 text-center">{formatNumber(line.expectedQty)}</td>
                     <td className="px-2 py-2 text-center">
@@ -148,7 +175,11 @@ export const GlobalStockCountSessionModal: React.FC = () => {
               </select>
             </div>
           )}
-          {msg && <p className="mt-2 text-sm font-bold text-[rgb(var(--color-success))]">{msg}</p>}
+          {msg && (
+            <p className={`mt-2 text-sm font-bold ${msgIsError ? 'text-[rgb(var(--color-danger))]' : 'text-[rgb(var(--color-success))]'}`}>
+              {msg}
+            </p>
+          )}
         </div>
         <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t px-4 py-3 sm:px-5">
           <Button variant="outline" onClick={() => close()}>إغلاق</Button>

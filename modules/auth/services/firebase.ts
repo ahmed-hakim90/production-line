@@ -4,8 +4,6 @@ import {
   getFirestore,
   initializeFirestore,
   memoryLocalCache,
-  persistentLocalCache,
-  persistentSingleTabManager,
 } from "firebase/firestore";
 import { getStorage, FirebaseStorage } from "firebase/storage";
 import {
@@ -40,76 +38,31 @@ let auth: Auth;
 let storage: FirebaseStorage;
 let functionsClient: Functions;
 
-/** True when IndexedDB persistence (single-tab) initialized successfully. */
-export let firestoreOfflinePersistenceEnabled = false;
-
 /**
- * Keys written by `WebStorageSharedClientState` (multi-tab manager) into
- * `localStorage`. Once the app switches to single-tab persistence, no new
- * entries are produced, but legacy entries can still occupy the ~5 MB origin
- * quota and trip Firestore's INTERNAL ASSERTION (b815) on `setItem`.
+ * Offline IndexedDB persistence is intentionally disabled.
+ *
+ * Each browser tab gets its own in-memory Firestore cache. This avoids shared
+ * IndexedDB/localStorage ownership state, which can crash Firestore 12.9 with
+ * INTERNAL ASSERTION b815/90f9 when the ERP is open in multiple tabs.
  */
-const FIRESTORE_LS_PREFIXES = [
-  "firestore_clients_",
-  "firestore_targets_",
-  "firestore_mutations_",
-  "firestore_online_state",
-  "firestore_sequence_number_",
-];
-
-const purgeLeakedFirestoreLocalStorage = (): void => {
-  try {
-    if (typeof window === "undefined" || !window.localStorage) return;
-    const ls = window.localStorage;
-    const toRemove: string[] = [];
-    for (let i = 0; i < ls.length; i += 1) {
-      const k = ls.key(i);
-      if (k && FIRESTORE_LS_PREFIXES.some((p) => k.startsWith(p))) {
-        toRemove.push(k);
-      }
-    }
-    toRemove.forEach((k) => {
-      try {
-        ls.removeItem(k);
-      } catch {
-        /* ignore individual key removal failures */
-      }
-    });
-  } catch {
-    /* localStorage unavailable (private mode, disabled storage) — safe to skip */
-  }
-};
+export let firestoreOfflinePersistenceEnabled = false;
 
 if (isConfigured) {
   app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  purgeLeakedFirestoreLocalStorage();
   try {
     db = initializeFirestore(app, {
       // Force long-polling to avoid Chromium QUIC/WebChannel Listen failures
       // (ERR_QUIC_PROTOCOL_ERROR / QUIC_TOO_MANY_RTOS) on flaky networks.
       experimentalForceLongPolling: true,
-      localCache: persistentLocalCache({
-        tabManager: persistentSingleTabManager({ forceOwnership: true }),
-      }),
+      localCache: memoryLocalCache(),
     });
-    firestoreOfflinePersistenceEnabled = true;
   } catch (err) {
     console.warn(
-      "Firestore: persistent cache unavailable or already initialized; reusing the active instance.",
+      "Firestore: already initialized; reusing the active in-memory instance.",
       err,
     );
-    // initializeFirestore may register the instance before persistence ownership
-    // fails (and HMR always reloads this module against an existing instance).
-    // Reuse it instead of trying a second incompatible initialization.
-    try {
-      db = getFirestore(app);
-    } catch {
-      db = initializeFirestore(app, {
-        experimentalForceLongPolling: true,
-        localCache: memoryLocalCache(),
-      });
-    }
-    firestoreOfflinePersistenceEnabled = false;
+    // HMR can reload this module after Firestore has already been initialized.
+    db = getFirestore(app);
   }
   auth = getAuth(app);
   storage = getStorage(app);
@@ -1032,8 +985,11 @@ export const getCustomerFinancialAnalyticsCallable = async <T>(input: {
 export const createInventoryCountSessionCallable = async (input: {
   warehouseId: string;
   warehouseName: string;
+  countScope?: 'warehouse' | 'rack' | 'location';
+  locationId?: string;
+  rackId?: string;
   note?: string;
-  lines: Array<{ itemType: 'finished_good' | 'raw_material' | 'material' | 'semi_finished' | 'consumable' | 'packaging'; itemId: string; expectedQty: number; countedQty: number }>;
+  lines: Array<{ itemType: 'finished_good' | 'raw_material' | 'material' | 'semi_finished' | 'consumable' | 'packaging'; itemId: string; expectedQty: number; countedQty: number; locationId?: string }>;
 }): Promise<{ ok: true; id: string; importedRows: number; changedRows: number }> => {
   if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
   const callable = httpsCallable<typeof input, { ok: true; id: string; importedRows: number; changedRows: number }>(

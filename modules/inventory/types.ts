@@ -271,12 +271,19 @@ export interface StockCountLine {
   itemCode: string;
   expectedQty: number;
   countedQty: number;
+  locationId?: string;
+  locationCode?: string;
 }
 
 export interface StockCountSession {
   id?: string;
   warehouseId: string;
   warehouseName: string;
+  countScope?: 'warehouse' | 'rack' | 'location';
+  locationId?: string;
+  locationCode?: string;
+  rackId?: string;
+  rackName?: string;
   status: 'open' | 'counted' | 'approved';
   note?: string;
   adjustmentReason?: StockAdjustmentReason;

@@ -5,7 +5,7 @@ import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPag
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
-import type { StockCountSession, StockItemBalance, Warehouse } from '../types';
+import type { StockCountSession, StockItemBalance, StockLocationBalance, Warehouse, WarehouseLocation, WarehouseRack } from '../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
@@ -25,6 +25,9 @@ import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { downloadStockCountErrors, downloadStockCountTemplate, parseStockCountSheet, type StockCountSheetResult } from '../lib/stockCountSheet';
 import { useWarehouseCountSheetPrint } from '../hooks/useWarehouseCountSheetPrint';
 import { WarehouseCountSheetPrintModal } from '../components/WarehouseCountSheetPrintModal';
+import { warehouseLocationService } from '../services/warehouseLocationService';
+import { warehouseRackService } from '../services/warehouseRackService';
+import { locationBelongsToRack } from '../lib/warehouseCountSheet';
 
 const STOCK_COUNTS_CACHE_KEY = 'inventory:stock-counts';
 const STOCK_COUNTS_BALANCES_CACHE = 'inventory:stock-counts-balances';
@@ -115,6 +118,13 @@ export const StockCounts: React.FC = () => {
   const [warehouseId, setWarehouseId] = useState(
     () => queryWarehouseId || scopedWarehouseId || '',
   );
+  const [countScope, setCountScope] = useState<'warehouse' | 'rack' | 'location'>('location');
+  const [rackId, setRackId] = useState('');
+  const [locationId, setLocationId] = useState('');
+  const [racks, setRacks] = useState<WarehouseRack[]>([]);
+  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
+  const [locationBalances, setLocationBalances] = useState<StockLocationBalance[]>([]);
+  const [scopeLoading, setScopeLoading] = useState(false);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [msg, setMsg] = useState<string>('');
@@ -128,12 +138,78 @@ export const StockCounts: React.FC = () => {
     );
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, queryWarehouseId, resolveScopedWarehouseId]);
 
+  useEffect(() => {
+    setRackId('');
+    setLocationId('');
+    setRacks([]);
+    setLocations([]);
+    setLocationBalances([]);
+    if (!warehouseId) return;
+    let cancelled = false;
+    setScopeLoading(true);
+    Promise.all([
+      warehouseRackService.getAll(warehouseId),
+      warehouseLocationService.getAll(warehouseId),
+      stockService.getLocationBalances({ warehouseId }),
+    ]).then(([nextRacks, nextLocations, nextBalances]) => {
+      if (cancelled) return;
+      setRacks(nextRacks.filter((row) => row.isActive !== false && row.id));
+      setLocations(nextLocations.filter((row) => row.isActive !== false && row.id));
+      setLocationBalances(nextBalances);
+    }).catch((error) => {
+      if (!cancelled) setMsg(error instanceof Error ? error.message : 'تعذر تحميل لوكيشنات المخزن.');
+    }).finally(() => {
+      if (!cancelled) setScopeLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [warehouseId]);
+
   const warehouseNameById = useMemo(
     () => new Map(warehouses.map((w) => [w.id, w.name])),
     [warehouses],
   );
 
   const selectedWarehouseName = warehouseNameById.get(warehouseId) || warehouseId;
+  const selectedRack = racks.find((row) => row.id === rackId);
+  const locationsForRack = useMemo(
+    () => selectedRack ? locations.filter((row) => locationBelongsToRack(row, selectedRack)) : [],
+    [locations, selectedRack],
+  );
+  const selectedLocation = locations.find((row) => row.id === locationId);
+  const selectedLocationBalances = useMemo(
+    () => locationBalances.filter((row) => row.locationId === locationId),
+    [locationBalances, locationId],
+  );
+  const locationById = useMemo(() => new Map(locations.map((row) => [row.id, row])), [locations]);
+  const rackLocationIds = useMemo(
+    () => new Set(locationsForRack.map((row) => row.id).filter(Boolean)),
+    [locationsForRack],
+  );
+  const scopedLocationBalances = useMemo(
+    () => countScope === 'location'
+      ? selectedLocationBalances
+      : countScope === 'rack'
+        ? locationBalances.filter((row) => rackLocationIds.has(row.locationId))
+        : [],
+    [countScope, locationBalances, rackLocationIds, selectedLocationBalances],
+  );
+  const countRows: Array<StockItemBalance & { locationId?: string; locationCode?: string }> = useMemo(() => (
+    countScope === 'location' || countScope === 'rack'
+      ? scopedLocationBalances.map((row) => ({
+        id: row.id,
+        warehouseId: row.warehouseId,
+        itemType: row.itemType,
+        itemId: row.itemId,
+        itemName: row.itemName,
+        itemCode: row.itemCode,
+        quantity: row.quantity,
+        minStock: row.minStock,
+        updatedAt: row.updatedAt,
+        locationId: row.locationId,
+        locationCode: row.locationCode || locationById.get(row.locationId)?.code,
+      }))
+      : balances.filter((row) => row.warehouseId === warehouseId)
+  ), [balances, countScope, locationById, scopedLocationBalances, warehouseId]);
 
   const visibleSessions = useMemo(() => {
     if (!warehouseId) return sessions;
@@ -141,39 +217,55 @@ export const StockCounts: React.FC = () => {
   }, [sessions, warehouseId]);
 
   const startCountSession = async () => {
-    if (!warehouseId) return;
+    if (!warehouseId || (countScope === 'location' && !locationId) || (countScope === 'rack' && !rackId)) return;
     setCreating(true);
     setMsg('');
     try {
-      const warehouseRows = balances.filter((b) => b.warehouseId === warehouseId);
-      if (warehouseRows.length === 0) {
-        setMsg('لا توجد أصناف في هذا المخزن لبدء الجرد.');
+      if (countRows.length === 0) {
+        setMsg(countScope === 'location'
+          ? 'لا توجد أرصدة أصناف في اللوكيشن المحدد لبدء الجرد.'
+          : countScope === 'rack'
+            ? 'لا توجد أرصدة أصناف في الراك المحدد لبدء الجرد.'
+            : 'لا توجد أصناف في هذا المخزن لبدء الجرد.');
         return;
       }
       await stockService.createCountSession({
         warehouseId,
         warehouseName: warehouseNameById.get(warehouseId) || warehouseId,
-        note: 'جلسة جرد جديدة',
+        countScope,
+        locationId: countScope === 'location' ? locationId : undefined,
+        rackId: countScope === 'rack' ? rackId : undefined,
+        note: countScope === 'location'
+          ? `جلسة جرد لوكيشن ${selectedLocation?.code || locationId}`
+          : countScope === 'rack'
+            ? `جلسة جرد راك ${selectedRack?.code || rackId}`
+            : 'جلسة جرد جديدة',
         createdBy: userDisplayName || 'Current User',
-        lines: warehouseRows.map((row) => ({
+        lines: countRows.map((row) => ({
           itemType: row.itemType,
           itemId: row.itemId,
           itemName: row.itemName,
           itemCode: row.itemCode,
           expectedQty: Number(row.quantity || 0),
           countedQty: Number(row.quantity || 0),
+          locationId: row.locationId,
+          locationCode: row.locationCode,
         })),
       });
       await loadData();
-      setMsg('تم فتح جلسة الجرد. أدخل الكميات الفعلية ثم طابق واعتمد الفروقات.');
+      setMsg(countScope === 'location'
+        ? `تم فتح جلسة جرد اللوكيشن ${selectedLocation?.code || locationId}. أدخل الكميات الفعلية ثم طابق واعتمد الفروقات.`
+        : countScope === 'rack'
+          ? `تم فتح جلسة جرد الراك ${selectedRack?.code || rackId}. أدخل كميات كل رف ثم طابق واعتمد الفروقات.`
+          : 'تم فتح جلسة الجرد. أدخل الكميات الفعلية ثم طابق واعتمد الفروقات.');
     } finally {
       setCreating(false);
     }
   };
 
   const selectedBalances = useMemo(
-    () => balances.filter((balance) => balance.warehouseId === warehouseId),
-    [balances, warehouseId],
+    () => countRows,
+    [countRows],
   );
 
   useEffect(() => {
@@ -210,7 +302,10 @@ export const StockCounts: React.FC = () => {
       await stockService.createCountSession({
         warehouseId,
         warehouseName: selectedWarehouseName,
-        note: `جرد مرفوع من ${countPreview.fileName} — ${countPreview.parsed.importedRows} صنف`,
+        countScope,
+        locationId: countScope === 'location' ? locationId : undefined,
+        rackId: countScope === 'rack' ? rackId : undefined,
+        note: `${countScope === 'location' ? `جرد لوكيشن ${selectedLocation?.code || locationId}` : 'جرد'} مرفوع من ${countPreview.fileName} — ${countPreview.parsed.importedRows} صنف`,
         createdBy: userDisplayName || 'Current User',
         lines: countPreview.parsed.lines,
       });
@@ -229,8 +324,12 @@ export const StockCounts: React.FC = () => {
       session,
       canManage: can('inventory.counts.manage'),
       createdBy: userDisplayName || 'Current User',
-      onUpdated: () => {
-        void loadData();
+      onUpdated: async () => {
+        await loadData();
+        if (warehouseId) {
+          const nextLocationBalances = await stockService.getLocationBalances({ warehouseId });
+          setLocationBalances(nextLocationBalances);
+        }
         setMsg('تم تحديث الجلسة.');
       },
     });
@@ -269,7 +368,7 @@ export const StockCounts: React.FC = () => {
           <li>أدخل الكميات الفعلية لكل صنف.</li>
           <li>طابق الفروقات واعتمدها لترحيل التسويات.</li>
         </ol>
-        <div className="flex flex-col lg:flex-row gap-3">
+        <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
           <Select
             value={warehouseId || 'none'}
             disabled={warehouseSelectLocked}
@@ -283,14 +382,84 @@ export const StockCounts: React.FC = () => {
               {warehouses.map((w) => <SelectItem key={w.id} value={w.id!}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="primary" onClick={() => void startCountSession()} disabled={!warehouseId || creating || balancesLoading || !can('inventory.counts.manage')}>
+          <Select
+            value={countScope}
+            onValueChange={(value) => {
+              setCountScope(value as 'warehouse' | 'rack' | 'location');
+              setRackId('');
+              setLocationId('');
+            }}
+          >
+            <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)]">
+              <SelectValue placeholder="اختر نطاق الجرد" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="location">لوكيشن محدد</SelectItem>
+              <SelectItem value="rack">راك كامل</SelectItem>
+              <SelectItem value="warehouse">المخزن كله</SelectItem>
+            </SelectContent>
+          </Select>
+          {countScope === 'location' || countScope === 'rack' ? (
+              <Select
+                value={rackId || 'none'}
+                disabled={!warehouseId || scopeLoading}
+                onValueChange={(value) => {
+                  setRackId(value === 'none' ? '' : value);
+                  setLocationId('');
+                }}
+              >
+                <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)]">
+                  <SelectValue placeholder={scopeLoading ? 'جاري تحميل الركات…' : 'اختر الراك'} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{racks.length ? 'اختر الراك' : 'لا توجد راكات'}</SelectItem>
+                  {racks.map((rack) => (
+                    <SelectItem key={rack.id} value={String(rack.id)}>
+                      {rack.name}{rack.code && rack.name !== rack.code ? ` (${rack.code})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+          ) : null}
+          {countScope === 'location' ? (
+              <Select
+                value={locationId || 'none'}
+                disabled={!rackId || scopeLoading}
+                onValueChange={(value) => setLocationId(value === 'none' ? '' : value)}
+              >
+                <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)]">
+                  <SelectValue placeholder="اختر اللوكيشن / الرف" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{rackId && !locationsForRack.length ? 'لا توجد لوكيشنات في الراك' : 'اختر اللوكيشن / الرف'}</SelectItem>
+                  {locationsForRack.map((location) => (
+                    <SelectItem key={location.id} value={String(location.id)}>
+                      {location.shelfName || location.shelf || location.code}{location.code ? ` — ${location.code}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+          ) : null}
+        </div>
+        {countScope === 'location' && selectedLocation ? (
+          <p className="mt-3 rounded-lg border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.08)] px-3 py-2 text-sm text-[var(--color-text-muted)]">
+            سيتم جرد <strong className="text-[var(--color-text)]">{selectedLocation.code}</strong> فقط، ويشمل {selectedLocationBalances.length} صنفًا. اعتماد الفروق يحدّث رصيد اللوكيشن وإجمالي المخزن معًا.
+          </p>
+        ) : null}
+        {countScope === 'rack' && selectedRack ? (
+          <p className="mt-3 rounded-lg border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.08)] px-3 py-2 text-sm text-[var(--color-text-muted)]">
+            سيتم جرد الراك <strong className="text-[var(--color-text)]">{selectedRack.code}</strong> كاملًا: {locationsForRack.length} لوكيشن و{scopedLocationBalances.length} سطر صنف. كل فرق سيُرحّل إلى اللوكيشن الخاص بسطره.
+          </p>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-3">
+          <Button variant="primary" onClick={() => void startCountSession()} disabled={!warehouseId || (countScope === 'location' && !locationId) || (countScope === 'rack' && !rackId) || creating || balancesLoading || scopeLoading || !can('inventory.counts.manage')}>
             <span className="material-icons-round text-sm">playlist_add_check</span>
-            {balancesLoading ? 'جاري تحميل الأرصدة…' : 'بدء الجرد'}
+            {balancesLoading || scopeLoading ? 'جاري تحميل الأرصدة…' : countScope === 'location' ? 'بدء جرد اللوكيشن' : countScope === 'rack' ? 'بدء جرد الراك' : 'بدء جرد المخزن'}
           </Button>
           <Button
             variant="outline"
             onClick={() => downloadStockCountTemplate(selectedWarehouseName, selectedBalances)}
-            disabled={!warehouseId || selectedBalances.length === 0 || balancesLoading}
+            disabled={!warehouseId || countScope === 'rack' || (countScope === 'location' && !locationId) || selectedBalances.length === 0 || balancesLoading || scopeLoading}
           >
             <span className="material-icons-round text-sm">download</span>
             تنزيل قالب الجرد
@@ -306,7 +475,7 @@ export const StockCounts: React.FC = () => {
           <Button
             variant="outline"
             onClick={() => fileInputRef.current?.click()}
-            disabled={!warehouseId || importing || !can('inventory.counts.manage')}
+            disabled={!warehouseId || countScope === 'rack' || (countScope === 'location' && !locationId) || importing || !can('inventory.counts.manage')}
           >
             <span className="material-icons-round text-sm">upload_file</span>
             {importing ? 'جارٍ قراءة الملف…' : 'رفع جرد Excel / CSV'}
@@ -387,7 +556,11 @@ export const StockCounts: React.FC = () => {
               <div key={session.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{session.warehouseName}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">
+                      {session.warehouseName}
+                      {session.countScope === 'location' ? ` — لوكيشن ${session.locationCode || session.locationId}` : ''}
+                      {session.countScope === 'rack' ? ` — راك ${session.rackName || session.rackId}` : ''}
+                    </p>
                     <p className="text-xs text-[var(--color-text-muted)]">{new Date(session.createdAt).toLocaleString('ar-EG')}</p>
                   </div>
                   <div className="flex items-center gap-2">

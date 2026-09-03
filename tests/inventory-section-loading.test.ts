@@ -26,6 +26,39 @@ const countsSrc = readFileSync(
 assert.match(countsSrc, /STOCK_COUNTS_BALANCES_CACHE/);
 assert.match(countsSrc, /loading=\{balancesLoading\}/);
 assert.match(countsSrc, /loading=\{listLoading \|\| listRefreshing\}/);
+assert.match(countsSrc, /لوكيشن محدد/);
+assert.match(countsSrc, /راك كامل/);
+assert.match(countsSrc, /warehouseRackService\.getAll\(warehouseId\)/);
+assert.match(countsSrc, /stockService\.getLocationBalances\(\{ warehouseId \}\)/);
+assert.match(countsSrc, /countScope === 'location' && !locationId/);
+assert.match(countsSrc, /countScope === 'rack' && !rackId/);
+assert.match(countsSrc, /locationBelongsToRack/);
+
+const countServiceSrc = readFileSync(
+  new URL('../modules/inventory/services/stockService.ts', import.meta.url),
+  'utf8',
+);
+assert.match(countServiceSrc, /locationId: line\.locationId \|\| \(session\.countScope === 'location' \? session\.locationId : undefined\)/);
+// A location/rack count's countedQty is one shelf's balance, not the warehouse total —
+// it must never overwrite the maintenance-center's absolute stock sync (see ADR-012).
+assert.match(countServiceSrc, /session\.countScope !== 'location' && session\.countScope !== 'rack'/);
+
+const countFunctionSrc = readFileSync(
+  new URL('../functions/src/inventoryStockCountOps.ts', import.meta.url),
+  'utf8',
+);
+assert.match(countFunctionSrc, /countScope === 'warehouse' \? 'stock_items' : 'stock_location_balances'/);
+assert.match(countFunctionSrc, /String\(balance\?\.locationId \|\| ''\) !== requestedLine\.locationId/);
+assert.match(countFunctionSrc, /String\(balance\?\.rackId \|\| ''\) !== rackId/);
+
+const countModalSrc = readFileSync(
+  new URL('../components/modal-manager/modals/GlobalStockCountSessionModal.tsx', import.meta.url),
+  'utf8',
+);
+// Rack sessions have one row per item per shelf — rows must be keyed by item+location
+// (not item alone) or same-item rows from different shelves collide as React keys.
+assert.match(countModalSrc, /\$\{line\.itemType\}_\$\{line\.itemId\}_\$\{line\.locationId \|\| idx\}/);
+assert.match(countModalSrc, /session\.countScope === 'rack' && <th/);
 
 const invoiceSrc = readFileSync(
   new URL('../modules/inventory/pages/SparePartsPurchaseInvoice.tsx', import.meta.url),

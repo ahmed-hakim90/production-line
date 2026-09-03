@@ -1341,6 +1341,9 @@ export const stockService = {
   async createCountSession(payload: {
     warehouseId: string;
     warehouseName: string;
+    countScope?: 'warehouse' | 'rack' | 'location';
+    locationId?: string;
+    rackId?: string;
     lines: StockCountLine[];
     note?: string;
     createdBy: string;
@@ -1349,12 +1352,16 @@ export const stockService = {
     const result = await createInventoryCountSessionCallable({
       warehouseId: payload.warehouseId,
       warehouseName: payload.warehouseName,
+      countScope: payload.countScope,
+      locationId: payload.locationId,
+      rackId: payload.rackId,
       note: payload.note,
       lines: payload.lines.map((line) => ({
         itemType: line.itemType,
         itemId: line.itemId,
         expectedQty: Number(line.expectedQty || 0),
         countedQty: Number(line.countedQty || 0),
+        locationId: line.locationId,
       })),
     });
     return result.id;
@@ -1409,6 +1416,28 @@ export const stockService = {
 
   async approveCountSession(session: StockCountSession, approvedBy: string): Promise<void> {
     if (!isConfigured || !session.id) return;
+    const sessionRef = doc(db, COUNTS_COLLECTION, session.id);
+    const adjustmentReason = session.adjustmentReason ?? 'count_correction';
+    const approvedAt = toIsoNow();
+
+    // Atomically claim approval before posting any ledger movement. Without this,
+    // a double-click, a network retry, or two tabs approving the same session both
+    // replay the diff loop below and post duplicate ADJUSTMENT movements for the
+    // same line — silently inflating the item's balance on every extra run.
+    await runTransaction(db, async (t) => {
+      const snap = await t.get(sessionRef);
+      if (!snap.exists()) throw new Error('جلسة الجرد غير موجودة.');
+      if (snap.data().status === 'approved') {
+        throw new Error('تم اعتماد هذه الجلسة بالفعل — لا يمكن اعتمادها مرة أخرى.');
+      }
+      t.update(sessionRef, {
+        status: 'approved',
+        approvedAt,
+        approvedBy,
+        adjustmentReason,
+      });
+    });
+
     const diffs = session.lines
       .map((line) => ({
         ...line,
@@ -1416,10 +1445,10 @@ export const stockService = {
       }))
       .filter((line) => line.diff !== 0);
 
-    const adjustmentReason = session.adjustmentReason ?? 'count_correction';
     for (const line of diffs) {
       await this.createMovement({
         warehouseId: session.warehouseId,
+        locationId: line.locationId || (session.countScope === 'location' ? session.locationId : undefined),
         itemType: line.itemType,
         itemId: line.itemId,
         itemName: line.itemName,
@@ -1434,13 +1463,6 @@ export const stockService = {
       }, { internal: true });
     }
 
-    await updateDoc(doc(db, COUNTS_COLLECTION, session.id), {
-      status: 'approved',
-      approvedAt: toIsoNow(),
-      approvedBy,
-      adjustmentReason,
-    });
-
     // Keep repair center UI ledger aligned when this warehouse is a maintenance center.
     // Create missing catalog rows — otherwise جدول المخزون stays empty after opening-balance approve.
     try {
@@ -1450,7 +1472,7 @@ export const stockService = {
       const branch = branches.find(
         (row) => String(row.warehouseId || '').trim() === String(session.warehouseId || '').trim(),
       );
-      if (branch?.id) {
+      if (branch?.id && session.countScope !== 'location' && session.countScope !== 'rack') {
         let parts = await sparePartsService.listParts(String(branch.id)).catch(() => []);
         for (const line of session.lines) {
           if (String(line.itemType || '') !== 'material') continue;
