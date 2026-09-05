@@ -1,31 +1,34 @@
 import type { CostingPolicySettings } from '../types';
 
 export const DEFAULT_COSTING_POLICY: CostingPolicySettings = {
-  legacyConversionEnabled: true,
+  legacyConversionEnabled: false,
   fullManufacturingEnabled: true,
-  primaryCostView: 'legacy_conversion',
+  primaryCostView: 'full_manufacturing',
   includeDirectLabor: true,
-  includeSupervisor: true,
-  includeIndirectCenters: true,
-  includeDepreciation: true,
-  includeActualMaterials: true,
-  includePackaging: true,
-  allowBomEstimateFallback: true,
-  allowLinePercentageAllocation: true,
-  allowQuantityAllocation: true,
+  includeSupervisor: false,
+  includeIndirectCenters: false,
+  includeDepreciation: false,
+  includeActualMaterials: false,
+  includePackaging: false,
+  allowBomEstimateFallback: false,
+  allowLinePercentageAllocation: false,
+  allowQuantityAllocation: false,
   dailyAllocationDriver: 'work_hours',
-  fallbackToQuantity: true,
-  prorateOpenPeriod: true,
-  allowProvisionalValues: true,
-  requireActualBeforeClose: true,
-  requireFullAllocationBeforeClose: true,
+  fallbackToQuantity: false,
+  prorateOpenPeriod: false,
+  allowProvisionalValues: false,
+  requireActualBeforeClose: false,
+  requireFullAllocationBeforeClose: false,
   freezeClosedSnapshots: true,
 };
 
 export function resolveCostingPolicy(
   input?: Partial<CostingPolicySettings> | null,
 ): CostingPolicySettings {
-  return { ...DEFAULT_COSTING_POLICY, ...(input || {}) };
+  // The historical policy is retained in storage only for compatibility.
+  // Production costing is now an enforced, labor-only policy.
+  void input;
+  return { ...DEFAULT_COSTING_POLICY };
 }
 
 export function validateCostingPolicy(policy: CostingPolicySettings): string[] {

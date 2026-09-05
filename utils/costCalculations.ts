@@ -11,6 +11,7 @@ import type {
 } from '../types';
 import { countsTowardProductManufacturingVolume } from '../modules/production/utils/reportTypes';
 import { resolveCostingPolicy } from './costingPolicy';
+import { calculateLaborOnlyProductionCost } from './laborOnlyProductionCost';
 
 export interface LineCostData {
   laborCost: number;
@@ -228,6 +229,17 @@ export const calculateDailyIndirectCost = (
   workingDaysByMonth?: Record<string, number>,
   activeReportDaysByLineMonth?: Map<string, number>,
 ): number => {
+  void lineId;
+  void month;
+  void costCenters;
+  void costCenterValues;
+  void costAllocations;
+  void assets;
+  void assetDepreciations;
+  void workingDaysByMonth;
+  void activeReportDaysByLineMonth;
+  return 0;
+
   let totalDaily = 0;
 
   const indirectCenters = costCenters.filter(
@@ -517,6 +529,38 @@ export const computeProductionCostEngine = ({
     centerSnapshots: [],
   };
   if (reports.length === 0) return result;
+
+  // Production costing is intentionally labor-only. Keep the wider function
+  // signature for API compatibility, but do not consume supervisors, centers,
+  // depreciation, materials, packaging, or legacy policy switches here.
+  reports.filter(countsTowardProductManufacturingVolume).forEach((report) => {
+    if (!report.productId || Number(report.quantityProduced || 0) <= 0) return;
+    const cost = calculateLaborOnlyProductionCost({
+      hourlyRate,
+      workersCount: Number(report.workersCount || 0),
+      workHours: Number(report.workHours || 0),
+      quantityProduced: Number(report.quantityProduced || 0),
+    });
+    result.totalProduction += cost.quantityProduced;
+    result.totalLaborCost += cost.laborCost;
+    result.totalCost += cost.totalCost;
+    if (report.id) result.reportUnitCost.set(report.id, cost.unitCost);
+    const current = result.byProduct[report.productId] || {
+      laborCost: 0,
+      indirectCost: 0,
+      totalCost: 0,
+      quantityProduced: 0,
+      costPerUnit: 0,
+    };
+    current.laborCost += cost.laborCost;
+    current.totalCost += cost.totalCost;
+    current.quantityProduced += cost.quantityProduced;
+    current.costPerUnit = current.quantityProduced > 0
+      ? current.totalCost / current.quantityProduced
+      : 0;
+    result.byProduct[report.productId] = current;
+  });
+  return result;
 
   const valueByCenterMonth = new Map<string, CostCenterValue>();
   costCenterValues.forEach((value) => {
@@ -1156,8 +1200,32 @@ export const getProductionReportCostBreakdown = (
   assets: Asset[] = [],
   assetDepreciations: AssetDepreciation[] = [],
 ): ProductionReportCostBreakdown | null => {
-  if (hourlyRate <= 0 && costCenters.length === 0) return null;
+  if (hourlyRate <= 0) return null;
   if (!countsTowardProductManufacturingVolume(report)) return null;
+
+  const laborOnly = calculateLaborOnlyProductionCost({
+    hourlyRate,
+    workersCount: report.workersCount,
+    workHours: report.workHours,
+    quantityProduced: report.quantityProduced,
+  });
+  if (laborOnly.quantityProduced <= 0) return null;
+  return {
+    quantityProduced: laborOnly.quantityProduced,
+    workersCount: laborOnly.workersCount,
+    workHours: laborOnly.workHours,
+    hourlyRate: laborOnly.hourlyRateApplied,
+    laborCostTotal: laborOnly.laborCost,
+    lineDailyIndirect: 0,
+    lineDateTotalQty: laborOnly.quantityProduced,
+    indirectShareTotal: 0,
+    indirectCenters: [],
+    byQtyShareTotal: 0,
+    byQtyCenters: [],
+    supervisorIndirectTotal: 0,
+    totalCost: laborOnly.totalCost,
+    costPerUnit: laborOnly.unitCost,
+  };
 
   const manufacturingContext = reports.filter(countsTowardProductManufacturingVolume);
   const activeReportDaysByLineMonth = buildActiveReportDaysByLineMonthMap(manufacturingContext);
@@ -1320,6 +1388,25 @@ export const buildProductAvgCost = (
   if (productReports.length === 0) {
     return { laborCost: 0, indirectCost: 0, totalCost: 0, quantityProduced: 0, costPerUnit: 0 };
   }
+  const laborOnly = productReports.reduce(
+    (totals, report) => {
+      const cost = calculateLaborOnlyProductionCost({
+        hourlyRate,
+        workersCount: report.workersCount,
+        workHours: report.workHours,
+        quantityProduced: report.quantityProduced,
+      });
+      totals.laborCost += cost.laborCost;
+      totals.totalCost += cost.totalCost;
+      totals.quantityProduced += cost.quantityProduced;
+      return totals;
+    },
+    { laborCost: 0, indirectCost: 0, totalCost: 0, quantityProduced: 0, costPerUnit: 0 },
+  );
+  laborOnly.costPerUnit = laborOnly.quantityProduced > 0
+    ? laborOnly.totalCost / laborOnly.quantityProduced
+    : 0;
+  return laborOnly;
 
   const lineDateTotals = new Map<string, number>();
   reports.forEach((r) => {
@@ -1387,6 +1474,28 @@ export const buildProductCostByLine = (
   );
   if (productReports.length === 0) return [];
 
+  const laborOnlyLines = new Map<string, { produced: number; cost: number }>();
+  productReports.forEach((report) => {
+    if (Number(report.quantityProduced || 0) <= 0) return;
+    const cost = calculateLaborOnlyProductionCost({
+      hourlyRate,
+      workersCount: report.workersCount,
+      workHours: report.workHours,
+      quantityProduced: report.quantityProduced,
+    });
+    const current = laborOnlyLines.get(report.lineId) || { produced: 0, cost: 0 };
+    current.produced += cost.quantityProduced;
+    current.cost += cost.totalCost;
+    laborOnlyLines.set(report.lineId, current);
+  });
+  return Array.from(laborOnlyLines.entries()).map(([lineId, data]) => ({
+    lineId,
+    lineName: getLineName(lineId),
+    totalProduced: data.produced,
+    totalCost: data.cost,
+    costPerUnit: data.produced > 0 ? data.cost / data.produced : 0,
+  }));
+
   const lineDateTotals = new Map<string, number>();
   reports.forEach((r) => {
     if (!countsTowardProductManufacturingVolume(r)) return;
@@ -1452,6 +1561,25 @@ export const buildProductCostHistory = (
   );
   if (productReports.length === 0) return [];
 
+  const laborOnlyDays = new Map<string, { totalCost: number; totalQty: number }>();
+  productReports.forEach((report) => {
+    const cost = calculateLaborOnlyProductionCost({
+      hourlyRate,
+      workersCount: report.workersCount,
+      workHours: report.workHours,
+      quantityProduced: report.quantityProduced,
+    });
+    const current = laborOnlyDays.get(report.date) || { totalCost: 0, totalQty: 0 };
+    current.totalCost += cost.totalCost;
+    current.totalQty += cost.quantityProduced;
+    laborOnlyDays.set(report.date, current);
+  });
+  return Array.from(laborOnlyDays.entries()).map(([date, data]) => ({
+    date,
+    costPerUnit: data.totalQty > 0 ? data.totalCost / data.totalQty : 0,
+    quantity: data.totalQty,
+  })).sort((a, b) => a.date.localeCompare(b.date));
+
   const allReportsByDate = new Map<string, ProductionReport[]>();
   reports.forEach((r) => {
     const list = allReportsByDate.get(r.date) || [];
@@ -1508,16 +1636,14 @@ export const estimateReportCost = (
   costAllocations: CostAllocation[]
 ): { laborCost: number; indirectCost: number; totalCost: number; costPerUnit: number } => {
   if (quantityProduced <= 0) return { laborCost: 0, indirectCost: 0, totalCost: 0, costPerUnit: 0 };
-
-  const laborCost = workersCount * workHours * hourlyRate;
-  const supervisorIndirectCost = Math.max(0, supervisorHourlyRate || 0) * workHours;
-  const month = reportDate?.slice(0, 7) || getCurrentMonth();
-  const sharedIndirectCost = lineId
-    ? calculateDailyIndirectCost(lineId, month, costCenters, costCenterValues, costAllocations)
-    : 0;
-  const indirectCost = sharedIndirectCost + supervisorIndirectCost;
-  const totalCost = laborCost + indirectCost;
-  return { laborCost, indirectCost, totalCost, costPerUnit: totalCost / quantityProduced };
+  void supervisorHourlyRate;
+  void lineId;
+  void reportDate;
+  void costCenters;
+  void costCenterValues;
+  void costAllocations;
+  const cost = calculateLaborOnlyProductionCost({ hourlyRate, workersCount, workHours, quantityProduced });
+  return { laborCost: cost.laborCost, indirectCost: 0, totalCost: cost.totalCost, costPerUnit: cost.unitCost };
 };
 
 export const getCurrentMonth = (): string => {
@@ -1670,6 +1796,7 @@ export const buildDailyProductionCostChart = (
 export type ProductionReportCostSnapshotPatch = Pick<
   ProductionReport,
   | 'costSnapshotAt'
+  | 'laborHourlyRateApplied'
   | 'unitCostSnapshot'
   | 'laborCostSnapshot'
   | 'lineIndirectShareSnapshot'
@@ -1696,35 +1823,20 @@ export const buildProductionReportCostSnapshotPatch = (
   },
 ): ProductionReportCostSnapshotPatch | null => {
   if (!report.id) return null;
-  const breakdown = getProductionReportCostBreakdown(
-    report,
-    contextReports,
-    args.hourlyRate,
-    args.costCenters,
-    args.costCenterValues,
-    args.costAllocations,
-    args.supervisorHourlyRates,
-    args.workingDaysByMonth,
-    args.productCategoryById,
-    args.assets,
-    args.assetDepreciations,
-  );
-  if (!breakdown) return null;
-  const indirectByCenterSnapshot: Record<string, number> = {};
-  for (const row of breakdown.indirectCenters) {
-    indirectByCenterSnapshot[row.costCenterId] =
-      (indirectByCenterSnapshot[row.costCenterId] || 0) + row.shareForThisReport;
-  }
-  for (const row of breakdown.byQtyCenters) {
-    indirectByCenterSnapshot[row.costCenterId] =
-      (indirectByCenterSnapshot[row.costCenterId] || 0) + row.shareForThisReport;
-  }
+  void contextReports;
+  const cost = calculateLaborOnlyProductionCost({
+    hourlyRate: args.hourlyRate,
+    workersCount: report.workersCount,
+    workHours: report.workHours,
+    quantityProduced: report.quantityProduced,
+  });
   return {
     costSnapshotAt: new Date().toISOString(),
-    unitCostSnapshot: breakdown.costPerUnit,
-    laborCostSnapshot: breakdown.laborCostTotal,
-    lineIndirectShareSnapshot: breakdown.indirectShareTotal,
-    supervisorIndirectSnapshot: breakdown.supervisorIndirectTotal,
-    indirectByCenterSnapshot,
+    laborHourlyRateApplied: cost.hourlyRateApplied,
+    unitCostSnapshot: cost.unitCost,
+    laborCostSnapshot: cost.laborCost,
+    lineIndirectShareSnapshot: 0,
+    supervisorIndirectSnapshot: 0,
+    indirectByCenterSnapshot: {},
   };
 };

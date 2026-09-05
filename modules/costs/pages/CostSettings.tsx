@@ -14,9 +14,9 @@ type BooleanCostPolicyKey = Exclude<
 >;
 
 const COST_POLICY_FLAGS: Array<{ key: BooleanCostPolicyKey; label: string; hint: string }> = [
-  { key: 'legacyConversionEnabled', label: 'تشغيل تكلفة التحويل القديمة', hint: 'يحافظ على رقم العمالة والإشراف والتكاليف غير المباشرة القديم.' },
-  { key: 'fullManufacturingEnabled', label: 'تشغيل التكلفة الصناعية الكاملة', hint: 'يضيف الخامات والتعبئة إلى تكلفة التحويل في نتيجة مستقلة.' },
-  { key: 'includeDirectLabor', label: 'إدخال العمالة المباشرة', hint: 'عدد العمال × ساعات التشغيل × معدل الساعة.' },
+  { key: 'legacyConversionEnabled', label: 'تشغيل تكلفة التحويل القديمة', hint: 'متوقف نهائيًا؛ محفوظ للعرض والتوافق فقط.' },
+  { key: 'fullManufacturingEnabled', label: 'تشغيل تكلفة الإنتاج الموحدة', hint: 'المسار الوحيد الفعّال لحفظ تكلفة العمالة بسعر الساعة الشامل.' },
+  { key: 'includeDirectLabor', label: 'حساب العمالة بسعر الساعة الشامل', hint: 'عدد العمال × ساعات التشغيل × معدل الساعة الشامل.' },
   { key: 'includeSupervisor', label: 'إدخال تكلفة المشرف', hint: 'تُحسب مرة للمشرف/الخط/اليوم ثم توزع على التقارير.' },
   { key: 'includeIndirectCenters', label: 'إدخال المراكز غير المباشرة', hint: 'يشغّل تحميل مجمعات المصروفات الصناعية على الإنتاج.' },
   { key: 'includeDepreciation', label: 'إدخال الإهلاك', hint: 'يضم إهلاك الأصول المرتبطة بمراكز الإنتاج مرة واحدة.' },
@@ -159,13 +159,14 @@ export const CostSettings: React.FC = () => {
               <select
                 className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm text-[var(--color-text)]"
                 value={costingPolicy.primaryCostView}
+                disabled
                 onChange={(event) => setCostingPolicy((current) => ({
                   ...current,
                   primaryCostView: event.target.value as CostingPolicySettings['primaryCostView'],
                 }))}
               >
                 <option value="legacy_conversion">تكلفة التحويل القديمة</option>
-                <option value="full_manufacturing">التكلفة الصناعية الكاملة</option>
+                <option value="full_manufacturing">تكلفة الإنتاج الموحدة — العمالة فقط</option>
               </select>
             </label>
             <label className="space-y-2 text-sm font-bold text-[var(--color-text-muted)]">
@@ -173,6 +174,7 @@ export const CostSettings: React.FC = () => {
               <select
                 className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm text-[var(--color-text)]"
                 value={costingPolicy.dailyAllocationDriver}
+                disabled
                 onChange={(event) => setCostingPolicy((current) => ({
                   ...current,
                   dailyAllocationDriver: event.target.value as CostingPolicySettings['dailyAllocationDriver'],
@@ -190,6 +192,7 @@ export const CostSettings: React.FC = () => {
                 <input
                   type="checkbox"
                   className="mt-1"
+                  disabled
                   checked={Boolean(costingPolicy[flag.key])}
                   onChange={(event) => setCostingPolicy((current) => ({
                     ...current,
@@ -210,13 +213,17 @@ export const CostSettings: React.FC = () => {
             </div>
           ) : null}
 
+          <div className="rounded-[var(--border-radius-lg)] border border-primary/20 bg-primary/5 p-4 text-sm font-bold text-[var(--color-text)]">
+            سياسة التكلفة الحالية إلزامية: سعر الساعة الشامل × عدد العمالة في التقرير × ساعات التشغيل. المشرف والمراكز والخامات والتعبئة والإهلاك لا تدخل في تكلفة الإنتاج.
+          </div>
+
           <div className="flex justify-end">
             <Button
               variant="primary"
               onClick={handleSaveCostingPolicy}
               disabled={savingPolicy || policyErrors.length > 0}
             >
-              {savingPolicy ? 'جاري الحفظ...' : savedPolicy ? 'تم الحفظ' : 'حفظ سياسة التكلفة'}
+              {savingPolicy ? 'جاري الحفظ...' : savedPolicy ? 'تم الحفظ' : 'حفظ السياسة الموحدة'}
             </Button>
           </div>
         </div>

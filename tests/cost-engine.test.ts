@@ -1,238 +1,39 @@
 import assert from 'node:assert/strict';
-import { computeProductionCostEngine } from '../utils/costCalculations';
-import type { Asset, AssetDepreciation, CostAllocation, CostCenter, CostCenterValue, CostingPolicySettings, ProductionReport } from '../types';
+import { computeProductionCostEngine } from '../utils/costCalculations.ts';
+import type { CostAllocation, CostCenter, CostCenterValue, ProductionReport } from '../types.ts';
 
-const month = '2026-05';
-const workingDaysByMonth = { [month]: 20 };
+const report = (overrides: Partial<ProductionReport> = {}): ProductionReport => ({
+  id: 'r1', employeeId: 'supervisor-1', productId: 'p1', lineId: 'line-1', date: '2026-09-05',
+  quantityProduced: 2_000, workersCount: 10, workHours: 8, reportType: 'finished_product', ...overrides,
+});
+const center: CostCenter = {
+  id: 'cc1', name: 'قديم', type: 'indirect', isActive: true, allocationBasis: 'line_percentage',
+};
+const value: CostCenterValue = { costCenterId: 'cc1', month: '2026-09', amount: 1_000_000 };
+const allocation: CostAllocation = {
+  costCenterId: 'cc1', month: '2026-09', allocations: [{ lineId: 'line-1', percentage: 100 }],
+};
 
-function report(overrides: Partial<ProductionReport>): ProductionReport {
-  return {
-    id: overrides.id || `r-${Math.random()}`,
-    employeeId: overrides.employeeId || 'sup-1',
-    productId: overrides.productId || 'p1',
-    lineId: overrides.lineId || 'line-1',
-    date: overrides.date || `${month}-03`,
-    quantityProduced: overrides.quantityProduced ?? 100,
-    workersCount: overrides.workersCount ?? 0,
-    workHours: overrides.workHours ?? 0,
-    reportType: 'finished_product',
-    ...overrides,
-  };
-}
+const result = computeProductionCostEngine({
+  reports: [report({ supervisorIndirectCost: 500_000 })], hourlyRate: 50,
+  costCenters: [center], costCenterValues: [value], costAllocations: [allocation],
+  options: {
+    supervisorHourlyRates: new Map([['supervisor-1', 100_000]]),
+    costingPolicy: { includeSupervisor: true, includeIndirectCenters: true, includeDepreciation: true },
+  },
+});
+assert.equal(result.totalLaborCost, 4_000);
+assert.equal(result.totalIndirectCost, 0);
+assert.equal(result.totalCost, 4_000);
+assert.equal(result.byProduct.p1.costPerUnit, 2);
+assert.equal(result.reportUnitCost.get('r1'), 2);
+assert.deepEqual(result.centerSnapshots, []);
 
-function runEngine(args: {
-  reports: ProductionReport[];
-  hourlyRate?: number;
-  costCenters?: CostCenter[];
-  costCenterValues?: CostCenterValue[];
-  costAllocations?: CostAllocation[];
-  assets?: Asset[];
-  assetDepreciations?: AssetDepreciation[];
-  productCategoryById?: Map<string, string>;
-  supervisorHourlyRates?: Map<string, number>;
-  costingPolicy?: Partial<CostingPolicySettings>;
-}) {
-  return computeProductionCostEngine({
-    reports: args.reports,
-    hourlyRate: args.hourlyRate ?? 0,
-    costCenters: args.costCenters ?? [],
-    costCenterValues: args.costCenterValues ?? [],
-    costAllocations: args.costAllocations ?? [],
-    options: {
-      assets: args.assets,
-      assetDepreciations: args.assetDepreciations,
-      productCategoryById: args.productCategoryById,
-      supervisorHourlyRates: args.supervisorHourlyRates,
-      workingDaysByMonth,
-      costingPolicy: args.costingPolicy,
-    },
-  });
-}
+const excluded = computeProductionCostEngine({
+  reports: [report({ id: 'packaging', reportType: 'packaging' }), report({ id: 'waste', reportType: 'component_waste' })],
+  hourlyRate: 50, costCenters: [], costCenterValues: [], costAllocations: [],
+});
+assert.equal(excluded.totalProduction, 0);
+assert.equal(excluded.totalCost, 0);
 
-// Golden compatibility: the default policy must retain the pre-merge conversion formula.
-{
-  const center = indirectCenter('cc-golden');
-  const result = runEngine({
-    hourlyRate: 10,
-    reports: [report({ id: 'golden', quantityProduced: 100, workersCount: 2, workHours: 5 })],
-    costCenters: [center],
-    costCenterValues: [value('cc-golden', 2000)],
-    costAllocations: [allocation('cc-golden')],
-    supervisorHourlyRates: new Map([['sup-1', 50]]),
-  });
-  assert.equal(result.byProduct.p1.laborCost, 100);
-  assert.equal(result.byProduct.p1.indirectCost, 350);
-  assert.equal(result.byProduct.p1.totalCost, 450);
-}
-
-{
-  const center = { ...indirectCenter('cc-disabled'), productionCostingEnabled: false };
-  const result = runEngine({
-    hourlyRate: 10,
-    reports: [report({ id: 'flags', workersCount: 2, workHours: 5 })],
-    costCenters: [center],
-    costCenterValues: [value('cc-disabled', 2000)],
-    costAllocations: [allocation('cc-disabled')],
-    supervisorHourlyRates: new Map([['sup-1', 50]]),
-    costingPolicy: { includeDirectLabor: false, includeSupervisor: false },
-  });
-  assert.equal(result.byProduct.p1.totalCost, 0);
-}
-
-{
-  const center = indirectCenter('cc-no-fallback');
-  const result = runEngine({
-    reports: [report({ id: 'no-fallback', quantityProduced: 100, workHours: 0 })],
-    costCenters: [center],
-    costCenterValues: [value('cc-no-fallback', 2000)],
-    costAllocations: [allocation('cc-no-fallback')],
-    costingPolicy: { dailyAllocationDriver: 'work_hours', fallbackToQuantity: false },
-  });
-  assert.equal(result.byProduct.p1.indirectCost, 0);
-}
-
-function indirectCenter(id: string, allocationBasis: CostCenter['allocationBasis'] = 'line_percentage'): CostCenter {
-  return {
-    id,
-    name: id,
-    type: 'indirect',
-    allocationBasis,
-    productScope: 'all',
-    isActive: true,
-  };
-}
-
-function value(costCenterId: string, amount: number): CostCenterValue {
-  return { costCenterId, month, amount, valueSource: 'manual' };
-}
-
-function allocation(costCenterId: string, percentage = 100): CostAllocation {
-  return { costCenterId, month, allocations: [{ lineId: 'line-1', percentage }] };
-}
-
-{
-  const result = runEngine({
-    hourlyRate: 10,
-    reports: [report({ id: 'direct', quantityProduced: 100, workersCount: 2, workHours: 5 })],
-  });
-  assert.equal(result.byProduct.p1.laborCost, 100);
-  assert.equal(result.byProduct.p1.indirectCost, 0);
-  assert.equal(result.byProduct.p1.costPerUnit, 1);
-}
-
-{
-  const result = runEngine({
-    hourlyRate: 10,
-    reports: [report({
-      id: 'absent-workers',
-      quantityProduced: 100,
-      workersCount: 2,
-      presentAssignments: 2,
-      absentAssignments: 3,
-      workHours: 5,
-    })],
-  });
-  assert.equal(result.byProduct.p1.laborCost, 100);
-  assert.equal(result.byProduct.p1.costPerUnit, 1);
-}
-
-{
-  const center = indirectCenter('cc-line');
-  const result = runEngine({
-    reports: [
-      report({ id: 'hours-a', productId: 'p1', quantityProduced: 50, workHours: 2 }),
-      report({ id: 'hours-b', productId: 'p2', quantityProduced: 50, workHours: 6 }),
-    ],
-    costCenters: [center],
-    costCenterValues: [value('cc-line', 2000)],
-    costAllocations: [allocation('cc-line')],
-  });
-  assert.equal(result.byProduct.p1.indirectCost, 25);
-  assert.equal(result.byProduct.p2.indirectCost, 75);
-}
-
-{
-  const center = indirectCenter('cc-fallback');
-  const result = runEngine({
-    reports: [
-      report({ id: 'qty-a', productId: 'p1', quantityProduced: 25, workHours: 0 }),
-      report({ id: 'qty-b', productId: 'p2', quantityProduced: 75, workHours: 0 }),
-    ],
-    costCenters: [center],
-    costCenterValues: [value('cc-fallback', 2000)],
-    costAllocations: [allocation('cc-fallback')],
-  });
-  assert.equal(result.byProduct.p1.indirectCost, 25);
-  assert.equal(result.byProduct.p2.indirectCost, 75);
-}
-
-{
-  const center = {
-    ...indirectCenter('cc-category', 'by_qty'),
-    productScope: 'category' as const,
-    productCategories: ['A'],
-  };
-  const result = runEngine({
-    reports: [
-      report({ id: 'cat-a', productId: 'p1', quantityProduced: 25 }),
-      report({ id: 'cat-b', productId: 'p2', quantityProduced: 75 }),
-    ],
-    costCenters: [center],
-    costCenterValues: [value('cc-category', 2000)],
-    productCategoryById: new Map([
-      ['p1', 'A'],
-      ['p2', 'B'],
-    ]),
-  });
-  assert.equal(result.byProduct.p1.indirectCost, 100);
-  assert.equal(result.byProduct.p2.indirectCost, 0);
-}
-
-{
-  const center = indirectCenter('cc-dep');
-  const result = runEngine({
-    reports: [report({ id: 'dep', productId: 'p1', quantityProduced: 100, workHours: 1 })],
-    costCenters: [center],
-    costCenterValues: [value('cc-dep', 0)],
-    costAllocations: [allocation('cc-dep')],
-    assets: [{
-      id: 'asset-1',
-      name: 'Machine',
-      code: 'M-1',
-      category: 'machine',
-      centerId: 'cc-dep',
-      purchaseDate: '2026-01-01',
-      purchaseCost: 10000,
-      salvageValue: 0,
-      usefulLifeMonths: 10,
-      depreciationMethod: 'straight_line',
-      monthlyDepreciation: 2000,
-      accumulatedDepreciation: 0,
-      currentValue: 10000,
-      status: 'active',
-    }],
-    assetDepreciations: [{
-      assetId: 'asset-1',
-      period: month,
-      depreciationAmount: 2000,
-      accumulatedDepreciation: 2000,
-      bookValue: 8000,
-    }],
-  });
-  assert.equal(result.byProduct.p1.indirectCost, 100);
-}
-
-{
-  const result = runEngine({
-    reports: [
-      report({ id: 'sup-a', productId: 'p1', employeeId: 'sup-1', quantityProduced: 25, workHours: 8 }),
-      report({ id: 'sup-b', productId: 'p2', employeeId: 'sup-1', quantityProduced: 75, workHours: 6 }),
-    ],
-    supervisorHourlyRates: new Map([['sup-1', 50]]),
-  });
-  assert.equal(result.byProduct.p1.indirectCost, 100);
-  assert.equal(result.byProduct.p2.indirectCost, 300);
-  assert.equal(result.totalIndirectCost, 400);
-}
-
-console.log('cost engine tests passed');
+console.log('cost-engine.test.ts: ok');

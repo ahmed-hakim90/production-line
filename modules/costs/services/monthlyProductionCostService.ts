@@ -434,18 +434,14 @@ async function buildMonthCalculationContext(
   providers: CostServiceProviders,
   workingDaysByMonth?: Record<string, number>,
 ): Promise<MonthCalculationContext> {
-  const [allReports, centerValues] = await Promise.all([
-    providers.productionProvider.getMonthlyReports(month) as Promise<CostProductionReport[]>,
-    resolveCenterValuesForMonth(
-      month,
-      costCenters,
-      costCenterValues,
-      assets,
-      assetDepreciations,
-      providers.payrollProvider,
-      workingDaysByMonth,
-    ),
-  ]);
+  void costCenters;
+  void costCenterValues;
+  void costAllocations;
+  void assets;
+  void assetDepreciations;
+  void workingDaysByMonth;
+  const allReports = await providers.productionProvider.getMonthlyReports(month) as CostProductionReport[];
+  const centerValues = new Map<string, CenterResolvedValue>();
 
   const productReportsByProduct = new Map<string, CostProductionReport[]>();
 
@@ -672,33 +668,23 @@ export const monthlyProductionCostService = {
     const avgUnitCost = totalQty > 0 ? totalCost / totalQty : 0;
     const indirectCenterSnapshots = engine.centerSnapshots;
     const rawFullCostSummary = summarizeFullManufacturingCost(productReports);
-    const materialCost = costingPolicy.includeActualMaterials
-      ? rawFullCostSummary.materialCost
-      : 0;
-    const packagingCost = costingPolicy.includePackaging
-      ? rawFullCostSummary.packagingCost
-      : 0;
-    const fullManufacturingCost = costingPolicy.fullManufacturingEnabled
-      ? totalCost + materialCost + packagingCost
-      : 0;
+    const materialCost = 0;
+    const packagingCost = 0;
+    const fullManufacturingCost = totalCost;
     const fullCostSummary = {
       ...rawFullCostSummary,
       materialCost,
       packagingCost,
       fullManufacturingCost,
-      fullManufacturingAverageUnitCost: rawFullCostSummary.fullCostedQty > 0
-        ? fullManufacturingCost / rawFullCostSummary.fullCostedQty
+      fullManufacturingAverageUnitCost: totalQty > 0
+        ? fullManufacturingCost / totalQty
         : 0,
-      fullCostStatus: costingPolicy.fullManufacturingEnabled
-        ? rawFullCostSummary.fullCostStatus
-        : 'missing' as const,
+      fullCostedQty: totalQty,
+      fullCostCoveragePct: totalQty > 0 ? 100 : 100,
+      fullCostStatus: totalQty > 0 ? 'actual' as const : 'missing' as const,
     };
-    const sourceValues = costCenterValues.filter((value) => value.month === month);
-    const sourcesActual = sourceValues.length === 0 || sourceValues.every(
-      (value) => value.costingStatus === 'actual' || value.costingStatus === 'closed',
-    );
     const costingStatus: MonthlyProductionCost['costingStatus'] =
-      sourcesActual && (!costingPolicy.fullManufacturingEnabled || fullCostSummary.fullCostStatus === 'actual')
+      fullCostSummary.fullCostStatus === 'actual'
         ? 'actual'
         : 'provisional';
 
@@ -706,11 +692,11 @@ export const monthlyProductionCostService = {
       productId,
       month,
       totalProducedQty: totalQty,
-      directCost: costingPolicy.legacyConversionEnabled ? totalLabor : 0,
-      indirectCost: costingPolicy.legacyConversionEnabled ? totalIndirect : 0,
+      directCost: totalLabor,
+      indirectCost: 0,
       indirectCenterSnapshots,
-      totalProductionCost: costingPolicy.legacyConversionEnabled ? totalCost : 0,
-      averageUnitCost: costingPolicy.legacyConversionEnabled ? avgUnitCost : 0,
+      totalProductionCost: totalCost,
+      averageUnitCost: avgUnitCost,
       ...fullCostSummary,
       costingStatus,
       revision: Math.max(1, Number(existing?.revision || 0) + 1),
@@ -755,8 +741,6 @@ export const monthlyProductionCostService = {
       providers,
       workingDaysByMonth,
     );
-    await persistResolvedCenterValues(month, context.centerValues, costCenterValues);
-
     const results: MonthlyProductionCost[] = [];
     const total = productIds.length;
     let done = 0;

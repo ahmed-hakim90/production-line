@@ -7,16 +7,24 @@ import {
 
 const defaults = resolveCostingPolicy();
 assert.deepEqual(defaults, DEFAULT_COSTING_POLICY);
-assert.equal(defaults.primaryCostView, 'legacy_conversion');
+assert.equal(defaults.primaryCostView, 'full_manufacturing');
+assert.equal(defaults.includeDirectLabor, true);
+assert.equal(defaults.includeSupervisor, false);
+assert.equal(defaults.includeIndirectCenters, false);
+assert.equal(defaults.includeActualMaterials, false);
+assert.deepEqual(
+  resolveCostingPolicy({ includeSupervisor: true, includeActualMaterials: true }),
+  DEFAULT_COSTING_POLICY,
+);
 assert.equal(validateCostingPolicy(defaults).length, 0);
 
 assert.match(
   validateCostingPolicy({ ...defaults, legacyConversionEnabled: false, fullManufacturingEnabled: false })[0],
   /يجب تشغيل تكلفة التحويل/,
 );
-assert.match(
-  validateCostingPolicy({ ...defaults, primaryCostView: 'full_manufacturing', fullManufacturingEnabled: false })[0],
-  /لا يمكن اعتماد التكلفة الكاملة/,
+assert.ok(
+  validateCostingPolicy({ ...defaults, primaryCostView: 'full_manufacturing', fullManufacturingEnabled: false })
+    .some((message) => /لا يمكن اعتماد التكلفة الكاملة/.test(message)),
 );
 assert.match(
   validateCostingPolicy({

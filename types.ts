@@ -311,6 +311,8 @@ export interface ProductionReport {
   presentAssignments?: number;
   absentAssignments?: number;
   workHours: number;
+  /** Inclusive production labor rate used by the labor-only costing formula. */
+  laborHourlyRateApplied?: number;
   supervisorHourlyRateApplied?: number;
   supervisorIndirectCost?: number;
   /** ISO timestamp when cost snapshots below were computed */

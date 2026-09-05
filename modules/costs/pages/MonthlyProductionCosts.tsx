@@ -4,7 +4,7 @@ import { Card, Badge, Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { useShallowStore } from '../../../store/useAppStore';
+import { recalculateOpenProductionReportCosts, useShallowStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
 import { reportService } from '@/modules/production/services/reportService';
@@ -579,6 +579,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         return;
       }
       setCalculateProgress({ done: 0, total: productIds.length, productId: '' });
+      await recalculateOpenProductionReportCosts(month);
       await monthlyProductionCostService.calculateAll(
         productIds,
         month,

@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { getDb } from './adminApp.js';
 import { applyProductionReportInventoryInternal } from './productionReportInventory.js';
+import { calculateLaborOnlyProductionCost } from './laborOnlyProductionCost.js';
 const db = getDb();
 const REPORTS = 'production_reports';
 const ATTENDANCE = 'production_attendance_records';
@@ -142,64 +143,17 @@ const shouldApplyInventory = async (tenantId) => {
 };
 const calculateAndPostLegacyCost = async (reportId, report) => {
     const tenantId = clean(report.tenantId);
-    const month = clean(report.date).slice(0, 7);
-    const [laborSnap, supervisorSnap, centersSnap, valuesSnap, allocationsSnap] = await Promise.all([
-        db.collection('labor_settings').doc(tenantId).get(),
-        db.collection('employees').doc(clean(report.employeeId)).get(),
-        db.collection('cost_centers').where('tenantId', '==', tenantId).get(),
-        db.collection('cost_center_values').where('tenantId', '==', tenantId).get(),
-        db.collection('cost_allocations').where('tenantId', '==', tenantId).get(),
-    ]);
+    const laborSnap = await db.collection('labor_settings').doc(tenantId).get();
     const labor = laborSnap.data();
-    const supervisor = supervisorSnap.data();
     const hourlyRate = number(labor?.hourlyRate);
-    const supervisorRate = clean(supervisor?.tenantId) === tenantId
-        ? number(supervisor?.hourlyRate || hourlyRate)
-        : hourlyRate;
-    const detailedWorkers = number(report.workersProductionCount)
-        + number(report.workersPackagingCount)
-        + number(report.workersQualityCount)
-        + number(report.workersMaintenanceCount)
-        + number(report.workersExternalCount);
-    const workers = detailedWorkers > 0 ? detailedWorkers : number(report.workersCount);
-    const hours = number(report.workHours);
-    const laborCost = workers * hours * hourlyRate;
-    const supervisorIndirect = supervisorRate * hours;
-    const centerById = new Map(centersSnap.docs.map((snapshot) => [snapshot.id, snapshot.data()]));
-    const allocationByCenter = new Map(allocationsSnap.docs
-        .map((snapshot) => snapshot.data())
-        .filter((row) => clean(row.month) === month)
-        .map((row) => [clean(row.costCenterId), row]));
-    let lineIndirect = 0;
-    const indirectByCenter = {};
-    for (const valueSnapshot of valuesSnap.docs) {
-        const value = valueSnapshot.data();
-        if (clean(value.month) !== month)
-            continue;
-        const centerId = clean(value.costCenterId);
-        const center = centerById.get(centerId);
-        if (!center
-            || center.isActive === false
-            || clean(center.type) !== 'indirect'
-            || center.productionCostingEnabled === false
-            || (clean(center.postingMode) && clean(center.postingMode) !== 'driver_allocation')
-            || clean(center.allocationBasis || 'line_percentage') !== 'line_percentage')
-            continue;
-        const allocation = allocationByCenter.get(centerId);
-        const lineAllocation = allocation?.allocations?.find((row) => clean(row.lineId) === clean(report.lineId));
-        const percentage = number(lineAllocation?.percentage);
-        if (!(percentage > 0))
-            continue;
-        const amount = number(value.actualAmount || value.provisionalAmount || value.amount);
-        const workingDays = Math.max(1, Math.round(number(value.workingDays) || 26));
-        const dailyShare = (amount * percentage / 100) / workingDays;
-        if (!(dailyShare > 0))
-            continue;
-        indirectByCenter[centerId] = dailyShare;
-        lineIndirect += dailyShare;
-    }
-    const totalCost = laborCost + supervisorIndirect + lineIndirect;
-    const quantity = number(report.quantityProduced);
+    const isManufacturingReport = countsTowardProgress(report);
+    const cost = calculateLaborOnlyProductionCost({
+        hourlyRate,
+        workersCount: isManufacturingReport ? number(report.workersCount) : 0,
+        workHours: number(report.workHours),
+        quantityProduced: number(report.quantityProduced),
+    });
+    const totalCost = cost.totalCost;
     const reportRef = db.collection(REPORTS).doc(reportId);
     await db.runTransaction(async (transaction) => {
         const reportSnap = await transaction.get(reportRef);
@@ -229,14 +183,39 @@ const calculateAndPostLegacyCost = async (reportId, report) => {
             transaction.set(planRef, { actualCost: number(planSnap.data()?.actualCost) + delta }, { merge: true });
         }
         transaction.set(reportRef, {
-            laborCostSnapshot: laborCost,
-            lineIndirectShareSnapshot: lineIndirect,
-            supervisorHourlyRateApplied: supervisorRate,
-            supervisorIndirectCost: supervisorIndirect,
-            supervisorIndirectSnapshot: supervisorIndirect,
-            indirectByCenterSnapshot: indirectByCenter,
+            laborHourlyRateApplied: cost.hourlyRateApplied,
+            laborCostSnapshot: cost.laborCost,
+            lineIndirectShareSnapshot: 0,
+            supervisorHourlyRateApplied: 0,
+            supervisorIndirectCost: 0,
+            supervisorIndirectSnapshot: 0,
+            indirectByCenterSnapshot: {},
             legacyConversionCostSnapshot: totalCost,
-            unitCostSnapshot: quantity > 0 ? totalCost / quantity : 0,
+            unitCostSnapshot: cost.unitCost,
+            materialCostSnapshot: 0,
+            packagingCostSnapshot: 0,
+            directLaborCostSnapshot: cost.laborCost,
+            factoryOverheadCostSnapshot: 0,
+            depreciationCostSnapshot: 0,
+            fullManufacturingCostSnapshot: totalCost,
+            fullManufacturingUnitCostSnapshot: cost.unitCost,
+            manufacturingCostVersion: 'labor-only-v1',
+            manufacturingCostStatus: 'actual',
+            manufacturingCostSourceQualitySnapshot: {
+                actualLines: isManufacturingReport ? 1 : 0,
+                estimatedLines: 0,
+                scheduledLines: 0,
+                missingAmountLines: isManufacturingReport && cost.laborCost <= 0 ? 1 : 0,
+            },
+            manufacturingCostSourcesSnapshot: isManufacturingReport ? [{
+                    sourceKey: `labor:${reportId}`,
+                    sourceType: 'inclusive_hourly_labor',
+                    sourceId: reportId,
+                    category: 'direct_labor',
+                    label: 'تكلفة العمالة بسعر الساعة الشامل',
+                    amount: cost.laborCost,
+                    status: 'actual',
+                }] : [],
             costSnapshotAt: new Date().toISOString(),
             workOrderCostPostedTargetId: workOrderId,
             workOrderCostPostedSnapshot: workOrderId ? totalCost : 0,

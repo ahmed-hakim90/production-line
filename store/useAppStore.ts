@@ -148,6 +148,7 @@ import {
   type ProductionCostSourceLine,
 } from '../modules/costs/lib/fullProductionCost';
 import { resolveCostingPolicy } from '../utils/costingPolicy';
+import { calculateLaborOnlyProductionCost } from '../utils/laborOnlyProductionCost';
 import { loadReportsComponentLabelOptions } from '../modules/production/utils/injectionComponentOptions';
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
 import {
@@ -400,22 +401,19 @@ function calculateIndustrialReportTotalCost(params: {
   employees: FirestoreEmployee[];
 }): number {
   const hourlyRate = Number(params.laborSettings?.hourlyRate ?? 0);
-  const supervisorHourlyRate = Number(
-    params.employees.find((employee) => employee.id === params.employeeId)?.hourlyRate ?? hourlyRate,
-  );
-  const estimate = estimateReportCost(
-    Number(params.workersCount || 0),
-    Number(params.workHours || 0),
-    Number(params.quantityProduced || 0),
+  void params.lineId;
+  void params.reportDate;
+  void params.employeeId;
+  void params.costCenters;
+  void params.costCenterValues;
+  void params.costAllocations;
+  void params.employees;
+  return calculateLaborOnlyProductionCost({
     hourlyRate,
-    supervisorHourlyRate,
-    params.lineId,
-    params.reportDate,
-    params.costCenters,
-    params.costCenterValues,
-    params.costAllocations,
-  );
-  return Number(estimate.totalCost || 0);
+    workersCount: params.workersCount,
+    workHours: params.workHours,
+    quantityProduced: params.quantityProduced,
+  }).totalCost;
 }
 
 type ReportAggregateCostState = ProductionReport & {
@@ -863,85 +861,25 @@ async function persistProductionReportCostSnapshot(
     indirectByCenterSnapshot: {},
   };
 
-  const effectiveDepreciation = buildEffectiveDepreciationRows(
-    ym,
-    st.assets,
-    st.assetDepreciations,
-  );
-  const withDepreciation = getProductionReportCostBreakdown(
-    row,
-    monthRows,
-    Number(st.laborSettings?.hourlyRate ?? 0),
-    st.costCenters,
-    st.costCenterValues,
-    st.costAllocations,
-    supervisorHourlyRates,
-    st.systemSettings.costMonthlyWorkingDays,
-    productCategoryById,
-    st.assets,
-    effectiveDepreciation.rows,
-  );
-  const legacyConversionCost = Number(legacyPatch.unitCostSnapshot || 0)
-    * Number(row.quantityProduced || 0);
-  const conversionWithDepreciation = Number(withDepreciation?.totalCost ?? legacyConversionCost);
-  const depreciationCost = Math.max(0, conversionWithDepreciation - legacyConversionCost);
-  const rawMaterialSources = await buildReportMaterialCostSources(row);
-  const materialSources = costingPolicy.fullManufacturingEnabled
-    ? rawMaterialSources.filter((source) => {
-        if (source.category === 'packaging') return costingPolicy.includePackaging;
-        if (source.category !== 'material') return true;
-        if (source.status === 'actual') return costingPolicy.includeActualMaterials;
-        return costingPolicy.allowBomEstimateFallback;
-      })
-    : [];
-  const applicableCenterIds = new Set(
-    st.costCenters
-      .filter(isProductionAllocationCostCenter)
-      .map((center) => String(center.id || '')),
-  );
-  const applicableCenterValues = st.costCenterValues.filter(
-    (value) => value.month === ym && applicableCenterIds.has(String(value.costCenterId || '')),
-  );
-  const overheadIsActual = applicableCenterValues.length > 0
-    && applicableCenterValues.every((value) => ['actual', 'closed'].includes(String(value.costingStatus || '')));
-  const sourceLines: ProductionCostSourceLine[] = [
-    ...materialSources,
-    ...(costingPolicy.fullManufacturingEnabled && costingPolicy.includeDirectLabor ? [{
-      sourceKey: `labor:${reportId}`,
-      sourceType: 'labor_standard',
-      sourceId: reportId,
-      category: 'direct_labor',
-      label: 'العمالة المباشرة',
-      amount: Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0),
-      status: 'actual' as const,
-    } satisfies ProductionCostSourceLine] : []),
-    ...(costingPolicy.fullManufacturingEnabled && costingPolicy.includeIndirectCenters ? [{
-      sourceKey: `overhead:${reportId}:${ym}`,
-      sourceType: 'cost_center_absorption',
-      sourceId: ym,
-      category: 'factory_overhead',
-      label: 'التكاليف الصناعية المحملة',
-      amount: Math.max(
-        0,
-        conversionWithDepreciation
-          - Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0)
-          - depreciationCost
-          - (costingPolicy.includeSupervisor ? 0 : Number(legacyPatch.supervisorIndirectSnapshot || 0)),
-      ),
-      status: overheadIsActual ? 'actual' : 'estimated',
-    } satisfies ProductionCostSourceLine] : []),
-  ];
-  if (costingPolicy.fullManufacturingEnabled && costingPolicy.includeDepreciation && depreciationCost > 0) {
-    sourceLines.push({
-      sourceKey: `depreciation:${reportId}:${ym}`,
-      sourceType: effectiveDepreciation.hasScheduledRows ? 'asset_schedule' : 'asset_depreciation',
-      sourceId: ym,
-      category: 'depreciation',
-      label: 'إهلاك أصول المصنع',
-      amount: depreciationCost,
-      status: effectiveDepreciation.hasScheduledRows ? 'scheduled' : 'actual',
-    });
-  }
+  void ym;
+  void costingPolicy;
+  void supervisorHourlyRates;
+  void productCategoryById;
+  const laborOnly = calculateLaborOnlyProductionCost({
+    hourlyRate: Number(st.laborSettings?.hourlyRate ?? 0),
+    workersCount: countsTowardProductManufacturingVolume(row) ? Number(row.workersCount || 0) : 0,
+    workHours: Number(row.workHours || 0),
+    quantityProduced: Number(row.quantityProduced || 0),
+  });
+  const sourceLines: ProductionCostSourceLine[] = countsTowardProductManufacturingVolume(row) ? [{
+    sourceKey: `labor:${reportId}`,
+    sourceType: 'inclusive_hourly_labor',
+    sourceId: reportId,
+    category: 'direct_labor',
+    label: 'تكلفة العمالة بسعر الساعة الشامل',
+    amount: laborOnly.laborCost,
+    status: 'actual',
+  }] : [];
   const previousRevision = Math.max(0, Number(row.manufacturingCostRevision || 0));
   const fullCost = calculateFullProductionCost({
     reportId,
@@ -955,7 +893,8 @@ async function persistProductionReportCostSnapshot(
   const revision = unchanged ? Math.max(1, previousRevision) : fullCost.revision;
   const finalPatch: Partial<ProductionReport> = {
     ...legacyPatch,
-    legacyConversionCostSnapshot: legacyConversionCost,
+    laborHourlyRateApplied: laborOnly.hourlyRateApplied,
+    legacyConversionCostSnapshot: laborOnly.totalCost,
     manufacturingCostVersion: fullCost.version,
     manufacturingCostRevision: revision,
     manufacturingCostStatus: fullCost.status,
@@ -964,13 +903,13 @@ async function persistProductionReportCostSnapshot(
     manufacturingCostCalculatedAt: unchanged
       ? row.manufacturingCostCalculatedAt || new Date().toISOString()
       : new Date().toISOString(),
-    materialCostSnapshot: fullCost.materialCost,
-    packagingCostSnapshot: fullCost.packagingCost,
-    directLaborCostSnapshot: fullCost.directLaborCost,
-    factoryOverheadCostSnapshot: fullCost.factoryOverheadCost,
-    depreciationCostSnapshot: fullCost.depreciationCost,
-    fullManufacturingCostSnapshot: fullCost.fullManufacturingCost,
-    fullManufacturingUnitCostSnapshot: fullCost.unitManufacturingCost,
+    materialCostSnapshot: 0,
+    packagingCostSnapshot: 0,
+    directLaborCostSnapshot: laborOnly.laborCost,
+    factoryOverheadCostSnapshot: 0,
+    depreciationCostSnapshot: 0,
+    fullManufacturingCostSnapshot: laborOnly.totalCost,
+    fullManufacturingUnitCostSnapshot: laborOnly.unitCost,
     manufacturingCostSourceQualitySnapshot: fullCost.sourceQuality,
     manufacturingCostSourcesSnapshot: fullCost.sourceLines,
   };
@@ -6676,3 +6615,26 @@ export const useAppStore = create<AppState>((set, get) => ({
 
 export const useShallowStore = <T>(selector: (state: AppState) => T): T =>
   useAppStore(useShallow(selector));
+
+/** Rebuild labor-only snapshots and aggregate deltas for an open costing month. */
+export async function recalculateOpenProductionReportCosts(month: string): Promise<void> {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(month || '').trim());
+  if (!match) throw new Error('صيغة شهر التكلفة غير صحيحة.');
+  const lastDay = new Date(Number(match[1]), Number(match[2]), 0).getDate();
+  const reports = (await reportService.getByDateRange(
+    `${month}-01`,
+    `${month}-${String(lastDay).padStart(2, '0')}`,
+  )).filter(countsTowardProductManufacturingVolume);
+  const state = useAppStore.getState();
+  for (const report of reports) {
+    if (!report.id || Number(report.quantityProduced || 0) <= 0) continue;
+    const costed = await persistProductionReportCostSnapshot(report.id, () => useAppStore.getState());
+    if (!costed) continue;
+    await reconcileReportAggregateCosts({
+      reportId: report.id,
+      expectedReport: costed,
+      industrialCost: Number(costed.fullManufacturingCostSnapshot || 0),
+      skipsAggregates: isPackagingThroughputReport(costed, state._rawLines),
+    });
+  }
+}
