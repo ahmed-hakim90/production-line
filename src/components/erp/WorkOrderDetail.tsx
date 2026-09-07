@@ -56,6 +56,7 @@ interface WorkOrderDetailProps {
   updatingSlotId?: string | null
   onOpenHourlySlot?: (slotId: string, workers: number) => Promise<void>
   onSubmitHourlySlot?: (slotId: string, input: { actualQuantity: number; rejectedQuantity: number; executionNotes: string }) => Promise<void>
+  onReviewHourlyQuality?: (slotId: string, input: { acceptedQuantity: number; rejectedQuantity: number; qualityNotes: string }) => Promise<void>
 }
 
 const numberFormatter = new Intl.NumberFormat("ar-EG")
@@ -81,11 +82,13 @@ export function WorkOrderDetail({
   updatingSlotId,
   onOpenHourlySlot,
   onSubmitHourlySlot,
+  onReviewHourlyQuality,
 }: WorkOrderDetailProps) {
   const { t } = useTranslation()
   const { dir } = useAppDirection();
   const [activeTab, setActiveTab] = useState<TabId>("dates")
   const [slotDraft, setSlotDraft] = useState({ actualQuantity: "", rejectedQuantity: "0", executionNotes: "" })
+  const [qualityDraft, setQualityDraft] = useState({ slotId: "", acceptedQuantity: "", rejectedQuantity: "", qualityNotes: "" })
   const [slotError, setSlotError] = useState("")
 
   useEffect(() => {
@@ -321,6 +324,22 @@ export function WorkOrderDetail({
                             </Button>
                           </div>
                         ) : null}
+                        {slot.status === 'quality_pending' && onReviewHourlyQuality ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            {qualityDraft.slotId !== slot.id ? (
+                              <Button type="button" size="sm" variant="outline" className="col-span-2" onClick={() => setQualityDraft({ slotId: slot.id, acceptedQuantity: String(Math.max(0, Number(slot.actualQuantity || 0) - Number(slot.rejectedQuantity || 0))), rejectedQuantity: String(slot.rejectedQuantity || 0), qualityNotes: '' })}>بدء فحص الجودة</Button>
+                            ) : (
+                              <>
+                                <label className="space-y-1 text-xs text-[var(--color-text-2)]">المقبول<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={qualityDraft.acceptedQuantity} onChange={(event) => setQualityDraft((draft) => ({ ...draft, acceptedQuantity: event.target.value }))} /></label>
+                                <label className="space-y-1 text-xs text-[var(--color-text-2)]">المرفوض من الجودة<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={qualityDraft.rejectedQuantity} onChange={(event) => setQualityDraft((draft) => ({ ...draft, rejectedQuantity: event.target.value }))} /></label>
+                                <p className="col-span-2 text-[11px] text-[var(--color-text-2)]">الإجمالي المطلوب مطابقته: {numberFormatter.format(slot.actualQuantity || 0)} وحدة</p>
+                                <label className="col-span-2 space-y-1 text-xs text-[var(--color-text-2)]">ملاحظة الجودة<textarea className="min-h-16 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 py-1 text-[var(--color-text-1)]" value={qualityDraft.qualityNotes} onChange={(event) => setQualityDraft((draft) => ({ ...draft, qualityNotes: event.target.value }))} /></label>
+                                <Button type="button" size="sm" className="col-span-2" disabled={updatingSlotId === slot.id || qualityDraft.acceptedQuantity === '' || qualityDraft.rejectedQuantity === ''} onClick={() => void runSlotAction(async () => { await onReviewHourlyQuality(slot.id, { acceptedQuantity: Number(qualityDraft.acceptedQuantity), rejectedQuantity: Number(qualityDraft.rejectedQuantity), qualityNotes: qualityDraft.qualityNotes }); setQualityDraft({ slotId: '', acceptedQuantity: '', rejectedQuantity: '', qualityNotes: '' }) })}>{updatingSlotId === slot.id ? 'جاري اعتماد الفحص...' : 'اعتماد نتيجة الجودة'}</Button>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                        {slot.qualityAcceptedQuantity != null ? <p className="text-xs text-[var(--color-text-2)]">نتيجة الجودة: <strong className="text-[var(--color-success)]">{numberFormatter.format(slot.qualityAcceptedQuantity)} مقبول</strong> · <strong className="text-[var(--color-danger)]">{numberFormatter.format(slot.qualityRejectedQuantity || 0)} مرفوض</strong></p> : null}
                       </div>
                     ))}
                   </div>

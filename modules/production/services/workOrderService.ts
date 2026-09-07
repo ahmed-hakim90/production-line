@@ -339,6 +339,37 @@ export const workOrderService = {
     });
   },
 
+  async reviewHourlyQuality(
+    workOrderId: string,
+    slotId: string,
+    input: { acceptedQuantity: number; rejectedQuantity: number; qualityNotes?: string },
+  ): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const acceptedQuantity = Number(input.acceptedQuantity);
+    const rejectedQuantity = Number(input.rejectedQuantity);
+    if (!Number.isFinite(acceptedQuantity) || acceptedQuantity < 0 || !Number.isFinite(rejectedQuantity) || rejectedQuantity < 0) {
+      throw new Error('أدخل كميات جودة صحيحة.');
+    }
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const slotSnap = await transaction.get(slotRef);
+      if (!slotSnap.exists() || slotSnap.data().status !== 'quality_pending') throw new Error('الساعة ليست بانتظار فحص الجودة.');
+      const actualQuantity = Number(slotSnap.data().actualQuantity || 0);
+      if (Math.abs((acceptedQuantity + rejectedQuantity) - actualQuantity) > 0.001) {
+        throw new Error('مجموع المقبول والمرفوض يجب أن يساوي إنتاج الساعة الفعلي.');
+      }
+      transaction.update(slotRef, {
+        status: acceptedQuantity > 0 ? 'quality_accepted' : 'quality_rejected',
+        qualityAcceptedQuantity: acceptedQuantity,
+        qualityRejectedQuantity: rejectedQuantity,
+        qualityNotes: String(input.qualityNotes || '').trim(),
+        qualityReviewedAt: serverTimestamp(),
+        qualityReviewedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
   /** Status change with history stamp — prefer usecase `updateWorkOrderStatus`. */
   async updateStatus(id: string, status: WorkOrder['status']): Promise<void> {
     if (!isConfigured) return;

@@ -42,3 +42,7 @@ Legacy work orders remain readable without migration. Saving an old order genera
 An authorized work-order operator opens only the oldest planned slot. Opening snapshots the assigned worker count and moves a pending work order into progress. Only one slot may be open at a time.
 
 The operator submits actual and rejected quantities plus optional execution notes. Submission moves the slot to `quality_pending`; it does not yet post inventory, create a production report, or count accepted output. Those mutations remain owned by their existing server-controlled journeys and will be connected only after the quality decision is implemented.
+
+## Delivery 3: hourly quality gate
+
+Users with final-inspection permission split the submitted hourly quantity into accepted and rejected quantities. The two values must equal the production submission exactly. A batch with accepted units moves to `quality_accepted`; a fully rejected batch moves to `quality_rejected`. The review records the operator, timestamp, and notes while deliberately leaving inventory and production-report posting unchanged for the packaging handoff delivery.

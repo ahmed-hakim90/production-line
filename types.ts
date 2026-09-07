@@ -856,6 +856,11 @@ export interface WorkOrderHourlySlot {
   productionSubmittedAt?: any;
   openedBy?: string;
   productionSubmittedBy?: string;
+  qualityAcceptedQuantity?: number;
+  qualityRejectedQuantity?: number;
+  qualityNotes?: string;
+  qualityReviewedAt?: any;
+  qualityReviewedBy?: string;
 }
 
 export interface WorkOrder {

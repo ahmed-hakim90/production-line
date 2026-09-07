@@ -24,6 +24,7 @@ interface WorkOrderDrawerProps {
   onReconcileReports?: (order: WorkOrder) => void;
   reconcilingReports?: boolean;
   canExecuteHourlySlots?: boolean;
+  canReviewHourlyQuality?: boolean;
 }
 
 const STATUS_AR_MAP: Record<WorkOrderStatus, string> = WORK_ORDER_STATUS_LABELS;
@@ -55,6 +56,7 @@ export function WorkOrderDrawer({
   onReconcileReports,
   reconcilingReports,
   canExecuteHourlySlots,
+  canReviewHourlyQuality,
 }: WorkOrderDrawerProps) {
   const [hourlySlots, setHourlySlots] = useState<WorkOrder['hourlySlots']>([]);
   const [hourlySlotsLoading, setHourlySlotsLoading] = useState(false);
@@ -83,6 +85,12 @@ export function WorkOrderDrawer({
     if (!order?.id) return;
     setUpdatingSlotId(slotId);
     try { await workOrderService.submitHourlyProduction(order.id, slotId, input); await refreshHourlySlots(); }
+    finally { setUpdatingSlotId(null); }
+  };
+  const handleReviewHourlyQuality = async (slotId: string, input: { acceptedQuantity: number; rejectedQuantity: number; qualityNotes: string }) => {
+    if (!order?.id) return;
+    setUpdatingSlotId(slotId);
+    try { await workOrderService.reviewHourlyQuality(order.id, slotId, input); await refreshHourlySlots(); }
     finally { setUpdatingSlotId(null); }
   };
   if (!order) return null;
@@ -154,6 +162,7 @@ export function WorkOrderDrawer({
       updatingSlotId={updatingSlotId}
       onOpenHourlySlot={canExecuteHourlySlots ? handleOpenHourlySlot : undefined}
       onSubmitHourlySlot={canExecuteHourlySlots ? handleSubmitHourlySlot : undefined}
+      onReviewHourlyQuality={canReviewHourlyQuality ? handleReviewHourlyQuality : undefined}
     />
   );
 }

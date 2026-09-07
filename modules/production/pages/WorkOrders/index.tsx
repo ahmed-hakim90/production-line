@@ -871,6 +871,7 @@ export const WorkOrders: React.FC = () => {
         onReconcileReports={workOrderReconcileEnabled && (can('workOrders.edit') || can('reports.edit')) ? handleReconcileLinkedReports : undefined}
         reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
         canExecuteHourlySlots={canUpdateWorkOrderStatus}
+        canReviewHourlyQuality={can('quality.finalInspection.inspect') && isOperationPathEnabled(systemSettings, WORK_ORDER_OPERATION_KEYS.update, WORK_ORDER_UPDATE_PATHS.qualityFinalInspection)}
       />
     </ModuleOpsPageShell>
   );
