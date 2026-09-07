@@ -17,6 +17,7 @@ The source and implementation were reviewed together at the desktop viewport. Th
 - Loading, missing-order, empty hourly-plan, permission-hidden, disabled submission, validation error, and successful completion states are represented.
 - The full local flow was exercised: open hour → record production → approve quality → start packaging → close packaging.
 - The stop path was exercised separately: open hour → record a stop reason → verify paused state → resume the same hour. A paused hour cannot submit production or allow a later hour to open.
+- The multi-day close path was exercised with two dates and six slots. The daily table showed separate totals for each date, the close action remained disabled while slots were pending, and it became available only after all six slots were terminal.
 - Completed hours now receive the completion check only after packaging is closed; quality approval alone does not present a false completed state.
 - Packaging rejects contribute to the total rejected count.
 - Mobile places the selected-hour workspace before the hour list, keeps RTL reading order, and avoids horizontal overflow at 390 px.
@@ -29,5 +30,6 @@ The source and implementation were reviewed together at the desktop viewport. Th
 3. Firestore transition verification found the rules expression ceiling during packaging completion; status guards were reordered ahead of permission resolution.
 4. Type checks, manufacturing tests, Firestore rules assertions, and the production build completed successfully. The Firebase test wrapper printed an upstream CLI shutdown error after its test script had already exited successfully with code 0.
 5. Browser verification confirmed the stop reason, paused status, and resume action against the local Firestore emulator. The only captured console errors came from pre-existing admin-dashboard aggregate permissions and were unrelated to this page or lifecycle.
+6. Browser verification confirmed the two-day summary, incomplete-hour count, ready-to-close state, and final parent status change to completed. No work-order or hourly-lifecycle console errors were captured.
 
 final result: passed

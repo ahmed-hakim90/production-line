@@ -1,4 +1,4 @@
-import type { WorkOrderHourlySlot } from '../../../types';
+import type { WorkOrderHourlyDailySummary, WorkOrderHourlySlot } from '../../../types';
 
 const MINUTES_PER_DAY = 24 * 60;
 
@@ -85,3 +85,36 @@ export const hasStartedHourlySlots = (slots: WorkOrderHourlySlot[] | undefined):
 
 export const hasActiveHourlySlot = (slots: WorkOrderHourlySlot[] | undefined): boolean =>
   Boolean(slots?.some((slot) => slot.status === 'open' || slot.status === 'paused'));
+
+export const isTerminalHourlySlot = (slot: WorkOrderHourlySlot): boolean =>
+  slot.status === 'finished' || slot.status === 'quality_rejected';
+
+export const canCompleteHourlyWorkOrder = (slots: WorkOrderHourlySlot[] | undefined): boolean =>
+  Boolean(slots?.length && slots.every(isTerminalHourlySlot));
+
+export const summarizeHourlySlotsByDay = (slots: WorkOrderHourlySlot[] | undefined): WorkOrderHourlyDailySummary[] => {
+  const days = new Map<string, WorkOrderHourlyDailySummary>();
+  (slots || []).forEach((slot) => {
+    const row = days.get(slot.date) || {
+      date: slot.date,
+      targetQuantity: 0,
+      producedQuantity: 0,
+      acceptedQuantity: 0,
+      rejectedQuantity: 0,
+      packagedQuantity: 0,
+      pausedSeconds: 0,
+      completedSlots: 0,
+      totalSlots: 0,
+    };
+    row.targetQuantity += Number(slot.targetQuantity || 0);
+    row.producedQuantity += Number(slot.actualQuantity || 0);
+    row.acceptedQuantity += Number(slot.qualityAcceptedQuantity || 0);
+    row.rejectedQuantity += Number(slot.qualityRejectedQuantity ?? slot.rejectedQuantity ?? 0) + Number(slot.packagingRejectedQuantity || 0);
+    row.packagedQuantity += Number(slot.packagingQuantity || 0);
+    row.pausedSeconds += Number(slot.totalPausedSeconds || 0);
+    row.completedSlots += isTerminalHourlySlot(slot) ? 1 : 0;
+    row.totalSlots += 1;
+    days.set(slot.date, row);
+  });
+  return [...days.values()].sort((a, b) => a.date.localeCompare(b.date));
+};

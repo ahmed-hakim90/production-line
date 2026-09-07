@@ -13,6 +13,7 @@ import { employeeService } from '../../hr/employeeService';
 import { lineService } from '../services/lineService';
 import { productService } from '../services/productService';
 import { workOrderService } from '../services/workOrderService';
+import { canCompleteHourlyWorkOrder, summarizeHourlySlotsByDay } from '../utils/workOrderHourlySlots';
 import { cn } from '@/lib/utils';
 
 const numbers = new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 });
@@ -20,6 +21,9 @@ const statusLabel: Record<WorkOrderHourlySlot['status'], string> = {
   planned: 'لم تبدأ', open: 'الإنتاج مفتوح', paused: 'متوقفة مؤقتًا', production_submitted: 'تم تسليم الإنتاج',
   quality_pending: 'بانتظار الجودة', quality_accepted: 'مقبولة من الجودة',
   quality_rejected: 'مرفوضة من الجودة', packaging: 'قيد التغليف', finished: 'مكتملة',
+};
+const workOrderStatusLabel: Record<WorkOrder['status'], string> = {
+  pending: 'لم يبدأ', in_progress: 'قيد التنفيذ', paused: 'متوقف', completed: 'مكتمل', cancelled: 'ملغي',
 };
 
 export function WorkOrderDetailsPage() {
@@ -69,6 +73,8 @@ export function WorkOrderDetailsPage() {
   const produced = useMemo(() => slots.reduce((sum, slot) => sum + Number(slot.actualQuantity || 0), 0), [slots]);
   const accepted = useMemo(() => slots.reduce((sum, slot) => sum + Number(slot.qualityAcceptedQuantity || 0), 0), [slots]);
   const rejected = useMemo(() => slots.reduce((sum, slot) => sum + Number(slot.qualityRejectedQuantity ?? slot.rejectedQuantity ?? 0) + Number(slot.packagingRejectedQuantity ?? 0), 0), [slots]);
+  const dailySummaries = useMemo(() => summarizeHourlySlotsByDay(slots), [slots]);
+  const readyToComplete = canCompleteHourlyWorkOrder(slots);
   const progress = order?.quantity ? Math.min(100, Math.round((accepted / order.quantity) * 100)) : 0;
   const canExecute = can('workOrders.edit') && isOperationPathEnabled(systemSettings, WORK_ORDER_OPERATION_KEYS.update, WORK_ORDER_UPDATE_PATHS.workOrdersPageStatus);
   const canReviewQuality = can('quality.finalInspection.inspect') && isOperationPathEnabled(systemSettings, WORK_ORDER_OPERATION_KEYS.update, WORK_ORDER_UPDATE_PATHS.qualityFinalInspection);
@@ -93,7 +99,7 @@ export function WorkOrderDetailsPage() {
     </header>
 
     <section className="grid gap-x-8 gap-y-3 border-y border-[var(--color-border-ui)] py-4 sm:grid-cols-3 xl:grid-cols-6">
-      {[['الصنف', names.product], ['خط الإنتاج', names.line], ['المشرف', names.supervisor], ['تاريخ البدء', order.startDate || '—'], ['الانتهاء المخطط', order.targetDate || '—'], ['حالة أمر الشغل', order.status === 'in_progress' ? 'قيد التنفيذ' : order.status === 'pending' ? 'لم يبدأ' : order.status]].map(([label, value]) => <div key={label}><p className="text-xs text-[var(--color-text-2)]">{label}</p><p className="mt-1 text-sm font-medium text-[var(--color-text-1)]">{value}</p></div>)}
+      {[['الصنف', names.product], ['خط الإنتاج', names.line], ['المشرف', names.supervisor], ['تاريخ البدء', order.startDate || '—'], ['الانتهاء المخطط', order.targetDate || '—'], ['حالة أمر الشغل', workOrderStatusLabel[order.status]]].map(([label, value]) => <div key={label}><p className="text-xs text-[var(--color-text-2)]">{label}</p><p className="mt-1 text-sm font-medium text-[var(--color-text-1)]">{value}</p></div>)}
     </section>
 
     <section className="grid grid-cols-2 items-center gap-5 rounded-md border border-[var(--color-border-ui)] px-4 py-3 xl:grid-cols-4">
@@ -125,6 +131,11 @@ export function WorkOrderDetailsPage() {
         </div>
       </article> : null}
     </section>}
+    {slots.length ? <section className="overflow-hidden rounded-md border border-[var(--color-border-ui)] bg-[var(--color-card-bg)]" aria-labelledby="daily-review-heading">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-ui)] px-4 py-3"><div><h2 id="daily-review-heading" className="font-medium">المراجعة اليومية والإقفال النهائي</h2><p className="mt-1 text-xs text-[var(--color-text-2)]">أمر الشغل يظل قيد التنفيذ بين الأيام، ويُقفل بعد اكتمال جميع الساعات.</p></div><span className={cn('text-xs font-medium', readyToComplete ? 'text-[var(--color-success)]' : 'text-[var(--color-text-2)]')}>{readyToComplete ? 'جاهز للإقفال' : `${slots.filter((slot) => !['finished', 'quality_rejected'].includes(slot.status)).length} ساعة غير مكتملة`}</span></div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead className="bg-[var(--color-page-bg)] text-xs text-[var(--color-text-2)]"><tr>{['اليوم', 'الساعات', 'الهدف', 'المنتج', 'المقبول', 'المرفوض', 'المغلف', 'التوقف'].map((label) => <th key={label} className="px-4 py-3 text-start font-medium">{label}</th>)}</tr></thead><tbody>{dailySummaries.map((day) => <tr key={day.date} className="border-t border-[var(--color-border-ui)]"><td className="px-4 py-3 font-medium" dir="ltr">{day.date}</td><td className="px-4 py-3">{numbers.format(day.completedSlots)}/{numbers.format(day.totalSlots)}</td><td className="px-4 py-3">{numbers.format(day.targetQuantity)}</td><td className="px-4 py-3">{numbers.format(day.producedQuantity)}</td><td className="px-4 py-3">{numbers.format(day.acceptedQuantity)}</td><td className="px-4 py-3">{numbers.format(day.rejectedQuantity)}</td><td className="px-4 py-3">{numbers.format(day.packagedQuantity)}</td><td className="px-4 py-3">{numbers.format(Math.ceil(day.pausedSeconds / 60))} د</td></tr>)}</tbody></table></div>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border-ui)] px-4 py-4"><p className="max-w-2xl text-xs text-[var(--color-text-2)]">الإقفال يحفظ ملخص الأيام ويُنهي أمر الشغل فقط؛ لا يرحّل مخزونًا ولا ينشئ تقرير إنتاج في هذه المرحلة المحلية.</p>{order.status === 'completed' ? <span className="flex items-center gap-2 text-sm font-medium text-[var(--color-success)]"><Check className="h-4 w-4" /> أمر الشغل مكتمل</span> : canExecute ? <Button disabled={updating || !readyToComplete} onClick={() => void runAction(() => workOrderService.completeHourlyWorkOrder(order.id!))}><PackageCheck className="h-4 w-4" />{updating ? 'جاري الإقفال...' : 'مراجعة وإقفال أمر الشغل'}</Button> : null}</div>
+    </section> : null}
     <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--color-text-2)]"><span>المرفوض الكلي: {numbers.format(rejected)} وحدة</span><span>جميع الأوقات حسب إعدادات أمر الشغل</span></footer>
   </main>;
 }

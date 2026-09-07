@@ -58,3 +58,7 @@ An accepted hourly batch can be opened for packaging by a user with production-h
 ## Delivery 6: hourly stop and resume
 
 An authorized operator may pause only the currently open production hour and must resume it before submitting production. The slot records the pause operator, reason, start time, and accumulated stopped seconds. Pausing does not alter the parent work-order status or permit another hour to open, so chronological execution and the single-active-hour invariant remain intact.
+
+## Delivery 7: multi-day review and final close
+
+The workspace groups every hourly slot by date and shows daily target, produced, accepted, rejected, packaged, pause time, and completed-slot totals. The parent work order remains in progress between days. Final close is enabled only when every slot across the complete date range is terminal (`finished` or fully `quality_rejected`). Closing rechecks every slot inside the transaction and snapshots the daily summaries on the parent work order without posting inventory or creating production reports.

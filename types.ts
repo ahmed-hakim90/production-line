@@ -876,6 +876,18 @@ export interface WorkOrderHourlySlot {
   packagingHandledBy?: string;
 }
 
+export interface WorkOrderHourlyDailySummary {
+  date: string;
+  targetQuantity: number;
+  producedQuantity: number;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  packagedQuantity: number;
+  pausedSeconds: number;
+  completedSlots: number;
+  totalSlots: number;
+}
+
 export interface WorkOrder {
   id?: string;
   workOrderNumber: string;
@@ -910,6 +922,9 @@ export interface WorkOrder {
   hourlySlots?: WorkOrderHourlySlot[];
   hourlyScheduleVersion?: number;
   hourlyScheduleUpdatedAt?: any;
+  hourlyCompletionSummary?: WorkOrderHourlyDailySummary[];
+  hourlyCompletedAt?: any;
+  hourlyCompletedBy?: string;
   scanPauseWindows?: WorkOrderPauseWindow[];
   actualWorkersCount?: number;
   actualProducedFromScans?: number;

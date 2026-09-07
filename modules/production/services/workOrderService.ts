@@ -25,7 +25,7 @@ import type { WorkOrder } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { buildSearchPrefixes } from '@/lib/firestoreSearch';
-import { hasActiveHourlySlot } from '../utils/workOrderHourlySlots';
+import { canCompleteHourlyWorkOrder, hasActiveHourlySlot, summarizeHourlySlotsByDay } from '../utils/workOrderHourlySlots';
 
 const COLLECTION = 'work_orders';
 const MAX_PAGE_SIZE = 100;
@@ -427,6 +427,34 @@ export const workOrderService = {
       const accepted = Number(snap.data().qualityAcceptedQuantity || 0);
       if (Math.abs(packagingQuantity + rejectedQuantity - accepted) > 0.001) throw new Error('مجموع المغلف والمرفوض يجب أن يساوي المقبول من الجودة.');
       transaction.update(slotRef, { status: 'finished', packagingQuantity, packagingRejectedQuantity: rejectedQuantity, packagingNotes: String(input.notes || '').trim(), packagingCompletedAt: serverTimestamp(), packagingHandledBy: auth.currentUser?.uid || null, updatedAt: serverTimestamp() });
+    });
+  },
+
+  async completeHourlyWorkOrder(workOrderId: string): Promise<void> {
+    if (!isConfigured || !workOrderId) return;
+    const orderRef = doc(db, COLLECTION, workOrderId);
+    const slots = await this.getHourlySlots(workOrderId);
+    if (!canCompleteHourlyWorkOrder(slots)) throw new Error('لا يمكن إقفال أمر الشغل قبل إنهاء جميع ساعات كل الأيام.');
+    const summary = summarizeHourlySlotsByDay(slots);
+    await runTransaction(db, async (transaction) => {
+      const orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists()) throw new Error('أمر الشغل غير موجود.');
+      if (orderSnap.data().status === 'cancelled') throw new Error('لا يمكن إقفال أمر شغل ملغي.');
+      for (const slot of slots || []) {
+        const current = await transaction.get(doc(orderRef, 'hourly_slots', slot.id));
+        if (!current.exists() || !['finished', 'quality_rejected'].includes(String(current.data().status))) {
+          throw new Error('تغيرت حالة إحدى الساعات. أعد المراجعة قبل الإقفال.');
+        }
+      }
+      transaction.update(orderRef, {
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        hourlyCompletedAt: serverTimestamp(),
+        hourlyCompletedBy: auth.currentUser?.uid || null,
+        hourlyCompletionSummary: summary,
+        updatedAt: serverTimestamp(),
+        'statusHistory.completed': serverTimestamp(),
+      });
     });
   },
 
