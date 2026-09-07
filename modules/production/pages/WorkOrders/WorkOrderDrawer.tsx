@@ -16,7 +16,9 @@ interface WorkOrderDrawerProps {
   onClose: () => void;
   onEdit?: (order: WorkOrder) => void;
   onCloseOrder?: (order: WorkOrder) => void;
-  onPrint: (order: WorkOrder) => void;
+  onPrint?: (order: WorkOrder) => void;
+  presentation?: 'drawer' | 'page';
+  onOpenFullPage?: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;
   canReopenCompleted?: boolean;
   onReopenCompleted?: (order: WorkOrder) => void;
@@ -49,6 +51,8 @@ export function WorkOrderDrawer({
   onEdit,
   onCloseOrder,
   onPrint,
+  presentation = 'drawer',
+  onOpenFullPage,
   onOpenScanner,
   canReopenCompleted,
   onReopenCompleted,
@@ -151,7 +155,9 @@ export function WorkOrderDrawer({
           onCloseOrder(order);
         }
       } : undefined}
-      onPrint={() => onPrint(order)}
+      onPrint={onPrint ? () => onPrint(order) : undefined}
+      presentation={presentation}
+      onOpenFullPage={onOpenFullPage ? () => onOpenFullPage(order) : undefined}
       onOpenScanner={onOpenScanner && !scannerHidden ? () => onOpenScanner(order) : undefined}
       showReopenCompleted={showReopenCompleted}
       onReopenCompleted={showReopenCompleted ? () => onReopenCompleted!(order) : undefined}

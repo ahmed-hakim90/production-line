@@ -42,7 +42,9 @@ interface WorkOrderDetailProps {
   onClose: () => void
   onEdit?: () => void
   onClose_order?: () => void
-  onPrint: () => void
+  onPrint?: () => void
+  presentation?: "drawer" | "page"
+  onOpenFullPage?: () => void
   /** فتح شاشة مسح الباركود لأمر الشغل (مسار /work-orders/:id/scanner) */
   onOpenScanner?: () => void
   /** عند أمر مكتمل: إظهار زر إعادة الفتح (صلاحية التعديل من الصفحة الأم) */
@@ -72,6 +74,8 @@ export function WorkOrderDetail({
   onEdit,
   onClose_order,
   onPrint,
+  presentation = "drawer",
+  onOpenFullPage,
   onOpenScanner,
   showReopenCompleted,
   onReopenCompleted,
@@ -131,17 +135,22 @@ export function WorkOrderDetail({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[220] flex" dir="ltr">
-      <button
+    <div className={presentation === "drawer" ? "fixed inset-0 z-[220] flex" : "min-h-full w-full"} dir="ltr">
+      {presentation === "drawer" ? <button
         type="button"
         aria-label={t("erpComponents.workOrderDetail.aria.closeDetails")}
         className="h-full flex-1 bg-[hsl(var(--foreground)/0.36)]"
         onClick={onClose}
-      />
+      /> : null}
 
       <aside
         dir={dir}
-        className="h-full w-[min(560px,96vw)] border-s border-[var(--color-border-ui)] bg-[var(--color-card-bg)]"
+        className={cn(
+          "bg-[var(--color-card-bg)]",
+          presentation === "drawer"
+            ? "h-full w-[min(560px,96vw)] border-s border-[var(--color-border-ui)]"
+            : "mx-auto min-h-[calc(100vh-9rem)] w-full max-w-6xl rounded-lg border border-[var(--color-border-ui)]",
+        )}
       >
         <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border-ui)] px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -177,7 +186,7 @@ export function WorkOrderDetail({
           </div>
         </header>
 
-        <div className="h-[calc(100%-128px)] overflow-y-auto">
+        <div className={presentation === "drawer" ? "h-[calc(100%-128px)] overflow-y-auto" : "min-h-0"}>
           <section className="grid grid-cols-2 gap-2 border-b border-[var(--color-border-ui)] p-4">
             {[
               { label: t("erpComponents.workOrderDetail.fields.product"), value: order.productName },
@@ -406,9 +415,8 @@ export function WorkOrderDetail({
         </div>
 
         <footer className="flex flex-wrap gap-2 border-t border-[var(--color-border-ui)] px-4 py-3">
-          <Button type="button" variant="outline" onClick={onPrint} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">
-            {t("erpComponents.workOrderDetail.actions.print")}
-          </Button>
+          {onPrint ? <Button type="button" variant="outline" onClick={onPrint} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">{t("erpComponents.workOrderDetail.actions.print")}</Button> : null}
+          {presentation === "drawer" && onOpenFullPage ? <Button type="button" variant="outline" onClick={onOpenFullPage} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">فتح الصفحة الكاملة</Button> : null}
           {onOpenScanner ? (
             <Button
               type="button"

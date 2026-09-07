@@ -864,6 +864,7 @@ export const WorkOrders: React.FC = () => {
         onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
         onCloseOrder={canUpdateWorkOrderStatus ? handleCloseOrder : undefined}
         onPrint={handlePrintOrder}
+        onOpenFullPage={(order) => navigate(`/work-orders/${order.id}`)}
         onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
         canReopenCompleted={can('workOrders.edit')}
         onReopenCompleted={handleReopenCompletedOrder}

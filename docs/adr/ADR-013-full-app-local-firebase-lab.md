@@ -46,3 +46,7 @@ The operator submits actual and rejected quantities plus optional execution note
 ## Delivery 3: hourly quality gate
 
 Users with final-inspection permission split the submitted hourly quantity into accepted and rejected quantities. The two values must equal the production submission exactly. A batch with accepted units moves to `quality_accepted`; a fully rejected batch moves to `quality_rejected`. The review records the operator, timestamp, and notes while deliberately leaving inventory and production-report posting unchanged for the packaging handoff delivery.
+
+## Delivery 4: full work-order workspace
+
+`/work-orders/:id` is the durable full-page workspace for one work order. It owns the complete hourly timeline and its production and quality actions, while the list drawer remains a quick summary with an explicit link to the full page. The existing scanner keeps its dedicated `/work-orders/:id/scanner` route.

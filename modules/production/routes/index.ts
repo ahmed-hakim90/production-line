@@ -14,6 +14,7 @@ const LineDetails = lazyNamed(() => import('../pages/LineDetails'), 'LineDetails
 const ProductionPlans = lazyNamed(() => import('../pages/ProductionPlans'), 'ProductionPlans');
 const WorkOrders = lazyNamed(() => import('../pages/WorkOrders/index'), 'WorkOrders');
 const WorkOrderScanner = lazyNamed(() => import('../pages/WorkOrderScanner'), 'WorkOrderScanner');
+const WorkOrderDetailsPage = lazyNamed(() => import('../pages/WorkOrderDetailsPage'), 'WorkOrderDetailsPage');
 const Supervisors = lazyNamed(() => import('../pages/Supervisors'), 'Supervisors');
 const SupervisorDetails = lazyNamed(() => import('../pages/SupervisorDetails'), 'SupervisorDetails');
 const SupervisorWorkerEvaluation = lazyNamed(() => import('../pages/SupervisorWorkerEvaluation'), 'SupervisorWorkerEvaluation');
@@ -107,6 +108,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
     skeleton: 'dashboard',
   },
   { path: '/work-orders', permission: 'workOrders.view', component: WorkOrders },
+  { path: '/work-orders/:id', permission: 'workOrders.view', component: WorkOrderDetailsPage, skeleton: 'dashboard' },
   {
     path: '/work-orders/:id/scanner',
     permission: 'workOrders.view',
