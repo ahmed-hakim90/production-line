@@ -20,11 +20,19 @@ Run these commands in separate terminals:
 
 ```bash
 npm run emulators:lab
+npm run seed:lab
 npm run dev:lab
 ```
 
 The application displays a persistent red environment banner whenever emulator mode is active.
+The seed command refuses to run unless both emulator hosts point to localhost and the project ID starts with `demo-`.
 
 ## Cutover rule
 
 No work-order-cycle change may be deployed until its full journey passes local emulator tests and rendered QA. Server-side validation, tenant isolation, permission checks, idempotency, migration compatibility, and rollback must be reviewed before production activation.
+
+## Delivery 1: work-order preparation and hourly plan
+
+New and safely edited work orders snapshot their operating hours in `hourlySlots`. Each slot records its date, start/end, allocated target, and lifecycle status. The generator excludes the configured break and prorates the daily target across actual operating minutes.
+
+Legacy work orders remain readable without migration. Saving an old order generates its schedule. Once any hourly slot leaves `planned`, schedule regeneration is blocked so an edit cannot rewrite an execution record.

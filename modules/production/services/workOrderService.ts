@@ -3,7 +3,6 @@ import {
   doc,
   getDocs,
   getDoc,
-  addDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -16,6 +15,7 @@ import {
   onSnapshot,
   Unsubscribe,
   startAfter,
+  writeBatch,
   QueryDocumentSnapshot,
   documentId,
 } from 'firebase/firestore';
@@ -86,7 +86,8 @@ export const workOrderService = {
     try {
       const snap = await getDoc(doc(db, COLLECTION, id));
       if (!snap.exists()) return null;
-      return { id: snap.id, ...snap.data() } as WorkOrder;
+      const hourlySlots = await this.getHourlySlots(id);
+      return { id: snap.id, ...snap.data(), hourlySlots } as WorkOrder;
     } catch (error) {
       console.error('workOrderService.getById error:', error);
       throw error;
@@ -184,9 +185,14 @@ export const workOrderService = {
   async create(data: Omit<WorkOrder, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
-      const ref = await addDoc(collection(db, COLLECTION), {
-        ...data,
+      const { hourlySlots = [], ...workOrderData } = data;
+      const ref = doc(collection(db, COLLECTION));
+      const batch = writeBatch(db);
+      batch.set(ref, {
+        ...workOrderData,
         tenantId: getCurrentTenantId(),
+        hourlyScheduleVersion: hourlySlots.length ? 1 : null,
+        hourlyScheduleUpdatedAt: hourlySlots.length ? serverTimestamp() : null,
         searchPrefixes: buildSearchPrefixes([
           data.workOrderNumber,
           (data as WorkOrder & { productCode?: string }).productCode,
@@ -196,6 +202,16 @@ export const workOrderService = {
         ]),
         createdAt: serverTimestamp(),
       });
+      hourlySlots.forEach((slot) => {
+        batch.set(doc(db, COLLECTION, ref.id, 'hourly_slots', slot.id), {
+          ...slot,
+          tenantId: getCurrentTenantId(),
+          workOrderId: ref.id,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
       return ref.id;
     } catch (error) {
       console.error('workOrderService.create error:', error);
@@ -206,7 +222,7 @@ export const workOrderService = {
   async update(id: string, data: Partial<WorkOrder>): Promise<void> {
     if (!isConfigured) return;
     try {
-      const { id: _id, createdAt: _ts, ...fields } = data as any;
+      const { id: _id, createdAt: _ts, hourlySlots, ...fields } = data as any;
       const searchableChanged = ['workOrderNumber', 'productCode', 'productName', 'lineName', 'supervisorName']
         .some((field) => field in fields);
       if (searchableChanged) {
@@ -221,10 +237,40 @@ export const workOrderService = {
         ]);
       }
       await updateDoc(doc(db, COLLECTION, id), fields);
+      if (Array.isArray(hourlySlots)) await this.replacePlannedHourlySlots(id, hourlySlots);
     } catch (error) {
       console.error('workOrderService.update error:', error);
       throw error;
     }
+  },
+
+  async getHourlySlots(workOrderId: string): Promise<WorkOrder['hourlySlots']> {
+    if (!isConfigured || !workOrderId) return [];
+    const snap = await getDocs(collection(db, COLLECTION, workOrderId, 'hourly_slots'));
+    return snap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as NonNullable<WorkOrder['hourlySlots']>[number]))
+      .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+  },
+
+  async replacePlannedHourlySlots(workOrderId: string, slots: NonNullable<WorkOrder['hourlySlots']>): Promise<void> {
+    if (!isConfigured || !workOrderId) return;
+    const slotCollection = collection(db, COLLECTION, workOrderId, 'hourly_slots');
+    const current = await getDocs(slotCollection);
+    if (current.docs.some((row) => row.data().status !== 'planned')) return;
+    const batch = writeBatch(db);
+    current.docs.forEach((row) => batch.delete(row.ref));
+    slots.forEach((slot) => batch.set(doc(slotCollection, slot.id), {
+      ...slot,
+      tenantId: getCurrentTenantId(),
+      workOrderId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    batch.update(doc(db, COLLECTION, workOrderId), {
+      hourlyScheduleVersion: 1,
+      hourlyScheduleUpdatedAt: serverTimestamp(),
+    });
+    await batch.commit();
   },
 
   /** Status change with history stamp — prefer usecase `updateWorkOrderStatus`. */

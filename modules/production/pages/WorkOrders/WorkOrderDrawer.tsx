@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { WORK_ORDER_STATUS_LABELS } from '../../utils/workOrderReportLinking';
 import { WorkOrderDetail } from '../../../../src/components/erp/WorkOrderDetail';
 import type { WorkOrderRowView } from './WorkOrderRow';
+import { workOrderService } from '../../services/workOrderService';
 
 interface WorkOrderDrawerProps {
   order: WorkOrder | null;
@@ -53,6 +54,18 @@ export function WorkOrderDrawer({
   onReconcileReports,
   reconcilingReports,
 }: WorkOrderDrawerProps) {
+  const [hourlySlots, setHourlySlots] = useState<WorkOrder['hourlySlots']>([]);
+  const [hourlySlotsLoading, setHourlySlotsLoading] = useState(false);
+  useEffect(() => {
+    let active = true;
+    if (!order?.id || !isOpen) { setHourlySlots([]); return () => { active = false; }; }
+    setHourlySlotsLoading(true);
+    void workOrderService.getHourlySlots(order.id)
+      .then((rows) => { if (active) setHourlySlots(rows); })
+      .catch(() => { if (active) setHourlySlots([]); })
+      .finally(() => { if (active) setHourlySlotsLoading(false); });
+    return () => { active = false; };
+  }, [isOpen, order?.id]);
   if (!order) return null;
   const effectiveStatus = rowView?.effectiveStatus ?? order.status;
   const storedStatus = rowView?.storedStatus ?? order.status;
@@ -94,8 +107,11 @@ export function WorkOrderDrawer({
       actualUnitCost,
       totalCost: Number(order.actualCost || 0),
       notes: String(order.notes || ''),
+      hourlySlots: hourlySlots || order.hourlySlots || [],
+      hourlySlotsLoading,
+      dailyTarget: Number(order.dailyTarget || 0),
     };
-  }, [effectiveStatus, lineName, order, productName, rowView, supervisorName]);
+  }, [effectiveStatus, hourlySlots, hourlySlotsLoading, lineName, order, productName, rowView, supervisorName]);
 
   return (
     <WorkOrderDetail

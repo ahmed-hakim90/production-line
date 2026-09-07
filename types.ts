@@ -831,6 +831,27 @@ export interface WorkOrderPauseWindow {
   reason: WorkOrderPauseReason;
 }
 
+export type WorkOrderHourlySlotStatus =
+  | 'planned'
+  | 'open'
+  | 'production_submitted'
+  | 'quality_pending'
+  | 'quality_accepted'
+  | 'quality_rejected'
+  | 'packaging'
+  | 'finished';
+
+export interface WorkOrderHourlySlot {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  targetQuantity: number;
+  status: WorkOrderHourlySlotStatus;
+  openedAt?: any;
+  workersSnapshotCount?: number;
+}
+
 export interface WorkOrder {
   id?: string;
   workOrderNumber: string;
@@ -858,7 +879,13 @@ export interface WorkOrder {
   notes?: string;
   breakStartTime?: string; // HH:mm
   breakEndTime?: string; // HH:mm
+  workdayStartTime?: string; // HH:mm
   workdayEndTime?: string; // HH:mm
+  dailyTarget?: number;
+  /** Client-loaded hourly subcollection. Existing/list views may omit it. */
+  hourlySlots?: WorkOrderHourlySlot[];
+  hourlyScheduleVersion?: number;
+  hourlyScheduleUpdatedAt?: any;
   scanPauseWindows?: WorkOrderPauseWindow[];
   actualWorkersCount?: number;
   actualProducedFromScans?: number;

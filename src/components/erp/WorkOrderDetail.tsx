@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronRight, X } from "lucide-react"
+import { CalendarClock, ChevronRight, X } from "lucide-react"
+import type { WorkOrderHourlySlot } from "../../../types"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -8,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 type WorkOrderDetailStatus = string
-type TabId = "dates" | "costs" | "notes"
+type TabId = "hours" | "dates" | "costs" | "notes"
 
 interface WorkOrderDetailProps {
   order: {
@@ -33,6 +34,9 @@ interface WorkOrderDetailProps {
     actualUnitCost: number
     totalCost: number
     notes?: string
+    hourlySlots?: WorkOrderHourlySlot[]
+    dailyTarget?: number
+    hourlySlotsLoading?: boolean
   }
   open: boolean
   onClose: () => void
@@ -87,7 +91,7 @@ export function WorkOrderDetail({
 
   useEffect(() => {
     if (open) {
-      setActiveTab("dates")
+      setActiveTab(order.hourlySlots?.length ? "hours" : "dates")
     }
   }, [open, order.id])
 
@@ -234,8 +238,9 @@ export function WorkOrderDetail({
           </section>
 
           <section className="border-b border-[var(--color-border-ui)] px-4">
-            <div className="grid grid-cols-3">
+            <div className="grid grid-cols-4">
               {([
+                { id: "hours", label: "الساعات" },
                 { id: "dates", label: t("erpComponents.workOrderDetail.tabs.dates") },
                 { id: "costs", label: t("erpComponents.workOrderDetail.tabs.costs") },
                 { id: "notes", label: t("erpComponents.workOrderDetail.tabs.notes") },
@@ -258,6 +263,37 @@ export function WorkOrderDetail({
           </section>
 
           <section className="p-4">
+            {activeTab === "hours" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-md border border-[var(--color-border-ui)] bg-[var(--color-page-bg)] px-3 py-2">
+                  <span className="flex items-center gap-2 text-xs text-[var(--color-text-2)]"><CalendarClock className="h-4 w-4" /> التارجت اليومي</span>
+                  <strong className="text-sm text-[var(--color-text-1)]">{numberFormatter.format(order.dailyTarget || 0)}</strong>
+                </div>
+                {order.hourlySlotsLoading ? (
+                  <div className="rounded-md border border-dashed border-[var(--color-border-ui)] p-6 text-center text-sm text-[var(--color-text-2)]">جاري تحميل جدول الساعات...</div>
+                ) : !order.hourlySlots?.length ? (
+                  <div className="rounded-md border border-dashed border-[var(--color-border-ui)] p-6 text-center text-sm text-[var(--color-text-2)]">
+                    هذا أمر قديم ولا يحتوي على جدول ساعات. افتح التعديل ثم احفظه لإنشاء الجدول.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {order.hourlySlots.map((slot) => (
+                      <div key={slot.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-[var(--color-border-ui)] px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium text-[var(--color-text-1)]" dir="ltr">{slot.startTime} - {slot.endTime}</p>
+                          <p className="text-[11px] text-[var(--color-text-2)]">{slot.date}</p>
+                        </div>
+                        <div className="text-end">
+                          <p className="text-sm font-medium text-[var(--color-primary)]">{numberFormatter.format(slot.targetQuantity)} وحدة</p>
+                          <p className="text-[11px] text-[var(--color-text-2)]">{slot.status === 'planned' ? 'مخططة' : slot.status}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === "dates" && (
               <div className="space-y-2">
                 {[

@@ -1998,6 +1998,20 @@
       allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
     }
 
+    match /work_orders/{workOrderId}/hourly_slots/{slotId} {
+      allow read: if pl_isActiveUser()
+        && get(/databases/$(database)/documents/work_orders/$(workOrderId)).data.tenantId == pl_tenantId();
+      allow create: if pl_isActiveUser()
+        && (pl_hasErpPermission('workOrders.create') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+        && request.resource.data.tenantId == pl_tenantId()
+        && request.resource.data.workOrderId == workOrderId
+        && getAfter(/databases/$(database)/documents/work_orders/$(workOrderId)).data.tenantId == pl_tenantId();
+      allow update, delete: if pl_isActiveUser()
+        && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+        && resource.data.tenantId == pl_tenantId()
+        && resource.data.workOrderId == workOrderId;
+    }
+
     match /{coll}/{docId} {
       allow read: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());

@@ -26,9 +26,10 @@ import {
   type InjectionComponentOption,
 } from '../../../modules/production/utils/injectionComponentOptions';
 import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
-import { ProductionLineStatus } from '../../../types';
+import { ProductionLineStatus, type WorkOrder } from '../../../types';
 import { PLAN_STATUS_SORT_RANK } from '../../../modules/production/utils/productionPlanReports';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import { generateWorkOrderHourlySlots, hasStartedHourlySlots } from '../../../modules/production/utils/workOrderHourlySlots';
 
 const LINKABLE_PLAN_STATUSES = new Set(['planned', 'in_progress', 'paused']);
 const PLAN_STATUS_LABEL: Record<string, string> = {
@@ -39,6 +40,7 @@ const PLAN_STATUS_LABEL: Record<string, string> = {
 
 const DEFAULT_BREAK_START = '12:00';
 const DEFAULT_BREAK_END = '12:30';
+const DEFAULT_WORKDAY_START = '08:00';
 const DEFAULT_WORKDAY_END = '16:00';
 
 const durationDaysBetweenInclusive = (startDate: string, endDate: string): number => {
@@ -65,7 +67,10 @@ type WorkOrderFormState = {
   notes: string;
   breakStartTime: string;
   breakEndTime: string;
+  workdayStartTime: string;
   workdayEndTime: string;
+  dailyTarget: number;
+  existingHourlySlots?: WorkOrder['hourlySlots'];
   requiresProductionIssue: boolean;
 };
 
@@ -84,7 +89,9 @@ const emptyForm = (requiresProductionIssue = true): WorkOrderFormState => ({
   notes: '',
   breakStartTime: DEFAULT_BREAK_START,
   breakEndTime: DEFAULT_BREAK_END,
+  workdayStartTime: DEFAULT_WORKDAY_START,
   workdayEndTime: DEFAULT_WORKDAY_END,
+  dailyTarget: 0,
   requiresProductionIssue,
 });
 
@@ -364,7 +371,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         notes: wo.notes || '',
         breakStartTime: wo.breakStartTime || DEFAULT_BREAK_START,
         breakEndTime: wo.breakEndTime || DEFAULT_BREAK_END,
+        workdayStartTime: wo.workdayStartTime || DEFAULT_WORKDAY_START,
         workdayEndTime: wo.workdayEndTime || DEFAULT_WORKDAY_END,
+        dailyTarget: Number(wo.dailyTarget || Math.ceil(Number(wo.quantity || 0) / Math.max(1, durationDaysBetweenInclusive(wo.startDate || wo.targetDate, wo.targetDate)))),
+        existingHourlySlots: wo.hourlySlots,
         requiresProductionIssue: typeof wo.requiresProductionIssue === 'boolean'
           ? wo.requiresProductionIssue
           : companyRequiresProductionIssue,
@@ -434,6 +444,20 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     setSaving(true);
     setError(null);
     try {
+      const dailyTarget = form.dailyTarget > 0
+        ? form.dailyTarget
+        : Math.ceil(form.quantity / Math.max(1, form.durationDays));
+      const hourlySlots = hasStartedHourlySlots(form.existingHourlySlots)
+        ? form.existingHourlySlots
+        : generateWorkOrderHourlySlots({
+            startDate: form.startDate,
+            targetDate: form.targetDate,
+            workdayStartTime: form.workdayStartTime || DEFAULT_WORKDAY_START,
+            workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
+            breakStartTime: form.breakStartTime,
+            breakEndTime: form.breakEndTime,
+            dailyTarget,
+          });
       if (isEditMode && editingId) {
         await updateWorkOrder(editingId, {
           workOrderType: form.workOrderType,
@@ -449,7 +473,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           notes: form.notes,
           breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
           breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
+          workdayStartTime: form.workdayStartTime || DEFAULT_WORKDAY_START,
           workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
+          dailyTarget,
+          hourlySlots,
           ...(form.planId ? { planId: form.planId } : {}),
           requiresProductionIssue: form.requiresProductionIssue,
         }, { path: WORK_ORDER_UPDATE_PATHS.workOrderModal });
@@ -492,7 +519,10 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
         notes: form.notes,
         breakStartTime: form.breakStartTime || DEFAULT_BREAK_START,
         breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
+        workdayStartTime: form.workdayStartTime || DEFAULT_WORKDAY_START,
         workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
+        dailyTarget,
+        hourlySlots,
         requiresProductionIssue: form.requiresProductionIssue,
         createdBy: uid || '',
       }, { path: createEntryPath });
@@ -501,9 +531,12 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
       setForm(emptyForm(companyRequiresProductionIssue));
       setSaving(false);
       close();
-    } catch {
+    } catch (caught) {
+      const message = caught instanceof Error && caught.message
+        ? caught.message
+        : isEditMode ? t('modalManager.createWorkOrder.editError') : t('modalManager.createWorkOrder.createError');
       showAppToast('error', isEditMode ? t('modalManager.createWorkOrder.editError') : t('modalManager.createWorkOrder.createError'));
-      setError(isEditMode ? t('modalManager.createWorkOrder.editError') : t('modalManager.createWorkOrder.createError'));
+      setError(message);
       setSaving(false);
     }
   };
@@ -722,7 +755,16 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بداية الوردية</label>
+              <input
+                type="time"
+                value={form.workdayStartTime}
+                onChange={(e) => setForm((f) => ({ ...f, workdayStartTime: e.target.value || DEFAULT_WORKDAY_START }))}
+                className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+              />
+            </div>
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">{t('modalManager.createWorkOrder.dailyBreakStart')}</label>
               <input
@@ -750,6 +792,21 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
                 className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
               />
             </div>
+          </div>
+          <div className="rounded-[var(--border-radius-lg)] border border-[rgb(var(--color-primary)/0.2)] bg-[rgb(var(--color-primary)/0.06)] p-3">
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">التارجت اليومي</label>
+            <input
+              type="number"
+              min={0}
+              step="any"
+              value={form.dailyTarget || ''}
+              onChange={(e) => setForm((f) => ({ ...f, dailyTarget: Number(e.target.value) }))}
+              placeholder={`تلقائي: ${Math.ceil(form.quantity / Math.max(1, form.durationDays || 1)) || 0}`}
+              className="w-full px-3 py-2.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-bold"
+            />
+            <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
+              سيُوزع على ساعات التشغيل الفعلية بعد خصم البريك. تركه فارغًا يحسبه من كمية الأمر ومدته.
+            </p>
           </div>
           <p className="text-[11px] text-[var(--color-text-muted)]">
             {t('modalManager.createWorkOrder.dailyTimeHint')}
