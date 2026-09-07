@@ -7,6 +7,7 @@ import './src/i18n';
 import App from './App';
 import { queryClient } from './lib/queryClient';
 import { ensureFreshClientWithoutPwaCache } from './src/purgeLegacyPwaCaches';
+import { isFirebaseEmulatorMode } from './modules/auth/services/firebase';
 
 async function bootstrap() {
   await ensureFreshClientWithoutPwaCache();
@@ -21,6 +22,18 @@ async function bootstrap() {
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <App />
+        {isFirebaseEmulatorMode && (
+          <div
+            role="status"
+            style={{
+              position: 'fixed', insetInline: 0, bottom: 0, zIndex: 100000,
+              padding: '7px 12px', textAlign: 'center', background: '#7f1d1d',
+              color: '#fff', font: '700 12px Cairo, sans-serif',
+            }}
+          >
+            بيئة اختبار محلية — جميع بيانات Firebase داخل المحاكيات ولا تصل إلى الإنتاج
+          </div>
+        )}
       </QueryClientProvider>
     </React.StrictMode>,
   );

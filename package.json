@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:lab": "vite --mode lab",
+    "emulators:lab": "firebase emulators:start --project demo-production-line-lab --only auth,firestore,functions,storage",
     "build": "vite build",
     "build:analyze": "vite build --mode analyze",
     "typecheck": "tsc -p tsconfig.json --noEmit",
