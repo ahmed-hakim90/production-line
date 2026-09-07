@@ -25,6 +25,7 @@ import type { WorkOrder } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { buildSearchPrefixes } from '@/lib/firestoreSearch';
+import { hasActiveHourlySlot } from '../utils/workOrderHourlySlots';
 
 const COLLECTION = 'work_orders';
 const MAX_PAGE_SIZE = 100;
@@ -286,7 +287,7 @@ export const workOrderService = {
       .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
     const target = ordered.find((slot) => slot.id === slotId);
     if (!target || target.status !== 'planned') throw new Error('هذه الساعة لم تعد متاحة للفتح.');
-    if (ordered.some((slot) => slot.status === 'open')) throw new Error('أغلق الساعة المفتوحة أولًا.');
+    if (hasActiveHourlySlot(ordered)) throw new Error('أكمل الساعة المفتوحة أو المتوقفة أولًا.');
     const firstPlanned = ordered.find((slot) => slot.status === 'planned');
     if (firstPlanned?.id !== slotId) throw new Error('يجب تنفيذ الساعات بالترتيب من الأقدم إلى الأحدث.');
     await runTransaction(db, async (transaction) => {
@@ -334,6 +335,40 @@ export const workOrderService = {
         executionNotes: String(input.executionNotes || '').trim(),
         productionSubmittedAt: serverTimestamp(),
         productionSubmittedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
+  async pauseHourlySlot(workOrderId: string, slotId: string, reason?: string): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'open') throw new Error('لا يمكن إيقاف ساعة غير مفتوحة.');
+      transaction.update(slotRef, {
+        status: 'paused',
+        pausedAt: serverTimestamp(),
+        pausedBy: auth.currentUser?.uid || null,
+        pauseReason: String(reason || '').trim(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
+  async resumeHourlySlot(workOrderId: string, slotId: string): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'paused') throw new Error('هذه الساعة ليست متوقفة.');
+      const pausedAt = snap.data().pausedAt;
+      const pauseSeconds = pausedAt?.toMillis ? Math.max(0, Math.floor((Date.now() - pausedAt.toMillis()) / 1000)) : 0;
+      transaction.update(slotRef, {
+        status: 'open',
+        totalPausedSeconds: Number(snap.data().totalPausedSeconds || 0) + pauseSeconds,
+        resumedAt: serverTimestamp(),
+        resumedBy: auth.currentUser?.uid || null,
         updatedAt: serverTimestamp(),
       });
     });

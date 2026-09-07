@@ -2019,6 +2019,13 @@
             && request.resource.data.workersSnapshotCount >= 1)
           || (resource.data.status == 'open'
             && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+            && request.resource.data.status == 'paused')
+          || (resource.data.status == 'paused'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+            && request.resource.data.status == 'open'
+            && request.resource.data.totalPausedSeconds >= 0)
+          || (resource.data.status == 'open'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
             && request.resource.data.status == 'quality_pending'
             && request.resource.data.actualQuantity >= 0
             && request.resource.data.rejectedQuantity >= 0

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Box, Check, ChevronLeft, Clock3, Factory, PackageCheck, ShieldCheck, Users } from 'lucide-react';
+import { Box, Check, ChevronLeft, Clock3, Factory, PackageCheck, Pause, Play, ShieldCheck, Users } from 'lucide-react';
 
 import type { WorkOrder, WorkOrderHourlySlot } from '../../../types';
 import { useTenantNavigate } from '../../../lib/useTenantNavigate';
@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 
 const numbers = new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 });
 const statusLabel: Record<WorkOrderHourlySlot['status'], string> = {
-  planned: 'لم تبدأ', open: 'الإنتاج مفتوح', production_submitted: 'تم تسليم الإنتاج',
+  planned: 'لم تبدأ', open: 'الإنتاج مفتوح', paused: 'متوقفة مؤقتًا', production_submitted: 'تم تسليم الإنتاج',
   quality_pending: 'بانتظار الجودة', quality_accepted: 'مقبولة من الجودة',
   quality_rejected: 'مرفوضة من الجودة', packaging: 'قيد التغليف', finished: 'مكتملة',
 };
@@ -37,6 +37,7 @@ export function WorkOrderDetailsPage() {
   const [productionDraft, setProductionDraft] = useState({ actual: '', rejected: '0', notes: '' });
   const [qualityDraft, setQualityDraft] = useState({ accepted: '', rejected: '', notes: '' });
   const [packagingDraft, setPackagingDraft] = useState({ packed: '', rejected: '0', notes: '' });
+  const [pauseReason, setPauseReason] = useState('');
 
   const applyLoadedOrder = (row: WorkOrder) => {
     setOrder(row);
@@ -83,7 +84,7 @@ export function WorkOrderDetailsPage() {
   if (loading) return <PageContentSkeleton variant="dashboard" />;
   if (error || !order) return <div className="mx-auto max-w-3xl space-y-4 p-8 text-center"><h1 className="text-lg font-semibold">تعذر عرض تفاصيل أمر الشغل</h1><p className="text-sm text-[var(--color-text-2)]">{error}</p><Button onClick={() => navigate('/work-orders')}>العودة لأوامر الشغل</Button></div>;
 
-  const stageIndex = !selectedSlot ? 0 : selectedSlot.status === 'planned' || selectedSlot.status === 'open' ? 0 : selectedSlot.status === 'quality_pending' || selectedSlot.status === 'quality_accepted' || selectedSlot.status === 'quality_rejected' ? 1 : selectedSlot.status === 'packaging' ? 2 : 3;
+  const stageIndex = !selectedSlot ? 0 : selectedSlot.status === 'planned' || selectedSlot.status === 'open' || selectedSlot.status === 'paused' ? 0 : selectedSlot.status === 'quality_pending' || selectedSlot.status === 'quality_accepted' || selectedSlot.status === 'quality_rejected' ? 1 : selectedSlot.status === 'packaging' ? 2 : 3;
 
   return <main className="mx-auto max-w-[1500px] space-y-4 p-3 sm:p-5" aria-label="تفاصيل أمر الشغل الكاملة">
     <header className="flex flex-wrap items-start justify-between gap-3">
@@ -115,6 +116,8 @@ export function WorkOrderDetailsPage() {
           {actionError ? <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-[var(--color-danger)]">{actionError}</p> : null}
           {selectedSlot.status === 'planned' && canExecute ? <div className="space-y-3"><h3 className="font-medium">بدء تنفيذ الساعة</h3><p className="text-sm text-[var(--color-text-2)]">سيتم تثبيت عدد العمال الحالي وبدء الساعة. لا يمكن فتح أكثر من ساعة في نفس الوقت.</p><Button disabled={updating || selectedSlot.id !== firstPlannedSlotId} onClick={() => void runAction(() => workOrderService.openHourlySlot(order.id!, selectedSlot.id, Math.max(1, order.maxWorkers)))}><Clock3 className="h-4 w-4" />{updating ? 'جاري الفتح...' : `فتح الساعة بـ ${Math.max(1, order.maxWorkers)} عمال`}</Button></div> : null}
           {selectedSlot.status === 'open' && canExecute ? <ProductionForm draft={productionDraft} setDraft={setProductionDraft} updating={updating} onSubmit={() => void runAction(async () => { await workOrderService.submitHourlyProduction(order.id!, selectedSlot.id, { actualQuantity: Number(productionDraft.actual), rejectedQuantity: Number(productionDraft.rejected || 0), executionNotes: productionDraft.notes }); setProductionDraft({ actual: '', rejected: '0', notes: '' }); })} /> : null}
+          {selectedSlot.status === 'open' && canExecute ? <div className="flex flex-wrap items-end gap-3 border-t border-[var(--color-border-ui)] pt-4"><label className="min-w-52 flex-1 space-y-1 text-sm">سبب التوقف<input className="h-10 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-3" value={pauseReason} placeholder="مثال: ضبط الماكينة" onChange={(event) => setPauseReason(event.target.value)} /></label><Button variant="outline" disabled={updating} onClick={() => void runAction(async () => { await workOrderService.pauseHourlySlot(order.id!, selectedSlot.id, pauseReason); setPauseReason(''); })}><Pause className="h-4 w-4" /> تسجيل توقف</Button></div> : null}
+          {selectedSlot.status === 'paused' && canExecute ? <div className="space-y-3 rounded-md border border-[var(--color-border-ui)] p-4"><h3 className="font-medium">الساعة متوقفة مؤقتًا</h3><p className="text-sm text-[var(--color-text-2)]">{selectedSlot.pauseReason || 'لم يُسجل سبب للتوقف.'}</p>{selectedSlot.totalPausedSeconds ? <p className="text-xs text-[var(--color-text-2)]">إجمالي التوقف السابق: {numbers.format(Math.ceil(selectedSlot.totalPausedSeconds / 60))} دقيقة</p> : null}<Button disabled={updating} onClick={() => void runAction(() => workOrderService.resumeHourlySlot(order.id!, selectedSlot.id))}><Play className="h-4 w-4" />{updating ? 'جاري الاستئناف...' : 'استئناف الإنتاج'}</Button></div> : null}
           {selectedSlot.status === 'quality_pending' && canReviewQuality ? <QualityForm slot={selectedSlot} draft={qualityDraft} setDraft={setQualityDraft} updating={updating} onSubmit={() => void runAction(() => workOrderService.reviewHourlyQuality(order.id!, selectedSlot.id, { acceptedQuantity: Number(qualityDraft.accepted || Math.max(0, Number(selectedSlot.actualQuantity || 0) - Number(selectedSlot.rejectedQuantity || 0))), rejectedQuantity: Number(qualityDraft.rejected || selectedSlot.rejectedQuantity || 0), qualityNotes: qualityDraft.notes }))} /> : null}
           {selectedSlot.status === 'quality_accepted' && canHandlePackaging ? <div className="space-y-3"><h3 className="font-medium">تسليم الدفعة للتغليف</h3><p className="text-sm text-[var(--color-text-2)]">المتاح للتغليف: {numbers.format(selectedSlot.qualityAcceptedQuantity || 0)} وحدة.</p><Button disabled={updating} onClick={() => void runAction(() => workOrderService.startHourlyPackaging(order.id!, selectedSlot.id))}>{updating ? 'جاري التسليم...' : 'بدء التغليف'}</Button></div> : null}
           {selectedSlot.status === 'packaging' && canHandlePackaging ? <PackagingForm slot={selectedSlot} draft={packagingDraft} setDraft={setPackagingDraft} updating={updating} onSubmit={() => void runAction(async () => { await workOrderService.finishHourlyPackaging(order.id!, selectedSlot.id, { packagingQuantity: Number(packagingDraft.packed || selectedSlot.qualityAcceptedQuantity || 0), rejectedQuantity: Number(packagingDraft.rejected || 0), notes: packagingDraft.notes }); setPackagingDraft({ packed: '', rejected: '0', notes: '' }); })} /> : null}

@@ -834,6 +834,7 @@ export interface WorkOrderPauseWindow {
 export type WorkOrderHourlySlotStatus =
   | 'planned'
   | 'open'
+  | 'paused'
   | 'production_submitted'
   | 'quality_pending'
   | 'quality_accepted'
@@ -856,6 +857,12 @@ export interface WorkOrderHourlySlot {
   productionSubmittedAt?: any;
   openedBy?: string;
   productionSubmittedBy?: string;
+  pausedAt?: any;
+  pausedBy?: string;
+  pauseReason?: string;
+  totalPausedSeconds?: number;
+  resumedAt?: any;
+  resumedBy?: string;
   qualityAcceptedQuantity?: number;
   qualityRejectedQuantity?: number;
   qualityNotes?: string;

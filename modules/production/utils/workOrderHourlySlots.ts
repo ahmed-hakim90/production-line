@@ -82,3 +82,6 @@ export const generateWorkOrderHourlySlots = (input: GenerateWorkOrderHourlySlots
 
 export const hasStartedHourlySlots = (slots: WorkOrderHourlySlot[] | undefined): boolean =>
   Boolean(slots?.some((slot) => slot.status !== 'planned'));
+
+export const hasActiveHourlySlot = (slots: WorkOrderHourlySlot[] | undefined): boolean =>
+  Boolean(slots?.some((slot) => slot.status === 'open' || slot.status === 'paused'));

@@ -54,3 +54,7 @@ Users with final-inspection permission split the submitted hourly quantity into 
 ## Delivery 5: hourly packaging close
 
 An accepted hourly batch can be opened for packaging by a user with production-handover approval permission. Closing packaging splits the quality-accepted quantity into packaged and packaging-rejected quantities; the values must balance exactly. The slot then becomes `finished`. This local lifecycle records operational state only and deliberately does not post stock or duplicate the existing server-owned production handover.
+
+## Delivery 6: hourly stop and resume
+
+An authorized operator may pause only the currently open production hour and must resume it before submitting production. The slot records the pause operator, reason, start time, and accumulated stopped seconds. Pausing does not alter the parent work-order status or permit another hour to open, so chronological execution and the single-active-hour invariant remain intact.
