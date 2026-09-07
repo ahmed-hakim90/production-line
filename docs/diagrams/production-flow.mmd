@@ -1,0 +1,27 @@
+flowchart TB
+  classDef action fill:#e8f0ff,stroke:#315fbd,color:#101828
+  classDef data fill:#f4f7fb,stroke:#667085,color:#101828
+  classDef excluded fill:#fff4e5,stroke:#b54708,color:#101828
+
+  PLAN[خطة الإنتاج]:::action --> WO[أمر الشغل]:::action
+  PLAN --> MRP[حساب احتياجات المواد]:::action
+  MRP --> REQ[طلب صرف الإنتاج]:::action
+  WO --> REQ
+  REQ --> APPROVE{اعتماد وصرف؟}
+  APPROVE -- نعم --> ISSUE[صرف الخامات إلى أرضية الإنتاج]:::action
+  APPROVE -- لا --> PENDING[انتظار التصحيح أو الاعتماد]:::excluded
+  ISSUE --> EXEC[التنفيذ على خط الإنتاج]:::action
+  WO --> EXEC
+  EXEC --> REPORT[تقرير المنتج التام أو حقن المكوّن]:::action
+  REPORT --> PROCESS[Cloud Function لمعالجة التقرير]:::action
+  PROCESS --> ATT[تسجيل حضور ومخرجات العمال]:::data
+  PROCESS --> PROGRESS[تحديث تقدم أمر الشغل والخطة]:::data
+  PROCESS --> COST[سعر الساعة × عدد العمال × ساعات التقرير]:::action
+  COST --> COSTSNAP[Snapshot تكلفة التقرير والوحدة]:::data
+  COSTSNAP --> AGG[تحديث actualCost بفروق الـSnapshot]:::data
+  PROCESS --> STOCK[خصم المكونات وإضافة المنتج تحت التشغيل]:::action
+  STOCK --> HANDOVER[طلب تسليم إلى التعبئة]:::action
+  HANDOVER --> PACK[تقرير التعبئة]:::excluded
+  EXEC --> WASTE[تقرير الهالك]:::excluded
+  PACK -. لا يدخل في تكلفة الإنتاج .-> COST
+  WASTE -. لا يدخل في تكلفة الإنتاج .-> COST

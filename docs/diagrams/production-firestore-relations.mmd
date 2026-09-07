@@ -1,0 +1,61 @@
+erDiagram
+  TENANTS ||--o{ USERS : contains
+  TENANTS ||--o{ PRODUCTS : owns
+  TENANTS ||--o{ PRODUCTION_LINES : owns
+  TENANTS ||--o{ PRODUCTION_PLANS : owns
+  TENANTS ||--o{ WORK_ORDERS : owns
+  TENANTS ||--o{ PRODUCTION_REPORTS : owns
+  TENANTS ||--o{ PRODUCTION_ISSUE_ORDERS : owns
+  TENANTS ||--o{ STOCK_TRANSACTIONS : owns
+  TENANTS ||--o{ LABOR_SETTINGS : owns
+
+  PRODUCTS ||--o{ BOMS : has
+  BOMS ||--o{ BOM_ITEMS : contains
+  MATERIALS ||--o{ BOM_ITEMS : referenced_by
+  PRODUCTION_PLANS ||--o{ WORK_ORDERS : schedules
+  PRODUCTION_PLANS ||--o{ PRODUCTION_ISSUE_ORDERS : requests
+  PRODUCTION_PLANS ||--o{ PRODUCTION_REPORTS : receives
+  WORK_ORDERS ||--o{ PRODUCTION_ISSUE_ORDERS : requests
+  WORK_ORDERS ||--o{ PRODUCTION_REPORTS : receives
+  PRODUCTS ||--o{ WORK_ORDERS : produces
+  PRODUCTS ||--o{ PRODUCTION_REPORTS : reported_for
+  PRODUCTION_LINES ||--o{ WORK_ORDERS : executes
+  PRODUCTION_LINES ||--o{ PRODUCTION_REPORTS : reported_on
+  PRODUCTION_ISSUE_ORDERS ||--o{ STOCK_TRANSACTIONS : posts
+  PRODUCTION_REPORTS ||--o{ STOCK_TRANSACTIONS : posts
+  PRODUCTION_REPORTS ||--o{ PRODUCTION_ATTENDANCE_RECORDS : materializes
+  PRODUCTION_REPORTS ||--o| INVENTORY_OPERATIONS : guards_idempotency
+  PRODUCTION_REPORTS ||--o| PACKAGING_HANDOVER_REQUESTS : creates
+  LABOR_SETTINGS ||--o{ PRODUCTION_REPORTS : hourly_rate_snapshot
+
+  PRODUCTION_REPORTS {
+    string tenantId
+    string productId
+    string lineId
+    string productionPlanId
+    string workOrderId
+    string reportType
+    number quantityProduced
+    number workersCount
+    number workHours
+    number laborHourlyRateApplied
+    number fullManufacturingCostSnapshot
+  }
+
+  WORK_ORDERS {
+    string tenantId
+    string productionPlanId
+    string productId
+    string lineId
+    number quantity
+    number producedQuantity
+    number actualCost
+  }
+
+  PRODUCTION_PLANS {
+    string tenantId
+    string productId
+    number plannedQuantity
+    number producedQuantity
+    number actualCost
+  }

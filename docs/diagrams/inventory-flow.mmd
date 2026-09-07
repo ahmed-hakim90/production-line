@@ -1,0 +1,19 @@
+flowchart TB
+  SOURCE{مصدر الحركة} --> RECEIPT[وارد أو استلام]
+  SOURCE --> ISSUE[طلب صرف]
+  SOURCE --> TRANSFER[طلب تحويل]
+  SOURCE --> COUNT[جلسة جرد]
+  RECEIPT --> VALIDATE[التحقق من الصنف والمخزن والموقع والصلاحية]
+  ISSUE --> APPROVE{اعتماد؟}
+  TRANSFER --> APPROVE
+  APPROVE -->|مرفوض| STOP[لا تتغير الأرصدة]
+  APPROVE -->|معتمد| VALIDATE
+  COUNT --> DIFF[حساب فرق الفعلي عن الدفتري]
+  DIFF --> VALIDATE
+  VALIDATE --> TX[معاملة Firestore ذرية]
+  TX --> LEDGER[إنشاء stock_transactions]
+  TX --> BALANCE[تحديث stock_items]
+  TX --> LOCATION[تحديث stock_location_balances]
+  LEDGER --> TRACE[بطاقة الصنف والتتبع والتحليلات]
+  BALANCE --> ALERTS[تنبيهات النقص والاستثناءات]
+  LOCATION --> PICKING[تجهيز وصرف حسب الموقع]

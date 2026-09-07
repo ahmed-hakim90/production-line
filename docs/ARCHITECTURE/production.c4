@@ -1,0 +1,90 @@
+specification {
+  element person
+  element system
+  element container
+  element component
+}
+
+model {
+  factoryManager = person 'مدير المصنع'
+  lineSupervisor = person 'مشرف خط الإنتاج'
+  warehouseOfficer = person 'مسؤول المخزن'
+  packagingOfficer = person 'مسؤول التعبئة'
+
+  factoryErp = system 'نظام إدارة المصنع' {
+    webApp = container 'تطبيق React' 'Vite + React + TypeScript' {
+      planningUi = component 'خطط الإنتاج'
+      workOrdersUi = component 'أوامر الشغل'
+      reportsUi = component 'تقارير الإنتاج'
+      issueUi = component 'طلبات صرف الإنتاج'
+      packagingUi = component 'التحكم في التعبئة'
+      costingUi = component 'تكاليف الإنتاج الشهرية'
+    }
+
+    clientDomain = container 'خدمات نطاق الإنتاج' 'TypeScript services and Zustand store' {
+      planning = component 'Production Plan Service'
+      workOrders = component 'Work Order Service'
+      reports = component 'Report Service'
+      manufacturing = component 'BOM and Materials Services'
+      costing = component 'Labor-only Cost Calculator'
+    }
+
+    cloudFunctions = container 'Firebase Cloud Functions' 'Node.js 22' {
+      reportFast = component 'Create Production Report Fast'
+      reportProcessor = component 'Production Report Processor'
+      inventoryPosting = component 'Production Inventory Posting'
+      monthlyCost = component 'Monthly Cost Aggregation'
+    }
+  }
+
+  firebase = system 'Firebase' {
+    auth = container 'Authentication'
+    firestore = container 'Cloud Firestore'
+    storage = container 'Cloud Storage'
+  }
+
+  factoryManager -> factoryErp.webApp.planningUi 'ينشئ ويتابع الخطة'
+  lineSupervisor -> factoryErp.webApp.workOrdersUi 'يتابع أمر الشغل'
+  lineSupervisor -> factoryErp.webApp.reportsUi 'يسجل الإنتاج الفعلي'
+  warehouseOfficer -> factoryErp.webApp.issueUi 'يراجع ويصرف الخامات'
+  packagingOfficer -> factoryErp.webApp.packagingUi 'يستلم المنتج للتعبئة'
+
+  factoryErp.webApp.planningUi -> factoryErp.clientDomain.planning
+  factoryErp.webApp.workOrdersUi -> factoryErp.clientDomain.workOrders
+  factoryErp.webApp.reportsUi -> factoryErp.clientDomain.reports
+  factoryErp.webApp.issueUi -> factoryErp.clientDomain.manufacturing
+  factoryErp.webApp.costingUi -> factoryErp.clientDomain.costing
+
+  factoryErp.clientDomain.reports -> factoryErp.cloudFunctions.reportFast 'إنشاء آمن'
+  factoryErp.cloudFunctions.reportFast -> factoryErp.cloudFunctions.reportProcessor 'تشغيل المعالجة'
+  factoryErp.cloudFunctions.reportProcessor -> factoryErp.cloudFunctions.inventoryPosting 'تطبيق حركة المخزون'
+  factoryErp.cloudFunctions.reportProcessor -> factoryErp.clientDomain.costing 'سعر الساعة × العمال × الساعات'
+  factoryErp.cloudFunctions.reportProcessor -> factoryErp.cloudFunctions.monthlyCost 'تجميع تكلفة التقرير'
+
+  factoryErp.webApp -> firebase.auth 'تسجيل الدخول والصلاحيات'
+  factoryErp.clientDomain -> firebase.firestore 'قراءة وكتابة بيانات المستأجر'
+  factoryErp.cloudFunctions -> firebase.firestore 'معاملات وتشغيل خلفي'
+  factoryErp.webApp -> firebase.storage 'مرفقات وصور'
+}
+
+views {
+  view productionContext {
+    title 'سياق موديول الإنتاج والمستخدمون'
+    include factoryManager, lineSupervisor, warehouseOfficer, packagingOfficer, factoryErp, firebase
+  }
+
+  view productionContainers of factoryErp {
+    title 'حاويات ومكونات موديول الإنتاج'
+    include *
+  }
+
+  view productionWebModules of factoryErp.webApp {
+    title 'شاشات وموديولات الإنتاج في التطبيق'
+    include *
+  }
+
+  view productionCloudModules of factoryErp.cloudFunctions {
+    title 'معالجة تقارير الإنتاج على Cloud Functions'
+    include *
+  }
+}

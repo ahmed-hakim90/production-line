@@ -46,7 +46,15 @@
     "handover:readiness": "node scripts/handover/check-tenant-readiness.mjs",
     "test:categories": "npx --yes tsx tests/category-tree.test.ts && npx --yes tsx tests/category-migration.test.ts",
     "test:operations": "npx --yes tsx tests/tenant-readiness.test.ts && npx --yes tsx tests/inventory-analytics.test.ts && npx --yes tsx tests/cost-health-snapshot.test.ts && npx --yes tsx tests/asset-depreciation.test.ts && npx --yes tsx tests/line-efficiency.test.ts",
-    "showcase:screens": "HANDOVER_BASE_URL=http://localhost:3000 node scripts/handover/capture-showcase-screens.mjs"
+    "showcase:screens": "HANDOVER_BASE_URL=http://localhost:3000 node scripts/handover/capture-showcase-screens.mjs",
+    "diagram:production:validate": "likec4 validate docs/ARCHITECTURE",
+    "diagram:production:architecture": "likec4 export png docs/ARCHITECTURE --flat --output docs/ARCHITECTURE/rendered",
+    "diagram:production:flow": "mmdc -i docs/diagrams/production-flow.mmd -o docs/diagrams/production-flow.svg -b white -w 1800 -H 1200",
+    "diagram:production:data": "mmdc -i docs/diagrams/production-firestore-relations.mmd -o docs/diagrams/production-firestore-relations.svg -b white -w 2200 -H 1600",
+    "diagram:production": "npm run diagram:production:validate && npm run diagram:production:architecture && npm run diagram:production:flow && npm run diagram:production:data",
+    "diagram:operations:flows": "mmdc -i docs/diagrams/quality-flow.mmd -o docs/diagrams/quality-flow.svg -b white -w 1800 -H 1400 && mmdc -i docs/diagrams/inventory-flow.mmd -o docs/diagrams/inventory-flow.svg -b white -w 1800 -H 1400 && mmdc -i docs/diagrams/maintenance-flow.mmd -o docs/diagrams/maintenance-flow.svg -b white -w 1800 -H 1400",
+    "diagram:operations:data": "mmdc -i docs/diagrams/quality-firestore-relations.mmd -o docs/diagrams/quality-firestore-relations.svg -b white -w 1800 -H 1400 && mmdc -i docs/diagrams/inventory-firestore-relations.mmd -o docs/diagrams/inventory-firestore-relations.svg -b white -w 2000 -H 1500 && mmdc -i docs/diagrams/maintenance-firestore-relations.mmd -o docs/diagrams/maintenance-firestore-relations.svg -b white -w 2000 -H 1500",
+    "diagram:operations": "npm run diagram:production:validate && npm run diagram:production:architecture && npm run diagram:operations:flows && npm run diagram:operations:data"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -95,6 +103,7 @@
   },
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.0",
+    "@mermaid-js/mermaid-cli": "^11.17.0",
     "@tailwindcss/container-queries": "^0.1.1",
     "@tailwindcss/forms": "^0.5.11",
     "@types/file-saver": "^2.0.7",
@@ -105,6 +114,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.27",
     "firebase-admin": "^13.5.0",
+    "likec4": "^1.59.3",
     "postcss": "^8.5.6",
     "rollup-plugin-visualizer": "^7.0.1",
     "tailwindcss": "^3.4.17",

@@ -1,0 +1,21 @@
+flowchart TB
+  INTAKE[استلام الجهاز وفتح طلب] --> ASSIGN[إسناد إلى فرع وفني]
+  ASSIGN --> DIAG[التشخيص]
+  DIAG --> ESTIMATE[تقدير الأعمال والقطع]
+  ESTIMATE --> WARRANTY{كل البنود داخل الضمان؟}
+  WARRANTY -->|نعم| REPAIR[الإصلاح]
+  WARRANTY -->|لا| APPROVAL{موافقة العميل}
+  APPROVAL -->|رفض| CLOSE[إغلاق أو إرجاع]
+  APPROVAL -->|موافقة| REPAIR
+  REPAIR --> PARTS{هل يحتاج قطع؟}
+  PARTS -->|نعم| REQUEST[طلب أو صرف أو تموين قطع]
+  REQUEST --> REPAIR
+  PARTS -->|لا| COMPLETE[إنهاء فني]
+  REPAIR --> COMPLETE
+  COMPLETE --> PAYMENT{تحصيل مطلوب؟}
+  PAYMENT -->|ضمان| WARRANTY_CLOSE[إغلاق ضمان بدون تحصيل]
+  PAYMENT -->|مدفوع| COLLECT[تحصيل وتسجيل خزينة]
+  COLLECT --> DELIVER[تسليم الجهاز]
+  WARRANTY_CLOSE --> DELIVER
+  PLAN[خطة صيانة وقائية] --> DUE[موعد الاستحقاق]
+  DUE --> INTAKE

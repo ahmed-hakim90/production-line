@@ -1,0 +1,49 @@
+model {
+  receptionAgent = person 'موظف الاستقبال'
+  technician = person 'فني الصيانة'
+  maintenanceManager = person 'مدير الصيانة'
+  customer = person 'العميل'
+
+  maintenanceModule = system 'موديول الصيانة Repair' {
+    maintenanceWeb = container 'واجهات الصيانة' 'React + TypeScript' {
+      jobIntake = component 'استلام طلب الصيانة'
+      technicianWorkspace = component 'مساحة عمل الفني'
+      customerApproval = component 'موافقة العميل'
+      parts = component 'قطع الغيار والتموين'
+      payments = component 'التحصيل والتسليم'
+      treasury = component 'خزينة المركز'
+      preventive = component 'الصيانة الوقائية'
+    }
+    maintenanceServices = container 'خدمات نطاق الصيانة' 'TypeScript services' {
+      jobService = component 'Repair Job Service'
+      partsService = component 'Spare Parts Service'
+      paymentService = component 'Payment Service'
+      pmService = component 'Preventive Maintenance Service'
+    }
+    maintenanceFunctions = container 'وظائف الصيانة الآمنة' 'Firebase Cloud Functions' {
+      customerOps = component 'Customer Operations'
+      technicianOps = component 'Technician Operations'
+      financialOps = component 'Financial Operations'
+      partsOps = component 'Parts and Replenishment'
+    }
+  }
+
+  receptionAgent -> maintenanceModule.maintenanceWeb.jobIntake 'يستلم الجهاز والبيانات'
+  technician -> maintenanceModule.maintenanceWeb.technicianWorkspace 'يشخص ويصلح ويطلب القطع'
+  maintenanceManager -> maintenanceModule.maintenanceWeb.treasury 'يراجع المركز والخزينة'
+  customer -> maintenanceModule.maintenanceWeb.customerApproval 'يوافق على التقدير ويتابع الطلب'
+  maintenanceModule.maintenanceWeb -> maintenanceModule.maintenanceServices
+  maintenanceModule.maintenanceServices -> maintenanceModule.maintenanceFunctions 'العمليات المحكومة'
+  maintenanceModule.maintenanceFunctions -> firebase.firestore 'الطلبات والقطع والمدفوعات'
+}
+
+views {
+  view maintenanceArchitecture of maintenanceModule {
+    title 'معمارية موديول الصيانة'
+    include *
+  }
+  view maintenanceScreens of maintenanceModule.maintenanceWeb {
+    title 'شاشات ومسارات الصيانة'
+    include *
+  }
+}

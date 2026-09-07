@@ -1,0 +1,16 @@
+flowchart TB
+  WO[أمر الشغل] --> CHECK{نوع الفحص}
+  CHECK -->|أثناء التشغيل| IPQC[فحص IPQC]
+  CHECK -->|نهاية التشغيل| FINAL[الفحص النهائي]
+  IPQC --> RESULT{النتيجة}
+  FINAL --> RESULT
+  RESULT -->|مقبول| PASS[تسجيل اجتياز]
+  RESULT -->|مرفوض| DEFECT[إنشاء عيب جودة]
+  RESULT -->|إعادة تشغيل| DEFECT
+  DEFECT --> REWORK[إنشاء أمر إعادة تشغيل]
+  REWORK --> FOLLOW[مفتوح ← قيد التنفيذ ← منتهٍ أو هالك]
+  DEFECT --> CAPA[إجراء تصحيحي أو وقائي CAPA]
+  PASS --> SUMMARY[تحديث ملخص جودة أمر الشغل]
+  FOLLOW --> SUMMARY
+  CAPA --> SUMMARY
+  SUMMARY --> KPI[معدل العيوب وFirst Pass Yield وأعلى سبب]

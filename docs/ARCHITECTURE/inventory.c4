@@ -1,0 +1,47 @@
+model {
+  inventoryManager = person 'مدير المخازن'
+  warehouseKeeper = person 'أمين المخزن'
+  inventoryApprover = person 'معتمد التحويلات'
+
+  inventoryModule = system 'موديول المخازن' {
+    inventoryWeb = container 'واجهات المخازن' 'React + TypeScript' {
+      warehouses = component 'المخازن والمواقع'
+      balances = component 'الأرصدة والحركات'
+      productionIssues = component 'صرف الإنتاج'
+      transfers = component 'التحويلات والموافقات'
+      stockCounts = component 'الجرد والتسويات'
+      replenishment = component 'تموين مراكز الصيانة'
+    }
+    inventoryServices = container 'خدمات المخزون' 'Tenant-scoped Firestore services' {
+      stockService = component 'Stock Service'
+      routingService = component 'Inventory Routing'
+      issueService = component 'Production Issue Service'
+      locationService = component 'Warehouse Location Service'
+    }
+    inventoryFunctions = container 'وظائف المخزون الآمنة' 'Firebase Cloud Functions' {
+      posting = component 'Stock Posting'
+      approvals = component 'Approval Lifecycle'
+      productionInventory = component 'Production Inventory'
+      repairSupply = component 'Spare Parts Replenishment'
+    }
+  }
+
+  warehouseKeeper -> inventoryModule.inventoryWeb.productionIssues 'يجهز ويصرف'
+  warehouseKeeper -> inventoryModule.inventoryWeb.stockCounts 'ينفذ الجرد'
+  inventoryApprover -> inventoryModule.inventoryWeb.transfers 'يعتمد التحويل'
+  inventoryManager -> inventoryModule.inventoryWeb.balances 'يراقب الأرصدة والاستثناءات'
+  inventoryModule.inventoryWeb -> inventoryModule.inventoryServices
+  inventoryModule.inventoryServices -> inventoryModule.inventoryFunctions 'العمليات الحساسة'
+  inventoryModule.inventoryFunctions -> firebase.firestore 'معاملات ذرية وحركات موثقة'
+}
+
+views {
+  view inventoryArchitecture of inventoryModule {
+    title 'معمارية موديول المخازن'
+    include *
+  }
+  view inventoryScreens of inventoryModule.inventoryWeb {
+    title 'شاشات ومسارات المخازن'
+    include *
+  }
+}

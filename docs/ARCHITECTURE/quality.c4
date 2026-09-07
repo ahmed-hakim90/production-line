@@ -1,0 +1,39 @@
+model {
+  qualityInspector = person 'مفتش الجودة'
+  qualityManager = person 'مدير الجودة'
+
+  qualityModule = system 'موديول الجودة' {
+    qualityWeb = container 'واجهات الجودة' 'React + TypeScript' {
+      finalInspection = component 'الفحص النهائي'
+      ipqc = component 'فحص أثناء التشغيل IPQC'
+      rework = component 'أوامر إعادة التشغيل'
+      capa = component 'الإجراءات التصحيحية والوقائية CAPA'
+      qualityReports = component 'تقارير ومؤشرات الجودة'
+    }
+    qualityServices = container 'خدمات الجودة' 'Firestore services' {
+      inspectionService = component 'Inspection Service'
+      notificationService = component 'Notification Service'
+      spcService = component 'SPC Analysis'
+      printService = component 'Print Service'
+    }
+  }
+
+  qualityInspector -> qualityModule.qualityWeb.finalInspection 'يسجل قبول أو رفض أو إعادة تشغيل'
+  qualityInspector -> qualityModule.qualityWeb.ipqc 'يفحص أثناء العملية'
+  qualityManager -> qualityModule.qualityWeb.capa 'يتابع الإجراء التصحيحي'
+  qualityManager -> qualityModule.qualityWeb.qualityReports 'يراجع المؤشرات'
+  qualityModule.qualityWeb -> qualityModule.qualityServices
+  qualityModule.qualityServices.inspectionService -> firebase.firestore 'الفحوص والعيوب وإعادة التشغيل'
+  qualityModule.qualityServices.notificationService -> firebase.firestore 'إشعارات الأطراف المسؤولة'
+}
+
+views {
+  view qualityArchitecture of qualityModule {
+    title 'معمارية موديول الجودة'
+    include *
+  }
+  view qualityScreens of qualityModule.qualityWeb {
+    title 'شاشات ومسارات الجودة'
+    include *
+  }
+}
