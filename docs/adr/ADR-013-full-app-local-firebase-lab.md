@@ -50,3 +50,7 @@ Users with final-inspection permission split the submitted hourly quantity into 
 ## Delivery 4: full work-order workspace
 
 `/work-orders/:id` is the durable full-page workspace for one work order. It owns the complete hourly timeline and its production and quality actions, while the list drawer remains a quick summary with an explicit link to the full page. The existing scanner keeps its dedicated `/work-orders/:id/scanner` route.
+
+## Delivery 5: hourly packaging close
+
+An accepted hourly batch can be opened for packaging by a user with production-handover approval permission. Closing packaging splits the quality-accepted quantity into packaged and packaging-rejected quantities; the values must balance exactly. The slot then becomes `finished`. This local lifecycle records operational state only and deliberately does not post stock or duplicate the existing server-owned production handover.

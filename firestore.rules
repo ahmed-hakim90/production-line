@@ -2084,24 +2084,33 @@ service cloud.firestore {
         && resource.data.workOrderId == workOrderId
         && request.resource.data.tenantId == resource.data.tenantId
         && request.resource.data.workOrderId == resource.data.workOrderId
-        && ((((pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
-          && resource.data.status == 'planned'
+        && (((resource.data.status == 'planned'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
             && request.resource.data.status == 'open'
             && request.resource.data.workersSnapshotCount >= 1)
-          || ((pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
-            && resource.data.status == 'open'
+          || (resource.data.status == 'open'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
             && request.resource.data.status == 'quality_pending'
             && request.resource.data.actualQuantity >= 0
             && request.resource.data.rejectedQuantity >= 0
             && request.resource.data.rejectedQuantity <= request.resource.data.actualQuantity)
-          || ((pl_hasErpPermission('quality.finalInspection.inspect') || pl_hasErpPermission('quality.inspect'))
-            && resource.data.status == 'quality_pending'
+          || (resource.data.status == 'quality_pending'
+            && (pl_hasErpPermission('quality.finalInspection.inspect') || pl_hasErpPermission('quality.inspect'))
             && (request.resource.data.status == 'quality_accepted' || request.resource.data.status == 'quality_rejected')
             && request.resource.data.qualityAcceptedQuantity >= 0
             && request.resource.data.qualityRejectedQuantity >= 0
             && request.resource.data.qualityAcceptedQuantity + request.resource.data.qualityRejectedQuantity == resource.data.actualQuantity
             && ((request.resource.data.status == 'quality_accepted' && request.resource.data.qualityAcceptedQuantity > 0)
-              || (request.resource.data.status == 'quality_rejected' && request.resource.data.qualityAcceptedQuantity == 0)))));
+              || (request.resource.data.status == 'quality_rejected' && request.resource.data.qualityAcceptedQuantity == 0)))
+          || (resource.data.status == 'quality_accepted'
+            && pl_hasErpPermission('productionHandover.approve')
+            && request.resource.data.status == 'packaging')
+          || (resource.data.status == 'packaging'
+            && pl_hasErpPermission('productionHandover.approve')
+            && request.resource.data.status == 'finished'
+            && request.resource.data.packagingQuantity >= 0
+            && request.resource.data.packagingRejectedQuantity >= 0
+            && request.resource.data.packagingQuantity + request.resource.data.packagingRejectedQuantity == resource.data.qualityAcceptedQuantity)));
       allow delete: if pl_isActiveUser()
         && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
         && resource.data.tenantId == pl_tenantId()

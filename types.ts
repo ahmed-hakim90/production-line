@@ -861,6 +861,12 @@ export interface WorkOrderHourlySlot {
   qualityNotes?: string;
   qualityReviewedAt?: any;
   qualityReviewedBy?: string;
+  packagingQuantity?: number;
+  packagingRejectedQuantity?: number;
+  packagingNotes?: string;
+  packagingStartedAt?: any;
+  packagingCompletedAt?: any;
+  packagingHandledBy?: string;
 }
 
 export interface WorkOrder {

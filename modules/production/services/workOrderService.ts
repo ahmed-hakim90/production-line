@@ -370,6 +370,31 @@ export const workOrderService = {
     });
   },
 
+  async startHourlyPackaging(workOrderId: string, slotId: string): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'quality_accepted') throw new Error('الدفعة ليست جاهزة للتغليف.');
+      transaction.update(slotRef, { status: 'packaging', packagingStartedAt: serverTimestamp(), packagingHandledBy: auth.currentUser?.uid || null, updatedAt: serverTimestamp() });
+    });
+  },
+
+  async finishHourlyPackaging(workOrderId: string, slotId: string, input: { packagingQuantity: number; rejectedQuantity: number; notes?: string }): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const packagingQuantity = Number(input.packagingQuantity);
+    const rejectedQuantity = Number(input.rejectedQuantity);
+    if (!Number.isFinite(packagingQuantity) || packagingQuantity < 0 || !Number.isFinite(rejectedQuantity) || rejectedQuantity < 0) throw new Error('أدخل كميات تغليف صحيحة.');
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'packaging') throw new Error('مرحلة التغليف غير مفتوحة لهذه الدفعة.');
+      const accepted = Number(snap.data().qualityAcceptedQuantity || 0);
+      if (Math.abs(packagingQuantity + rejectedQuantity - accepted) > 0.001) throw new Error('مجموع المغلف والمرفوض يجب أن يساوي المقبول من الجودة.');
+      transaction.update(slotRef, { status: 'finished', packagingQuantity, packagingRejectedQuantity: rejectedQuantity, packagingNotes: String(input.notes || '').trim(), packagingCompletedAt: serverTimestamp(), packagingHandledBy: auth.currentUser?.uid || null, updatedAt: serverTimestamp() });
+    });
+  },
+
   /** Status change with history stamp — prefer usecase `updateWorkOrderStatus`. */
   async updateStatus(id: string, status: WorkOrder['status']): Promise<void> {
     if (!isConfigured) return;
