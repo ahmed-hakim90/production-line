@@ -36,3 +36,9 @@ No work-order-cycle change may be deployed until its full journey passes local e
 New and safely edited work orders snapshot their operating hours in `hourlySlots`. Each slot records its date, start/end, allocated target, and lifecycle status. The generator excludes the configured break and prorates the daily target across actual operating minutes.
 
 Legacy work orders remain readable without migration. Saving an old order generates its schedule. Once any hourly slot leaves `planned`, schedule regeneration is blocked so an edit cannot rewrite an execution record.
+
+## Delivery 2: hourly execution handoff
+
+An authorized work-order operator opens only the oldest planned slot. Opening snapshots the assigned worker count and moves a pending work order into progress. Only one slot may be open at a time.
+
+The operator submits actual and rejected quantities plus optional execution notes. Submission moves the slot to `quality_pending`; it does not yet post inventory, create a production report, or count accepted output. Those mutations remain owned by their existing server-controlled journeys and will be connected only after the quality decision is implemented.

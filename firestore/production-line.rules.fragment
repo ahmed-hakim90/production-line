@@ -2005,11 +2005,28 @@
         && (pl_hasErpPermission('workOrders.create') || pl_hasErpPermission('workOrders.componentInjection.manage'))
         && request.resource.data.tenantId == pl_tenantId()
         && request.resource.data.workOrderId == workOrderId
+        && request.resource.data.status == 'planned'
+        && request.resource.data.targetQuantity >= 0
         && getAfter(/databases/$(database)/documents/work_orders/$(workOrderId)).data.tenantId == pl_tenantId();
-      allow update, delete: if pl_isActiveUser()
+      allow update: if pl_isActiveUser()
         && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
         && resource.data.tenantId == pl_tenantId()
-        && resource.data.workOrderId == workOrderId;
+        && resource.data.workOrderId == workOrderId
+        && request.resource.data.tenantId == resource.data.tenantId
+        && request.resource.data.workOrderId == resource.data.workOrderId
+        && ((resource.data.status == 'planned'
+            && request.resource.data.status == 'open'
+            && request.resource.data.workersSnapshotCount >= 1)
+          || (resource.data.status == 'open'
+            && request.resource.data.status == 'quality_pending'
+            && request.resource.data.actualQuantity >= 0
+            && request.resource.data.rejectedQuantity >= 0
+            && request.resource.data.rejectedQuantity <= request.resource.data.actualQuantity));
+      allow delete: if pl_isActiveUser()
+        && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+        && resource.data.tenantId == pl_tenantId()
+        && resource.data.workOrderId == workOrderId
+        && resource.data.status == 'planned';
     }
 
     match /{coll}/{docId} {

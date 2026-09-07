@@ -870,6 +870,7 @@ export const WorkOrders: React.FC = () => {
         onViewReports={can('reports.view') || can('reports.create') ? handleViewLinkedReports : undefined}
         onReconcileReports={workOrderReconcileEnabled && (can('workOrders.edit') || can('reports.edit')) ? handleReconcileLinkedReports : undefined}
         reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
+        canExecuteHourlySlots={canUpdateWorkOrderStatus}
       />
     </ModuleOpsPageShell>
   );

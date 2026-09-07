@@ -53,6 +53,9 @@ interface WorkOrderDetailProps {
   onViewReports?: () => void
   onReconcileReports?: () => void
   reconcilingReports?: boolean
+  updatingSlotId?: string | null
+  onOpenHourlySlot?: (slotId: string, workers: number) => Promise<void>
+  onSubmitHourlySlot?: (slotId: string, input: { actualQuantity: number; rejectedQuantity: number; executionNotes: string }) => Promise<void>
 }
 
 const numberFormatter = new Intl.NumberFormat("ar-EG")
@@ -75,10 +78,15 @@ export function WorkOrderDetail({
   onViewReports,
   onReconcileReports,
   reconcilingReports,
+  updatingSlotId,
+  onOpenHourlySlot,
+  onSubmitHourlySlot,
 }: WorkOrderDetailProps) {
   const { t } = useTranslation()
   const { dir } = useAppDirection();
   const [activeTab, setActiveTab] = useState<TabId>("dates")
+  const [slotDraft, setSlotDraft] = useState({ actualQuantity: "", rejectedQuantity: "0", executionNotes: "" })
+  const [slotError, setSlotError] = useState("")
 
   useEffect(() => {
     if (!open) return
@@ -90,16 +98,23 @@ export function WorkOrderDetail({
   }, [open, onClose])
 
   useEffect(() => {
-    if (open) {
+    if (open && !order.hourlySlotsLoading) {
       setActiveTab(order.hourlySlots?.length ? "hours" : "dates")
     }
-  }, [open, order.id])
+  }, [open, order.id, order.hourlySlotsLoading])
 
   const progress = useMemo(() => {
     if (order.targetQty <= 0) return 0
     return Math.max(0, Math.min(100, Math.round((order.producedQty / order.targetQty) * 100)))
   }, [order.producedQty, order.targetQty])
   const progressValue = Number.isFinite(progress) ? progress : 0
+  const firstPlannedSlotId = order.hourlySlots?.find((slot) => slot.status === 'planned')?.id
+
+  const runSlotAction = async (action: () => Promise<void>) => {
+    setSlotError("")
+    try { await action() }
+    catch (error) { setSlotError(error instanceof Error ? error.message : 'تعذر تحديث الساعة.') }
+  }
 
   const remaining = Math.max(0, order.targetQty - order.producedQty)
   const isCompletedFooter =
@@ -277,16 +292,35 @@ export function WorkOrderDetail({
                   </div>
                 ) : (
                   <div className="space-y-2">
+                    {slotError ? <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-[var(--color-danger)]">{slotError}</p> : null}
                     {order.hourlySlots.map((slot) => (
-                      <div key={slot.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border border-[var(--color-border-ui)] px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium text-[var(--color-text-1)]" dir="ltr">{slot.startTime} - {slot.endTime}</p>
-                          <p className="text-[11px] text-[var(--color-text-2)]">{slot.date}</p>
+                      <div key={slot.id} className="space-y-3 rounded-md border border-[var(--color-border-ui)] px-3 py-2">
+                        <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-[var(--color-text-1)]" dir="ltr">{slot.startTime} - {slot.endTime}</p>
+                            <p className="text-[11px] text-[var(--color-text-2)]">{slot.date}</p>
+                          </div>
+                          <div className="text-end">
+                            <p className="text-sm font-medium text-[var(--color-primary)]">{numberFormatter.format(slot.targetQuantity)} وحدة</p>
+                            <p className="text-[11px] text-[var(--color-text-2)]">{{ planned: 'مخططة', open: 'مفتوحة', quality_pending: 'بانتظار الجودة', production_submitted: 'تم تسليم الإنتاج', quality_accepted: 'مقبولة', quality_rejected: 'مرفوضة', packaging: 'تغليف', finished: 'منتهية' }[slot.status]}</p>
+                          </div>
                         </div>
-                        <div className="text-end">
-                          <p className="text-sm font-medium text-[var(--color-primary)]">{numberFormatter.format(slot.targetQuantity)} وحدة</p>
-                          <p className="text-[11px] text-[var(--color-text-2)]">{slot.status === 'planned' ? 'مخططة' : slot.status}</p>
-                        </div>
+                        {slot.actualQuantity != null ? <p className="text-xs text-[var(--color-text-2)]">الفعلي: <strong className="text-[var(--color-text-1)]">{numberFormatter.format(slot.actualQuantity)}</strong> · المرفوض: <strong className="text-[var(--color-danger)]">{numberFormatter.format(slot.rejectedQuantity || 0)}</strong></p> : null}
+                        {slot.status === 'planned' && onOpenHourlySlot ? (
+                          <Button type="button" size="sm" variant="outline" disabled={updatingSlotId === slot.id || firstPlannedSlotId !== slot.id} onClick={() => void runSlotAction(() => onOpenHourlySlot(slot.id, Math.max(1, order.maxWorkers)))}>
+                            {updatingSlotId === slot.id ? 'جاري الفتح...' : `فتح الساعة (${Math.max(1, order.maxWorkers)} عمال)`}
+                          </Button>
+                        ) : null}
+                        {slot.status === 'open' && onSubmitHourlySlot ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="space-y-1 text-xs text-[var(--color-text-2)]">الإنتاج الفعلي<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={slotDraft.actualQuantity} onChange={(event) => setSlotDraft((draft) => ({ ...draft, actualQuantity: event.target.value }))} /></label>
+                            <label className="space-y-1 text-xs text-[var(--color-text-2)]">المرفوض<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={slotDraft.rejectedQuantity} onChange={(event) => setSlotDraft((draft) => ({ ...draft, rejectedQuantity: event.target.value }))} /></label>
+                            <label className="col-span-2 space-y-1 text-xs text-[var(--color-text-2)]">ملاحظات التشغيل<textarea className="min-h-16 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 py-1 text-[var(--color-text-1)]" value={slotDraft.executionNotes} onChange={(event) => setSlotDraft((draft) => ({ ...draft, executionNotes: event.target.value }))} /></label>
+                            <Button type="button" size="sm" className="col-span-2" disabled={updatingSlotId === slot.id || slotDraft.actualQuantity === ''} onClick={() => void runSlotAction(async () => { await onSubmitHourlySlot(slot.id, { actualQuantity: Number(slotDraft.actualQuantity), rejectedQuantity: Number(slotDraft.rejectedQuantity || 0), executionNotes: slotDraft.executionNotes }); setSlotDraft({ actualQuantity: '', rejectedQuantity: '0', executionNotes: '' }) })}>
+                              {updatingSlotId === slot.id ? 'جاري التسليم...' : 'تسليم الساعة للجودة'}
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>

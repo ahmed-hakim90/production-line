@@ -16,10 +16,11 @@ import {
   Unsubscribe,
   startAfter,
   writeBatch,
+  runTransaction,
   QueryDocumentSnapshot,
   documentId,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { auth, db, isConfigured } from '../../auth/services/firebase';
 import type { WorkOrder } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
@@ -271,6 +272,71 @@ export const workOrderService = {
       hourlyScheduleUpdatedAt: serverTimestamp(),
     });
     await batch.commit();
+  },
+
+  async openHourlySlot(workOrderId: string, slotId: string, workersSnapshotCount: number): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const workers = Math.floor(Number(workersSnapshotCount));
+    if (!Number.isFinite(workers) || workers < 1) throw new Error('أدخل عدد عمال صحيحًا لفتح الساعة.');
+    const orderRef = doc(db, COLLECTION, workOrderId);
+    const slotRef = doc(orderRef, 'hourly_slots', slotId);
+    const slotsSnap = await getDocs(collection(orderRef, 'hourly_slots'));
+    const ordered = slotsSnap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as NonNullable<WorkOrder['hourlySlots']>[number]))
+      .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+    const target = ordered.find((slot) => slot.id === slotId);
+    if (!target || target.status !== 'planned') throw new Error('هذه الساعة لم تعد متاحة للفتح.');
+    if (ordered.some((slot) => slot.status === 'open')) throw new Error('أغلق الساعة المفتوحة أولًا.');
+    const firstPlanned = ordered.find((slot) => slot.status === 'planned');
+    if (firstPlanned?.id !== slotId) throw new Error('يجب تنفيذ الساعات بالترتيب من الأقدم إلى الأحدث.');
+    await runTransaction(db, async (transaction) => {
+      const orderSnap = await transaction.get(orderRef);
+      const currentSlotSnap = await transaction.get(slotRef);
+      if (!orderSnap.exists()) throw new Error('أمر الشغل غير موجود.');
+      if (!currentSlotSnap.exists() || currentSlotSnap.data().status !== 'planned') throw new Error('هذه الساعة لم تعد متاحة للفتح.');
+      transaction.update(slotRef, {
+        status: 'open',
+        workersSnapshotCount: workers,
+        openedAt: serverTimestamp(),
+        openedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+      if (orderSnap.data().status === 'pending') {
+        transaction.update(orderRef, {
+          status: 'in_progress',
+          updatedAt: serverTimestamp(),
+          'statusHistory.in_progress': serverTimestamp(),
+        });
+      }
+    });
+  },
+
+  async submitHourlyProduction(
+    workOrderId: string,
+    slotId: string,
+    input: { actualQuantity: number; rejectedQuantity?: number; executionNotes?: string },
+  ): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const actualQuantity = Number(input.actualQuantity);
+    const rejectedQuantity = Number(input.rejectedQuantity || 0);
+    if (!Number.isFinite(actualQuantity) || actualQuantity < 0) throw new Error('أدخل كمية إنتاج صحيحة.');
+    if (!Number.isFinite(rejectedQuantity) || rejectedQuantity < 0 || rejectedQuantity > actualQuantity) {
+      throw new Error('الكمية المرفوضة يجب أن تكون بين صفر وإجمالي الإنتاج.');
+    }
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const slotSnap = await transaction.get(slotRef);
+      if (!slotSnap.exists() || slotSnap.data().status !== 'open') throw new Error('الساعة ليست مفتوحة للتسليم.');
+      transaction.update(slotRef, {
+        status: 'quality_pending',
+        actualQuantity,
+        rejectedQuantity,
+        executionNotes: String(input.executionNotes || '').trim(),
+        productionSubmittedAt: serverTimestamp(),
+        productionSubmittedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+    });
   },
 
   /** Status change with history stamp — prefer usecase `updateWorkOrderStatus`. */

@@ -43,6 +43,23 @@ const writes = [
 
 const batch = db.batch();
 writes.forEach(([collectionName, id, data]) => batch.set(db.collection(collectionName).doc(id), data, { merge: true }));
+const labOrderRef = db.collection('work_orders').doc('lab-hourly-order');
+batch.set(labOrderRef, {
+  tenantId, workOrderNumber: 'LAB-WO-001', productId: 'lab-product', lineId: 'lab-line',
+  supervisorId: 'lab-supervisor', quantity: 800, producedQuantity: 0, maxWorkers: 8,
+  workHours: 8, startDate: '2026-09-07', targetDate: '2026-09-07', estimatedCost: 0,
+  actualCost: 0, status: 'pending', workdayStartTime: '08:00', breakStartTime: '12:00',
+  breakEndTime: '12:30', workdayEndTime: '16:00', dailyTarget: 800,
+  hourlyScheduleVersion: 1, createdBy: user.uid, createdAt: now,
+}, { merge: true });
+[
+  ['2026-09-07_0800', '08:00', '09:00', 106.67],
+  ['2026-09-07_0900', '09:00', '10:00', 106.67],
+  ['2026-09-07_1000', '10:00', '11:00', 106.67],
+].forEach(([id, startTime, endTime, targetQuantity]) => batch.set(labOrderRef.collection('hourly_slots').doc(String(id)), {
+  tenantId, workOrderId: labOrderRef.id, id, date: '2026-09-07', startTime, endTime,
+  targetQuantity, status: 'planned', createdAt: now, updatedAt: now,
+}, { merge: true }));
 await batch.commit();
 
 console.log(`Lab seeded: http://localhost:3000/t/lab/login`);

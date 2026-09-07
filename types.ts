@@ -850,6 +850,12 @@ export interface WorkOrderHourlySlot {
   status: WorkOrderHourlySlotStatus;
   openedAt?: any;
   workersSnapshotCount?: number;
+  actualQuantity?: number;
+  rejectedQuantity?: number;
+  executionNotes?: string;
+  productionSubmittedAt?: any;
+  openedBy?: string;
+  productionSubmittedBy?: string;
 }
 
 export interface WorkOrder {
