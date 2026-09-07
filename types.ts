@@ -1979,6 +1979,8 @@ export interface FirestoreUser {
    * access to the linked repair branch (spare parts / jobs scope).
    */
   inventoryWarehouseId?: string | null;
+  /** Optional multi-warehouse inventory scope. The single bind remains supported. */
+  inventoryWarehouseIds?: string[];
   /** Primary repair / service-center branch for this user (ADR-004). */
   repairBranchId?: string;
   /** Optional multi-branch repair scope. */

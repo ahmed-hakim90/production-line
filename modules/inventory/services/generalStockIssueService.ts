@@ -28,6 +28,12 @@ export interface GeneralStockIssue {
   destinationName?: string | null;
   workOrderId?: string | null;
   workOrderNumber?: string | null;
+  productId?: string | null;
+  productName?: string | null;
+  productionLineId?: string | null;
+  productionLineName?: string | null;
+  productionStageId?: string | null;
+  productionStageName?: string | null;
   note?: string | null;
   lines: GeneralStockIssueLine[];
   createdByName: string;
@@ -61,6 +67,14 @@ export const generalStockIssueService = {
       .slice(0, Math.min(max, 100));
   },
 
+  async listForWorkOrder(workOrderId: string): Promise<GeneralStockIssue[]> {
+    if (!isConfigured || !workOrderId) return [];
+    const snap = await getDocs(tenantQuery(db, 'general_stock_issues'));
+    return snap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as GeneralStockIssue))
+      .filter((row) => row.workOrderId === workOrderId && row.status === 'posted');
+  },
+
   async post(input: {
     draftId?: string;
     warehouseId: string;
@@ -69,6 +83,8 @@ export const generalStockIssueService = {
     destinationName?: string;
     workOrderId?: string;
     workOrderNumber?: string;
+    productionStageId?: string;
+    productionStageName?: string;
     note?: string;
     lines: Array<Pick<GeneralStockIssueLine, 'itemType' | 'itemId' | 'quantity' | 'locationId'>>;
   }): Promise<{ id: string; referenceNo: string }> {
@@ -88,6 +104,10 @@ export const generalStockIssueService = {
     purpose: GeneralIssuePurpose;
     destinationId?: string;
     destinationName?: string;
+    workOrderId?: string;
+    workOrderNumber?: string;
+    productionStageId?: string;
+    productionStageName?: string;
     note?: string;
     lines: Array<Pick<GeneralStockIssueLine, 'itemType' | 'itemId' | 'quantity' | 'locationId'>>;
   }): Promise<{ id: string; referenceNo: string }> {

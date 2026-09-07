@@ -26,14 +26,22 @@ The matching general receipt workflow:
 
 ## Unified gateway behavior
 
-The two new pages are entry gateways as well as direct general vouchers. Specialized operations never use the general posting callable:
+The two new pages are entry gateways as well as direct general vouchers. Specialized operations normally retain their owning engine; the production-material issue is the deliberate exception described below:
 
-- Production issue previews the active product BOM for the selected work order and calculated quantity, then embeds the existing production-issue engine in the general issue journey. Allocation, shortage checks, approval, and posting remain owned by that engine.
+- Production-material issue may post directly from the general issue page. It can select the complete BOM or one optional step from the product's current production routing, include unassigned/common BOM lines, issue in batches, and retain work-order/product/line/stage snapshots. The legacy production-issue route remains available during parity validation.
 - Packaging issue embeds the existing packaging-control engine.
 - Center spare-parts issue/receipt embeds the existing replenishment engine, preserving preparation, responsible approval, central approval, and center receipt.
 - Production output embeds the existing production-report entry engine and prefills the selected work order, preserving injection/finished-output semantics, quality, scrap, labor, and report inventory posting.
 
 This gateway rule prevents duplicate stock mutations and keeps every specialized document as the source of truth.
+
+## Generic warehouse scope and optional production stages
+
+- General issue/receipt pages use a warehouse scope that has no warehouse-role or configured-routing fallback. `inventoryWarehouseId` remains compatible; optional `inventoryWarehouseIds` supplies a multi-warehouse scope. Super-admin access remains tenant-bound.
+- Warehouse type continues to control only specialized flows and never the availability of the two general pages.
+- A BOM line may snapshot `consumptionStageId` and `consumptionStageName` from the existing active production routing. Both are optional; an unassigned line is common to the product.
+- Routing changes never delete a BOM association. A missing step is displayed as stale and must be explicitly rebound.
+- Posted production issues calculate prior issue quantities from posted vouchers only. Drafts have no stock effect, and voided vouchers are excluded; over-BOM issue is a visible warning in the first release, not a posting blocker.
 
 Embedding is a migration bridge, not permission to duplicate the stock mutation logic. The final unified presentation should expose the engine's workflow content without rendering a second page shell inside the general voucher shell.
 

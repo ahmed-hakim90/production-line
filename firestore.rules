@@ -359,19 +359,23 @@ service cloud.firestore {
         || pl_materialAvailableForSpareParts(request.resource.data.materialId);
     }
 
-    /** Single-warehouse bind on users.inventoryWarehouseId (UI + rules). Empty = all warehouses. */
+    /** Single or multi-warehouse inventory bind. Empty = all tenant warehouses. */
     function pl_boundInventoryWarehouseId() {
       return pl_currentUserDoc().data.get('inventoryWarehouseId', '');
     }
 
     function pl_isInventoryWarehouseBound() {
-      return pl_boundInventoryWarehouseId() is string
-        && pl_boundInventoryWarehouseId() != '';
+      return (pl_boundInventoryWarehouseId() is string && pl_boundInventoryWarehouseId() != '')
+        || (pl_currentUserDoc().data.get('inventoryWarehouseIds', []) is list
+          && pl_currentUserDoc().data.get('inventoryWarehouseIds', []).size() > 0);
     }
 
     function pl_canAccessInventoryWarehouse(warehouseId) {
       return !pl_isInventoryWarehouseBound()
-        || (warehouseId is string && warehouseId != '' && warehouseId == pl_boundInventoryWarehouseId());
+        || (warehouseId is string && warehouseId != '' && (
+          warehouseId == pl_boundInventoryWarehouseId()
+          || warehouseId in pl_currentUserDoc().data.get('inventoryWarehouseIds', [])
+        ));
     }
 
     /**
@@ -947,6 +951,7 @@ service cloud.firestore {
             'tenantId',
             'isActive',
             'inventoryWarehouseId',
+            'inventoryWarehouseIds',
             'repairBranchId',
             'repairBranchIds',
           ])
@@ -2001,7 +2006,6 @@ service cloud.firestore {
       allow read: if pl_isActiveUser()
         && (pl_hasErpPermission('inventory.view') || pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
         && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
-      // Creation and stock posting are owned by postGeneralStockIssue.
       allow create, update, delete: if false;
     }
 
@@ -2009,7 +2013,6 @@ service cloud.firestore {
       allow read: if pl_isActiveUser()
         && (pl_hasErpPermission('inventory.view') || pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
         && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
-      // Creation and stock posting are owned by postGeneralStockReceipt.
       allow create, update, delete: if false;
     }
 

@@ -17,7 +17,7 @@ import {
   generalStockIssueService,
   type GeneralStockIssue,
 } from "../services/generalStockIssueService";
-import { useMaterialsWarehouseScope } from "../hooks/useMaterialsWarehouseScope";
+import { useInventoryWarehouseScope } from "../hooks/useInventoryWarehouseScope";
 import type { InventoryItemType, Warehouse, WarehouseLocation } from "../types";
 import type { WorkOrder } from "../../../types";
 import {
@@ -72,7 +72,8 @@ export const GeneralStockReceipts: React.FC = () => {
     filterWarehouses,
     warehouseSelectLocked,
     warehouseId: scopedWarehouseId,
-  } = useMaterialsWarehouseScope();
+    warehouseIds: scopedWarehouseIds,
+  } = useInventoryWarehouseScope();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
@@ -104,8 +105,12 @@ export const GeneralStockReceipts: React.FC = () => {
         issueRows,
         receiptRows,
       ] = await Promise.all([
-        warehouseService.getActiveWarehouses(),
-        warehouseLocationService.getAll(),
+        scopedWarehouseIds.length > 1
+          ? Promise.all(scopedWarehouseIds.map((id) => warehouseService.getById(id))).then((rows) => rows.filter((row): row is Warehouse => Boolean(row && row.isActive !== false)))
+          : warehouseService.getActiveWarehouses(),
+        scopedWarehouseIds.length > 1
+          ? Promise.all(scopedWarehouseIds.map((id) => warehouseLocationService.getAll(id))).then((groups) => groups.flat())
+          : warehouseLocationService.getAll(),
         materialService.getAll().catch(() => []),
         rawMaterialService.getAll().catch(() => []),
         workOrderService.getAll(),
@@ -172,7 +177,7 @@ export const GeneralStockReceipts: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterWarehouses, products, scoped, scopedWarehouseId]);
+  }, [filterWarehouses, products, scoped, scopedWarehouseId, scopedWarehouseIds]);
   useEffect(() => {
     void load();
   }, [load]);

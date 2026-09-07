@@ -288,19 +288,23 @@
         || pl_materialAvailableForSpareParts(request.resource.data.materialId);
     }
 
-    /** Single-warehouse bind on users.inventoryWarehouseId (UI + rules). Empty = all warehouses. */
+    /** Single or multi-warehouse inventory bind. Empty = all tenant warehouses. */
     function pl_boundInventoryWarehouseId() {
       return pl_currentUserDoc().data.get('inventoryWarehouseId', '');
     }
 
     function pl_isInventoryWarehouseBound() {
-      return pl_boundInventoryWarehouseId() is string
-        && pl_boundInventoryWarehouseId() != '';
+      return (pl_boundInventoryWarehouseId() is string && pl_boundInventoryWarehouseId() != '')
+        || (pl_currentUserDoc().data.get('inventoryWarehouseIds', []) is list
+          && pl_currentUserDoc().data.get('inventoryWarehouseIds', []).size() > 0);
     }
 
     function pl_canAccessInventoryWarehouse(warehouseId) {
       return !pl_isInventoryWarehouseBound()
-        || (warehouseId is string && warehouseId != '' && warehouseId == pl_boundInventoryWarehouseId());
+        || (warehouseId is string && warehouseId != '' && (
+          warehouseId == pl_boundInventoryWarehouseId()
+          || warehouseId in pl_currentUserDoc().data.get('inventoryWarehouseIds', [])
+        ));
     }
 
     /**
@@ -807,6 +811,10 @@
       allow create, update, delete: if false;
     }
 
+    match /production_gate_events/{docId} {
+      allow read, write: if false;
+    }
+
     match /tenant_slugs/{slug} {
       allow read: if pl_authSignedIn();
       allow write: if pl_isSuperAdmin();
@@ -872,6 +880,7 @@
             'tenantId',
             'isActive',
             'inventoryWarehouseId',
+            'inventoryWarehouseIds',
             'repairBranchId',
             'repairBranchIds',
           ])
@@ -1920,6 +1929,20 @@
       allow create: if false;
       allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
       allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /general_stock_issues/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.view') || pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
+        && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create, update, delete: if false;
+    }
+
+    match /general_stock_receipts/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.view') || pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
+        && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create, update, delete: if false;
     }
 
     match /inventory_transfer_requests/{docId} {

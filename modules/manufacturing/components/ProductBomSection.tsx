@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Trash2, Calculator, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,9 @@ import {
   type BomItem,
 } from '../types';
 import { materialRequirementService } from '../services/materialRequirementService';
+import { routingPlanService } from '../../production/routing/services/routingPlanService';
+import { routingStepService } from '../../production/routing/services/routingStepService';
+import type { ProductionRoutingStep } from '../../production/routing/types';
 import { totalEstimatedCost } from '../engines/productionPlanningEngine';
 import type { MaterialRequirementLine } from '../types';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
@@ -33,6 +36,7 @@ type BomLineForm = {
   wastePercent: number;
   directCostPerUnit: number;
   indirectCostPerUnit: number;
+  consumptionStageId: string;
 };
 
 const emptyForm = (): BomLineForm => ({
@@ -42,6 +46,7 @@ const emptyForm = (): BomLineForm => ({
   wastePercent: 0,
   directCostPerUnit: 0,
   indirectCostPerUnit: 0,
+  consumptionStageId: '',
 });
 
 export type ProductBomSectionProps = {
@@ -80,6 +85,16 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
   const { openModal } = useGlobalModalManager();
   const [planQty, setPlanQty] = useState(1);
   const [reqLoading, setReqLoading] = useState(false);
+  const [routingSteps, setRoutingSteps] = useState<ProductionRoutingStep[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    void routingPlanService.getActivePlanForProduct(productId)
+      .then((plan) => plan?.id ? routingStepService.getByPlanId(plan.id) : [])
+      .then((steps) => { if (active) setRoutingSteps(steps); })
+      .catch(() => { if (active) setRoutingSteps([]); });
+    return () => { active = false; };
+  }, [productId]);
 
   const materialOptions = useMemo(
     () => materials.filter((m) => m.isActive !== false && m.id && m.type !== 'consumable'),
@@ -117,6 +132,7 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
       wastePercent: Number(row.wastePercent || 0),
       directCostPerUnit: Number(row.directCostPerUnit || 0),
       indirectCostPerUnit: Number(row.indirectCostPerUnit || 0),
+      consumptionStageId: row.consumptionStageId || '',
     });
     setFormError(null);
     setFormOpen(true);
@@ -157,6 +173,8 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
         costBehavior: 'direct' as const,
         directCostPerUnit: form.directCostPerUnit,
         indirectCostPerUnit: form.indirectCostPerUnit,
+        consumptionStageId: form.consumptionStageId || null,
+        consumptionStageName: routingSteps.find((step) => step.id === form.consumptionStageId)?.name || null,
       };
       if (editingItemId) {
         await updateItem.mutateAsync({ itemId: editingItemId, data: payload });
@@ -264,6 +282,7 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground">كمية/وحدة</th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الوحدة</th>
               <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الهالك %</th>
+              <th className="px-3 py-2 text-xs font-medium text-muted-foreground">مرحلة الاستهلاك</th>
               {canViewCosts ? (
                 <>
                   <th className="px-3 py-2 text-xs font-medium text-muted-foreground">مباشر</th>
@@ -278,7 +297,7 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
             {(bomData?.rows ?? []).length === 0 ? (
               <tr>
                 <td
-                  colSpan={(canViewCosts ? 8 : 5) + (canManage ? 1 : 0)}
+                  colSpan={(canViewCosts ? 9 : 6) + (canManage ? 1 : 0)}
                   className="px-3 py-8 text-center text-sm text-muted-foreground"
                 >
                   لا توجد مكونات لهذا المنتج
@@ -298,6 +317,11 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
                     {MATERIAL_UNIT_LABELS[row.unit as MaterialUnit] ?? row.unit}
                   </td>
                   <td className="px-3 py-2 text-sm">{arNum(Number(row.wastePercent || 0), 1)}</td>
+                  <td className="px-3 py-2 text-sm">
+                    {!row.consumptionStageId ? 'عام' : routingSteps.some((step) => step.id === row.consumptionStageId)
+                      ? row.consumptionStageName || routingSteps.find((step) => step.id === row.consumptionStageId)?.name
+                      : <span className="text-[rgb(var(--color-danger))]">{row.consumptionStageName || 'مرحلة محذوفة'} — أعد الربط</span>}
+                  </td>
                   {canViewCosts ? (
                     <>
                       <td className="px-3 py-2 text-sm">{arNum(row.directCost)}</td>
@@ -364,6 +388,20 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
               </option>
             ))}
           </select>
+          <label className="grid gap-1 text-xs text-muted-foreground">
+            مرحلة الاستهلاك (اختياري)
+            <select
+              className="w-full rounded border border-border px-3 py-2 text-sm text-foreground"
+              value={form.consumptionStageId}
+              onChange={(e) => setForm((value) => ({ ...value, consumptionStageId: e.target.value }))}
+            >
+              <option value="">عام — غير مرتبط بمرحلة</option>
+              {routingSteps.map((step) => <option key={step.id} value={step.id}>{step.name}</option>)}
+              {form.consumptionStageId && !routingSteps.some((step) => step.id === form.consumptionStageId) && (
+                <option value={form.consumptionStageId}>مرحلة قديمة — يجب إعادة الربط</option>
+              )}
+            </select>
+          </label>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <label className="space-y-1 text-xs text-muted-foreground">
               كمية/وحدة

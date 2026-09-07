@@ -1,5 +1,4 @@
 import React, { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Button, SearchableSelect } from "../components/UI";
@@ -9,8 +8,11 @@ import { stockService } from "../services/stockService";
 import { workOrderService } from "../../production/services/workOrderService";
 import { bomService } from "../../manufacturing/services/bomService";
 import type { BomItem } from "../../manufacturing/types";
+import { routingPlanService } from "../../production/routing/services/routingPlanService";
+import { routingStepService } from "../../production/routing/services/routingStepService";
+import type { ProductionRoutingStep } from "../../production/routing/types";
 import { organizationService } from "../../hr/services/organizationService";
-import { useMaterialsWarehouseScope } from "../hooks/useMaterialsWarehouseScope";
+import { useInventoryWarehouseScope } from "../hooks/useInventoryWarehouseScope";
 import { useAppStore } from "../../../store/useAppStore";
 import { useEnsureStoreData } from "@/hooks/useEnsureStoreData";
 import { usePrintEngine } from "@/utils/printManager";
@@ -52,7 +54,6 @@ const formatDate = (value: string) =>
     timeStyle: "short",
   });
 
-const EmbeddedProductionIssues = lazy(() => import("./ProductionIssues").then((module) => ({ default: module.ProductionIssues })));
 const EmbeddedPackagingControl = lazy(() => import("../../production/pages/PackagingControl").then((module) => ({ default: module.PackagingControl })));
 const EmbeddedSparePartsReplenishment = lazy(() => import("./SparePartsReplenishment").then((module) => ({ default: module.SparePartsReplenishment })));
 
@@ -60,7 +61,6 @@ export const GeneralStockIssues: React.FC = () => {
   const { printDocument } = usePrintEngine();
   const { can } = usePermission();
   const printTemplate = useAppStore((state) => state.systemSettings.printTemplate);
-  const [, setSearchParams] = useSearchParams();
   useEnsureStoreData(["products", "lines"]);
   const products = useAppStore((state) => state.products);
   const productionLines = useAppStore((state) => state.productionLines);
@@ -69,7 +69,8 @@ export const GeneralStockIssues: React.FC = () => {
     filterWarehouses,
     warehouseSelectLocked,
     warehouseId: scopedWarehouseId,
-  } = useMaterialsWarehouseScope();
+    warehouseIds: scopedWarehouseIds,
+  } = useInventoryWarehouseScope();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [locationBalances, setLocationBalances] = useState<
@@ -84,6 +85,10 @@ export const GeneralStockIssues: React.FC = () => {
   const [productionQty, setProductionQty] = useState("");
   const [bomItems, setBomItems] = useState<BomItem[]>([]);
   const [bomLoading, setBomLoading] = useState(false);
+  const [routingSteps, setRoutingSteps] = useState<ProductionRoutingStep[]>([]);
+  const [productionStageId, setProductionStageId] = useState("");
+  const [includeCommonComponents, setIncludeCommonComponents] = useState(true);
+  const [issuedByItem, setIssuedByItem] = useState<Record<string, number>>({});
   const [destinationId, setDestinationId] = useState("");
   const [destinationName, setDestinationName] = useState("");
   const [note, setNote] = useState("");
@@ -98,7 +103,9 @@ export const GeneralStockIssues: React.FC = () => {
     try {
       const [warehouseRows, workOrders, departmentRows, issueRows] =
         await Promise.all([
-          warehouseService.getActiveWarehouses(),
+          scopedWarehouseIds.length > 1
+            ? Promise.all(scopedWarehouseIds.map((id) => warehouseService.getById(id))).then((rows) => rows.filter((row): row is Warehouse => Boolean(row && row.isActive !== false)))
+            : warehouseService.getActiveWarehouses(),
           workOrderService.getAll(),
           organizationService.listActiveDepartments().catch(() => []),
           generalStockIssueService.listRecent(),
@@ -117,7 +124,7 @@ export const GeneralStockIssues: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [filterWarehouses, scoped, scopedWarehouseId]);
+  }, [filterWarehouses, scoped, scopedWarehouseId, scopedWarehouseIds]);
 
   useEffect(() => {
     void loadBase();
@@ -198,24 +205,56 @@ export const GeneralStockIssues: React.FC = () => {
     );
     setProductionQty(String(remaining || selectedOrder.quantity || ""));
     setBomLoading(true);
-    void bomService
-      .getActiveBomWithLegacyFallback("product", selectedOrder.productId)
-      .then(({ items }) =>
-        setBomItems(
-          items.filter(
-            (item) =>
-              item.itemType === "material" && Number(item.qtyPerUnit || 0) > 0,
-          ),
-        ),
-      )
+    setProductionStageId("");
+    void Promise.all([
+      bomService.getActiveBomWithLegacyFallback("product", selectedOrder.productId),
+      routingPlanService.getActivePlanForProduct(selectedOrder.productId),
+      generalStockIssueService.listForWorkOrder(selectedOrder.id || ""),
+    ])
+      .then(async ([{ items }, plan, posted]) => {
+        setBomItems(items.filter((item) => item.itemType === "material" && Number(item.qtyPerUnit || 0) > 0));
+        setRoutingSteps(plan?.id ? await routingStepService.getByPlanId(plan.id) : []);
+        const totals: Record<string, number> = {};
+        posted.forEach((voucher) => voucher.lines.forEach((line) => {
+          const key = `${voucher.productionStageId || ""}:${line.itemType}:${line.itemId}`;
+          totals[key] = (totals[key] || 0) + Number(line.quantity || 0);
+        }));
+        setIssuedByItem(totals);
+      })
       .catch(() => setBomItems([]))
       .finally(() => setBomLoading(false));
   }, [purpose, selectedOrder?.id, selectedOrder?.productId]);
+
+  const visibleBomItems = useMemo(() => bomItems.filter((item) => {
+    if (!productionStageId) return true;
+    return item.consumptionStageId === productionStageId || (includeCommonComponents && !item.consumptionStageId);
+  }), [bomItems, includeCommonComponents, productionStageId]);
+  const issuedForItem = useCallback((item: BomItem) => {
+    const suffix = `:${item.itemType}:${item.itemId}`;
+    if (productionStageId && item.consumptionStageId) return issuedByItem[`${productionStageId}:${item.itemType}:${item.itemId}`] || 0;
+    return Object.entries(issuedByItem).reduce((sum, [key, value]) => key.endsWith(suffix) ? sum + value : sum, 0);
+  }, [issuedByItem, productionStageId]);
+  const hasProductionOverage = useMemo(() => purpose === "production" && visibleBomItems.some((item) => {
+    const current = lines.find((line) => line.itemKey === `${item.itemType}:${item.itemId}`);
+    const required = Number(item.qtyPerUnit || 0) * Number(productionQty || 0) * (1 + Number(item.wastePercent || 0) / 100);
+    return Number(current?.quantity || 0) > Math.max(0, required - issuedForItem(item)) + 0.0001;
+  }), [issuedForItem, lines, productionQty, purpose, visibleBomItems]);
+
+  useEffect(() => {
+    if (purpose !== "production" || !selectedOrder) return;
+    setLines(visibleBomItems.map((item) => {
+      const required = Number(item.qtyPerUnit || 0) * Number(productionQty || 0) * (1 + Number(item.wastePercent || 0) / 100);
+      const issued = issuedForItem(item);
+      return { key: crypto.randomUUID(), itemKey: `${item.itemType}:${item.itemId}`, locationId: "", quantity: String(Math.max(0, required - issued)) };
+    }).filter((line) => Number(line.quantity) > 0));
+  }, [issuedForItem, productionQty, purpose, selectedOrder?.id, visibleBomItems]);
 
   const reset = () => {
     setWorkOrderId("");
     setProductionQty("");
     setBomItems([]);
+    setRoutingSteps([]);
+    setProductionStageId("");
     setDestinationId("");
     setDestinationName("");
     setNote("");
@@ -238,13 +277,15 @@ export const GeneralStockIssues: React.FC = () => {
   };
 
   const saveDraft = async () => {
-    if (["production", "packaging", "center_replenishment"].includes(purpose)) return toast.error("المسار المتخصص يدير حالاته داخل محركه الحالي.");
+    if (["packaging", "center_replenishment"].includes(purpose)) return toast.error("المسار المتخصص يدير حالاته داخل محركه الحالي.");
     try {
       const normalized = validateDirectLines();
       setPosting(true);
       const result = await generalStockIssueService.saveDraft({
         draftId: draftId || undefined, warehouseId, purpose, destinationId,
-        destinationName: destinationName.trim(), note: note.trim(),
+        destinationName: destinationName.trim(), workOrderId: selectedOrder?.id, workOrderNumber: selectedOrder?.workOrderNumber,
+        productionStageId: productionStageId || undefined, productionStageName: routingSteps.find((step) => step.id === productionStageId)?.name,
+        note: note.trim(),
         lines: normalized.map(({ item, line, quantity }) => ({ itemType: item!.itemType, itemId: item!.itemId, locationId: line.locationId || undefined, quantity })),
       });
       setDraftId(result.id);
@@ -259,7 +300,7 @@ export const GeneralStockIssues: React.FC = () => {
       transferNo: row.referenceNo, createdAt: row.postedAt || row.createdAt,
       fromWarehouseName: row.warehouseName, toWarehouseName: row.destinationName || GENERAL_ISSUE_PURPOSE_LABELS[row.purpose],
       statusLabel: row.status === "draft" ? "مسودة" : row.status === "voided" ? "ملغي" : "مرحّل",
-      documentType: "إذن منصرف عام", note: row.note || undefined, createdBy: row.createdByName,
+      documentType: "إذن منصرف عام", note: [row.workOrderNumber && `أمر الشغل: ${row.workOrderNumber}`, row.productName && `المنتج: ${row.productName}`, row.productionLineName && `الخط: ${row.productionLineName}`, row.productionStageName && `المرحلة: ${row.productionStageName}`, row.note].filter(Boolean).join(" · ") || undefined, createdBy: row.createdByName,
       items: row.lines.map((line) => ({ itemName: line.itemName, itemCode: line.itemCode, unitLabel: line.unit, quantity: line.quantity, quantityPieces: line.quantity, locationCode: line.locationCode || locationBalances.find((location) => location.locationId === line.locationId)?.locationCode || line.locationId || undefined })),
     };
     printDocument({ documentTitle: row.referenceNo, printSettings: printTemplate, render: (ref) => <StockTransferPrint ref={ref} data={data} printSettings={printTemplate} /> });
@@ -275,6 +316,7 @@ export const GeneralStockIssues: React.FC = () => {
   const openDraft = (row: GeneralStockIssue) => {
     if (!row.id || row.status !== 'draft') return;
     setDraftId(row.id); setWarehouseId(row.warehouseId); setPurpose(row.purpose);
+    setWorkOrderId(row.workOrderId || ''); setProductionStageId(row.productionStageId || '');
     setDestinationId(row.destinationId || ''); setDestinationName(row.destinationName || ''); setNote(row.note || '');
     setLines(row.lines.map((line) => ({ key: crypto.randomUUID(), itemKey: `${line.itemType}:${line.itemId}`, locationId: line.locationId || '', quantity: String(line.quantity) })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -292,9 +334,6 @@ export const GeneralStockIssues: React.FC = () => {
       if (!selectedOrder?.id) return toast.error("اختر أمر الشغل.");
       if (!(Number(productionQty) > 0))
         return toast.error("أدخل كمية الإنتاج المطلوب صرف مكوناتها.");
-      setSearchParams({ workOrderId: selectedOrder.id, quantity: productionQty }, { replace: true });
-      setEmbeddedWorkflow(purpose);
-      return;
     }
     const normalized = lines.map((line) => ({ line, item: byKey.get(line.itemKey), quantity: Number(line.quantity) }));
     if (!warehouseId) return toast.error("اختر المخزن.");
@@ -334,6 +373,7 @@ export const GeneralStockIssues: React.FC = () => {
       return toast.error(
         `الرصيد غير كافٍ للصنف ${insufficient.item.itemName}.`,
       );
+    if (hasProductionOverage) toast.warning("كمية الصرف الحالية تتجاوز المتبقي حسب الـBOM؛ سيستمر الترحيل حسب الإعداد المعتمد.");
     setPosting(true);
     try {
       const result = await generalStockIssueService.post({
@@ -344,6 +384,8 @@ export const GeneralStockIssues: React.FC = () => {
         destinationName: destinationName.trim(),
         workOrderId: selectedOrder?.id,
         workOrderNumber: selectedOrder?.workOrderNumber,
+        productionStageId: productionStageId || undefined,
+        productionStageName: routingSteps.find((step) => step.id === productionStageId)?.name,
         note: note.trim(),
         lines: normalized.map(({ item, line, quantity }) => ({
           itemType: item!.itemType,
@@ -422,17 +464,20 @@ export const GeneralStockIssues: React.FC = () => {
               </label>
             )}
             {purpose === "production" && selectedOrder && (
-              <label className="grid gap-1 text-sm font-medium sm:col-span-2">
-                كمية المنتج المطلوب صرف مكوناتها
-                <input
-                  className="min-h-11 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3"
-                  type="number"
-                  min="0.0001"
-                  step="any"
-                  value={productionQty}
-                  onChange={(e) => setProductionQty(e.target.value)}
-                />
-              </label>
+              <>
+                <label className="grid gap-1 text-sm font-medium">
+                  كمية المنتج المطلوب صرف مكوناتها
+                  <input className="min-h-11 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-3" type="number" min="0.0001" step="any" value={productionQty} onChange={(e) => setProductionQty(e.target.value)} />
+                </label>
+                <label className="grid gap-1 text-sm font-medium">
+                  نطاق المكونات
+                  <SearchableSelect value={productionStageId} onChange={setProductionStageId} options={[{ value: "", label: "كل المكونات" }, ...routingSteps.map((step) => ({ value: step.id!, label: step.name }))]} placeholder="كل المكونات" searchPlaceholder="ابحث باسم المرحلة" openOnFocus />
+                </label>
+                {productionStageId && <label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2">
+                  <input type="checkbox" checked={includeCommonComponents} onChange={(e) => setIncludeCommonComponents(e.target.checked)} />
+                  تضمين المكونات العامة غير المرتبطة بمرحلة
+                </label>}
+              </>
             )}
             {needsDestination(purpose) &&
               (purpose === "department" ? (
@@ -483,13 +528,13 @@ export const GeneralStockIssues: React.FC = () => {
                 </p>
               ) : (
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {bomItems.map((item) => (
+                  {visibleBomItems.map((item) => (
                     <div
                       key={`${item.itemType}:${item.itemId}`}
                       className="flex justify-between gap-3 rounded-md bg-[var(--color-surface-muted)] p-2 text-sm"
                     >
                       <span>{item.itemName || item.itemId}</span>
-                      <strong className="tabular-nums">
+                      <span className="text-end tabular-nums"><strong>
                         {(
                           Number(item.qtyPerUnit || 0) *
                           Number(productionQty || 0) *
@@ -498,19 +543,19 @@ export const GeneralStockIssues: React.FC = () => {
                           maximumFractionDigits: 4,
                         })}{" "}
                         {item.unit}
-                      </strong>
+                      </strong><small className="block text-[var(--color-text-muted)]">مصروف سابقًا {issuedForItem(item).toLocaleString("ar-EG")} · متبقي {Math.max(0, Number(item.qtyPerUnit || 0) * Number(productionQty || 0) * (1 + Number(item.wastePercent || 0) / 100) - issuedForItem(item)).toLocaleString("ar-EG")}</small></span>
                     </div>
                   ))}
                 </div>
               )}
               <p className="mt-2 text-xs text-[var(--color-text-muted)]">
-                المعاينة إرشادية؛ التخصيص من اللوكيشن والتحقق من الرصيد
-                والاعتماد يتم داخل محرك صرف الإنتاج الحالي.
+                عدّل كمية الصرف الآن واختر اللوكيشن لكل بند. تجاوز المتبقي تحذير فقط.
               </p>
+              {hasProductionOverage && <p className="mt-2 rounded-md bg-[rgb(var(--color-warning)/0.12)] px-3 py-2 text-sm text-[rgb(var(--color-warning))]">تنبيه: يوجد بند يتجاوز المتبقي حسب الـBOM. الترحيل مسموح في هذه النسخة.</p>}
             </div>
           )}
 
-          {!["production", "packaging", "center_replenishment"].includes(
+          {!["packaging", "center_replenishment"].includes(
             purpose,
           ) && (
             <div className="mt-5 w-full min-w-0 max-w-full overflow-x-auto">
@@ -640,7 +685,7 @@ export const GeneralStockIssues: React.FC = () => {
             </div>
           )}
           <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
-            {!["production", "packaging", "center_replenishment"].includes(
+            {!["packaging", "center_replenishment"].includes(
               purpose,
             ) && (
               <Button
@@ -669,14 +714,14 @@ export const GeneralStockIssues: React.FC = () => {
               {posting
                 ? "جاري الترحيل…"
                 : purpose === "production"
-                  ? "بدء صرف الإنتاج هنا"
+                  ? "ترحيل صرف الإنتاج نهائيًا"
                   : purpose === "packaging"
                     ? "بدء تنفيذ التغليف هنا"
                     : purpose === "center_replenishment"
                       ? "بدء تموين المراكز هنا"
                       : "ترحيل نهائي"}
             </Button>
-            {!['production', 'packaging', 'center_replenishment'].includes(purpose) && (
+            {!['packaging', 'center_replenishment'].includes(purpose) && (
               <Button variant="secondary" disabled={posting || loading} onClick={saveDraft}>
                 {posting ? "جاري الحفظ…" : draftId ? "تحديث المسودة" : "حفظ مسودة"}
               </Button>
@@ -691,7 +736,6 @@ export const GeneralStockIssues: React.FC = () => {
                 </button>
               </div>
               <Suspense fallback={<p className="py-8 text-center text-sm text-[var(--color-text-muted)]">جاري تحميل محرك التنفيذ…</p>}>
-                {embeddedWorkflow === "production" && <EmbeddedProductionIssues />}
                 {embeddedWorkflow === "packaging" && <EmbeddedPackagingControl />}
                 {embeddedWorkflow === "center_replenishment" && <EmbeddedSparePartsReplenishment />}
               </Suspense>

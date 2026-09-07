@@ -252,6 +252,13 @@ export interface StockTransaction {
   sourceReportId?: string;
   sourceIssueOrderId?: string;
   sourceWorkOrderId?: string;
+  workOrderNumber?: string;
+  productId?: string;
+  productName?: string;
+  productionLineId?: string;
+  productionLineName?: string;
+  productionStageId?: string;
+  productionStageName?: string;
   sourcePlanId?: string;
   /** HR department snapshot when movement is department consumable issue/return. */
   departmentId?: string;

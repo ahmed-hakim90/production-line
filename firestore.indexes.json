@@ -5343,6 +5343,16 @@
       ]
     },
     {
+      "collectionGroup": "stock_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "sourceWorkOrderId", "order": "ASCENDING" },
+        { "fieldPath": "productionStageId", "order": "ASCENDING" },
+        { "fieldPath": "itemId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "price_lists",
       "queryScope": "COLLECTION",
       "fields": [

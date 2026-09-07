@@ -50,8 +50,11 @@ export const postGeneralStockReceiptHandler = async (request) => {
     const warehouseSnap = await db.collection('warehouses').doc(warehouseId).get();
     if (!warehouseSnap.exists || clean(warehouseSnap.data()?.tenantId) !== tenantId)
         throw new HttpsError('not-found', 'المخزن غير موجود داخل الشركة.');
-    const assignedWarehouseId = clean(user?.inventoryWarehouseId);
-    if (user?.isSuperAdmin !== true && assignedWarehouseId && assignedWarehouseId !== warehouseId) {
+    const assignedWarehouseIds = [...new Set([
+            ...(Array.isArray(user?.inventoryWarehouseIds) ? user.inventoryWarehouseIds : []),
+            user?.inventoryWarehouseId,
+        ].map(clean).filter(Boolean))];
+    if (user?.isSuperAdmin !== true && assignedWarehouseIds.length && !assignedWarehouseIds.includes(warehouseId)) {
         throw new HttpsError('permission-denied', 'لا يمكنك الإضافة إلى مخزن غير المخزن المرتبط بحسابك.');
     }
     if (workOrderId) {

@@ -3,7 +3,7 @@ import { getDb } from './adminApp.js';
 
 const db = getDb();
 const ITEM_TYPES = new Set(['finished_good', 'raw_material', 'material', 'semi_finished', 'consumable', 'packaging']);
-const ISSUE_PURPOSES = new Set(['maintenance', 'lubricants', 'department', 'waste', 'sample', 'other']);
+const ISSUE_PURPOSES = new Set(['production', 'packaging', 'maintenance', 'lubricants', 'department', 'waste', 'sample', 'other']);
 const RECEIPT_REASONS = new Set(['purchase', 'issue_return', 'opening_balance', 'department_return', 'maintenance_return', 'other']);
 const clean = (value: unknown, max = 160) => String(value || '').trim().slice(0, max);
 const roundQty = (value: unknown) => {
@@ -30,16 +30,19 @@ async function actor(request: CallableRequest, permission: 'create' | 'void') {
   return {
     uid,
     tenantId: clean(user?.tenantId),
-    assignedWarehouseId: clean(user?.inventoryWarehouseId),
+    assignedWarehouseIds: [...new Set([
+      ...(Array.isArray(user?.inventoryWarehouseIds) ? user.inventoryWarehouseIds : []),
+      user?.inventoryWarehouseId,
+    ].map(clean).filter(Boolean))],
     isSuperAdmin: user?.isSuperAdmin === true,
     name: clean(user?.displayName || user?.name || user?.email || uid),
   };
 }
 
-async function assertWarehouse(warehouseId: string, tenantId: string, assignedWarehouseId: string, isSuperAdmin: boolean) {
+async function assertWarehouse(warehouseId: string, tenantId: string, assignedWarehouseIds: string[], isSuperAdmin: boolean) {
   const snap = await db.collection('warehouses').doc(warehouseId).get();
   if (!snap.exists || clean(snap.data()?.tenantId) !== tenantId) throw new HttpsError('not-found', 'المخزن غير موجود داخل الشركة.');
-  if (!isSuperAdmin && assignedWarehouseId && assignedWarehouseId !== warehouseId) throw new HttpsError('permission-denied', 'المخزن لا يطابق المخزن المرتبط بحسابك.');
+  if (!isSuperAdmin && assignedWarehouseIds.length && !assignedWarehouseIds.includes(warehouseId)) throw new HttpsError('permission-denied', 'المخزن خارج نطاق المخازن المسموح بها للحساب.');
   return snap;
 }
 
@@ -66,8 +69,22 @@ export const saveGeneralStockIssueDraftHandler = async (request: CallableRequest
   const purpose = clean(data.purpose);
   const destinationName = clean(data.destinationName);
   if (!warehouseId || !ISSUE_PURPOSES.has(purpose)) throw new HttpsError('invalid-argument', 'المخزن وغرض الصرف المباشر مطلوبان.');
+  if ((purpose === 'production' || purpose === 'packaging') && !clean(data.workOrderId)) throw new HttpsError('invalid-argument', 'أمر الشغل مطلوب لهذا النوع من الصرف.');
   if (['maintenance', 'lubricants', 'department', 'other'].includes(purpose) && !destinationName) throw new HttpsError('invalid-argument', 'الجهة المستلمة مطلوبة.');
-  const warehouse = await assertWarehouse(warehouseId, current.tenantId, current.assignedWarehouseId, current.isSuperAdmin);
+  const warehouse = await assertWarehouse(warehouseId, current.tenantId, current.assignedWarehouseIds, current.isSuperAdmin);
+  const workOrderId = clean(data.workOrderId);
+  const productionStageId = clean(data.productionStageId);
+  if (workOrderId) {
+    const workOrder = await db.collection('work_orders').doc(workOrderId).get();
+    if (!workOrder.exists || clean(workOrder.data()?.tenantId) !== current.tenantId) throw new HttpsError('not-found', 'أمر الشغل غير موجود داخل الشركة.');
+    if (productionStageId) {
+      const stage = await db.collection('production_routing_steps').doc(productionStageId).get();
+      const plan = stage.exists ? await db.collection('production_routing_plans').doc(clean(stage.data()?.planId)).get() : null;
+      if (!stage.exists || clean(stage.data()?.tenantId) !== current.tenantId || !plan?.exists || clean(plan.data()?.productId) !== clean(workOrder.data()?.productId)) {
+        throw new HttpsError('invalid-argument', 'المرحلة لا تتبع مسار منتج أمر الشغل.');
+      }
+    }
+  }
   const lines = parseLines(data.lines);
   const balances = await Promise.all(lines.map((line) => db.collection('stock_items').doc(`${warehouseId}__${line.itemType}__${line.itemId}`).get()));
   const locations = await Promise.all(lines.map((line) => line.locationId ? db.collection('warehouse_locations').doc(line.locationId).get() : Promise.resolve(null)));
@@ -90,6 +107,8 @@ export const saveGeneralStockIssueDraftHandler = async (request: CallableRequest
   await ref.set({
     tenantId: current.tenantId, referenceNo, status: 'draft', warehouseId, warehouseName: clean(warehouse.data()?.name), purpose,
     destinationId: clean(data.destinationId) || null, destinationName: destinationName || null, note: clean(data.note, 500) || null,
+    workOrderId: workOrderId || null, workOrderNumber: clean(data.workOrderNumber) || null,
+    productionStageId: productionStageId || null, productionStageName: clean(data.productionStageName) || null,
     lines: savedLines, createdBy: current.uid, createdByName: current.name,
     createdAt: requestedId ? ((await ref.get()).data()?.createdAt || at) : at, updatedAt: at,
   }, { merge: true });
@@ -104,7 +123,7 @@ export const saveGeneralStockReceiptDraftHandler = async (request: CallableReque
   const warehouseId = clean(data.warehouseId);
   const reason = clean(data.reason);
   if (!warehouseId || !RECEIPT_REASONS.has(reason)) throw new HttpsError('invalid-argument', 'المخزن وسبب الإضافة المباشرة مطلوبان.');
-  const warehouse = await assertWarehouse(warehouseId, current.tenantId, current.assignedWarehouseId, current.isSuperAdmin);
+  const warehouse = await assertWarehouse(warehouseId, current.tenantId, current.assignedWarehouseIds, current.isSuperAdmin);
   const lines = parseLines(data.lines);
   const catalog = await Promise.all(lines.map((line) => db.collection(catalogCollection(line.itemType)).doc(line.itemId).get()));
   const locations = await Promise.all(lines.map((line) => line.locationId ? db.collection('warehouse_locations').doc(line.locationId).get() : Promise.resolve(null)));
@@ -151,7 +170,7 @@ async function voidVoucher(request: CallableRequest, kind: 'issue' | 'receipt') 
       if (returned > 0.0001) throw new HttpsError('failed-precondition', 'يجب إلغاء أذونات المرتجع المرتبطة أولًا قبل إلغاء إذن الصرف.');
     }
     const warehouseId = clean(voucher.warehouseId);
-    if (!current.isSuperAdmin && current.assignedWarehouseId && current.assignedWarehouseId !== warehouseId) throw new HttpsError('permission-denied', 'المخزن لا يطابق المخزن المرتبط بحسابك.');
+    if (!current.isSuperAdmin && current.assignedWarehouseIds.length && !current.assignedWarehouseIds.includes(warehouseId)) throw new HttpsError('permission-denied', 'المخزن خارج نطاق المخازن المسموح بها للحساب.');
     const lines = Array.isArray(voucher.lines) ? voucher.lines as Array<Record<string, unknown>> : [];
     const balanceRefs = lines.map((line) => db.collection('stock_items').doc(`${warehouseId}__${clean(line.itemType)}__${clean(line.itemId)}`));
     const locationRefs = lines.map((line) => clean(line.locationId) ? db.collection('stock_location_balances').doc(`${warehouseId}__${clean(line.locationId)}__${clean(line.itemType)}__${clean(line.itemId)}`) : null);
@@ -178,6 +197,10 @@ async function voidVoucher(request: CallableRequest, kind: 'issue' | 'receipt') 
         locationCode: clean(line.locationCode) || null, movementType: kind === 'issue' ? 'IN' : 'OUT', quantity: kind === 'issue' ? quantity : -quantity,
         referenceNo: `${clean(voucher.referenceNo)}-VOID`, sourceModule: 'manual_movement_reversal', sourceId: voucherId,
         reversedSourceModule: 'manual_movement', reversedSourceId: voucherId, voidReason: reason, note: reason, createdBy: current.name, createdAt: at,
+        sourceWorkOrderId: clean(voucher.workOrderId) || null, workOrderNumber: clean(voucher.workOrderNumber) || null,
+        productId: clean(voucher.productId) || null, productName: clean(voucher.productName) || null,
+        productionLineId: clean(voucher.productionLineId) || null, productionLineName: clean(voucher.productionLineName) || null,
+        productionStageId: clean(voucher.productionStageId) || null, productionStageName: clean(voucher.productionStageName) || null,
       });
     });
     if (sourceIssueRef && sourceIssueSnap?.exists) {

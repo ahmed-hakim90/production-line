@@ -34,6 +34,9 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
   const destinationName = clean(data.destinationName);
   const workOrderId = clean(data.workOrderId);
   const workOrderNumber = clean(data.workOrderNumber);
+  const productionStageId = clean(data.productionStageId);
+  const productionStageName = clean(data.productionStageName);
+  let validatedStageName = productionStageName;
   const note = clean(data.note, 500);
   const draftId = clean(data.draftId);
   if (!warehouseId || !PURPOSES.has(purpose)) throw new HttpsError('invalid-argument', 'المخزن وغرض الصرف مطلوبان.');
@@ -48,14 +51,39 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
   if (!warehouseSnap.exists || clean(warehouseSnap.data()?.tenantId) !== tenantId) {
     throw new HttpsError('not-found', 'المخزن غير موجود داخل الشركة.');
   }
-  const assignedWarehouseId = clean(user?.inventoryWarehouseId);
-  if (user?.isSuperAdmin !== true && assignedWarehouseId && assignedWarehouseId !== warehouseId) {
+  const assignedWarehouseIds = [...new Set([
+    ...(Array.isArray(user?.inventoryWarehouseIds) ? user.inventoryWarehouseIds : []),
+    user?.inventoryWarehouseId,
+  ].map(clean).filter(Boolean))];
+  if (user?.isSuperAdmin !== true && assignedWarehouseIds.length && !assignedWarehouseIds.includes(warehouseId)) {
     throw new HttpsError('permission-denied', 'لا يمكنك الصرف من مخزن غير المخزن المرتبط بحسابك.');
   }
+  let workOrder: Record<string, unknown> | undefined;
+  let productName = '';
+  let productionLineName = '';
   if (workOrderId) {
     const workOrderSnap = await db.collection('work_orders').doc(workOrderId).get();
     if (!workOrderSnap.exists || clean(workOrderSnap.data()?.tenantId) !== tenantId) {
       throw new HttpsError('not-found', 'أمر الشغل غير موجود داخل الشركة.');
+    }
+    workOrder = workOrderSnap.data() as Record<string, unknown>;
+    const productId = clean(workOrder.productId);
+    const lineId = clean(workOrder.lineId);
+    const [productSnap, lineSnap] = await Promise.all([
+      productId ? db.collection('products').doc(productId).get() : Promise.resolve(null),
+      lineId ? db.collection('production_lines').doc(lineId).get() : Promise.resolve(null),
+    ]);
+    productName = clean(productSnap?.data()?.name || productSnap?.data()?.productName);
+    productionLineName = clean(lineSnap?.data()?.name);
+    if (productionStageId) {
+      const stageSnap = await db.collection('production_routing_steps').doc(productionStageId).get();
+      const stage = stageSnap.data();
+      if (!stageSnap.exists || clean(stage?.tenantId) !== tenantId) throw new HttpsError('invalid-argument', 'مرحلة الإنتاج غير صالحة.');
+      validatedStageName = clean(stage?.name);
+      const planSnap = await db.collection('production_routing_plans').doc(clean(stage?.planId)).get();
+      if (!planSnap.exists || clean(planSnap.data()?.tenantId) !== tenantId || clean(planSnap.data()?.productId) !== productId) {
+        throw new HttpsError('invalid-argument', 'المرحلة لا تتبع مسار منتج أمر الشغل.');
+      }
     }
   }
 
@@ -116,7 +144,10 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
         movementType: 'OUT', quantity: -line.quantity, referenceNo,
         sourceModule: 'manual_movement', sourceId: voucherRef.id,
         issuePurpose: purpose, destinationId: destinationId || null, destinationName: destinationName || null,
-        sourceWorkOrderId: workOrderId || null, workOrderNumber: workOrderNumber || null,
+        sourceWorkOrderId: workOrderId || null, workOrderNumber: workOrderNumber || clean(workOrder?.workOrderNumber) || null,
+        productId: clean(workOrder?.productId) || null, productName: productName || null,
+        productionLineId: clean(workOrder?.lineId) || null, productionLineName: productionLineName || null,
+        productionStageId: productionStageId || null, productionStageName: validatedStageName || null,
         note: note || null, createdBy: actorName, createdAt: at,
       });
       return posted;
@@ -124,7 +155,10 @@ export const postGeneralStockIssueHandler = async (request: CallableRequest) => 
     tx.create(voucherRef, {
       tenantId, referenceNo, status: 'posted', warehouseId, warehouseName: clean(warehouseSnap.data()?.name),
       purpose, destinationId: destinationId || null, destinationName: destinationName || null,
-      workOrderId: workOrderId || null, workOrderNumber: workOrderNumber || null,
+      workOrderId: workOrderId || null, workOrderNumber: workOrderNumber || clean(workOrder?.workOrderNumber) || null,
+      productId: clean(workOrder?.productId) || null, productName: productName || null,
+      productionLineId: clean(workOrder?.lineId) || null, productionLineName: productionLineName || null,
+      productionStageId: productionStageId || null, productionStageName: validatedStageName || null,
       note: note || null, lines: postedLines, createdBy: uid, createdByName: actorName, createdAt: at, postedAt: at,
     });
     if (draftRef) tx.set(draftRef, { status: 'converted', postedVoucherId: voucherRef.id, postedReferenceNo: referenceNo, updatedAt: at }, { merge: true });

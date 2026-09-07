@@ -28,6 +28,27 @@ export const createInventoryCountSessionHandler = async (request) => {
     if (!warehouseId || !warehouseSnap.exists || String(warehouseSnap.data()?.tenantId || '') !== tenantId) {
         throw new HttpsError('not-found', 'المخزن غير موجود داخل الشركة.');
     }
+    const countScope = data.countScope === 'location' ? 'location' : data.countScope === 'rack' ? 'rack' : 'warehouse';
+    const locationId = countScope === 'location' ? String(data.locationId || '').trim() : '';
+    const rackId = countScope === 'rack' ? String(data.rackId || '').trim() : '';
+    const locationSnap = locationId
+        ? await db.collection('warehouse_locations').doc(locationId).get()
+        : null;
+    if (countScope === 'location' && (!locationId
+        || !locationSnap?.exists
+        || String(locationSnap.data()?.tenantId || '') !== tenantId
+        || String(locationSnap.data()?.warehouseId || '') !== warehouseId
+        || locationSnap.data()?.isActive === false)) {
+        throw new HttpsError('failed-precondition', 'اللوكيشن غير موجود أو غير نشط داخل المخزن المحدد.');
+    }
+    const rackSnap = rackId ? await db.collection('warehouse_racks').doc(rackId).get() : null;
+    if (countScope === 'rack' && (!rackId
+        || !rackSnap?.exists
+        || String(rackSnap.data()?.tenantId || '') !== tenantId
+        || String(rackSnap.data()?.warehouseId || '') !== warehouseId
+        || rackSnap.data()?.isActive === false)) {
+        throw new HttpsError('failed-precondition', 'الراك غير موجود أو غير نشط داخل المخزن المحدد.');
+    }
     const requested = Array.isArray(data.lines) ? data.lines : [];
     if (!requested.length || requested.length > 450)
         throw new HttpsError('invalid-argument', 'جلسة الجرد يجب أن تحتوي من 1 إلى 450 صنفًا في الملف الواحد.');
@@ -35,16 +56,22 @@ export const createInventoryCountSessionHandler = async (request) => {
     const normalized = requested.map((line) => {
         const itemType = String(line.itemType || '').trim();
         const itemId = String(line.itemId || '').trim();
+        const lineLocationId = countScope === 'location' ? locationId : countScope === 'rack' ? String(line.locationId || '').trim() : '';
         if (!['finished_good', 'raw_material', 'material', 'semi_finished', 'consumable', 'packaging'].includes(itemType) || !itemId) {
             throw new HttpsError('invalid-argument', 'يوجد صنف غير صالح في الجرد.');
         }
-        const key = `${itemType}:${itemId}`;
+        if (countScope === 'rack' && !lineLocationId) {
+            throw new HttpsError('invalid-argument', `الصنف ${itemId} غير مرتبط بلوكيشن داخل الراك.`);
+        }
+        const key = `${lineLocationId}:${itemType}:${itemId}`;
         if (keys.has(key))
             throw new HttpsError('invalid-argument', `الصنف ${itemId} مكرر في ملف الجرد.`);
         keys.add(key);
-        return { itemType, itemId, expectedQty: roundQty(line.expectedQty), countedQty: roundQty(line.countedQty) };
+        return { itemType, itemId, locationId: lineLocationId, expectedQty: roundQty(line.expectedQty), countedQty: roundQty(line.countedQty) };
     });
-    const balanceRefs = normalized.map((line) => db.collection('stock_items').doc(`${warehouseId}__${line.itemType}__${line.itemId}`));
+    const balanceRefs = normalized.map((line) => db.collection(countScope === 'warehouse' ? 'stock_items' : 'stock_location_balances').doc(countScope !== 'warehouse'
+        ? `${warehouseId}__${line.locationId}__${line.itemType}__${line.itemId}`
+        : `${warehouseId}__${line.itemType}__${line.itemId}`));
     const countRef = db.collection('stock_counts').doc();
     const at = new Date().toISOString();
     const result = await db.runTransaction(async (tx) => {
@@ -52,8 +79,12 @@ export const createInventoryCountSessionHandler = async (request) => {
         const lines = balances.map((snap, index) => {
             const requestedLine = normalized[index];
             const balance = snap.data();
-            if (!snap.exists || String(balance?.tenantId || '') !== tenantId || String(balance?.warehouseId || '') !== warehouseId) {
-                throw new HttpsError('failed-precondition', `الصنف ${requestedLine.itemId} لم يعد موجودًا في المخزن.`);
+            if (!snap.exists
+                || String(balance?.tenantId || '') !== tenantId
+                || String(balance?.warehouseId || '') !== warehouseId
+                || (countScope !== 'warehouse' && String(balance?.locationId || '') !== requestedLine.locationId)
+                || (countScope === 'rack' && String(balance?.rackId || '') !== rackId)) {
+                throw new HttpsError('failed-precondition', `الصنف ${requestedLine.itemId} لم يعد موجودًا في نطاق الجرد.`);
             }
             const currentExpected = roundQty(balance?.quantity);
             if (Math.abs(currentExpected - requestedLine.expectedQty) > 0.0001) {
@@ -66,6 +97,10 @@ export const createInventoryCountSessionHandler = async (request) => {
                 itemCode: String(balance?.itemCode || ''),
                 expectedQty: currentExpected,
                 countedQty: requestedLine.countedQty,
+                ...(countScope !== 'warehouse' ? {
+                    locationId: requestedLine.locationId,
+                    locationCode: String(balance?.locationCode || requestedLine.locationId),
+                } : {}),
             };
         });
         const changedRows = lines.filter((line) => Math.abs(line.countedQty - line.expectedQty) > 0.0001).length;
@@ -74,6 +109,17 @@ export const createInventoryCountSessionHandler = async (request) => {
         const status = changedRows > 0 ? 'counted' : 'open';
         tx.create(countRef, {
             tenantId, warehouseId, warehouseName: String(warehouseSnap.data()?.name || data.warehouseName || warehouseId),
+            countScope,
+            ...(countScope === 'location' ? {
+                locationId,
+                locationCode: String(locationSnap?.data()?.code || locationId),
+                rackId: String(locationSnap?.data()?.rackId || ''),
+                rackName: String(locationSnap?.data()?.rackName || locationSnap?.data()?.rack || ''),
+            } : {}),
+            ...(countScope === 'rack' ? {
+                rackId,
+                rackName: String(rackSnap?.data()?.name || rackSnap?.data()?.code || rackId),
+            } : {}),
             status, note: String(data.note || '').trim(), lines,
             previewConfirmed: true, previewConfirmedAt: at, createdBy: String(user?.displayName || user?.name || user?.email || uid), createdAt: at,
         });

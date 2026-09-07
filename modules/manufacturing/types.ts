@@ -90,6 +90,10 @@ export interface BomItem {
   directCostPerUnit?: number;
   indirectCostPerUnit?: number;
   sortOrder?: number;
+  /** Optional production-routing step at which this component is consumed. */
+  consumptionStageId?: string | null;
+  /** Historical snapshot; retained when the routing plan changes. */
+  consumptionStageName?: string | null;
 }
 
 export interface MaterialRequirementExplodedFrom {
