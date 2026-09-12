@@ -13,9 +13,9 @@ export function requireWorkOrderLab() {
 
 const permissions = {
   prepare: 'workOrders.create', approve: 'workOrders.approve',
-  assignInspectors: 'workOrders.assignInspectors',
+  assignInspectors: 'workOrders.assignInspectors', defineQualityReport: 'workOrders.assignInspectors',
   assignWorkers: 'workOrders.execute', start: 'workOrders.execute',
-  submit: 'workOrders.execute', pause: 'workOrders.execute', resume: 'workOrders.execute',
+  submit: 'workOrders.execute', pause: 'workOrders.execute', resume: 'workOrders.execute', submitQualityReport: 'workOrders.inspect',
 } as const;
 type Action = keyof typeof permissions;
 type Input = { requestId: string; orderId: string; action: Action; payload?: Record<string, unknown> };
@@ -117,6 +117,47 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
         // Line assignment is authoritative across this tenant's orders on that line.
         tx.set(db.collection('work_order_line_assignments').doc(`${tenantId}--${order.lineId}`), { tenantId, lineId: order.lineId, inspectorUids, assignedBy: uid, assignedAt: now });
         Object.assign(patch, { inspectorUids });
+      } else if (input.action === 'defineQualityReport') {
+        if (!['draft', 'approved'].includes(order.productionStatus)) fail('يجب تعريف نموذج الجودة قبل بدء الإنتاج.');
+        if (!Array.isArray(payload.qualityReportTemplate)) fail('نموذج الجودة يجب أن يكون قائمة معايير.');
+        const template = (payload.qualityReportTemplate as Record<string, unknown>[]).map((check, idx) => {
+          if (typeof check.label !== 'string' || !check.label.trim() || check.label.length > 200) fail(`المعيار ${idx + 1}: الاسم مطلوب، بحد أقصى ٢٠٠ حرف.`);
+          const inputType = String(check.inputType || '');
+          if (!['number', 'text'].includes(inputType)) fail(`المعيار ${idx + 1}: نوع الإدخال يجب أن يكون رقم أو نص.`);
+          if (typeof check.required !== 'boolean') fail(`المعيار ${idx + 1}: حالة الإلزام مطلوبة.`);
+          const result: Record<string, unknown> = { id: String(check.id || `check-${idx}`), label: String(check.label).trim(), inputType, required: Boolean(check.required) };
+          if (inputType === 'number') {
+            if (check.minValue !== undefined) {
+              if (typeof check.minValue !== 'number' || !Number.isFinite(check.minValue)) fail(`المعيار ${idx + 1}: الحد الأدنى يجب أن يكون رقم صحيح.`);
+              result.minValue = check.minValue;
+            }
+            if (check.maxValue !== undefined) {
+              if (typeof check.maxValue !== 'number' || !Number.isFinite(check.maxValue)) fail(`المعيار ${idx + 1}: الحد الأقصى يجب أن يكون رقم صحيح.`);
+              result.maxValue = check.maxValue;
+            }
+            if (result.minValue !== undefined && result.maxValue !== undefined && Number(result.minValue) > Number(result.maxValue)) fail(`المعيار ${idx + 1}: الحد الأدنى أكبر من الأقصى.`);
+          }
+          return result;
+        });
+        if (template.length > 50) fail('عدد معايير الجودة محدود بـ ٥٠ معيار.');
+        Object.assign(patch, { qualityReportTemplate: template });
+      } else if (input.action === 'submitQualityReport') {
+        const slotId = id(payload.slotId); const slotRef = orderRef.collection('hourly_slots').doc(slotId);
+        const slot = (await tx.get(slotRef)).data();
+        if (!slot || slot.tenantId !== tenantId || slot.workOrderId !== orderId) fail('الساعة غير صالحة.');
+        if (slot.status !== 'quality_pending') fail('الساعة ليست في انتظار فحص الجودة.');
+        if (!Array.isArray(order.qualityReportTemplate) || !order.qualityReportTemplate.length) fail('لا يوجد نموذج جودة معرّف.');
+        if (!Array.isArray(payload.qualityResults)) fail('نتائج الجودة يجب أن تكون قائمة.');
+        const results = (payload.qualityResults as Record<string, unknown>[]).map((result, idx) => {
+          if (typeof result.checkId !== 'string' || !result.checkId) fail(`النتيجة ${idx + 1}: معرّف المعيار مطلوب.`);
+          if (typeof result.value === 'number' || typeof result.value === 'string') {
+            if (typeof result.value === 'string' && !result.value.trim()) fail(`النتيجة ${idx + 1}: القيمة مطلوبة.`);
+          } else fail(`النتيجة ${idx + 1}: القيمة مطلوبة.`);
+          const notes = typeof result.notes === 'string' ? result.notes.trim() : '';
+          if (notes.length > 500) fail(`النتيجة ${idx + 1}: الملاحظات بحد أقصى ٥٠٠ حرف.`);
+          return { checkId: String(result.checkId), label: String(result.label || ''), value: result.value, notes };
+        });
+        tx.update(slotRef, { qualityResults: results, qualityReviewedAt: now, qualityReviewedBy: uid });
       } else {
         if (!['approved', 'in_progress'].includes(order.productionStatus)) fail('الإنتاج غير معتمد أو مقفول.');
         if (input.action === 'assignWorkers') {

@@ -1,14 +1,17 @@
 import { httpsCallable } from 'firebase/functions';
 import { auth, functionsClient, isFirebaseEmulatorMode } from '../../auth/services/firebase';
 
-export type CycleAction = 'prepare' | 'approve' | 'assignInspectors' | 'assignWorkers' | 'start' | 'submit' | 'pause' | 'resume';
+export type CycleAction = 'prepare' | 'approve' | 'assignInspectors' | 'assignWorkers' | 'start' | 'submit' | 'pause' | 'resume' | 'defineQualityReport' | 'submitQualityReport';
 export type CycleOption = { id: string; name: string };
+export type QualityCheckTemplate = { id: string; label: string; inputType: 'number' | 'text'; minValue?: number; maxValue?: number; required: boolean };
+export type QualityCheckResult = { checkId: string; label: string; value: string | number; notes?: string };
 export type CycleSlot = {
   id: string; date: string; startTime: string; endTime: string; targetQuantity: number;
   status: 'planned' | 'open' | 'paused' | 'quality_pending'; containerId: string;
   actualQuantity?: number; rejectedQuantity?: number; productionNotes?: string;
   submittedAt?: string; openedAt?: string; pausedAt?: string; pauseReason?: string;
   workersSnapshotCount?: number; workersSnapshot?: CycleOption[]; productionDocumentId?: string;
+  qualityResults?: QualityCheckResult[];
 };
 export type CycleOrder = {
   id: string; cycleVersion: 2; cycleRevision: number; workOrderNumber: string;
@@ -16,6 +19,7 @@ export type CycleOrder = {
   quantity: number; producedQuantity: number; approvedAcceptedQuantity: number;
   productionStatus: 'draft' | 'approved' | 'in_progress'; qualityHold?: boolean;
   activeSlotId?: string; workerIds: string[]; inspectorUids: string[]; preparedAt: string;
+  qualityReportTemplate?: QualityCheckTemplate[];
   slots: CycleSlot[];
 };
 export type CycleWorkspace = {

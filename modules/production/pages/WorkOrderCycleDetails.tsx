@@ -10,6 +10,8 @@ import { useWorkOrderCycle } from '../hooks/useWorkOrderCycle';
 import { workOrderCycleService, type CycleAction, type CycleOption, type CycleOrder, type CycleSlot } from '../services/workOrderCycleService';
 import { cycleOrderLabels, cycleSlotLabels, productionCardPath } from '../utils/workOrderCycle';
 import { WorkOrderContainerCard } from '../components/WorkOrderContainerCard';
+import { QualityReportTemplateEditor } from '../components/QualityReportTemplateEditor';
+import { QualityReportForm, type QualityCheckResult } from '../components/QualityReportForm';
 
 export function WorkOrderCycleDetails() {
   const { id = '', tenantSlug = 'lab' } = useParams();
@@ -48,6 +50,7 @@ export function WorkOrderCycleDetails() {
     {order.qualityHold && <p role="alert" className="rounded-md border border-destructive p-4">التشغيل مقفول بقرار الجودة. لا يمكن بدء ساعة أو إرسال إنتاج.</p>}
     {order.productionStatus === 'draft' && <section className="space-y-3 rounded-lg border border-border bg-card p-4"><h2 className="font-semibold">مراجعة واعتماد مدير الإنتاج</h2><p className="text-sm text-muted-foreground">راجع المنتج والخط والمشرف والكمية وجدول الساعات بالأسفل. لن يبدأ المشرف قبل الاعتماد.</p>{data.permissions['workOrders.approve'] ? <Button disabled={busy || Boolean(error)} onClick={() => void act('approve')}>اعتماد أمر الشغل</Button> : <p>بانتظار اعتماد مدير الإنتاج.</p>}</section>}
     {data.permissions['workOrders.assignInspectors'] && <Assignment key={`inspectors-${id}`} title="توزيع مراقبي الجودة على الخط" options={data.directory.inspectors} initial={order.inspectorUids} disabled={busy || Boolean(error)} onSave={ids => act('assignInspectors', { inspectorUids: ids })} />}
+    {data.permissions['workOrders.assignInspectors'] && (order.productionStatus === 'draft' || order.productionStatus === 'approved') && <QualityReportTemplateEditor key={`quality-${id}`} initialTemplate={order.qualityReportTemplate} disabled={busy || Boolean(error)} onSave={template => act('defineQualityReport', { qualityReportTemplate: template })} />}
     <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <article className="min-w-0 space-y-4 rounded-lg border border-border bg-card p-4 sm:p-6">
         {!selectedValid ? <p role="alert">الساعة أو مستند QR غير صالح. اختر ساعة من الجدول.</p> : <>
@@ -64,7 +67,19 @@ export function WorkOrderCycleDetails() {
           {slot.status === 'quality_pending' && <>
             <p className="text-sm">تم تسجيل {slot.actualQuantity} وحدة، منها {slot.rejectedQuantity} مرفوض مبدئي. الكمية لا تُحسب مقبولًا معتمدًا ولا تتاح للتغليف بعد.</p>
             {slot.productionNotes && <p className="text-sm">ملاحظات الإنتاج: {slot.productionNotes}</p>}
-            <p className="rounded-md bg-muted p-3 text-sm">فحص الجودة واعتماد تقريرها سيُتاحان في الدفعة الثالثة بعد تثبيت بنود التقرير.</p>
+            {order.qualityReportTemplate && order.qualityReportTemplate.length > 0 ? (
+              data.permissions['workOrders.inspect'] ? (
+                <QualityReportForm
+                  template={order.qualityReportTemplate}
+                  disabled={busy || Boolean(error)}
+                  onSubmit={results => act('submitQualityReport', { slotId: slot.id, qualityResults: results })}
+                />
+              ) : (
+                <p className="rounded-md bg-muted p-3 text-sm">نموذج جودة معرّف لكن ملء التقرير محصور على مراقبي الجودة المكلفين.</p>
+              )
+            ) : (
+              <p className="rounded-md bg-muted p-3 text-sm">لم يتم تعريف نموذج جودة لهذا الأمر بعد.</p>
+            )}
             {slot.productionDocumentId && <ContainerPrint order={order} slot={slot} tenantSlug={tenantSlug} canPrint={Boolean(canExecute)} disabled={busy || Boolean(error)} />}
           </>}
         </>}

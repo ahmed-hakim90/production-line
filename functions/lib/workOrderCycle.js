@@ -11,7 +11,7 @@ export function requireWorkOrderLab() {
 }
 const permissions = {
     prepare: 'workOrders.create', approve: 'workOrders.approve',
-    assignInspectors: 'workOrders.assignInspectors',
+    assignInspectors: 'workOrders.assignInspectors', defineQualityReport: 'workOrders.assignInspectors',
     assignWorkers: 'workOrders.execute', start: 'workOrders.execute',
     submit: 'workOrders.execute', pause: 'workOrders.execute', resume: 'workOrders.execute',
 };
@@ -147,6 +147,40 @@ export async function executeWorkOrderCycle(uid, input) {
                 // Line assignment is authoritative across this tenant's orders on that line.
                 tx.set(db.collection('work_order_line_assignments').doc(`${tenantId}--${order.lineId}`), { tenantId, lineId: order.lineId, inspectorUids, assignedBy: uid, assignedAt: now });
                 Object.assign(patch, { inspectorUids });
+            }
+            else if (input.action === 'defineQualityReport') {
+                if (!['draft', 'approved'].includes(order.productionStatus))
+                    fail('يجب تعريف نموذج الجودة قبل بدء الإنتاج.');
+                if (!Array.isArray(payload.qualityReportTemplate))
+                    fail('نموذج الجودة يجب أن يكون قائمة معايير.');
+                const template = payload.qualityReportTemplate.map((check, idx) => {
+                    if (typeof check.label !== 'string' || !check.label.trim() || check.label.length > 200)
+                        fail(`المعيار ${idx + 1}: الاسم مطلوب، بحد أقصى ٢٠٠ حرف.`);
+                    const inputType = String(check.inputType || '');
+                    if (!['number', 'text'].includes(inputType))
+                        fail(`المعيار ${idx + 1}: نوع الإدخال يجب أن يكون رقم أو نص.`);
+                    if (typeof check.required !== 'boolean')
+                        fail(`المعيار ${idx + 1}: حالة الإلزام مطلوبة.`);
+                    const result = { id: String(check.id || `check-${idx}`), label: String(check.label).trim(), inputType, required: Boolean(check.required) };
+                    if (inputType === 'number') {
+                        if (check.minValue !== undefined) {
+                            if (typeof check.minValue !== 'number' || !Number.isFinite(check.minValue))
+                                fail(`المعيار ${idx + 1}: الحد الأدنى يجب أن يكون رقم صحيح.`);
+                            result.minValue = check.minValue;
+                        }
+                        if (check.maxValue !== undefined) {
+                            if (typeof check.maxValue !== 'number' || !Number.isFinite(check.maxValue))
+                                fail(`المعيار ${idx + 1}: الحد الأقصى يجب أن يكون رقم صحيح.`);
+                            result.maxValue = check.maxValue;
+                        }
+                        if (result.minValue !== undefined && result.maxValue !== undefined && Number(result.minValue) > Number(result.maxValue))
+                            fail(`المعيار ${idx + 1}: الحد الأدنى أكبر من الأقصى.`);
+                    }
+                    return result;
+                });
+                if (template.length > 50)
+                    fail('عدد معايير الجودة محدود بـ ٥٠ معيار.');
+                Object.assign(patch, { qualityReportTemplate: template });
             }
             else {
                 if (!['approved', 'in_progress'].includes(order.productionStatus))
