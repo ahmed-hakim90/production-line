@@ -60,6 +60,11 @@ describe('materialMatchesListFilters', () => {
     expect(materialMatchesListFilters(row, { ...emptyFilters, spareFilter: 'visible' })).toBe(false);
     expect(materialMatchesListFilters(row, { ...emptyFilters, spareFilter: 'hidden' })).toBe(true);
   });
+
+  it('finds a material by barcode', () => {
+    const row = material({ id: 'scan', name: 'موتور', code: 'SP-09', barcode: '6221234567890' });
+    expect(materialMatchesListFilters(row, { ...emptyFilters, search: '6221234567890' })).toBe(true);
+  });
 });
 
 describe('cross-page material selection', () => {

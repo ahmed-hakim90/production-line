@@ -68,6 +68,33 @@ function legacyProductMaterialsToVirtualBom(
 }
 
 export const bomService = {
+  async getMaterialBomItemCounts(): Promise<Map<string, number>> {
+    if (!isConfigured) return new Map();
+    const tenantId = getCurrentTenantId();
+    const bomSnap = await getDocs(query(
+      collection(db, BOMS_COLLECTION),
+      where('tenantId', '==', tenantId),
+      where('ownerType', '==', 'material'),
+      where('status', '==', 'active'),
+    ));
+    const ownerByBomId = new Map<string, string>();
+    bomSnap.docs.forEach((row) => {
+      const bom = row.data() as Bom;
+      if (bom.ownerId) ownerByBomId.set(row.id, bom.ownerId);
+    });
+    if (ownerByBomId.size === 0) return new Map();
+    const itemSnap = await getDocs(tenantQuery(db, BOM_ITEMS_COLLECTION));
+    const counts = new Map<string, number>();
+    itemSnap.docs.forEach((row) => {
+      const ownerId = ownerByBomId.get(String(row.data().bomId || ''));
+      if (ownerId) counts.set(ownerId, (counts.get(ownerId) || 0) + 1);
+    });
+    ownerByBomId.forEach((ownerId) => {
+      if (!counts.has(ownerId)) counts.set(ownerId, 0);
+    });
+    return counts;
+  },
+
   async getActiveBom(ownerType: BomOwnerType, ownerId: string): Promise<Bom | null> {
     if (!isConfigured || !ownerId) return null;
     const tenantId = getCurrentTenantId();

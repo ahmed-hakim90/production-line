@@ -156,7 +156,7 @@ type ProductTableColumnKey =
   | 'cartonSharePerUnit'
   | 'productionOverheadPerUnit';
 
-const COLUMN_PREFS_KEY = 'products_table_visible_columns_v1';
+const COLUMN_PREFS_KEY = 'products_table_visible_columns_v2';
 const LAYOUT_PREFS_KEY = 'products_list_layout_v1';
 type ProductsLayoutMode = 'table' | 'grid';
 
@@ -211,23 +211,43 @@ const ProductIcon = ({
 };
 
 const DEFAULT_VISIBLE_COLUMNS: Record<ProductTableColumnKey, boolean> = {
-  openingStock: true,
-  totalProduction: true,
-  monthlyProductionQty: true,
-  wasteUnits: true,
+  openingStock: false,
+  totalProduction: false,
+  monthlyProductionQty: false,
+  wasteUnits: false,
   stockLevel: true,
-  totalCost: true,
-  directIndirect: true,
+  totalCost: false,
+  directIndirect: false,
   costPerUnit: true,
   sellingPrice: true,
-  chineseUnitCost: true,
-  chinesePriceCny: true,
-  innerBoxCost: true,
+  chineseUnitCost: false,
+  chinesePriceCny: false,
+  innerBoxCost: false,
   outerCartonCost: false,
-  unitsPerCarton: true,
-  rawMaterialsUnitCost: true,
-  cartonSharePerUnit: true,
-  productionOverheadPerUnit: true,
+  unitsPerCarton: false,
+  rawMaterialsUnitCost: false,
+  cartonSharePerUnit: false,
+  productionOverheadPerUnit: false,
+};
+
+const PRODUCT_COLUMN_PRESETS: Record<'compact' | 'operations' | 'costs', Record<ProductTableColumnKey, boolean>> = {
+  compact: { ...DEFAULT_VISIBLE_COLUMNS },
+  operations: {
+    ...DEFAULT_VISIBLE_COLUMNS,
+    openingStock: true,
+    totalProduction: true,
+    monthlyProductionQty: true,
+    wasteUnits: true,
+  },
+  costs: {
+    ...DEFAULT_VISIBLE_COLUMNS,
+    totalCost: true,
+    directIndirect: true,
+    rawMaterialsUnitCost: true,
+    cartonSharePerUnit: true,
+    productionOverheadPerUnit: true,
+    unitsPerCarton: true,
+  },
 };
 
 function buildProductExportColumnOrder(
@@ -2261,6 +2281,14 @@ export const Products: React.FC = () => {
     }
   };
 
+  const applyColumnPreset = (preset: keyof typeof PRODUCT_COLUMN_PRESETS) => {
+    const next = { ...PRODUCT_COLUMN_PRESETS[preset] };
+    setVisibleColumns(next);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(next));
+    }
+  };
+
   const toggleExportColumn = (key: ProductTableColumnKey, checked: boolean) => {
     setExportColumnPrefs((prev) => ({ ...prev, [key]: checked }));
   };
@@ -2438,7 +2466,7 @@ export const Products: React.FC = () => {
                 label: 'إدارة الأعمدة الظاهرة',
                 icon: 'view_column',
                 group: 'عرض',
-                hidden: !canExportFromPage || layoutMode !== 'table',
+                hidden: layoutMode !== 'table',
                 onClick: () => setShowColumnsModal(true),
               },
             ]}
@@ -2767,7 +2795,7 @@ export const Products: React.FC = () => {
           )}
         </div>
         <div className="erp-desktop-table overflow-x-auto">
-          <table className="erp-table w-full min-w-[960px] text-right border-collapse">
+          <table className="erp-table w-full min-w-[760px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th w-10 text-center">
@@ -2775,7 +2803,6 @@ export const Products: React.FC = () => {
                 </th>
                 <th className="erp-th cursor-pointer select-none" onClick={() => handleSort('name')}>المنتج <SortIcon col="name" /></th>
                 <th className="erp-th text-center">تاج المصنع</th>
-                <th className="erp-th text-center">نمط التجميع</th>
                 {visibleColumns.openingStock && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('openingStock')}>رصيد مفكك <SortIcon col="openingStock" /></th>}
                 {visibleColumns.totalProduction && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('totalProduction')}>ما تم إنتاجه <SortIcon col="totalProduction" /></th>}
                 {visibleColumns.monthlyProductionQty && (
@@ -2882,17 +2909,6 @@ export const Products: React.FC = () => {
                       }`}
                     >
                       {product.isManufactured === false ? 'غير تصنيعي' : 'تصنيعي'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-center">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${
-                        product.assemblyMode === 'team'
-                          ? 'bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
-                          : 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]'
-                      }`}
-                    >
-                      {product.assemblyMode === 'team' ? 'جماعي' : 'فردي'}
                     </span>
                   </td>
                   {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-[var(--color-text)] tabular-nums">{formatNumber(decomposedBalance)}</td>}
@@ -4250,6 +4266,23 @@ export const Products: React.FC = () => {
               </button>
             </div>
             <div className="p-6 space-y-3 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+                <p className="mb-2 text-xs font-bold text-[var(--color-text-muted)]">اختيارات جاهزة</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => applyColumnPreset('compact')}>
+                    مختصر
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => applyColumnPreset('operations')}>
+                    تشغيل
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={() => applyColumnPreset('costs')}>
+                    تكاليف
+                  </Button>
+                </div>
+                <p className="mt-2 text-[11px] text-[var(--color-text-muted)]">
+                  المختصر يعرض المنتج والمخزون والتكلفة وسعر البيع فقط. بقية التفاصيل متاحة في معاينة المنتج.
+                </p>
+              </div>
               {[
                 { key: 'openingStock' as const, label: 'رصيد مفكك', icon: 'call_split' },
                 { key: 'totalProduction' as const, label: 'ما تم إنتاجه', icon: 'precision_manufacturing' },

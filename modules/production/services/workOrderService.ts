@@ -46,6 +46,12 @@ export interface WorkOrderPageResult {
 }
 
 export const workOrderService = {
+  async getCycleVersion(id: string): Promise<number> {
+    if (!isConfigured) throw new Error('الاتصال غير متاح.');
+    const snap = await getDoc(doc(db, COLLECTION, id));
+    if (!snap.exists()) throw new Error('أمر الشغل غير موجود.');
+    return Number(snap.data().cycleVersion || 1);
+  },
   async listPaged(params: WorkOrderPagedParams = {}): Promise<WorkOrderPageResult> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));

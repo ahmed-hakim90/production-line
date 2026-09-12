@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { isFirebaseEmulatorMode } from '../../auth/services/firebase';
+import { WorkOrderCycleDetails } from './WorkOrderCycleDetails';
 import { Box, Check, ChevronLeft, Clock3, Factory, PackageCheck, Pause, Play, ShieldCheck, Users } from 'lucide-react';
 
 import type { WorkOrder, WorkOrderHourlySlot } from '../../../types';
@@ -27,6 +29,25 @@ const workOrderStatusLabel: Record<WorkOrder['status'], string> = {
 };
 
 export function WorkOrderDetailsPage() {
+  const [search] = useSearchParams();
+  const { id = '' } = useParams();
+  const [resolved, setResolved] = useState<{ id: string; version?: number; error?: string } | null>(null);
+  useEffect(() => {
+    if (!isFirebaseEmulatorMode || search.get('cycle') === '2') return;
+    let active = true;
+    void workOrderService.getCycleVersion(id).then(version => { if (active) setResolved({ id, version }); }).catch(error => { if (active) setResolved({ id, error: String(error.message || error) }); });
+    return () => { active = false; };
+  }, [id, search]);
+  if (isFirebaseEmulatorMode && search.get('cycle') === '2') return <WorkOrderCycleDetails />;
+  if (isFirebaseEmulatorMode) {
+    if (resolved?.id !== id) return <p role="status">جاري تحديد دورة أمر الشغل…</p>;
+    if (resolved.error) return <p role="alert">{resolved.error}</p>;
+    if (resolved.version === 2) return <WorkOrderCycleDetails />;
+  }
+  return <LegacyWorkOrderDetailsPage />;
+}
+
+function LegacyWorkOrderDetailsPage() {
   const { id = '' } = useParams();
   const navigate = useTenantNavigate();
   const { can } = usePermission();

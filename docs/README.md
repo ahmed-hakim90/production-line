@@ -46,6 +46,7 @@ Bilingual short index. Technical detail lives in the linked English docs unless 
 | [adr/ADR-001-tenant-scoped-settings.md](./adr/ADR-001-tenant-scoped-settings.md) | Tenant-scoped singleton settings docs |
 | [adr/ADR-002-server-owned-stock-mutations.md](./adr/ADR-002-server-owned-stock-mutations.md) | Server-owned stock mutations |
 | [adr/ADR-003-functions-src-is-source-of-truth.md](./adr/ADR-003-functions-src-is-source-of-truth.md) | `functions/src` is source of truth |
+| [adr/ADR-009-material-master-workspace.md](./adr/ADR-009-material-master-workspace.md) | Material master, inventory, BOM, and repair ownership boundaries |
 
 ## Onboarding / البدء
 

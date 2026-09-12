@@ -2643,6 +2643,8 @@ export {
   reverseProductionReportInventory,
 } from './productionReportInventory.js';
 export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.js';
+export { mutateWorkOrderCycle } from './workOrderCycle.js';
+export { getWorkOrderCycleWorkspace } from './workOrderCycleRead.js';
 export { syncBuiltInRolePermissionGrants } from './rolePermissionMigration.js';
 export { onRepairJobCreatedCustody } from './repairCustomerPortalOps.js';
 export { purgeRepairOperationalData } from './purgeRepairOperationalData.js';

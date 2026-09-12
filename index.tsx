@@ -26,7 +26,7 @@ async function bootstrap() {
           <div
             role="status"
             style={{
-              position: 'fixed', insetInline: 0, bottom: 0, zIndex: 100000,
+              position: 'fixed', insetInline: 0, bottom: 0, zIndex: 'calc(var(--z-modal, 10050) - 1)',
               padding: '7px 12px', textAlign: 'center', background: '#7f1d1d',
               color: '#fff', font: '700 12px Cairo, sans-serif',
             }}

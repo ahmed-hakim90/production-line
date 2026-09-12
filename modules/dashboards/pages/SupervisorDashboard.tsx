@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useLocation } from 'react-router-dom';
+import { WorkOrderCycleTasks } from '../../production/components/WorkOrderCycleTasks';
 import {
   Bar,
   BarChart,
@@ -173,6 +174,7 @@ function ChartTooltip({
 }
 
 export const SupervisorDashboard: React.FC = () => {
+  const cycleTasksOnDirectRoute = useLocation().pathname.endsWith('/supervisor');
   const navigate = useTenantNavigate();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
@@ -742,6 +744,7 @@ export const SupervisorDashboard: React.FC = () => {
         </div>
       )}
     >
+      {cycleTasksOnDirectRoute && <WorkOrderCycleTasks />}
       <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
         {can('productionIssue.request') ? (
           <button
