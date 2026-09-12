@@ -9,6 +9,7 @@ const auth = getAuth(); const db = getFirestore(); const tenantId = 'lab-tenant'
 const roles = [
   ['production-manager', 'مدير الإنتاج', ['workOrders.create', 'workOrders.approve']],
   ['production-supervisor', 'مشرف الإنتاج', ['workOrders.execute']],
+  ['production-supervisor-2', 'مشرف الإنتاج البديل', ['workOrders.execute']],
   ['quality-manager', 'مدير الجودة', ['workOrders.assignInspectors']],
   ['quality-inspector-1', 'مراقب الجودة الأول', ['workOrders.inspect']],
   ['quality-inspector-2', 'مراقب الجودة الثاني', ['workOrders.inspect']],

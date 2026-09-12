@@ -1,7 +1,7 @@
 import { httpsCallable } from 'firebase/functions';
 import { auth, functionsClient, isFirebaseEmulatorMode } from '../../auth/services/firebase';
 
-export type CycleAction = 'prepare' | 'approve' | 'assignInspectors' | 'assignWorkers' | 'start' | 'submit' | 'pause' | 'resume' | 'defineQualityReport' | 'submitQualityReport';
+export type CycleAction = 'prepare' | 'editDraft' | 'reassignSupervisor' | 'approve' | 'assignInspectors' | 'assignWorkers' | 'start' | 'submit' | 'pause' | 'resume' | 'defineQualityReport' | 'submitQualityReport';
 export type CycleOption = { id: string; name: string };
 export type QualityCheckTemplate = { id: string; label: string; inputType: 'number' | 'text'; minValue?: number; maxValue?: number; required: boolean };
 export type QualityCheckResult = { checkId: string; label: string; value: string | number; notes?: string };
@@ -15,6 +15,9 @@ export type CycleSlot = {
 };
 export type CycleOrder = {
   id: string; cycleVersion: 2; cycleRevision: number; workOrderNumber: string;
+  productId: string; lineId: string;
+  auditTruncated?: boolean;
+  audit?: { id: string; action: string; actorUid: string; actorName: string; createdAt: string; revision: number; reason: string; previousSupervisorUid: string; supervisorUid: string }[];
   productName: string; lineName: string; supervisorName: string; supervisorUid: string;
   quantity: number; producedQuantity: number; approvedAcceptedQuantity: number;
   productionStatus: 'draft' | 'approved' | 'in_progress'; qualityHold?: boolean;

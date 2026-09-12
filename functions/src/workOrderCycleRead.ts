@@ -40,11 +40,12 @@ export async function readWorkOrderCycle(uid: string, input: { orderId?: string;
     rows = snap.docs.slice(0, 100).filter(doc => visible(doc.data())).map(doc => ({ id: doc.id, data: doc.data() }));
   }
   const orders = await Promise.all(rows.map(async ({ id, data }) => {
-    const [slots, lineAssignment] = await Promise.all([
+    const [slots, lineAssignment, audit] = await Promise.all([
       db.collection('work_orders').doc(id).collection('hourly_slots').get(),
       db.collection('work_order_line_assignments').doc(`${tenantId}--${data.lineId}`).get(),
+      input.orderId ? db.collection('work_orders').doc(id).collection('cycle_audit').orderBy('revision', 'desc').limit(101).get() : Promise.resolve(null),
     ]);
-    return { ...clean(data), id, inspectorUids: lineAssignment.data()?.inspectorUids || [], slots: slots.docs.map(slot => ({ ...clean(slot.data()), id: slot.id }) as Record<string, any>).sort((a, b) => String(a.date + a.startTime).localeCompare(String(b.date + b.startTime))) };
+    return { ...clean(data), id, auditTruncated: (audit?.size || 0) > 100, audit: audit?.docs.slice(0, 100).map(doc => { const event = doc.data(); return { id: doc.id, action: event.action, actorUid: event.actorUid, actorName: event.actorName || event.actorUid, createdAt: event.createdAt, revision: event.revision, reason: event.payload?.reason || '', previousSupervisorUid: event.previousSupervisorUid || '', supervisorUid: event.action === 'reassignSupervisor' ? event.payload?.supervisorUid : '' }; }) || [], inspectorUids: lineAssignment.data()?.inspectorUids || [], slots: slots.docs.map(slot => ({ ...clean(slot.data()), id: slot.id }) as Record<string, any>).sort((a, b) => String(a.date + a.startTime).localeCompare(String(b.date + b.startTime))) };
   }));
   const directory: Record<string, { id: string; name: string }[]> = { products: [], lines: [], supervisors: [], inspectors: [], workers: [] };
   if (input.directory) {
@@ -55,7 +56,7 @@ export async function readWorkOrderCycle(uid: string, input: { orderId?: string;
     };
     if (permissions['workOrders.create'] === true) [directory.products, directory.lines] = await Promise.all([basic('products'), basic('production_lines')]);
     if (supervisor) directory.workers = await basic('employees');
-    if (permissions['workOrders.create'] === true || permissions['workOrders.assignInspectors'] === true) {
+    if (permissions['workOrders.create'] === true || permissions['workOrders.approve'] === true || permissions['workOrders.assignInspectors'] === true) {
       const [users, roles] = await Promise.all([db.collection('users').where('tenantId', '==', tenantId).limit(501).get(), db.collection('roles').where('tenantId', '==', tenantId).limit(501).get()]);
       if (users.size > 500 || roles.size > 500) throw new HttpsError('resource-exhausted', 'دليل المستخدمين تجاوز حد المختبر.');
       const roleMap = new Map(roles.docs.map(doc => [doc.id, doc.data().permissions || {}]));
@@ -63,7 +64,7 @@ export async function readWorkOrderCycle(uid: string, input: { orderId?: string;
         const person = doc.data(); const grants = roleMap.get(person.roleId) || {};
         if (person.isActive !== true) continue;
         const entry = { id: doc.id, name: String(person.displayName || doc.id) };
-        if (grants['workOrders.execute'] === true && permissions['workOrders.create'] === true) directory.supervisors.push(entry);
+        if (grants['workOrders.execute'] === true && (permissions['workOrders.create'] === true || permissions['workOrders.approve'] === true)) directory.supervisors.push(entry);
         if (grants['workOrders.inspect'] === true && permissions['workOrders.assignInspectors'] === true) directory.inspectors.push(entry);
       }
     }

@@ -12,6 +12,7 @@ import { cycleOrderLabels, cycleSlotLabels, productionCardPath } from '../utils/
 import { WorkOrderContainerCard } from '../components/WorkOrderContainerCard';
 import { QualityReportTemplateEditor } from '../components/QualityReportTemplateEditor';
 import { QualityReportForm, type QualityCheckResult } from '../components/QualityReportForm';
+import { CycleAudit, CycleDraftEditor, CycleSupervisorReassignment } from '../components/WorkOrderCycleManagement';
 
 export function WorkOrderCycleDetails() {
   const { id = '', tenantSlug = 'lab' } = useParams();
@@ -51,6 +52,8 @@ export function WorkOrderCycleDetails() {
     {order.productionStatus === 'draft' && <section className="space-y-3 rounded-lg border border-border bg-card p-4"><h2 className="font-semibold">مراجعة واعتماد مدير الإنتاج</h2><p className="text-sm text-muted-foreground">راجع المنتج والخط والمشرف والكمية وجدول الساعات بالأسفل. لن يبدأ المشرف قبل الاعتماد.</p>{data.permissions['workOrders.approve'] ? <Button disabled={busy || Boolean(error)} onClick={() => void act('approve')}>اعتماد أمر الشغل</Button> : <p>بانتظار اعتماد مدير الإنتاج.</p>}</section>}
     {data.permissions['workOrders.assignInspectors'] && <Assignment key={`inspectors-${id}`} title="توزيع مراقبي الجودة على الخط" options={data.directory.inspectors} initial={order.inspectorUids} disabled={busy || Boolean(error)} onSave={ids => act('assignInspectors', { inspectorUids: ids })} />}
     {data.permissions['workOrders.assignInspectors'] && (order.productionStatus === 'draft' || order.productionStatus === 'approved') && <QualityReportTemplateEditor key={`quality-${id}`} initialTemplate={order.qualityReportTemplate} disabled={busy || Boolean(error)} onSave={template => act('defineQualityReport', { qualityReportTemplate: template })} />}
+    {order.productionStatus === 'draft' && data.permissions['workOrders.create'] && <CycleDraftEditor key={id} order={order} directory={data.directory} disabled={busy || Boolean(error)} act={act} />}
+    {data.permissions['workOrders.approve'] && <CycleSupervisorReassignment key={`${id}-${order.supervisorUid}`} order={order} directory={data.directory} disabled={busy || Boolean(error)} act={act} />}
     <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <article className="min-w-0 space-y-4 rounded-lg border border-border bg-card p-4 sm:p-6">
         {!selectedValid ? <p role="alert">الساعة أو مستند QR غير صالح. اختر ساعة من الجدول.</p> : <>
@@ -86,6 +89,7 @@ export function WorkOrderCycleDetails() {
       </article>
       <aside className="min-w-0 rounded-lg border border-border bg-card p-4" aria-label="جدول الساعات"><h2 className="mb-3 font-semibold">خطة الأيام والساعات</h2><ol className="max-h-[70vh] space-y-2 overflow-auto">{order.slots.map(row => <li key={row.id}><button type="button" aria-current={slot?.id === row.id ? 'step' : undefined} disabled={busy} onClick={() => { setActionError(''); setSuccess(''); setSearch({ cycle: '2', slot: row.id }); }} className={`min-h-11 w-full rounded-md border p-3 text-start focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${slot?.id === row.id ? 'border-primary bg-muted' : 'border-border'}`}><span className="block text-sm">{row.date} • <bdi>{row.startTime}–{row.endTime}</bdi></span><span className="mt-1 block text-sm text-muted-foreground">{cycleSlotLabels[row.status]} • {row.actualQuantity ?? row.targetQuantity} وحدة</span></button></li>)}</ol></aside>
     </div>
+    <CycleAudit order={order} />
   </main>;
 }
 

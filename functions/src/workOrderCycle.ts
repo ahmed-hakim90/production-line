@@ -12,7 +12,7 @@ export function requireWorkOrderLab() {
 }
 
 const permissions = {
-  prepare: 'workOrders.create', approve: 'workOrders.approve',
+  prepare: 'workOrders.create', editDraft: 'workOrders.create', reassignSupervisor: 'workOrders.approve', approve: 'workOrders.approve',
   assignInspectors: 'workOrders.assignInspectors', defineQualityReport: 'workOrders.assignInspectors',
   assignWorkers: 'workOrders.execute', start: 'workOrders.execute',
   submit: 'workOrders.execute', pause: 'workOrders.execute', resume: 'workOrders.execute', submitQualityReport: 'workOrders.inspect',
@@ -74,8 +74,14 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
     const now = new Date().toISOString();
     const result = { ok: true, orderId, requestId, revision: Number(order?.cycleRevision || 0) + 1 };
     const patch: Record<string, unknown> = { cycleRevision: result.revision, updatedAt: FieldValue.serverTimestamp() };
-    if (input.action === 'prepare') {
-      if (order) fail('أمر الشغل موجود بالفعل؛ لا يتم تحويل الأوامر القديمة تلقائيًا.');
+    if (input.action === 'prepare' || input.action === 'editDraft') {
+      if (input.action === 'prepare' && order) fail('أمر الشغل موجود بالفعل؛ لا يتم تحويل الأوامر القديمة تلقائيًا.');
+      const editing = input.action === 'editDraft';
+      if (editing && (!order || order.tenantId !== tenantId || order.cycleVersion !== 2)) throw new HttpsError('permission-denied', 'الأمر غير متاح للتعديل.');
+      if (editing && (order!.productionStatus !== 'draft' || order!.activeSlotId)) fail('التعديل متاح للمسودة فقط.');
+      if (editing && payload.expectedRevision !== order!.cycleRevision) fail('تغير الأمر؛ حدّث البيانات وراجع التعديل.');
+      const previousSlots = editing ? await tx.get(orderRef.collection('hourly_slots')) : null;
+      if (previousSlots?.docs.some(doc => doc.data().status !== 'planned')) fail('لا يمكن تغيير ساعات بدأت بالفعل.');
       const productId = id(payload.productId); const lineId = id(payload.lineId); const supervisorUid = id(payload.supervisorUid);
       const product = (await tx.get(db.collection('products').doc(productId))).data();
       const line = (await tx.get(db.collection('production_lines').doc(lineId))).data();
@@ -96,14 +102,35 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
       }
       if (Math.abs(slots.reduce((sum, slot) => sum + slot.targetQuantity, 0) - requested) > 0.001) fail('مجموع أهداف الساعات لا يساوي كمية الأمر.');
       Object.assign(patch, { tenantId, cycleVersion: 2, productionStatus: 'draft', status: 'pending', fulfillmentStatus: 'pending', productId, lineId, supervisorUid, productName: String(product.name || productId), lineName: String(line.name || lineId), supervisorName: String(supervisor.displayName || supervisorUid), quantity: requested, approvedAcceptedQuantity: 0, producedQuantity: 0, workOrderNumber: reason(payload.workOrderNumber), activeSlotId: null, workerIds: [], inspectorUids: [], preparedBy: uid, preparedAt: now, createdAt: FieldValue.serverTimestamp() });
-      for (const slot of slots) tx.create(orderRef.collection('hourly_slots').doc(slot.id), { ...slot, containerId: `${orderId}--${slot.id}` });
-      tx.create(orderRef, patch);
+      if (editing) {
+        // Keep original preparation metadata and all unrelated fields. Archive the prior draft atomically.
+        tx.create(orderRef.collection('draft_versions').doc(requestId), { order, slots: previousSlots!.docs.map(doc => ({ ...doc.data(), id: doc.id })), replacedAt: now, actorUid: uid });
+        for (const field of ['preparedBy', 'preparedAt', 'createdAt', 'workerIds', 'inspectorUids']) delete patch[field];
+        if (order!.lineId !== lineId) Object.assign(patch, { workerIds: [], inspectorUids: [] });
+        if (order!.productId !== productId) patch.qualityReportTemplate = FieldValue.delete();
+        const nextIds = new Set(slots.map(slot => slot.id));
+        for (const old of previousSlots!.docs) if (!nextIds.has(old.id)) tx.delete(old.ref);
+      }
+      for (const slot of slots) tx.set(orderRef.collection('hourly_slots').doc(slot.id), { ...slot, containerId: `${orderId}--${slot.id}` });
+      if (editing) tx.update(orderRef, patch); else tx.create(orderRef, patch);
     } else {
       if (!order || order.tenantId !== tenantId) throw new HttpsError('permission-denied', 'أمر الشغل غير متاح.');
       if (order.cycleVersion !== 2) fail('هذا الأمر يستخدم الدورة القديمة.');
       const operator = ['assignWorkers', 'start', 'submit', 'pause', 'resume'].includes(input.action);
       if (operator && order.supervisorUid !== uid) throw new HttpsError('permission-denied', 'أنت غير مكلّف بهذا الأمر.');
-      if (input.action === 'approve') {
+      if (input.action === 'reassignSupervisor') {
+        if (!['draft', 'approved', 'in_progress'].includes(order.productionStatus)) fail('لا يمكن إعادة الإسناد بعد إقفال الإنتاج.');
+        if (payload.expectedRevision !== order.cycleRevision) fail('تغير الأمر؛ حدّث البيانات وراجع الإسناد.');
+        const reassignmentReason = reason(payload.reason);
+        const supervisorUid = id(payload.supervisorUid);
+        if (supervisorUid === order.supervisorUid) fail('اختر مشرفًا مختلفًا.');
+        const supervisor = (await tx.get(db.collection('users').doc(supervisorUid))).data();
+        if (supervisor?.tenantId !== tenantId || supervisor.isActive !== true || !supervisor.roleId) fail('المشرف غير صالح.');
+        const supervisorRole = (await tx.get(db.collection('roles').doc(String(supervisor.roleId)))).data();
+        if (supervisorRole?.tenantId !== tenantId || supervisorRole.permissions?.['workOrders.execute'] !== true) fail('المشرف لا يملك صلاحية التشغيل.');
+        Object.assign(patch, { supervisorUid, supervisorName: String(supervisor.displayName || supervisorUid) });
+        tx.create(orderRef.collection('supervisor_assignments').doc(requestId), { tenantId, previousUid: order.supervisorUid, nextUid: supervisorUid, reason: reassignmentReason, actorUid: uid, createdAt: now });
+      } else if (input.action === 'approve') {
         if (order.productionStatus !== 'draft') fail('الأمر ليس في مرحلة التجهيز.');
         Object.assign(patch, { productionStatus: 'approved', approvedBy: uid, approvedAt: now });
       } else if (input.action === 'assignInspectors') {
@@ -217,7 +244,7 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
       tx.update(orderRef, patch);
     }
     tx.create(receiptRef, { uid, tenantId, fingerprint, result, createdAt: now });
-    tx.create(orderRef.collection('cycle_audit').doc(requestId), { tenantId, actorUid: uid, action: input.action, payload, revision: result.revision, createdAt: now });
+    tx.create(orderRef.collection('cycle_audit').doc(requestId), { tenantId, actorUid: uid, actorName: String(user.displayName || uid), action: input.action, payload, previousSupervisorUid: order?.supervisorUid || null, revision: result.revision, createdAt: now });
     return result;
   });
 }
