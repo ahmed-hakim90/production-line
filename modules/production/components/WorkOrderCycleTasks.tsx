@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { usePermission } from '@/utils/permissions';
-import { isFirebaseEmulatorMode } from '../../auth/services/firebase';
 import { useWorkOrderCycle } from '../hooks/useWorkOrderCycle';
 import { cycleOrderLabels, cycleTasks } from '../utils/workOrderCycle';
 import { useParams } from 'react-router-dom';
@@ -9,7 +8,7 @@ import { withTenantPath } from '@/lib/tenantPaths';
 
 export function WorkOrderCycleTasks({ full = false }: { full?: boolean }) {
   const { can } = usePermission();
-  const enabled = isFirebaseEmulatorMode && (can('workOrders.create') || can('workOrders.approve') || can('workOrders.execute') || can('workOrders.inspect') || can('workOrders.assignInspectors') || can('productionHandover.approve'));
+  const enabled = can('workOrders.create') || can('workOrders.approve') || can('workOrders.execute') || can('workOrders.inspect') || can('workOrders.assignInspectors') || can('productionHandover.approve');
   return enabled ? <CycleTasksContent full={full} /> : null;
 }
 

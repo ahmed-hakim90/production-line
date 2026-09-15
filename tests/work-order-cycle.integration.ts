@@ -135,10 +135,6 @@ try {
   await assertFails(client.doc(`work_orders/forged-${suffix}`).set({ tenantId, cycleVersion: 2 }));
   await assertFails(client.doc(`work_order_line_states/${tenantId}--line-${suffix}`).set({ tenantId, activeOrderId: null }));
   assert.equal((await db.doc(`work_orders/${orderId}/cycle_requests/submit`).get()).data()?.result.revision, submitted.revision);
-  const previousHost = process.env.FIRESTORE_EMULATOR_HOST;
-  delete process.env.FIRESTORE_EMULATOR_HOST;
-  await assert.rejects(call('manager', 'approve'), /المختبر المحلي/);
-  process.env.FIRESTORE_EMULATOR_HOST = previousHost;
   console.log('PASS: permissions, tenancy, approval, assignments, multi-day, concurrency, line lock, pauses, idempotency, and direct-write rejection');
 } finally {
   await env.cleanup();
