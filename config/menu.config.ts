@@ -284,6 +284,14 @@ export const MENU_CONFIG: MenuGroup[] = [
       },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       {
+        key: 'work-order-cycle',
+        label: 'أمر شغل بالساعة',
+        icon: 'schedule',
+        path: '/work-order-cycle',
+        permission: 'workOrders.create',
+        anyOfPermissions: ['workOrders.create', 'workOrders.approve', 'workOrders.execute', 'workOrders.inspect', 'workOrders.assignInspectors', 'productionHandover.approve'],
+      },
+      {
         key: 'plans',
         label: 'خطط الإنتاج',
         icon: 'event_note',
