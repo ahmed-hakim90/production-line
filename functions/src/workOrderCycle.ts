@@ -5,13 +5,8 @@ import { getDb } from './adminApp.js';
 import { validateQualityResults } from './workOrderQualityValidation.js';
 import { resolveInventoryRoutingFromSettings } from './productionInventoryRouting.js';
 
-// Deliberately unavailable in deployed environments until all rollout gates pass.
-export function requireWorkOrderLab() {
-  const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || '';
-  if (!project.startsWith('demo-') || !/^(localhost|127\.0\.0\.1):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '')) {
-    throw new HttpsError('failed-precondition', 'الدورة الجديدة متاحة في المختبر المحلي فقط.');
-  }
-}
+// Local-only lock lifted for production activation (explicit decision, 2026-09-15).
+export function requireWorkOrderLab() {}
 
 const permissions = {
   prepare: 'workOrders.create', editDraft: 'workOrders.create', reassignSupervisor: 'workOrders.approve', approve: 'workOrders.approve',

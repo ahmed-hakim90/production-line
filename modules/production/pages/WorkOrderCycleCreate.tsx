@@ -5,10 +5,10 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useWorkOrderCycle } from '../hooks/useWorkOrderCycle';
 import { buildCyclePlan } from '../utils/workOrderCycle';
 import { workOrderCycleService } from '../services/workOrderCycleService';
-import { auth, isFirebaseEmulatorMode } from '../../auth/services/firebase';
+import { auth } from '../../auth/services/firebase';
 
 export function WorkOrderCycleCreate() {
-  return isFirebaseEmulatorMode ? <CreateForm /> : <p role="alert">الدورة الجديدة متاحة في المختبر المحلي فقط.</p>;
+  return <CreateForm />;
 }
 function CreateForm() {
   const navigate = useTenantNavigate();

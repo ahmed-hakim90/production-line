@@ -1,5 +1,5 @@
 import { httpsCallable } from 'firebase/functions';
-import { auth, functionsClient, isFirebaseEmulatorMode } from '../../auth/services/firebase';
+import { auth, functionsClient } from '../../auth/services/firebase';
 
 export type CycleAction = 'prepare' | 'editDraft' | 'reassignSupervisor' | 'approve' | 'assignInspectors' | 'assignWorkers' | 'start' | 'submit' | 'pause' | 'resume' | 'defineQualityReport' | 'submitQualityReport' | 'claimQualityInspection' | 'releaseQualityInspection' | 'approveQualityReport' | 'returnQualityReport' | 'correctQualityReport' | 'lockQuality' | 'unlockQuality' | 'decideRejectedDisposition' | 'submitRework' | 'claimReworkInspection' | 'submitReworkQualityReport' | 'approveReworkQualityReport' | 'receivePackaging' | 'packageContainer' | 'deliverToWarehouse' | 'proposePlanRevision' | 'applyPlanRevision' | 'closeProduction';
 export type CycleOption = { id: string; name: string };
@@ -74,7 +74,6 @@ export type CycleWorkspace = {
   truncated: boolean; fetchedAt: string;
 };
 function localOnly() {
-  if (!isFirebaseEmulatorMode) throw new Error('الدورة الجديدة متاحة في المختبر المحلي فقط.');
   if (!auth.currentUser) throw new Error('يجب تسجيل الدخول.');
 }
 export const workOrderCycleService = {
