@@ -108,7 +108,7 @@ const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
 
 export const WorkOrders: React.FC = () => {
   const [search] = useSearchParams();
-  if (search.get('legacy') !== '1') return <WorkOrderCycleTasks full />;
+  if (search.get('tasks') === '1') return <WorkOrderCycleTasks full />;
   return <LegacyWorkOrders />;
 };
 
