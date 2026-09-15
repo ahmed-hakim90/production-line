@@ -81,10 +81,11 @@ export async function readWorkOrderCycle(uid, input = {}) {
     }));
     const directory = { products: [], lines: [], supervisors: [], inspectors: [], workers: [] };
     if (input.directory) {
+        const DIRECTORY_LIMIT = 5000;
         const basic = async (collection) => {
-            const snap = await db.collection(collection).where('tenantId', '==', tenantId).limit(501).get();
-            if (snap.size > 500)
-                throw new HttpsError('resource-exhausted', 'دليل الاختيار تجاوز حد المختبر؛ يحتاج بحثًا مقسمًا.');
+            const snap = await db.collection(collection).where('tenantId', '==', tenantId).limit(DIRECTORY_LIMIT + 1).get();
+            if (snap.size > DIRECTORY_LIMIT)
+                throw new HttpsError('resource-exhausted', 'دليل الاختيار كبير جدًا؛ يحتاج بحثًا مقسمًا (لم يُبنَ بعد).');
             return snap.docs.filter(doc => collection === 'employees' ? doc.data().isActive === true : doc.data().isActive !== false).map(doc => ({ id: doc.id, name: String(doc.data().name || doc.id) }));
         };
         if (permissions['workOrders.create'] === true)
@@ -92,9 +93,9 @@ export async function readWorkOrderCycle(uid, input = {}) {
         if (supervisor)
             directory.workers = await basic('employees');
         if (permissions['workOrders.create'] === true || permissions['workOrders.approve'] === true || permissions['workOrders.assignInspectors'] === true) {
-            const [users, roles] = await Promise.all([db.collection('users').where('tenantId', '==', tenantId).limit(501).get(), db.collection('roles').where('tenantId', '==', tenantId).limit(501).get()]);
-            if (users.size > 500 || roles.size > 500)
-                throw new HttpsError('resource-exhausted', 'دليل المستخدمين تجاوز حد المختبر.');
+            const [users, roles] = await Promise.all([db.collection('users').where('tenantId', '==', tenantId).limit(DIRECTORY_LIMIT + 1).get(), db.collection('roles').where('tenantId', '==', tenantId).limit(DIRECTORY_LIMIT + 1).get()]);
+            if (users.size > DIRECTORY_LIMIT || roles.size > DIRECTORY_LIMIT)
+                throw new HttpsError('resource-exhausted', 'دليل المستخدمين كبير جدًا؛ يحتاج بحثًا مقسمًا (لم يُبنَ بعد).');
             const roleMap = new Map(roles.docs.map(doc => [doc.id, doc.data().permissions || {}]));
             for (const doc of users.docs) {
                 const person = doc.data();
