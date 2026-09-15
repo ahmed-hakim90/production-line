@@ -1,0 +1,12 @@
+import { executeWorkOrderCycle } from '../functions/lib/workOrderCycle.js';
+if (process.env.GCLOUD_PROJECT !== 'demo-production-line-lab' || !['127.0.0.1:8080', '127.0.0.1:8085'].includes(process.env.FIRESTORE_EMULATOR_HOST)) throw new Error('Local lab only');
+const orderId = `quality-safety-${Date.now()}`;
+const call = (actor, action, payload = {}) => executeWorkOrderCycle(`lab-${actor}`, { orderId, action, payload, requestId: crypto.randomUUID() });
+await call('production-manager', 'prepare', { productId: 'lab-product', lineId: 'lab-cycle-line', supervisorUid: 'lab-production-supervisor', quantity: 100, workOrderNumber: orderId, slots: [{ date: '2026-09-12', startTime: '08:00', endTime: '09:00', targetQuantity: 100 }] });
+await call('quality-manager', 'defineQualityReport', { qualityReportTemplate: [{ id: 'weight', label: 'قياس تجريبي', inputType: 'number', required: true, minValue: 0, maxValue: 10 }] });
+await call('quality-manager', 'assignInspectors', { inspectorUids: ['lab-quality-inspector-1', 'lab-quality-inspector-2'] });
+await call('production-manager', 'approve');
+await call('production-supervisor', 'assignWorkers', { workerIds: ['lab-cycle-worker-1'] });
+await call('production-supervisor', 'start', { slotId: 'hour-001' });
+await call('production-supervisor', 'submit', { slotId: 'hour-001', actualQuantity: 100, rejectedQuantity: 0 });
+console.log(`http://localhost:3010/t/lab/work-orders/${orderId}?cycle=2&slot=hour-001`);

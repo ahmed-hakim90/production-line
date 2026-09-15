@@ -3,6 +3,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { QualityCheckTemplate } from '../services/workOrderCycleService';
 
+export function QualityReportTemplateView({ template }: { template: QualityCheckTemplate[] }) {
+  return (
+    <section className="space-y-2 rounded-lg border border-border bg-card p-4" aria-label="قالب فحص الجودة">
+      <h2 className="font-semibold">قالب فحص الجودة لهذا الأمر</h2>
+      <p className="text-sm text-muted-foreground">عرض للقراءة فقط. التعديل متاح لمدير الجودة أثناء مرحلة المسودة أو الاعتماد فقط.</p>
+      <ol className="space-y-2">
+        {template.map((check, idx) => (
+          <li key={check.id} className="rounded-md bg-muted p-3">
+            <p className="text-sm font-medium">{idx + 1}. {check.label}</p>
+            <p className="text-xs text-muted-foreground">
+              {check.inputType === 'number' ? 'أرقام' : 'نصوص'}
+              {check.inputType === 'number' && check.minValue !== undefined && ` • من ${check.minValue}`}
+              {check.inputType === 'number' && check.maxValue !== undefined && ` إلى ${check.maxValue}`}
+              {check.required && ' • إلزامي'}
+            </p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
 export function QualityReportTemplateEditor({
   initialTemplate = [],
   disabled = false,

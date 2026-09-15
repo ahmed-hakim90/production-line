@@ -2149,19 +2149,29 @@ service cloud.firestore {
         && resource.data.status == 'planned';
     }
 
+    function pl_legacyReportOrder(data) {
+      let orderId = data.get('workOrderId', '');
+      return orderId == null || orderId == ''
+        || !exists(/databases/$(database)/documents/work_orders/$(orderId))
+        || get(/databases/$(database)/documents/work_orders/$(orderId)).data.get('cycleVersion', 1) != 2;
+    }
+
     match /{coll}/{docId} {
       allow read: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
         && (coll != 'work_orders' || resource == null || pl_canReadCycleWorkOrder(resource.data))
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
       allow create: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (coll != 'production_reports' || pl_legacyReportOrder(request.resource.data))
         && (coll != 'work_orders' || request.resource.data.get('cycleVersion', 1) != 2)
         && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk())
         && pl_validSearchPrefixes();
       allow update: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (coll != 'production_reports' || (pl_legacyReportOrder(resource.data) && pl_legacyReportOrder(request.resource.data)))
         && (coll != 'work_orders' || (resource.data.get('cycleVersion', 1) != 2 && request.resource.data.get('cycleVersion', 1) != 2))
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
         && pl_validSearchPrefixes();
       allow delete: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (coll != 'production_reports' || pl_legacyReportOrder(resource.data))
         && (coll != 'work_orders' || resource.data.get('cycleVersion', 1) != 2)
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }

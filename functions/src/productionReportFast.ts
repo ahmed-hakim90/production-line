@@ -2,6 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import type { CallableRequest } from 'firebase-functions/v2/https';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
+import { assertLegacyReportOrder } from './workOrderCycleBoundary.js';
 import {
   buildProductionReportFastUniqueKey,
   validateProductionReportAssignment,
@@ -177,6 +178,7 @@ export async function createProductionReportFastHandler(request: CallableRequest
   const workOrderSnap = workOrderId
     ? await db.collection(WORK_ORDERS).doc(workOrderId).get()
     : null;
+  await assertLegacyReportOrder({ workOrderId });
   const workOrder = workOrderSnap?.data() as {
     tenantId?: string;
     supervisorId?: string;
@@ -233,6 +235,7 @@ export async function createProductionReportFastHandler(request: CallableRequest
   }
 
   await db.runTransaction(async (transaction) => {
+    await assertLegacyReportOrder({ workOrderId }, transaction);
     if (!skipsUnique(reportType)) {
       for (const key of uniqueKeysToCheck) {
         const snap = await transaction.get(db.collection(UNIQUES).doc(key));

@@ -1,18 +1,57 @@
 import { httpsCallable } from 'firebase/functions';
 import { auth, functionsClient, isFirebaseEmulatorMode } from '../../auth/services/firebase';
 
-export type CycleAction = 'prepare' | 'editDraft' | 'reassignSupervisor' | 'approve' | 'assignInspectors' | 'assignWorkers' | 'start' | 'submit' | 'pause' | 'resume' | 'defineQualityReport' | 'submitQualityReport';
+export type CycleAction = 'prepare' | 'editDraft' | 'reassignSupervisor' | 'approve' | 'assignInspectors' | 'assignWorkers' | 'start' | 'submit' | 'pause' | 'resume' | 'defineQualityReport' | 'submitQualityReport' | 'claimQualityInspection' | 'releaseQualityInspection' | 'approveQualityReport' | 'returnQualityReport' | 'correctQualityReport' | 'lockQuality' | 'unlockQuality' | 'decideRejectedDisposition' | 'submitRework' | 'claimReworkInspection' | 'submitReworkQualityReport' | 'approveReworkQualityReport' | 'receivePackaging' | 'packageContainer' | 'deliverToWarehouse' | 'proposePlanRevision' | 'applyPlanRevision' | 'closeProduction';
 export type CycleOption = { id: string; name: string };
 export type QualityCheckTemplate = { id: string; label: string; inputType: 'number' | 'text'; minValue?: number; maxValue?: number; required: boolean };
 export type QualityCheckResult = { checkId: string; label: string; value: string | number; notes?: string };
+export type RejectedDisposition = { reworkQuantity: number; scrapQuantity: number; reason: string; actorName: string; decidedAt: string };
+export type PackagingEvent = { id: string; action: 'receive' | 'package' | 'deliver'; quantity: number; note?: string; actorName: string; createdAt: string; warehouseId?: string };
+type PackagingFields = {
+  packagingReceivedQuantity?: number; packagingPackagedQuantity?: number; packagingDeliveredQuantity?: number;
+  packagingEventsTruncated?: boolean; packagingEvents?: PackagingEvent[];
+};
+export type ReworkAttempt = {
+  id: string; attemptNumber: number; requestedQuantity: number;
+  status: 'planned' | 'quality_pending' | 'quality_accepted';
+  actualQuantity?: number; notes?: string; submittedAt?: string;
+  qualityClaim?: { id: string; uid: string; name: string; startedAt: string } | null;
+  inspectedQuantity?: number; inspectedAcceptedQuantity?: number; inspectedRejectedQuantity?: number;
+  contributionsTruncated?: boolean;
+  qualityContributions?: { id: string; inspectorName: string; submittedAt: string; inspectedQuantity: number; acceptedQuantity: number; rejectedQuantity: number; results: QualityCheckResult[] }[];
+  qualityApprovedAcceptedQuantity?: number; qualityApprovedRejectedQuantity?: number;
+  qualityApprovedByName?: string; qualityApprovedAt?: string;
+  rejectedDisposition?: RejectedDisposition;
+  reason: string; createdByName: string; createdAt: string;
+} & PackagingFields;
+export type PlanRevisionSlot = { slotId: string; previousTargetQuantity: number; proposedTargetQuantity: number };
+export type PlanRevision = {
+  id: string; status: 'proposed' | 'approved' | 'superseded';
+  proposedAt: string; proposedByName: string;
+  basis: { rateSource: 'this_order' | 'product_line_history' | 'original_plan_fallback'; ratePerHour: number | null; sampleHours: number; lowConfidence: boolean };
+  remainingToTarget: number; pendingQualityQuantity: number; pendingReworkQuantity: number; achievedQuantity: number; targetQuantity: number;
+  slots: PlanRevisionSlot[];
+  approvedAt?: string; approvedByName?: string; supersededAt?: string;
+};
 export type CycleSlot = {
   id: string; date: string; startTime: string; endTime: string; targetQuantity: number;
-  status: 'planned' | 'open' | 'paused' | 'quality_pending'; containerId: string;
+  status: 'planned' | 'open' | 'paused' | 'quality_pending' | 'quality_accepted' | 'cancelled'; containerId: string;
+  cancelledAt?: string; cancelledReason?: string; cancelledByName?: string;
   actualQuantity?: number; rejectedQuantity?: number; productionNotes?: string;
   submittedAt?: string; openedAt?: string; pausedAt?: string; pauseReason?: string;
   workersSnapshotCount?: number; workersSnapshot?: CycleOption[]; productionDocumentId?: string;
   qualityResults?: QualityCheckResult[];
-};
+  qualityClaim?: { id: string; uid: string; name: string; startedAt: string } | null;
+  inspectedQuantity?: number; inspectedAcceptedQuantity?: number; inspectedRejectedQuantity?: number;
+  contributionsTruncated?: boolean;
+  qualityContributions?: { id: string; inspectorName: string; submittedAt: string; inspectedQuantity: number; acceptedQuantity: number; rejectedQuantity: number; results: QualityCheckResult[] }[];
+  qualityApprovedAcceptedQuantity?: number; qualityApprovedRejectedQuantity?: number;
+  qualityApprovedBy?: string; qualityApprovedByName?: string; qualityApprovedAt?: string;
+  qualityCorrectionCount?: number;
+  qualityCorrections?: { id: string; previousAcceptedQuantity: number; previousRejectedQuantity: number; newAcceptedQuantity: number; newRejectedQuantity: number; reason: string; actorName: string; createdAt: string }[];
+  rejectedDisposition?: RejectedDisposition;
+  reworkAttempts?: ReworkAttempt[];
+} & PackagingFields;
 export type CycleOrder = {
   id: string; cycleVersion: 2; cycleRevision: number; workOrderNumber: string;
   productId: string; lineId: string;
@@ -20,9 +59,13 @@ export type CycleOrder = {
   audit?: { id: string; action: string; actorUid: string; actorName: string; createdAt: string; revision: number; reason: string; previousSupervisorUid: string; supervisorUid: string }[];
   productName: string; lineName: string; supervisorName: string; supervisorUid: string;
   quantity: number; producedQuantity: number; approvedAcceptedQuantity: number;
-  productionStatus: 'draft' | 'approved' | 'in_progress'; qualityHold?: boolean;
+  productionStatus: 'draft' | 'approved' | 'in_progress' | 'closed'; qualityHold?: boolean;
+  qualityHoldReason?: string; qualityHoldByName?: string; qualityHoldAt?: string;
+  productionClosedAt?: string; productionClosedByName?: string; productionCloseReason?: string;
+  productionClosedWithDeficit?: boolean; productionClosedCancelledSlotCount?: number;
   activeSlotId?: string; workerIds: string[]; inspectorUids: string[]; preparedAt: string;
   qualityReportTemplate?: QualityCheckTemplate[];
+  planRevisionsTruncated?: boolean; planRevisions?: PlanRevision[];
   slots: CycleSlot[];
 };
 export type CycleWorkspace = {

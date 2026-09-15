@@ -15,6 +15,7 @@ order.productionStatus = 'approved';
 assert.equal(cycleTasks(order, 'outsider', { 'workOrders.execute': true }).length, 0);
 assert.match(cycleTasks(order, 'supervisor', { 'workOrders.execute': true })[0].title, /العمالة/);
 order.slots[0].status = 'quality_pending';
+order.slots[0].actualQuantity = 100;
 assert.equal(cycleTasks(order, 'inspector', { 'workOrders.inspect': true }).length, 1);
 assert.equal(productionCardPath(order, order.slots[0]), '/work-orders/order?cycle=2&slot=hour-001&document=order--hour-001--production-v1');
 console.log('PASS: cycle planning, role tasks, and stable container deep links');

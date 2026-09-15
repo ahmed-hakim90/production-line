@@ -3,7 +3,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
 const projectId = process.env.GCLOUD_PROJECT;
-if (projectId !== 'demo-production-line-lab' || process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8080' || process.env.FIREBASE_AUTH_EMULATOR_HOST !== '127.0.0.1:9099') throw new Error('Only the isolated local lab is allowed');
+if (projectId !== 'demo-production-line-lab' || !['127.0.0.1:8080', '127.0.0.1:8085'].includes(process.env.FIRESTORE_EMULATOR_HOST) || process.env.FIREBASE_AUTH_EMULATOR_HOST !== '127.0.0.1:9099') throw new Error('Only the isolated local lab is allowed');
 initializeApp({ projectId });
 const auth = getAuth(); const db = getFirestore(); const tenantId = 'lab-tenant';
 const roles = [

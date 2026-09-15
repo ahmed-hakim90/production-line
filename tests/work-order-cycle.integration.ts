@@ -118,6 +118,10 @@ try {
   await assertFails(env.authenticatedContext('outsider').firestore().doc(`work_orders/${orderId}`).get());
   await assertSucceeds(env.authenticatedContext('inspector1').firestore().doc(`work_orders/${orderId}`).get());
   await assertSucceeds(client.doc(`work_orders/legacy-${suffix}`).set({ tenantId, status: 'pending' }));
+  await assertSucceeds(client.doc(`production_reports/legacy-report-${suffix}`).set({ tenantId, workOrderId: `legacy-${suffix}`, quantityProduced: 1 }));
+  await assertFails(client.doc(`production_reports/blocked-report-${suffix}`).set({ tenantId, workOrderId: orderId, quantityProduced: 1 }));
+  await assertFails(client.doc(`production_reports/legacy-report-${suffix}`).update({ workOrderId: orderId }));
+  await assertFails(client.doc(`work_orders/${orderId}/hourly_slots/hour-001/quality_contributions/fake`).set({ tenantId, acceptedQuantity: 99 }));
   await assertSucceeds(client.doc(`work_orders/legacy-${suffix}`).update({ status: 'in_progress' }));
   const legacySlot = client.doc(`work_orders/legacy-${suffix}/hourly_slots/hour-001`);
   await assertSucceeds(legacySlot.set({ tenantId, workOrderId: `legacy-${suffix}`, status: 'planned', targetQuantity: 10 }));

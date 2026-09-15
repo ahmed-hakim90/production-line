@@ -27,6 +27,10 @@ npm run dev:lab
 The application displays a persistent red environment banner whenever emulator mode is active.
 The seed command refuses to run unless both emulator hosts point to localhost and the project ID starts with `demo-`.
 
+### Local port isolation (2026-09-13)
+
+The lab uses `firebase.lab.json` with Firestore on `127.0.0.1:8085` to avoid the unrelated Docker service on 8080. `.env.lab` supplies `VITE_FIRESTORE_EMULATOR_PORT=8085`; non-lab configuration and `firebase.json` remain unchanged. Lab seed scripts use the same port. Reload the browser after changing emulator configuration. Seed the base fixture only into an empty lab; it overwrites the sample order. Emulator data is temporary unless explicitly exported and imported.
+
 ## Cutover rule
 
 No work-order-cycle change may be deployed until its full journey passes local emulator tests and rendered QA. Server-side validation, tenant isolation, permission checks, idempotency, migration compatibility, and rollback must be reviewed before production activation.

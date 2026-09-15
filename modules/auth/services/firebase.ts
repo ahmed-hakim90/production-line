@@ -74,7 +74,7 @@ if (isConfigured) {
   if (isFirebaseEmulatorMode) {
     const emulatorGuard = window as Window & { __forgeOpsFirebaseEmulatorsConnected?: boolean };
     if (!emulatorGuard.__forgeOpsFirebaseEmulatorsConnected) {
-      connectFirestoreEmulator(db, "127.0.0.1", 8080);
+      connectFirestoreEmulator(db, "127.0.0.1", Number(viteEnv.VITE_FIRESTORE_EMULATOR_PORT || 8080));
       connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
       connectFunctionsEmulator(functionsClient, "127.0.0.1", 5001);
       connectStorageEmulator(storage, "127.0.0.1", 9199);

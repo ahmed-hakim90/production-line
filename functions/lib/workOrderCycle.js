@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
+import { validateQualityResults } from './workOrderQualityValidation.js';
+import { resolveInventoryRoutingFromSettings } from './productionInventoryRouting.js';
 // Deliberately unavailable in deployed environments until all rollout gates pass.
 export function requireWorkOrderLab() {
     const project = process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || '';
@@ -13,7 +15,18 @@ const permissions = {
     prepare: 'workOrders.create', editDraft: 'workOrders.create', reassignSupervisor: 'workOrders.approve', approve: 'workOrders.approve',
     assignInspectors: 'workOrders.assignInspectors', defineQualityReport: 'workOrders.assignInspectors',
     assignWorkers: 'workOrders.execute', start: 'workOrders.execute',
+    claimQualityInspection: 'workOrders.inspect', releaseQualityInspection: 'workOrders.assignInspectors',
     submit: 'workOrders.execute', pause: 'workOrders.execute', resume: 'workOrders.execute', submitQualityReport: 'workOrders.inspect',
+    approveQualityReport: 'workOrders.assignInspectors', returnQualityReport: 'workOrders.assignInspectors',
+    correctQualityReport: 'workOrders.assignInspectors',
+    lockQuality: 'workOrders.assignInspectors', unlockQuality: 'workOrders.assignInspectors',
+    decideRejectedDisposition: 'workOrders.assignInspectors', submitRework: 'workOrders.execute',
+    claimReworkInspection: 'workOrders.inspect', submitReworkQualityReport: 'workOrders.inspect',
+    approveReworkQualityReport: 'workOrders.assignInspectors',
+    receivePackaging: 'productionHandover.approve', packageContainer: 'productionHandover.approve',
+    deliverToWarehouse: 'productionHandover.approve',
+    proposePlanRevision: 'workOrders.approve', applyPlanRevision: 'workOrders.approve',
+    closeProduction: 'workOrders.execute',
 };
 function fail(message) { throw new HttpsError('failed-precondition', message); }
 function id(value) {
@@ -71,7 +84,8 @@ export async function executeWorkOrderCycle(uid, input) {
             throw new HttpsError('permission-denied', 'الحساب غير نشط أو غير مرتبط بدور.');
         const tenantId = String(user.tenantId);
         const role = (await tx.get(db.collection('roles').doc(String(user.roleId)))).data();
-        if (role?.tenantId !== tenantId || role.permissions?.[permissions[input.action]] !== true)
+        const hasPermission = role?.permissions?.[permissions[input.action]] === true || (input.action === 'closeProduction' && role?.permissions?.['workOrders.approve'] === true);
+        if (role?.tenantId !== tenantId || !hasPermission)
             throw new HttpsError('permission-denied', 'ليس لديك صلاحية الإجراء.');
         const receiptRef = orderRef.collection('cycle_requests').doc(requestId);
         const receipt = (await tx.get(receiptRef)).data();
@@ -153,7 +167,10 @@ export async function executeWorkOrderCycle(uid, input) {
                 throw new HttpsError('permission-denied', 'أمر الشغل غير متاح.');
             if (order.cycleVersion !== 2)
                 fail('هذا الأمر يستخدم الدورة القديمة.');
-            const operator = ['assignWorkers', 'start', 'submit', 'pause', 'resume'].includes(input.action);
+            const packagingActions = ['receivePackaging', 'packageContainer', 'deliverToWarehouse'];
+            if (order.productionStatus === 'closed' && input.action !== 'closeProduction' && !packagingActions.includes(input.action))
+                fail('الإنتاج مقفل؛ لا يمكن تنفيذ هذا الإجراء بعد الإقفال. التغليف والتسليم يبقيان متاحين.');
+            const operator = ['assignWorkers', 'start', 'submit', 'pause', 'resume', 'submitRework'].includes(input.action);
             if (operator && order.supervisorUid !== uid)
                 throw new HttpsError('permission-denied', 'أنت غير مكلّف بهذا الأمر.');
             if (input.action === 'reassignSupervisor') {
@@ -178,6 +195,45 @@ export async function executeWorkOrderCycle(uid, input) {
                 if (order.productionStatus !== 'draft')
                     fail('الأمر ليس في مرحلة التجهيز.');
                 Object.assign(patch, { productionStatus: 'approved', approvedBy: uid, approvedAt: now });
+            }
+            else if (input.action === 'lockQuality') {
+                if (order.qualityHold)
+                    fail('التشغيل مقفول بالفعل.');
+                const lockReason = reason(payload.reason);
+                let pausedSlotId = null;
+                if (order.activeSlotId) {
+                    const activeSlotRef = orderRef.collection('hourly_slots').doc(String(order.activeSlotId));
+                    const activeSlot = (await tx.get(activeSlotRef)).data();
+                    if (activeSlot?.status === 'open') {
+                        tx.update(activeSlotRef, { status: 'paused', pausedAt: now, pauseReason: lockReason });
+                        tx.create(activeSlotRef.collection('stops').doc(requestId), { tenantId, reason: lockReason, startedAt: now, actorUid: uid, source: 'quality_lock' });
+                        Object.assign(patch, { activeStopId: requestId });
+                        pausedSlotId = String(order.activeSlotId);
+                    }
+                }
+                tx.create(orderRef.collection('quality_holds').doc(requestId), { tenantId, action: 'lock', reason: lockReason, actorUid: uid, actorName: String(user.displayName || uid), createdAt: now, pausedSlotId });
+                tx.create(db.collection('notifications').doc(), { tenantId, recipientId: order.supervisorUid, type: 'work_order_quality_lock', title: `قفل جودة على أمر الشغل ${order.workOrderNumber}`, message: lockReason, referenceId: orderId, isRead: false, createdAt: FieldValue.serverTimestamp() });
+                Object.assign(patch, { qualityHold: true, qualityHoldReason: lockReason, qualityHoldBy: uid, qualityHoldByName: String(user.displayName || uid), qualityHoldAt: now });
+            }
+            else if (input.action === 'unlockQuality') {
+                if (!order.qualityHold)
+                    fail('التشغيل غير مقفول حاليًا.');
+                const unlockReason = typeof payload.reason === 'string' ? payload.reason.trim().slice(0, 2000) : '';
+                let resumedSlotId = null;
+                if (order.activeSlotId && order.activeStopId) {
+                    const activeSlotRef = orderRef.collection('hourly_slots').doc(String(order.activeSlotId));
+                    const activeSlot = (await tx.get(activeSlotRef)).data();
+                    const stopRef = activeSlotRef.collection('stops').doc(String(order.activeStopId));
+                    const stop = (await tx.get(stopRef)).data();
+                    if (activeSlot?.status === 'paused' && stop?.source === 'quality_lock') {
+                        tx.update(activeSlotRef, { status: 'open', resumedAt: now, totalPausedSeconds: Number(activeSlot.totalPausedSeconds || 0) + Math.max(0, (Date.parse(now) - Date.parse(activeSlot.pausedAt)) / 1000) });
+                        tx.update(stopRef, { endedAt: now, resumedBy: uid });
+                        Object.assign(patch, { activeStopId: null });
+                        resumedSlotId = String(order.activeSlotId);
+                    }
+                }
+                tx.create(orderRef.collection('quality_holds').doc(requestId), { tenantId, action: 'unlock', reason: unlockReason, actorUid: uid, actorName: String(user.displayName || uid), createdAt: now, resumedSlotId });
+                Object.assign(patch, { qualityHold: false, qualityHoldReason: FieldValue.delete(), qualityHoldBy: FieldValue.delete(), qualityHoldByName: FieldValue.delete(), qualityHoldAt: FieldValue.delete() });
             }
             else if (input.action === 'assignInspectors') {
                 const inspectorUids = ids(payload.inspectorUids);
@@ -223,11 +279,189 @@ export async function executeWorkOrderCycle(uid, input) {
                     }
                     return result;
                 });
-                if (template.length > 50)
-                    fail('عدد معايير الجودة محدود بـ ٥٠ معيار.');
+                if (!template.length || template.length > 50 || new Set(template.map(check => check.id)).size !== template.length)
+                    fail('النموذج يتطلب من ١ إلى ٥٠ معيارًا بهويات غير مكررة.');
                 Object.assign(patch, { qualityReportTemplate: template });
             }
-            else if (input.action === 'submitQualityReport') {
+            else if (input.action === 'correctQualityReport') {
+                const slotId = id(payload.slotId);
+                const slotRef = orderRef.collection('hourly_slots').doc(slotId);
+                const slot = (await tx.get(slotRef)).data();
+                if (!slot || slot.tenantId !== tenantId || slot.workOrderId !== orderId)
+                    fail('الساعة غير صالحة.');
+                if (slot.status !== 'quality_accepted')
+                    fail('التصحيح متاح فقط بعد اعتماد نتيجة الفحص.');
+                if (Number(slot.packagingReceivedQuantity || 0) > 0)
+                    fail('لا يمكن تصحيح تقرير بدأ التغليف استلامه؛ الكمية تحركت بالفعل.');
+                const correctionReason = reason(payload.reason);
+                const inspectedTotal = quantity(Number(slot.inspectedQuantity || 0));
+                const newAccepted = quantity(payload.acceptedQuantity);
+                const newRejected = quantity(payload.rejectedQuantity);
+                if (Math.abs(newAccepted + newRejected - inspectedTotal) > 0.000001)
+                    fail('مجموع المقبول والمرفوض بعد التصحيح يجب أن يساوي إجمالي المفحوص.');
+                const previousAccepted = Number(slot.qualityApprovedAcceptedQuantity || 0);
+                const previousRejected = Number(slot.qualityApprovedRejectedQuantity || 0);
+                if (newAccepted === previousAccepted && newRejected === previousRejected)
+                    fail('لا يوجد تغيير فعلي لتسجيله.');
+                tx.create(slotRef.collection('quality_corrections').doc(requestId), { tenantId, workOrderId: orderId, slotId, previousAcceptedQuantity: previousAccepted, previousRejectedQuantity: previousRejected, newAcceptedQuantity: newAccepted, newRejectedQuantity: newRejected, reason: correctionReason, actorUid: uid, actorName: String(user.displayName || uid), createdAt: now });
+                tx.update(slotRef, { qualityApprovedAcceptedQuantity: newAccepted, qualityApprovedRejectedQuantity: newRejected, qualityCorrectionCount: FieldValue.increment(1) });
+                Object.assign(patch, { approvedAcceptedQuantity: Number(order.approvedAcceptedQuantity || 0) - previousAccepted + newAccepted });
+            }
+            else if (input.action === 'decideRejectedDisposition') {
+                const slotId = id(payload.slotId);
+                const slotRef = orderRef.collection('hourly_slots').doc(slotId);
+                const slot = (await tx.get(slotRef)).data();
+                if (!slot || slot.tenantId !== tenantId || slot.workOrderId !== orderId)
+                    fail('الساعة غير صالحة.');
+                const attemptId = payload.attemptId !== undefined && payload.attemptId !== null && payload.attemptId !== '' ? id(payload.attemptId) : null;
+                const targetRef = attemptId ? slotRef.collection('rework_attempts').doc(attemptId) : slotRef;
+                const target = attemptId ? (await tx.get(targetRef)).data() : slot;
+                if (attemptId && (!target || target.tenantId !== tenantId || target.slotId !== slotId))
+                    fail('محاولة إعادة التشغيل غير صالحة.');
+                if (target.status !== 'quality_accepted')
+                    fail('القرار متاح فقط بعد اعتماد نتيجة الفحص.');
+                if (target.rejectedDisposition)
+                    fail('تم اتخاذ قرار المرفوض بالفعل لهذه الحاوية.');
+                const totalRejected = Number(target.qualityApprovedRejectedQuantity || 0);
+                if (totalRejected <= 0)
+                    fail('لا توجد كمية مرفوضة لاتخاذ قرار بشأنها.');
+                const dispositionReason = reason(payload.reason);
+                const reworkQuantity = quantity(payload.reworkQuantity);
+                const scrapQuantity = quantity(payload.scrapQuantity);
+                if (Math.abs(reworkQuantity + scrapQuantity - totalRejected) > 0.000001)
+                    fail('مجموع إعادة التشغيل والهالك النهائي يجب أن يساوي إجمالي المرفوض.');
+                const attemptsSnap = reworkQuantity > 0 ? await tx.get(slotRef.collection('rework_attempts')) : null;
+                tx.update(targetRef, { rejectedDisposition: { reworkQuantity, scrapQuantity, reason: dispositionReason, actorUid: uid, actorName: String(user.displayName || uid), decidedAt: now } });
+                if (reworkQuantity > 0) {
+                    tx.create(slotRef.collection('rework_attempts').doc(requestId), { tenantId, workOrderId: orderId, slotId, parentAttemptId: attemptId, attemptNumber: attemptsSnap.size + 1, requestedQuantity: reworkQuantity, status: 'planned', reason: dispositionReason, createdBy: uid, createdByName: String(user.displayName || uid), createdAt: now });
+                }
+            }
+            else if (input.action === 'submitRework') {
+                const slotId = id(payload.slotId);
+                const slotRef = orderRef.collection('hourly_slots').doc(slotId);
+                const slot = (await tx.get(slotRef)).data();
+                if (!slot || slot.tenantId !== tenantId || slot.workOrderId !== orderId)
+                    fail('الساعة غير صالحة.');
+                const attemptId = id(payload.attemptId);
+                const attemptRef = slotRef.collection('rework_attempts').doc(attemptId);
+                const attempt = (await tx.get(attemptRef)).data();
+                if (!attempt || attempt.tenantId !== tenantId || attempt.slotId !== slotId)
+                    fail('محاولة إعادة التشغيل غير صالحة.');
+                if (attempt.status !== 'planned')
+                    fail('محاولة إعادة التشغيل ليست بانتظار التسجيل.');
+                const actualQuantity = quantity(payload.actualQuantity, true);
+                if (actualQuantity > Number(attempt.requestedQuantity))
+                    fail('لا يمكن أن يتجاوز الناتج الكمية المرسلة لإعادة التشغيل.');
+                const notes = typeof payload.notes === 'string' ? payload.notes.trim() : '';
+                if (notes.length > 2000)
+                    fail('الملاحظات بحد أقصى ٢٠٠٠ حرف.');
+                tx.update(attemptRef, { status: 'quality_pending', actualQuantity, notes, submittedAt: now, submittedBy: uid });
+            }
+            else if (['claimReworkInspection', 'submitReworkQualityReport', 'approveReworkQualityReport'].includes(input.action)) {
+                const slotId = id(payload.slotId);
+                const slotRef = orderRef.collection('hourly_slots').doc(slotId);
+                const slot = (await tx.get(slotRef)).data();
+                if (!slot || slot.tenantId !== tenantId || slot.workOrderId !== orderId)
+                    fail('الساعة غير صالحة.');
+                const attemptId = id(payload.attemptId);
+                const attemptRef = slotRef.collection('rework_attempts').doc(attemptId);
+                const attempt = (await tx.get(attemptRef)).data();
+                if (!attempt || attempt.tenantId !== tenantId || attempt.slotId !== slotId)
+                    fail('محاولة إعادة التشغيل غير صالحة.');
+                if (!Array.isArray(order.qualityReportTemplate) || !order.qualityReportTemplate.length)
+                    fail('لا يوجد نموذج جودة معرّف.');
+                if (attempt.status !== 'quality_pending')
+                    fail('محاولة إعادة التشغيل ليست في انتظار فحص الجودة.');
+                const claim = attempt.qualityClaim;
+                if (input.action === 'approveReworkQualityReport') {
+                    if (claim)
+                        fail('يوجد حجز فحص نشط؛ فكه أولًا.');
+                    const inspected = quantity(Number(attempt.inspectedQuantity || 0));
+                    const remaining = quantity(Number(attempt.actualQuantity)) - inspected;
+                    if (remaining > 0)
+                        fail('الفحص غير مكتمل بعد؛ لا يمكن الاعتماد.');
+                    const acceptedQuantity = Number(attempt.inspectedAcceptedQuantity || 0);
+                    const rejectedQuantity = Number(attempt.inspectedRejectedQuantity || 0);
+                    tx.update(attemptRef, { status: 'quality_accepted', qualityApprovedAcceptedQuantity: acceptedQuantity, qualityApprovedRejectedQuantity: rejectedQuantity, qualityApprovedBy: uid, qualityApprovedByName: String(user.displayName || uid), qualityApprovedAt: now });
+                    Object.assign(patch, { approvedAcceptedQuantity: Number(order.approvedAcceptedQuantity || 0) + acceptedQuantity });
+                }
+                else {
+                    const assignment = (await tx.get(db.collection('work_order_line_assignments').doc(`${tenantId}--${order.lineId}`))).data();
+                    if (assignment?.tenantId !== tenantId || assignment.lineId !== order.lineId || !Array.isArray(assignment.inspectorUids) || !assignment.inspectorUids.includes(uid))
+                        throw new HttpsError('permission-denied', 'أنت غير مكلّف بفحص هذا الخط.');
+                    const inspected = quantity(Number(attempt.inspectedQuantity || 0));
+                    const remaining = quantity(Number(attempt.actualQuantity)) - inspected;
+                    if (input.action === 'claimReworkInspection') {
+                        if (claim || remaining <= 0)
+                            fail('الفحص محجوز أو اكتملت كمية الفحص.');
+                        tx.update(attemptRef, { qualityClaim: { id: requestId, uid, name: String(user.displayName || uid), startedAt: now } });
+                    }
+                    else {
+                        if (!claim || claim.uid !== uid || claim.id !== id(payload.claimId))
+                            fail('ابدأ حجز الفحص أولًا؛ الحجز الحالي لا يخص هذه المشاركة.');
+                        const inspectedQuantity = quantity(payload.inspectedQuantity, true);
+                        const acceptedQuantity = quantity(payload.acceptedQuantity);
+                        const rejectedQuantity = quantity(payload.rejectedQuantity);
+                        if (inspectedQuantity > remaining || Math.abs(acceptedQuantity + rejectedQuantity - inspectedQuantity) > 0.000001)
+                            fail('كميات المشاركة لا تتطابق أو تتجاوز المتبقي.');
+                        const results = validateQualityResults(order.qualityReportTemplate, payload.qualityResults);
+                        tx.create(attemptRef.collection('quality_contributions').doc(claim.id), { tenantId, workOrderId: orderId, slotId, attemptId, claimId: claim.id, inspectorUid: uid, inspectorName: String(user.displayName || uid), startedAt: claim.startedAt, submittedAt: now, inspectedQuantity, acceptedQuantity, rejectedQuantity, results, templateSnapshot: order.qualityReportTemplate });
+                        tx.update(attemptRef, { qualityClaim: null, inspectedQuantity: inspected + inspectedQuantity, inspectedAcceptedQuantity: Number(attempt.inspectedAcceptedQuantity || 0) + acceptedQuantity, inspectedRejectedQuantity: Number(attempt.inspectedRejectedQuantity || 0) + rejectedQuantity });
+                    }
+                }
+            }
+            else if (['receivePackaging', 'packageContainer', 'deliverToWarehouse'].includes(input.action)) {
+                const slotId = id(payload.slotId);
+                const slotRef = orderRef.collection('hourly_slots').doc(slotId);
+                const slot = (await tx.get(slotRef)).data();
+                if (!slot || slot.tenantId !== tenantId || slot.workOrderId !== orderId)
+                    fail('الساعة غير صالحة.');
+                const attemptId = payload.attemptId !== undefined && payload.attemptId !== null && payload.attemptId !== '' ? id(payload.attemptId) : null;
+                const targetRef = attemptId ? slotRef.collection('rework_attempts').doc(attemptId) : slotRef;
+                const target = attemptId ? (await tx.get(targetRef)).data() : slot;
+                if (attemptId && (!target || target.tenantId !== tenantId || target.slotId !== slotId))
+                    fail('محاولة إعادة التشغيل غير صالحة.');
+                if (target.status !== 'quality_accepted')
+                    fail('الاستلام متاح فقط من مقبول معتمد بعد اعتماد الجودة.');
+                const approved = Number(target.qualityApprovedAcceptedQuantity || 0);
+                const received = Number(target.packagingReceivedQuantity || 0);
+                const packaged = Number(target.packagingPackagedQuantity || 0);
+                const delivered = Number(target.packagingDeliveredQuantity || 0);
+                const moveQuantity = quantity(payload.quantity, true);
+                const note = typeof payload.note === 'string' ? payload.note.trim().slice(0, 2000) : '';
+                if (input.action === 'receivePackaging') {
+                    if (moveQuantity > approved - received + 0.000001)
+                        fail('الكمية تتجاوز المقبول المعتمد غير المستلم بعد.');
+                    tx.update(targetRef, { packagingReceivedQuantity: received + moveQuantity });
+                    tx.create(targetRef.collection('packaging_events').doc(requestId), { tenantId, workOrderId: orderId, slotId, attemptId, action: 'receive', quantity: moveQuantity, note, actorUid: uid, actorName: String(user.displayName || uid), createdAt: now });
+                }
+                else if (input.action === 'packageContainer') {
+                    if (moveQuantity > received - packaged + 0.000001)
+                        fail('الكمية تتجاوز المستلم غير المغلف بعد.');
+                    tx.update(targetRef, { packagingPackagedQuantity: packaged + moveQuantity });
+                    tx.create(targetRef.collection('packaging_events').doc(requestId), { tenantId, workOrderId: orderId, slotId, attemptId, action: 'package', quantity: moveQuantity, note, actorUid: uid, actorName: String(user.displayName || uid), createdAt: now });
+                }
+                else {
+                    if (moveQuantity > packaged - delivered + 0.000001)
+                        fail('الكمية تتجاوز المغلف غير المسلّم بعد.');
+                    const settingsSnap = await tx.get(db.collection('system_settings').doc(tenantId));
+                    const routing = resolveInventoryRoutingFromSettings((settingsSnap.data() || {}));
+                    const warehouseId = routing.finalProductWarehouseId;
+                    if (!warehouseId)
+                        fail('مخزن المنتج التام غير مضبوط في إعدادات المصنع؛ راجع إعدادات المخزون قبل التسليم.');
+                    const productId = String(order.productId || '');
+                    const productSnap = await tx.get(db.collection('products').doc(productId));
+                    const product = productSnap.data();
+                    if (!productSnap.exists)
+                        fail('المنتج غير موجود.');
+                    const stockItemRef = db.collection('stock_items').doc(`${warehouseId}__finished_good__${productId}`);
+                    tx.set(stockItemRef, { warehouseId, itemType: 'finished_good', itemId: productId, itemName: String(product?.name || order.productName || productId), itemCode: String(product?.code || ''), unit: 'piece', quantity: FieldValue.increment(moveQuantity), updatedAt: FieldValue.serverTimestamp(), tenantId }, { merge: true });
+                    tx.create(db.collection('stock_transactions').doc(requestId), { warehouseId, itemType: 'finished_good', itemId: productId, itemName: String(product?.name || order.productName || productId), itemCode: String(product?.code || ''), unit: 'piece', movementType: 'IN', quantity: moveQuantity, referenceNo: `WO2-PKG-${requestId.slice(0, 8).toUpperCase()}`, note: note || `تسليم تغليف — أمر ${order.workOrderNumber}`, sourceModule: 'work_order_cycle_packaging', sourceId: attemptId ? `${slotId}--${attemptId}` : slotId, createdBy: String(user.displayName || uid), createdByUserId: uid, createdAt: FieldValue.serverTimestamp(), tenantId });
+                    tx.update(targetRef, { packagingDeliveredQuantity: delivered + moveQuantity });
+                    tx.create(targetRef.collection('packaging_events').doc(requestId), { tenantId, workOrderId: orderId, slotId, attemptId, action: 'deliver', quantity: moveQuantity, warehouseId, note, actorUid: uid, actorName: String(user.displayName || uid), createdAt: now });
+                }
+            }
+            else if (['claimQualityInspection', 'releaseQualityInspection', 'submitQualityReport', 'approveQualityReport', 'returnQualityReport'].includes(input.action)) {
                 const slotId = id(payload.slotId);
                 const slotRef = orderRef.collection('hourly_slots').doc(slotId);
                 const slot = (await tx.get(slotRef)).data();
@@ -237,23 +471,182 @@ export async function executeWorkOrderCycle(uid, input) {
                     fail('الساعة ليست في انتظار فحص الجودة.');
                 if (!Array.isArray(order.qualityReportTemplate) || !order.qualityReportTemplate.length)
                     fail('لا يوجد نموذج جودة معرّف.');
-                if (!Array.isArray(payload.qualityResults))
-                    fail('نتائج الجودة يجب أن تكون قائمة.');
-                const results = payload.qualityResults.map((result, idx) => {
-                    if (typeof result.checkId !== 'string' || !result.checkId)
-                        fail(`النتيجة ${idx + 1}: معرّف المعيار مطلوب.`);
-                    if (typeof result.value === 'number' || typeof result.value === 'string') {
-                        if (typeof result.value === 'string' && !result.value.trim())
-                            fail(`النتيجة ${idx + 1}: القيمة مطلوبة.`);
+                if (slot.qualityResults !== undefined)
+                    fail('هذه الساعة بها نتائج من النموذج السابق؛ يلزم مراجعتها قبل إدخال مشاركات جديدة.');
+                const claim = slot.qualityClaim;
+                if (input.action === 'releaseQualityInspection') {
+                    reason(payload.reason);
+                    if (!claim || claim.id !== id(payload.claimId))
+                        fail('الحجز تغير أو غير موجود؛ حدّث الصفحة.');
+                    tx.update(slotRef, { qualityClaim: null });
+                }
+                else if (input.action === 'approveQualityReport') {
+                    if (claim)
+                        fail('يوجد حجز فحص نشط؛ فكه أولًا.');
+                    const inspected = quantity(Number(slot.inspectedQuantity || 0));
+                    const remaining = quantity(Number(slot.actualQuantity)) - inspected;
+                    if (remaining > 0)
+                        fail('الفحص غير مكتمل بعد؛ لا يمكن الاعتماد.');
+                    const acceptedQuantity = Number(slot.inspectedAcceptedQuantity || 0);
+                    const rejectedQuantity = Number(slot.inspectedRejectedQuantity || 0);
+                    tx.update(slotRef, { status: 'quality_accepted', qualityApprovedAcceptedQuantity: acceptedQuantity, qualityApprovedRejectedQuantity: rejectedQuantity, qualityApprovedBy: uid, qualityApprovedByName: String(user.displayName || uid), qualityApprovedAt: now });
+                    Object.assign(patch, { approvedAcceptedQuantity: Number(order.approvedAcceptedQuantity || 0) + acceptedQuantity });
+                }
+                else if (input.action === 'returnQualityReport') {
+                    if (claim)
+                        fail('يوجد حجز فحص نشط؛ فكه أولًا.');
+                    const returnReason = reason(payload.reason);
+                    const inspected = Number(slot.inspectedQuantity || 0);
+                    if (inspected <= 0)
+                        fail('لا توجد مشاركات فحص لإرجاعها.');
+                    const contributions = await tx.get(slotRef.collection('quality_contributions'));
+                    tx.create(slotRef.collection('quality_returns').doc(requestId), { tenantId, workOrderId: orderId, slotId, reason: returnReason, actorUid: uid, actorName: String(user.displayName || uid), createdAt: now, contributions: contributions.docs.map(doc => ({ id: doc.id, ...doc.data() })) });
+                    for (const doc of contributions.docs)
+                        tx.delete(doc.ref);
+                    tx.update(slotRef, { inspectedQuantity: 0, inspectedAcceptedQuantity: 0, inspectedRejectedQuantity: 0, qualityClaim: null });
+                }
+                else {
+                    const assignment = (await tx.get(db.collection('work_order_line_assignments').doc(`${tenantId}--${order.lineId}`))).data();
+                    if (assignment?.tenantId !== tenantId || assignment.lineId !== order.lineId || !Array.isArray(assignment.inspectorUids) || !assignment.inspectorUids.includes(uid))
+                        throw new HttpsError('permission-denied', 'أنت غير مكلّف بفحص هذا الخط.');
+                    const inspected = quantity(Number(slot.inspectedQuantity || 0));
+                    const remaining = quantity(Number(slot.actualQuantity)) - inspected;
+                    if (input.action === 'claimQualityInspection') {
+                        if (claim || remaining <= 0)
+                            fail('الفحص محجوز أو اكتملت كمية الفحص.');
+                        tx.update(slotRef, { qualityClaim: { id: requestId, uid, name: String(user.displayName || uid), startedAt: now } });
                     }
-                    else
-                        fail(`النتيجة ${idx + 1}: القيمة مطلوبة.`);
-                    const notes = typeof result.notes === 'string' ? result.notes.trim() : '';
-                    if (notes.length > 500)
-                        fail(`النتيجة ${idx + 1}: الملاحظات بحد أقصى ٥٠٠ حرف.`);
-                    return { checkId: String(result.checkId), label: String(result.label || ''), value: result.value, notes };
-                });
-                tx.update(slotRef, { qualityResults: results, qualityReviewedAt: now, qualityReviewedBy: uid });
+                    else {
+                        if (!claim || claim.uid !== uid || claim.id !== id(payload.claimId))
+                            fail('ابدأ حجز الفحص أولًا؛ الحجز الحالي لا يخص هذه المشاركة.');
+                        const inspectedQuantity = quantity(payload.inspectedQuantity, true);
+                        const acceptedQuantity = quantity(payload.acceptedQuantity);
+                        const rejectedQuantity = quantity(payload.rejectedQuantity);
+                        if (inspectedQuantity > remaining || Math.abs(acceptedQuantity + rejectedQuantity - inspectedQuantity) > 0.000001)
+                            fail('كميات المشاركة لا تتطابق أو تتجاوز المتبقي.');
+                        const results = validateQualityResults(order.qualityReportTemplate, payload.qualityResults);
+                        tx.create(slotRef.collection('quality_contributions').doc(claim.id), { tenantId, workOrderId: orderId, slotId, containerId: slot.containerId, claimId: claim.id, inspectorUid: uid, inspectorName: String(user.displayName || uid), startedAt: claim.startedAt, submittedAt: now, inspectedQuantity, acceptedQuantity, rejectedQuantity, results, templateSnapshot: order.qualityReportTemplate });
+                        tx.update(slotRef, { qualityClaim: null, inspectedQuantity: inspected + inspectedQuantity, inspectedAcceptedQuantity: Number(slot.inspectedAcceptedQuantity || 0) + acceptedQuantity, inspectedRejectedQuantity: Number(slot.inspectedRejectedQuantity || 0) + rejectedQuantity });
+                    }
+                }
+            }
+            else if (input.action === 'closeProduction') {
+                if (order.productionStatus === 'closed')
+                    fail('الإنتاج مقفل بالفعل.');
+                if (!['approved', 'in_progress'].includes(order.productionStatus))
+                    fail('لا يمكن إقفال أمر لم يُعتمد بعد.');
+                const slotsSnap = await tx.get(orderRef.collection('hourly_slots'));
+                const slotDocs = slotsSnap.docs;
+                if (slotDocs.some(doc => ['open', 'paused'].includes(String(doc.data().status))))
+                    fail('توجد ساعة جارية أو متوقفة لم تُحسم بعد.');
+                if (slotDocs.some(doc => doc.data().status === 'quality_pending'))
+                    fail('توجد ساعة بانتظار اعتماد تقرير الجودة.');
+                if (slotDocs.some(doc => Number(doc.data().qualityApprovedRejectedQuantity || 0) > 0 && !doc.data().rejectedDisposition))
+                    fail('توجد كمية مرفوضة لم يُتخذ قرار بشأنها بعد.');
+                const reworkSnaps = await Promise.all(slotDocs.map(doc => tx.get(doc.ref.collection('rework_attempts'))));
+                const allAttempts = reworkSnaps.flatMap(snap => snap.docs.map(doc => doc.data()));
+                if (allAttempts.some(attempt => ['planned', 'quality_pending'].includes(String(attempt.status))))
+                    fail('توجد محاولة إعادة تشغيل قيد التنفيذ أو بانتظار الفحص.');
+                if (allAttempts.some(attempt => Number(attempt.qualityApprovedRejectedQuantity || 0) > 0 && !attempt.rejectedDisposition))
+                    fail('توجد كمية مرفوضة من إعادة التشغيل لم يُتخذ قرار بشأنها بعد.');
+                const plannedSlots = slotDocs.filter(doc => doc.data().status === 'planned');
+                const closeReason = typeof payload.reason === 'string' ? payload.reason.trim().slice(0, 2000) : '';
+                const achieved = Number(order.approvedAcceptedQuantity || 0);
+                const deficit = achieved < Number(order.quantity || 0);
+                if ((deficit || plannedSlots.length > 0) && !closeReason)
+                    fail('سبب الإقفال مطلوب عند وجود عجز عن الهدف أو ساعات لم تبدأ بعد.');
+                for (const doc of plannedSlots) {
+                    tx.update(doc.ref, { status: 'cancelled', cancelledAt: now, cancelledReason: closeReason, cancelledBy: uid, cancelledByName: String(user.displayName || uid) });
+                }
+                Object.assign(patch, { productionStatus: 'closed', productionClosedAt: now, productionClosedBy: uid, productionClosedByName: String(user.displayName || uid), productionClosedWithDeficit: deficit, productionClosedCancelledSlotCount: plannedSlots.length });
+                if (closeReason)
+                    patch.productionCloseReason = closeReason;
+                tx.create(orderRef.collection('production_closures').doc(requestId), { tenantId, workOrderId: orderId, reason: closeReason, deficit, achievedQuantity: achieved, targetQuantity: Number(order.quantity || 0), cancelledSlotIds: plannedSlots.map(doc => doc.id), actorUid: uid, actorName: String(user.displayName || uid), createdAt: now });
+            }
+            else if (['proposePlanRevision', 'applyPlanRevision'].includes(input.action)) {
+                if (!['approved', 'in_progress'].includes(order.productionStatus))
+                    fail('التخطيط متاح فقط بعد اعتماد الأمر.');
+                if (input.action === 'applyPlanRevision') {
+                    const revisionId = id(payload.revisionId);
+                    const revisionRef = orderRef.collection('plan_revisions').doc(revisionId);
+                    const revision = (await tx.get(revisionRef)).data();
+                    if (!revision || revision.tenantId !== tenantId || revision.workOrderId !== orderId)
+                        fail('الاقتراح غير موجود.');
+                    if (revision.status !== 'proposed')
+                        fail('هذا الاقتراح لم يعد قابلًا للاعتماد؛ أعد الحساب.');
+                    if (Number(order.approvedAcceptedQuantity || 0) !== Number(revision.achievedQuantity || 0))
+                        fail('تغيّر تنفيذ الأمر منذ الاقتراح؛ أعد حساب التوزيع.');
+                    const slotsSnap = await tx.get(orderRef.collection('hourly_slots'));
+                    const slotById = new Map(slotsSnap.docs.map(doc => [doc.id, doc.data()]));
+                    const revisionSlots = revision.slots;
+                    for (const entry of revisionSlots) {
+                        const current = slotById.get(entry.slotId);
+                        if (!current || current.status !== 'planned' || Number(current.targetQuantity) !== Number(entry.previousTargetQuantity))
+                            fail('تغيّرت إحدى الساعات المقترحة منذ الاقتراح؛ أعد حساب التوزيع.');
+                    }
+                    for (const entry of revisionSlots)
+                        tx.update(orderRef.collection('hourly_slots').doc(entry.slotId), { targetQuantity: entry.proposedTargetQuantity });
+                    tx.update(revisionRef, { status: 'approved', approvedAt: now, approvedBy: uid, approvedByName: String(user.displayName || uid) });
+                }
+                else {
+                    const slotsSnap = await tx.get(orderRef.collection('hourly_slots'));
+                    const slotDocs = slotsSnap.docs;
+                    const plannedSlots = slotDocs.filter(doc => doc.data().status === 'planned').sort((a, b) => String(a.data().date + a.data().startTime).localeCompare(String(b.data().date + b.data().startTime)));
+                    if (!plannedSlots.length)
+                        fail('لا توجد ساعات مستقبلية لم تبدأ لإعادة توزيعها.');
+                    const pendingQualityQuantity = slotDocs.filter(doc => doc.data().status === 'quality_pending').reduce((sum, doc) => sum + Number(doc.data().actualQuantity || 0), 0);
+                    const reworkSnaps = await Promise.all(slotDocs.map(doc => tx.get(doc.ref.collection('rework_attempts'))));
+                    const allAttempts = reworkSnaps.flatMap(snap => snap.docs.map(doc => doc.data()));
+                    const pendingReworkQuantity = allAttempts.filter(a => a.status === 'planned').reduce((sum, a) => sum + Number(a.requestedQuantity || 0), 0)
+                        + allAttempts.filter(a => a.status === 'quality_pending').reduce((sum, a) => sum + Number(a.actualQuantity || 0), 0);
+                    const achieved = Number(order.approvedAcceptedQuantity || 0);
+                    const remainingToTarget = Math.max(0, Number(order.quantity || 0) - achieved - pendingQualityQuantity - pendingReworkQuantity);
+                    const hoursOfSlot = (data) => {
+                        const minutesOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+                        return Math.max(0.01, (minutesOf(String(data.endTime)) - minutesOf(String(data.startTime))) / 60);
+                    };
+                    const ownHistorical = slotDocs.filter(doc => doc.data().status === 'quality_accepted');
+                    let sumAccepted = ownHistorical.reduce((sum, doc) => sum + Number(doc.data().qualityApprovedAcceptedQuantity || 0), 0);
+                    let sumHours = ownHistorical.reduce((sum, doc) => sum + hoursOfSlot(doc.data()), 0);
+                    let rateSource = sumHours > 0 ? 'this_order' : 'original_plan_fallback';
+                    if (sumHours <= 0) {
+                        const others = await tx.get(db.collection('work_orders').where('tenantId', '==', tenantId).where('productId', '==', order.productId).where('lineId', '==', order.lineId).where('cycleVersion', '==', 2).limit(6));
+                        const candidateOrders = others.docs.filter(doc => doc.id !== orderId);
+                        const otherSlotsSnaps = await Promise.all(candidateOrders.map(doc => tx.get(doc.ref.collection('hourly_slots').where('status', '==', 'quality_accepted'))));
+                        for (const snap of otherSlotsSnaps) {
+                            for (const doc of snap.docs) {
+                                sumAccepted += Number(doc.data().qualityApprovedAcceptedQuantity || 0);
+                                sumHours += hoursOfSlot(doc.data());
+                            }
+                        }
+                        if (sumHours > 0)
+                            rateSource = 'product_line_history';
+                    }
+                    const lowConfidence = rateSource === 'original_plan_fallback';
+                    const ratePerHour = lowConfidence ? null : sumAccepted / sumHours;
+                    const rawEstimates = plannedSlots.map(doc => ({
+                        slotId: doc.id,
+                        previousTargetQuantity: Number(doc.data().targetQuantity || 0),
+                        rawEstimate: lowConfidence ? Number(doc.data().targetQuantity || 0) : ratePerHour * hoursOfSlot(doc.data()),
+                    }));
+                    const rawSum = rawEstimates.reduce((sum, entry) => sum + entry.rawEstimate, 0);
+                    const scale = rawSum > 0 ? remainingToTarget / rawSum : 0;
+                    let allocated = 0;
+                    const finalSlots = rawEstimates.map((entry, index) => {
+                        const value = index === rawEstimates.length - 1 ? Math.round(Math.max(0, remainingToTarget - allocated) * 1000) / 1000 : Math.round(entry.rawEstimate * scale * 1000) / 1000;
+                        allocated += value;
+                        return { slotId: entry.slotId, previousTargetQuantity: entry.previousTargetQuantity, proposedTargetQuantity: value };
+                    });
+                    const previousProposed = await tx.get(orderRef.collection('plan_revisions').where('status', '==', 'proposed'));
+                    for (const doc of previousProposed.docs)
+                        tx.update(doc.ref, { status: 'superseded', supersededAt: now });
+                    tx.create(orderRef.collection('plan_revisions').doc(requestId), {
+                        tenantId, workOrderId: orderId, status: 'proposed', proposedAt: now, proposedBy: uid, proposedByName: String(user.displayName || uid),
+                        basis: { rateSource, ratePerHour, sampleHours: lowConfidence ? 0 : sumHours, lowConfidence },
+                        remainingToTarget, pendingQualityQuantity, pendingReworkQuantity, achievedQuantity: achieved, targetQuantity: Number(order.quantity || 0),
+                        slots: finalSlots,
+                    });
+                }
             }
             else {
                 if (!['approved', 'in_progress'].includes(order.productionStatus))

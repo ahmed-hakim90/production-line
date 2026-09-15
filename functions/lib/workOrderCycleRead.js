@@ -25,7 +25,8 @@ export async function readWorkOrderCycle(uid, input = {}) {
         throw denied();
     const assignment = inspector ? await db.collection('work_order_line_assignments').where('tenantId', '==', tenantId).where('inspectorUids', 'array-contains', uid).get() : null;
     const lineIds = new Set(assignment?.docs.map(doc => doc.data().lineId) || []);
-    const visible = (order) => order.tenantId === tenantId && order.cycleVersion === 2 && (manager || (supervisor && order.supervisorUid === uid) || (inspector && lineIds.has(order.lineId)));
+    // Packaging is a factory-wide role (all lines), so it gets manager-like blanket visibility rather than a line/assignment scope.
+    const visible = (order) => order.tenantId === tenantId && order.cycleVersion === 2 && (manager || packaging || (supervisor && order.supervisorUid === uid) || (inspector && lineIds.has(order.lineId)));
     let rows = [];
     let truncated = false;
     if (input.orderId) {
@@ -37,21 +38,46 @@ export async function readWorkOrderCycle(uid, input = {}) {
             throw denied();
         rows = [{ id: snap.id, data }];
     }
-    else if (manager || supervisor || inspector) {
+    else if (manager || supervisor || inspector || packaging) {
         let query = db.collection('work_orders').where('tenantId', '==', tenantId).where('cycleVersion', '==', 2);
-        if (!manager && supervisor && !inspector)
+        if (!manager && !packaging && supervisor && !inspector)
             query = query.where('supervisorUid', '==', uid);
         const snap = await query.limit(101).get();
         truncated = snap.size > 100;
         rows = snap.docs.slice(0, 100).filter(doc => visible(doc.data())).map(doc => ({ id: doc.id, data: doc.data() }));
     }
     const orders = await Promise.all(rows.map(async ({ id, data }) => {
-        const [slots, lineAssignment, audit] = await Promise.all([
+        const [slots, lineAssignment, audit, planRevisions] = await Promise.all([
             db.collection('work_orders').doc(id).collection('hourly_slots').get(),
             db.collection('work_order_line_assignments').doc(`${tenantId}--${data.lineId}`).get(),
             input.orderId ? db.collection('work_orders').doc(id).collection('cycle_audit').orderBy('revision', 'desc').limit(101).get() : Promise.resolve(null),
+            input.orderId ? db.collection('work_orders').doc(id).collection('plan_revisions').orderBy('proposedAt', 'desc').limit(101).get() : Promise.resolve(null),
         ]);
-        return { ...clean(data), id, auditTruncated: (audit?.size || 0) > 100, audit: audit?.docs.slice(0, 100).map(doc => { const event = doc.data(); return { id: doc.id, action: event.action, actorUid: event.actorUid, actorName: event.actorName || event.actorUid, createdAt: event.createdAt, revision: event.revision, reason: event.payload?.reason || '', previousSupervisorUid: event.previousSupervisorUid || '', supervisorUid: event.action === 'reassignSupervisor' ? event.payload?.supervisorUid : '' }; }) || [], inspectorUids: lineAssignment.data()?.inspectorUids || [], slots: slots.docs.map(slot => ({ ...clean(slot.data()), id: slot.id })).sort((a, b) => String(a.date + a.startTime).localeCompare(String(b.date + b.startTime))) };
+        const packagingEventsOf = async (ref, data) => {
+            if (!input.orderId || !(Number(data.packagingReceivedQuantity || 0) > 0))
+                return { truncated: false, rows: [] };
+            const snap = await ref.collection('packaging_events').orderBy('createdAt', 'desc').limit(101).get();
+            return { truncated: snap.size > 100, rows: snap.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) };
+        };
+        const slotRows = await Promise.all(slots.docs.map(async (slot) => {
+            const slotData = slot.data();
+            const [contributions, corrections, reworkAttempts, packagingEvents] = await Promise.all([
+                input.orderId && slotData.inspectedQuantity > 0 ? slot.ref.collection('quality_contributions').orderBy('submittedAt', 'desc').limit(101).get() : Promise.resolve(null),
+                input.orderId && slotData.qualityCorrectionCount > 0 ? slot.ref.collection('quality_corrections').orderBy('createdAt', 'desc').limit(101).get() : Promise.resolve(null),
+                input.orderId ? slot.ref.collection('rework_attempts').orderBy('attemptNumber', 'asc').limit(101).get() : Promise.resolve(null),
+                packagingEventsOf(slot.ref, slotData),
+            ]);
+            const attemptRows = await Promise.all((reworkAttempts?.docs.slice(0, 100) || []).map(async (attempt) => {
+                const attemptData = attempt.data();
+                const [attemptContributions, attemptPackagingEvents] = await Promise.all([
+                    attemptData.inspectedQuantity > 0 ? attempt.ref.collection('quality_contributions').orderBy('submittedAt', 'desc').limit(101).get() : Promise.resolve(null),
+                    packagingEventsOf(attempt.ref, attemptData),
+                ]);
+                return { ...clean(attemptData), id: attempt.id, contributionsTruncated: (attemptContributions?.size || 0) > 100, qualityContributions: attemptContributions?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], packagingEventsTruncated: attemptPackagingEvents.truncated, packagingEvents: attemptPackagingEvents.rows };
+            }));
+            return { ...clean(slotData), id: slot.id, contributionsTruncated: (contributions?.size || 0) > 100, qualityContributions: contributions?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], qualityCorrections: corrections?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], reworkAttemptsTruncated: (reworkAttempts?.size || 0) > 100, reworkAttempts: attemptRows, packagingEventsTruncated: packagingEvents.truncated, packagingEvents: packagingEvents.rows };
+        }));
+        return { ...clean(data), id, auditTruncated: (audit?.size || 0) > 100, audit: audit?.docs.slice(0, 100).map(doc => { const event = doc.data(); return { id: doc.id, action: event.action, actorUid: event.actorUid, actorName: event.actorName || event.actorUid, createdAt: event.createdAt, revision: event.revision, reason: event.payload?.reason || '', previousSupervisorUid: event.previousSupervisorUid || '', supervisorUid: event.action === 'reassignSupervisor' ? event.payload?.supervisorUid : '' }; }) || [], inspectorUids: lineAssignment.data()?.inspectorUids || [], planRevisionsTruncated: (planRevisions?.size || 0) > 100, planRevisions: planRevisions?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], slots: slotRows.sort((a, b) => String(a.date + a.startTime).localeCompare(String(b.date + b.startTime))) };
     }));
     const directory = { products: [], lines: [], supervisors: [], inspectors: [], workers: [] };
     if (input.directory) {
