@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { lazyNamed } from '../../shared/routes/lazyNamed';
 import { resolvePortalKind, shouldUseSupervisorDashboard } from '../lib/portalHome';
 import { defaultTenantSlug, withTenantPath } from '@/lib/tenantPaths';
+import { WorkOrderCycleTasks } from '../../production/components/WorkOrderCycleTasks';
 
 const AdminDashboard = lazyNamed(() => import('./AdminDashboard'), 'AdminDashboard');
 const Dashboard = lazyNamed(() => import('./Dashboard'), 'Dashboard');
@@ -78,6 +79,7 @@ export const HomeDashboardRouter: React.FC = () => {
 
   return (
     <Suspense fallback={<PageContentSkeleton variant="dashboard" kpiCount={4} />}>
+      <WorkOrderCycleTasks />
       {body}
     </Suspense>
   );

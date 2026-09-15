@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { WORK_ORDER_STATUS_LABELS } from '../../utils/workOrderReportLinking';
 import { WorkOrderDetail } from '../../../../src/components/erp/WorkOrderDetail';
 import type { WorkOrderRowView } from './WorkOrderRow';
+import { workOrderService } from '../../services/workOrderService';
 
 interface WorkOrderDrawerProps {
   order: WorkOrder | null;
@@ -15,13 +16,17 @@ interface WorkOrderDrawerProps {
   onClose: () => void;
   onEdit?: (order: WorkOrder) => void;
   onCloseOrder?: (order: WorkOrder) => void;
-  onPrint: (order: WorkOrder) => void;
+  onPrint?: (order: WorkOrder) => void;
+  presentation?: 'drawer' | 'page';
+  onOpenFullPage?: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;
   canReopenCompleted?: boolean;
   onReopenCompleted?: (order: WorkOrder) => void;
   onViewReports?: (order: WorkOrder) => void;
   onReconcileReports?: (order: WorkOrder) => void;
   reconcilingReports?: boolean;
+  canExecuteHourlySlots?: boolean;
+  canReviewHourlyQuality?: boolean;
 }
 
 const STATUS_AR_MAP: Record<WorkOrderStatus, string> = WORK_ORDER_STATUS_LABELS;
@@ -46,13 +51,52 @@ export function WorkOrderDrawer({
   onEdit,
   onCloseOrder,
   onPrint,
+  presentation = 'drawer',
+  onOpenFullPage,
   onOpenScanner,
   canReopenCompleted,
   onReopenCompleted,
   onViewReports,
   onReconcileReports,
   reconcilingReports,
+  canExecuteHourlySlots,
+  canReviewHourlyQuality,
 }: WorkOrderDrawerProps) {
+  const [hourlySlots, setHourlySlots] = useState<WorkOrder['hourlySlots']>([]);
+  const [hourlySlotsLoading, setHourlySlotsLoading] = useState(false);
+  const [updatingSlotId, setUpdatingSlotId] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    if (!order?.id || !isOpen) { setHourlySlots([]); return () => { active = false; }; }
+    setHourlySlotsLoading(true);
+    void workOrderService.getHourlySlots(order.id)
+      .then((rows) => { if (active) setHourlySlots(rows); })
+      .catch(() => { if (active) setHourlySlots([]); })
+      .finally(() => { if (active) setHourlySlotsLoading(false); });
+    return () => { active = false; };
+  }, [isOpen, order?.id]);
+  const refreshHourlySlots = async () => {
+    if (!order?.id) return;
+    setHourlySlots(await workOrderService.getHourlySlots(order.id));
+  };
+  const handleOpenHourlySlot = async (slotId: string, workers: number) => {
+    if (!order?.id) return;
+    setUpdatingSlotId(slotId);
+    try { await workOrderService.openHourlySlot(order.id, slotId, workers); await refreshHourlySlots(); }
+    finally { setUpdatingSlotId(null); }
+  };
+  const handleSubmitHourlySlot = async (slotId: string, input: { actualQuantity: number; rejectedQuantity: number; executionNotes: string }) => {
+    if (!order?.id) return;
+    setUpdatingSlotId(slotId);
+    try { await workOrderService.submitHourlyProduction(order.id, slotId, input); await refreshHourlySlots(); }
+    finally { setUpdatingSlotId(null); }
+  };
+  const handleReviewHourlyQuality = async (slotId: string, input: { acceptedQuantity: number; rejectedQuantity: number; qualityNotes: string }) => {
+    if (!order?.id) return;
+    setUpdatingSlotId(slotId);
+    try { await workOrderService.reviewHourlyQuality(order.id, slotId, input); await refreshHourlySlots(); }
+    finally { setUpdatingSlotId(null); }
+  };
   if (!order) return null;
   const effectiveStatus = rowView?.effectiveStatus ?? order.status;
   const storedStatus = rowView?.storedStatus ?? order.status;
@@ -60,7 +104,7 @@ export function WorkOrderDrawer({
   const showReopenCompleted =
     Boolean(canReopenCompleted && onReopenCompleted && storedStatus === 'completed');
 
-  const detailOrder = useMemo(() => {
+  const detailOrder = (() => {
     const targetQty = Number(order.quantity || 0);
     const producedFromRow = Number(rowView?.order?.producedQuantity || 0);
     const producedFromOrder = Number(order.producedQuantity || 0);
@@ -94,8 +138,11 @@ export function WorkOrderDrawer({
       actualUnitCost,
       totalCost: Number(order.actualCost || 0),
       notes: String(order.notes || ''),
+      hourlySlots: hourlySlots || order.hourlySlots || [],
+      hourlySlotsLoading,
+      dailyTarget: Number(order.dailyTarget || 0),
     };
-  }, [effectiveStatus, lineName, order, productName, rowView, supervisorName]);
+  })();
 
   return (
     <WorkOrderDetail
@@ -108,7 +155,9 @@ export function WorkOrderDrawer({
           onCloseOrder(order);
         }
       } : undefined}
-      onPrint={() => onPrint(order)}
+      onPrint={onPrint ? () => onPrint(order) : undefined}
+      presentation={presentation}
+      onOpenFullPage={onOpenFullPage ? () => onOpenFullPage(order) : undefined}
       onOpenScanner={onOpenScanner && !scannerHidden ? () => onOpenScanner(order) : undefined}
       showReopenCompleted={showReopenCompleted}
       onReopenCompleted={showReopenCompleted ? () => onReopenCompleted!(order) : undefined}
@@ -116,6 +165,10 @@ export function WorkOrderDrawer({
       onViewReports={onViewReports && order.id ? () => onViewReports(order) : undefined}
       onReconcileReports={onReconcileReports && order.id ? () => onReconcileReports(order) : undefined}
       reconcilingReports={reconcilingReports}
+      updatingSlotId={updatingSlotId}
+      onOpenHourlySlot={canExecuteHourlySlots ? handleOpenHourlySlot : undefined}
+      onSubmitHourlySlot={canExecuteHourlySlots ? handleSubmitHourlySlot : undefined}
+      onReviewHourlyQuality={canReviewHourlyQuality ? handleReviewHourlyQuality : undefined}
     />
   );
 }

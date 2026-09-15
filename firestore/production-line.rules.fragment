@@ -1998,15 +1998,109 @@
       allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
     }
 
+    function pl_canReadCycleWorkOrder(order) {
+      return order.get('cycleVersion', 1) != 2 || (
+        pl_isActiveUser() && order.tenantId == pl_tenantId()
+        && (pl_hasErpPermission('workOrders.create')
+          || pl_hasErpPermission('workOrders.approve')
+          || pl_hasErpPermission('workOrders.assignInspectors')
+          || (pl_hasErpPermission('workOrders.execute') && order.supervisorUid == request.auth.uid)
+          || (pl_hasErpPermission('workOrders.inspect')
+            && request.auth.uid in get(/databases/$(database)/documents/work_order_line_assignments/$(order.tenantId + '--' + order.lineId)).data.inspectorUids))
+      );
+    }
+
+    match /work_orders/{workOrderId}/cycle_audit/{eventId} {
+      allow read: if pl_isActiveUser()
+        && resource.data.tenantId == pl_tenantId()
+        && pl_canReadCycleWorkOrder(get(/databases/$(database)/documents/work_orders/$(workOrderId)).data);
+      allow write: if false;
+    }
+
+    match /work_orders/{workOrderId}/hourly_slots/{slotId} {
+      allow read: if pl_isActiveUser()
+        && pl_canReadCycleWorkOrder(get(/databases/$(database)/documents/work_orders/$(workOrderId)).data)
+        && get(/databases/$(database)/documents/work_orders/$(workOrderId)).data.tenantId == pl_tenantId();
+      allow create: if pl_isActiveUser()
+        && getAfter(/databases/$(database)/documents/work_orders/$(workOrderId)).data.get('cycleVersion', 1) != 2
+        && (pl_hasErpPermission('workOrders.create') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+        && request.resource.data.tenantId == pl_tenantId()
+        && request.resource.data.workOrderId == workOrderId
+        && request.resource.data.status == 'planned'
+        && request.resource.data.targetQuantity >= 0
+        && getAfter(/databases/$(database)/documents/work_orders/$(workOrderId)).data.tenantId == pl_tenantId();
+      allow update: if pl_isActiveUser()
+        && get(/databases/$(database)/documents/work_orders/$(workOrderId)).data.get('cycleVersion', 1) != 2
+        && getAfter(/databases/$(database)/documents/work_orders/$(workOrderId)).data.get('cycleVersion', 1) != 2
+        && resource.data.tenantId == pl_tenantId()
+        && resource.data.workOrderId == workOrderId
+        && request.resource.data.tenantId == resource.data.tenantId
+        && request.resource.data.workOrderId == resource.data.workOrderId
+        && (((resource.data.status == 'planned'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+            && request.resource.data.status == 'open'
+            && request.resource.data.workersSnapshotCount >= 1)
+          || (resource.data.status == 'open'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+            && request.resource.data.status == 'paused')
+          || (resource.data.status == 'paused'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+            && request.resource.data.status == 'open'
+            && request.resource.data.totalPausedSeconds >= 0)
+          || (resource.data.status == 'open'
+            && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+            && request.resource.data.status == 'quality_pending'
+            && request.resource.data.actualQuantity >= 0
+            && request.resource.data.rejectedQuantity >= 0
+            && request.resource.data.rejectedQuantity <= request.resource.data.actualQuantity)
+          || (resource.data.status == 'quality_pending'
+            && (pl_hasErpPermission('quality.finalInspection.inspect') || pl_hasErpPermission('quality.inspect'))
+            && (request.resource.data.status == 'quality_accepted' || request.resource.data.status == 'quality_rejected')
+            && request.resource.data.qualityAcceptedQuantity >= 0
+            && request.resource.data.qualityRejectedQuantity >= 0
+            && request.resource.data.qualityAcceptedQuantity + request.resource.data.qualityRejectedQuantity == resource.data.actualQuantity
+            && ((request.resource.data.status == 'quality_accepted' && request.resource.data.qualityAcceptedQuantity > 0)
+              || (request.resource.data.status == 'quality_rejected' && request.resource.data.qualityAcceptedQuantity == 0)))
+          || (resource.data.status == 'quality_accepted'
+            && pl_hasErpPermission('productionHandover.approve')
+            && request.resource.data.status == 'packaging')
+          || (resource.data.status == 'packaging'
+            && pl_hasErpPermission('productionHandover.approve')
+            && request.resource.data.status == 'finished'
+            && request.resource.data.packagingQuantity >= 0
+            && request.resource.data.packagingRejectedQuantity >= 0
+            && request.resource.data.packagingQuantity + request.resource.data.packagingRejectedQuantity == resource.data.qualityAcceptedQuantity)));
+      allow delete: if pl_isActiveUser()
+        && get(/databases/$(database)/documents/work_orders/$(workOrderId)).data.get('cycleVersion', 1) != 2
+        && (pl_hasErpPermission('workOrders.edit') || pl_hasErpPermission('workOrders.componentInjection.manage'))
+        && resource.data.tenantId == pl_tenantId()
+        && resource.data.workOrderId == workOrderId
+        && resource.data.status == 'planned';
+    }
+
+    function pl_legacyReportOrder(data) {
+      let orderId = data.get('workOrderId', '');
+      return orderId == null || orderId == ''
+        || !exists(/databases/$(database)/documents/work_orders/$(orderId))
+        || get(/databases/$(database)/documents/work_orders/$(orderId)).data.get('cycleVersion', 1) != 2;
+    }
+
     match /{coll}/{docId} {
       allow read: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (coll != 'work_orders' || resource == null || pl_canReadCycleWorkOrder(resource.data))
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
       allow create: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (coll != 'production_reports' || pl_legacyReportOrder(request.resource.data))
+        && (coll != 'work_orders' || request.resource.data.get('cycleVersion', 1) != 2)
         && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk())
         && pl_validSearchPrefixes();
       allow update: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (coll != 'production_reports' || (pl_legacyReportOrder(resource.data) && pl_legacyReportOrder(request.resource.data)))
+        && (coll != 'work_orders' || (resource.data.get('cycleVersion', 1) != 2 && request.resource.data.get('cycleVersion', 1) != 2))
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
         && pl_validSearchPrefixes();
       allow delete: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (coll != 'production_reports' || pl_legacyReportOrder(resource.data))
+        && (coll != 'work_orders' || resource.data.get('cycleVersion', 1) != 2)
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { MaterialCategoryTreeSelect } from '../components/MaterialCategoryTreeSelect';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
@@ -18,6 +18,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPortal';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -93,6 +94,16 @@ import {
 import { materialShowsSparePartsPricing } from '../lib/materialSparePartsPricing';
 import { repairPartsPricingService } from '../../repair/services/repairPartsPricingService';
 import { normalizeRepairSalePrice } from '../../repair/utils/sparePartPricing';
+import { stockService } from '../../inventory/services/stockService';
+import type { StockItemBalance } from '../../inventory/types';
+import { bomService } from '../services/bomService';
+import { MaterialsMasterSummary } from '../components/MaterialsMasterSummary';
+import {
+  buildMaterialCatalogRows,
+  MATERIAL_HEALTH_LABELS,
+  type MaterialCatalogRow,
+  type MaterialDataHealth,
+} from '../lib/materialCatalog';
 
 const BULK_SPARE_UPDATE_CHUNK = 8;
 const IMPORT_PREVIEW_LIMIT = 80;
@@ -108,6 +119,7 @@ type StatusFilter = MaterialStatusFilter;
 type ManufacturedFilter = MaterialManufacturedFilter;
 type MaterialsPageSize = 20 | 50;
 type MaterialSource = 'internal' | 'external';
+type MaterialQuickTab = 'all' | 'needs_attention' | 'external' | 'internal' | 'spare';
 
 const EMPTY_FORM = {
   code: '',
@@ -121,6 +133,8 @@ const EMPTY_FORM = {
   defaultSalePrice: 0,
   traderSalePrice: 0,
   wastePercent: 0,
+  barcode: '',
+  minStock: 0,
   isManufacturedInternally: false,
   availableForSpareParts: false,
   isActive: true,
@@ -147,9 +161,11 @@ export const Materials: React.FC = () => {
   const { can } = usePermission();
   const materialsPerms = useResourcePermission('materials');
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const canView = materialsPerms.canView;
   const canManage = materialsPerms.canManage || materialsPerms.canAction('manage');
   const canManagePricing = can('repair.pricing.manage');
+  const canViewInventory = can('inventory.view');
   const userRoleId = useAppStore((s) => s.userRoleId);
   const applyRole = useAppStore((s) => s._applyRole);
   const fetchRoles = useAppStore((s) => s.fetchRoles);
@@ -209,21 +225,42 @@ export const Materials: React.FC = () => {
   const importSessionRef = useRef(0);
   const categoryCodeRequestRef = useRef(0);
 
-  const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<MaterialType | 'all'>('all');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [manufacturedFilter, setManufacturedFilter] = useState<ManufacturedFilter>('all');
-  const [gapFilter, setGapFilter] = useState<CatalogMaterialGap | ''>('');
-  const [spareFilter, setSpareFilter] = useState<MaterialSpareFilter>('all');
-  const [pageSize, setPageSize] = useState<MaterialsPageSize>(20);
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
+  const [typeFilter, setTypeFilter] = useState<MaterialType | 'all'>(() => {
+    const value = searchParams.get('type');
+    return value && value in MATERIAL_TYPE_LABELS ? value as MaterialType : 'all';
+  });
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
+    const value = searchParams.get('status');
+    return value === 'active' || value === 'inactive' ? value : 'all';
+  });
+  const [manufacturedFilter, setManufacturedFilter] = useState<ManufacturedFilter>(() => {
+    const value = searchParams.get('source');
+    return value === 'internal' || value === 'external' ? value : 'all';
+  });
+  const [gapFilter, setGapFilter] = useState<CatalogMaterialGap | ''>(() =>
+    parseCatalogMaterialGap(searchParams.get('gap')) || '');
+  const [spareFilter, setSpareFilter] = useState<MaterialSpareFilter>(() => {
+    const value = searchParams.get('spare');
+    return value === 'visible' || value === 'hidden' ? value : 'all';
+  });
+  const [healthFilter, setHealthFilter] = useState<MaterialDataHealth | 'all'>(() =>
+    (searchParams.get('health') as MaterialDataHealth | null) || 'all');
+  const [quickTab, setQuickTab] = useState<MaterialQuickTab>(() =>
+    (searchParams.get('tab') as MaterialQuickTab | null) || 'all');
+  const [pageSize, setPageSize] = useState<MaterialsPageSize>(() =>
+    searchParams.get('size') === '50' ? 50 : 20);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectingAllMatching, setSelectingAllMatching] = useState(false);
   const [bulkSpareSaving, setBulkSpareSaving] = useState(false);
   const [catalogRows, setCatalogRows] = useState<Material[] | null>(null);
+  const [catalogBalances, setCatalogBalances] = useState<StockItemBalance[]>([]);
+  const [bomCountByMaterialId, setBomCountByMaterialId] = useState<Map<string, number>>(new Map());
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [clientPage, setClientPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
+  const [previewing, setPreviewing] = useState<MaterialCatalogRow | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [materialSource, setMaterialSource] = useState<MaterialSource | null>(null);
   const [saving, setSaving] = useState(false);
@@ -245,7 +282,8 @@ export const Materials: React.FC = () => {
   const [importExistingMaterials, setImportExistingMaterials] = useState<Material[]>([]);
   const debouncedSearch = useDebouncedValue(search, 350);
   const usesCatalog = catalogRows !== null;
-  const needsCatalog = spareFilter !== 'all' || Boolean(gapFilter);
+  // The master workspace needs complete catalog counts; heavy stock/BOM data stays lazy.
+  const needsCatalog = true;
   const materialPager = useCursorPagination<Material, NonNullable<Awaited<ReturnType<typeof materialService.listPaged>>['nextCursor']>>({
     enabled: !usesCatalog,
     queryKey: JSON.stringify({
@@ -267,6 +305,10 @@ export const Materials: React.FC = () => {
   const rows = materialPager.items;
   const refetch = materialPager.refresh;
   const sourceRows = catalogRows ?? rows;
+  const catalogViewRows = useMemo(
+    () => buildMaterialCatalogRows(sourceRows, catalogBalances, bomCountByMaterialId),
+    [sourceRows, catalogBalances, bomCountByMaterialId],
+  );
   const isLoading = catalogLoading || (!usesCatalog && materialPager.loading);
   const effectivePurchaseUnit = form.purchaseUnit || form.baseUnit;
   const usesWeightPerPiece =
@@ -288,10 +330,15 @@ export const Materials: React.FC = () => {
     spareFilter,
   }), [search, typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter]);
 
-  const filtered = useMemo(
-    () => sourceRows.filter((row) => materialMatchesListFilters(row, listFilters)),
-    [sourceRows, listFilters],
-  );
+  const filtered = useMemo(() => catalogViewRows.filter((row) => {
+    if (!materialMatchesListFilters(row, listFilters)) return false;
+    if (healthFilter !== 'all' && !row.dataHealth.includes(healthFilter)) return false;
+    if (quickTab === 'needs_attention' && row.dataHealth.length === 1 && row.dataHealth[0] === 'complete') return false;
+    if (quickTab === 'external' && row.isManufacturedInternally) return false;
+    if (quickTab === 'internal' && !row.isManufacturedInternally) return false;
+    if (quickTab === 'spare' && !isMaterialSpareVisible(row)) return false;
+    return true;
+  }), [catalogViewRows, listFilters, healthFilter, quickTab]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -336,11 +383,18 @@ export const Materials: React.FC = () => {
     try {
       const all = await materialService.getAll();
       setCatalogRows(all);
+      const ids = all.map((row) => String(row.id || '')).filter(Boolean);
+      const [balances, bomCounts] = await Promise.all([
+        canViewInventory ? stockService.getBalancesForItems(ids).catch(() => []) : Promise.resolve([]),
+        bomService.getMaterialBomItemCounts().catch(() => new Map<string, number>()),
+      ]);
+      setCatalogBalances(balances);
+      setBomCountByMaterialId(bomCounts);
       return all;
     } finally {
       setCatalogLoading(false);
     }
-  }, []);
+  }, [canViewInventory]);
 
   const refreshVisibleList = useCallback(async () => {
     if (catalogRows) {
@@ -358,11 +412,29 @@ export const Materials: React.FC = () => {
   useEffect(() => {
     setSelectedIds(new Set());
     setClientPage(1);
-  }, [typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter, debouncedSearch]);
+  }, [typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter, healthFilter, quickTab, debouncedSearch]);
 
   useEffect(() => {
     setClientPage(1);
   }, [pageSize]);
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams);
+    const setOrDelete = (key: string, value: string, fallback: string) => {
+      if (!value || value === fallback) next.delete(key);
+      else next.set(key, value);
+    };
+    setOrDelete('q', debouncedSearch, '');
+    setOrDelete('type', typeFilter, 'all');
+    setOrDelete('status', statusFilter, 'all');
+    setOrDelete('source', manufacturedFilter, 'all');
+    setOrDelete('gap', gapFilter, '');
+    setOrDelete('spare', spareFilter, 'all');
+    setOrDelete('health', healthFilter, 'all');
+    setOrDelete('tab', quickTab, 'all');
+    if (pageSize === 20) next.delete('size'); else next.set('size', String(pageSize));
+    if (next.toString() !== searchParams.toString()) setSearchParams(next, { replace: true });
+  }, [debouncedSearch, typeFilter, statusFilter, manufacturedFilter, gapFilter, spareFilter, healthFilter, quickTab, pageSize, searchParams, setSearchParams]);
 
   const toggleSelectAllPage = () => {
     setSelectedIds((prev) => mergePageSelection(prev, pageIds, !allPageSelected));
@@ -426,6 +498,8 @@ export const Materials: React.FC = () => {
       defaultSalePrice: normalizeRepairSalePrice(row.defaultSalePrice),
       traderSalePrice: normalizeRepairSalePrice(row.traderSalePrice),
       wastePercent: Number(row.wastePercent ?? 0),
+      barcode: String(row.barcode || ''),
+      minStock: Number(row.minStock || 0),
       isManufacturedInternally: Boolean(row.isManufacturedInternally),
       availableForSpareParts: row.availableForSpareParts === true,
       isActive: row.isActive !== false,
@@ -439,6 +513,33 @@ export const Materials: React.FC = () => {
     );
     setShowForm(true);
   };
+
+  const openDuplicate = async (row: Material) => {
+    openEdit(row);
+    setEditing(null);
+    setForm((current) => ({ ...current, code: '', name: `${row.name} - نسخة` }));
+    setGeneratedCode('');
+    if (row.categoryId) {
+      setCodeLoading(true);
+      try {
+        setGeneratedCode(await materialService.peekNextCode(row.categoryId));
+      } finally {
+        setCodeLoading(false);
+      }
+    }
+  };
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const editId = params.get('id');
+    if (params.get('action') !== 'edit' || !editId || !canManage || catalogLoading) return;
+    const row = sourceRows.find((item) => item.id === editId);
+    if (!row) return;
+    openEdit(row);
+    params.delete('action');
+    params.delete('id');
+    navigate(`/manufacturing/materials${params.toString() ? `?${params}` : ''}`, { replace: true });
+  }, [location.search, canManage, catalogLoading, sourceRows, navigate]);
 
   const handleMaterialSourceChange = (source: MaterialSource) => {
     setMaterialSource(source);
@@ -531,6 +632,10 @@ export const Materials: React.FC = () => {
     }
     if (!isInternallyManufactured && (Number(form.purchaseCost) < 0 || Number(form.wastePercent) < 0)) {
       toast.error('التكلفة ونسبة الهالك لا يمكن أن تكونا أقل من صفر.');
+      return;
+    }
+    if (Number(form.minStock) < 0) {
+      toast.error('الحد الأدنى للمخزون لا يمكن أن يكون أقل من صفر.');
       return;
     }
     if (
@@ -628,13 +733,41 @@ export const Materials: React.FC = () => {
 
   const handleDelete = async (row: Material) => {
     if (!canManage || !row.id) return;
-    if (!window.confirm(`حذف المادة "${row.name}"؟`)) return;
     try {
+      const [balances, bom] = await Promise.all([
+        stockService.getBalancesForItems([row.id]),
+        bomService.getActiveBomWithLegacyFallback('material', row.id),
+      ]);
+      const hasStockHistory = balances.some((balance) => Number(balance.quantity || 0) !== 0);
+      if (hasStockHistory || bom.items.length > 0) {
+        toast.error('لا يمكن حذف مادة مرتبطة بمخزون أو BOM. أوقف المادة بدلًا من حذفها.');
+        return;
+      }
+      if (!window.confirm(`حذف المادة "${row.name}" نهائياً؟`)) return;
       await remove.mutateAsync(row.id);
       await refreshVisibleList();
       toast.success('تم حذف المادة.');
     } catch {
       toast.error('تعذر حذف المادة.');
+    }
+  };
+
+  const handleBulkStatus = async (isActive: boolean) => {
+    if (!canManage || selectedIds.size === 0 || bulkBusy) return;
+    setBulkSpareSaving(true);
+    try {
+      const results = await Promise.allSettled([...selectedIds].map((id) => materialService.update(
+        id,
+        { isActive },
+        { path: MATERIAL_UPDATE_PATHS.materialsPage },
+      )));
+      const failed = results.filter((result) => result.status === 'rejected').length;
+      await refreshVisibleList();
+      if (failed) toast.error(`تم تحديث ${results.length - failed} مادة، وفشل ${failed}.`);
+      else toast.success(isActive ? 'تم تفعيل المواد المحددة.' : 'تم إيقاف المواد المحددة.');
+      if (!failed) setSelectedIds(new Set());
+    } finally {
+      setBulkSpareSaving(false);
     }
   };
 
@@ -1075,7 +1208,7 @@ export const Materials: React.FC = () => {
   }
 
   const showPricingCols = canManagePricing;
-  const colCount = 10 + (showPricingCols ? 2 : 0) + (canManage ? 2 : 0);
+  const colCount = 11 + (showPricingCols ? 2 : 0) + (canManage ? 2 : 0);
   const formPricingCode = editing ? form.code : generatedCode;
   const showFormPricingFields = canManagePricing && materialShowsSparePartsPricing({
     type: form.type,
@@ -1141,20 +1274,44 @@ export const Materials: React.FC = () => {
       )}
     >
 
-      {canManagePricing ? (
-        <OpsDashPanel title="تسعير قطع الغيار (ماستر المكونات)" accent="plans">
-          <p className="mb-3 text-xs text-muted-foreground">
-            سعر المستهلك والجملة والتكلفة تُحفظ على المكوّن فقط — لا تسعير من شاشات الصيانة.
-          </p>
-          <MaterialSparePartsPricingPanel
-            materials={sourceRows}
-            canManagePricing={canManagePricing}
-            onUpdated={() => { void refreshVisibleList(); }}
-          />
-        </OpsDashPanel>
-      ) : null}
+      <MaterialsMasterSummary
+        rows={catalogViewRows}
+        activeFilter={healthFilter}
+        onFilter={(filter) => {
+          if (filter === 'all') {
+            setHealthFilter('all');
+            setStatusFilter('all');
+          } else if (filter === 'active') {
+            setHealthFilter('all');
+            setStatusFilter('active');
+          } else {
+            setHealthFilter(filter);
+          }
+        }}
+      />
 
       <OpsDashPanel title="كتالوج المواد" accent="production" bodyClassName="p-0">
+        <nav className="flex gap-1 overflow-x-auto border-b px-3 pt-3" aria-label="طرق عرض كتالوج المواد">
+          {([
+            ['all', 'كل المواد'],
+            ['needs_attention', 'يحتاج استكمال'],
+            ['external', 'شراء خارجي'],
+            ['internal', 'تصنيع داخلي'],
+            ['spare', 'قطع غيار'],
+          ] as const).map(([key, label]) => (
+            <Button
+              key={key}
+              type="button"
+              size="sm"
+              variant={quickTab === key ? 'default' : 'ghost'}
+              className="mb-2 shrink-0"
+              aria-pressed={quickTab === key}
+              onClick={() => setQuickTab(key)}
+            >
+              {label}
+            </Button>
+          ))}
+        </nav>
         <SmartFilterBar
       pageId="materials-list"
           searchPlaceholder="بحث بالاسم أو الكود أو الفئة"
@@ -1201,6 +1358,13 @@ export const Materials: React.FC = () => {
                 { value: 'hidden', label: 'لا تظهر في قطع الغيار' },
               ],
             },
+            {
+              key: 'health',
+              placeholder: 'جاهزية البيانات',
+              options: (Object.keys(MATERIAL_HEALTH_LABELS) as MaterialDataHealth[])
+                .filter((key) => key !== 'complete' && key !== 'inactive')
+                .map((key) => ({ value: key, label: MATERIAL_HEALTH_LABELS[key] })),
+            },
           ]}
           quickFilterValues={{
             type: typeFilter,
@@ -1208,6 +1372,7 @@ export const Materials: React.FC = () => {
             manufactured: manufacturedFilter,
             gap: gapFilter || 'all',
             spare: spareFilter,
+            health: healthFilter,
           }}
           onQuickFilterChange={(key, value) => {
             if (key === 'type') setTypeFilter(value as MaterialType | 'all');
@@ -1215,6 +1380,7 @@ export const Materials: React.FC = () => {
             if (key === 'manufactured') setManufacturedFilter(value as ManufacturedFilter);
             if (key === 'gap') setGapFilter(value === 'all' ? '' : (value as CatalogMaterialGap));
             if (key === 'spare') setSpareFilter(value === 'all' ? 'all' : (value as MaterialSpareFilter));
+            if (key === 'health') setHealthFilter(value === 'all' ? 'all' : (value as MaterialDataHealth));
           }}
           className="mb-0 border-0 rounded-none"
         />
@@ -1261,6 +1427,12 @@ export const Materials: React.FC = () => {
               onClick={() => void handleBulkSpareVisibility(true)}
             >
               تفعيل المحدد في قطع الغيار
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={bulkBusy || selectedIds.size === 0} onClick={() => void handleBulkStatus(true)}>
+              تفعيل المواد
+            </Button>
+            <Button type="button" size="sm" variant="outline" disabled={bulkBusy || selectedIds.size === 0} onClick={() => void handleBulkStatus(false)}>
+              إيقاف المواد
             </Button>
             {selectedIds.size > 0 ? (
               <Button
@@ -1324,6 +1496,10 @@ export const Materials: React.FC = () => {
                         type={isMaterialSpareVisible(row) ? 'success' : 'muted'}
                       />
                       <StatusBadge label={active ? 'نشط' : 'موقوف'} type={active ? 'success' : 'danger'} />
+                      <StatusBadge
+                        label={row.dataHealth[0] === 'complete' ? 'مكتملة' : `${row.dataHealth.length} نواقص`}
+                        type={row.dataHealth[0] === 'complete' ? 'success' : 'warning'}
+                      />
                     </div>
                   </div>
                   <dl className="mt-2 grid grid-cols-1 gap-1 text-sm">
@@ -1335,6 +1511,11 @@ export const Materials: React.FC = () => {
                     </div>
                   </dl>
                   <div className="mt-2 flex flex-wrap gap-1.5">
+                    {row.id ? (
+                      <Button type="button" variant="outline" className="!px-2 !py-1 text-xs" onClick={() => navigate(`/manufacturing/materials/${row.id}`)}>
+                        فتح ملف المادة
+                      </Button>
+                    ) : null}
                     {row.type === 'semi_finished' && row.id && (
                       <Button
                         type="button"
@@ -1355,6 +1536,9 @@ export const Materials: React.FC = () => {
                         >
                           <Pencil className="me-1 h-3.5 w-3.5" />
                           تعديل
+                        </Button>
+                        <Button type="button" variant="outline" className="!px-2 !py-1 text-xs" onClick={() => { void openDuplicate(row); }}>
+                          نسخ كجديدة
                         </Button>
                         <Button
                           type="button"
@@ -1398,6 +1582,7 @@ export const Materials: React.FC = () => {
                     { key: 'name' as const, label: 'المادة', sortable: true },
                     { key: null, label: 'الفئة', sortable: false },
                     { key: 'type' as const, label: 'النوع', sortable: true },
+                    { key: null, label: 'جاهزية البيانات', sortable: false },
                     { key: null, label: 'الوحدة', sortable: false },
                     { key: 'purchaseCost' as const, label: 'تكلفة الشراء', sortable: true },
                     ...(showPricingCols
@@ -1490,6 +1675,20 @@ export const Materials: React.FC = () => {
                       <td className="px-4 py-3">
                         <StatusBadge label={MATERIAL_TYPE_LABELS[row.type]} type={TYPE_BADGE[row.type]} />
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex max-w-44 flex-wrap gap-1">
+                          {row.dataHealth.slice(0, 2).map((health) => (
+                            <StatusBadge
+                              key={health}
+                              label={MATERIAL_HEALTH_LABELS[health]}
+                              type={health === 'complete' ? 'success' : health === 'inactive' ? 'danger' : 'warning'}
+                            />
+                          ))}
+                          {row.dataHealth.length > 2 ? (
+                            <span className="text-xs text-muted-foreground">+{row.dataHealth.length - 2}</span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm">{MATERIAL_UNIT_LABELS[row.baseUnit]}</td>
                       <td className="px-4 py-3 text-sm tabular-nums font-semibold">
                         {arNum(Number(row.purchaseCost ?? 0))}
@@ -1530,6 +1729,11 @@ export const Materials: React.FC = () => {
                       {canManage && (
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-center gap-1">
+                            {row.id ? (
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setPreviewing(row)}>
+                                معاينة
+                              </Button>
+                            ) : null}
                             <Button
                               type="button"
                               variant="ghost"
@@ -1538,6 +1742,9 @@ export const Materials: React.FC = () => {
                               onClick={() => openEdit(row)}
                             >
                               <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" title="نسخ كجديدة" onClick={() => { void openDuplicate(row); }}>
+                              نسخ
                             </Button>
                             <Button
                               type="button"
@@ -1602,6 +1809,59 @@ export const Materials: React.FC = () => {
           </div>
         )}
       </OpsDashPanel>
+
+      {canManagePricing ? (
+        <OpsDashPanel title="أداة تسعير قطع الغيار" accent="plans">
+          <p className="mb-3 text-xs text-muted-foreground">
+            أداة إدارية مستقلة لتحديث سعر المستهلك والجملة للمكونات المفعلة كقطع غيار.
+          </p>
+          <MaterialSparePartsPricingPanel
+            materials={sourceRows}
+            canManagePricing={canManagePricing}
+            onUpdated={() => { void refreshVisibleList(); }}
+          />
+        </OpsDashPanel>
+      ) : null}
+
+      <Sheet open={Boolean(previewing)} onOpenChange={(open) => { if (!open) setPreviewing(null); }}>
+        <SheetContent side="left" dir="rtl" className="overflow-y-auto sm:max-w-md">
+          {previewing ? (
+            <>
+              <SheetHeader className="text-right">
+                <SheetTitle>{previewing.name}</SheetTitle>
+                <SheetDescription>{previewing.code} · {MATERIAL_TYPE_LABELS[previewing.type]}</SheetDescription>
+              </SheetHeader>
+              <div className="mt-6 space-y-5">
+                <div className="flex flex-wrap gap-1.5">
+                  {previewing.dataHealth.map((health) => (
+                    <StatusBadge key={health} label={MATERIAL_HEALTH_LABELS[health]} type={health === 'complete' ? 'success' : health === 'inactive' ? 'danger' : 'warning'} />
+                  ))}
+                </div>
+                <dl className="grid grid-cols-2 gap-3">
+                  {[
+                    ['الفئة', previewing.categoryName || 'غير محددة'],
+                    ['الوحدة', MATERIAL_UNIT_LABELS[previewing.baseUnit]],
+                    ['الرصيد', arNum(previewing.totalOnHand)],
+                    ['المتاح', arNum(previewing.totalAvailable)],
+                    ['الباركود', previewing.barcode || 'غير مسجل'],
+                    ['الحد الأدنى', arNum(Number(previewing.minStock || 0))],
+                  ].map(([label, value]) => <div key={label} className="rounded-lg border p-3"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="mt-1 font-semibold">{value}</dd></div>)}
+                </dl>
+                {previewing.dataHealth[0] !== 'complete' ? (
+                  <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm">
+                    أكمل الحقول المشار إليها حتى تصبح المادة جاهزة للاستخدام دون أخطاء تشغيلية.
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap gap-2 border-t pt-4">
+                  {previewing.id ? <Button onClick={() => navigate(`/manufacturing/materials/${previewing.id}`)}>فتح ملف المادة</Button> : null}
+                  {canManage ? <Button variant="outline" onClick={() => { openEdit(previewing); setPreviewing(null); }}>تعديل</Button> : null}
+                  {canViewInventory && previewing.id ? <Button variant="outline" onClick={() => navigate(`/inventory/item-card?itemType=material&itemId=${encodeURIComponent(previewing.id!)}`)}>بطاقة الصنف</Button> : null}
+                </div>
+              </div>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <Dialog
         open={showForm && canManage}
@@ -1908,6 +2168,33 @@ export const Materials: React.FC = () => {
             )}
 
             <div className="space-y-3 border-t pt-4">
+              <div>
+                <h4 className="text-sm font-semibold">الاستخدامات والتشغيل</h4>
+                <p className="mt-1 text-xs text-muted-foreground">بيانات تساعد البحث والجرد والتنبيه دون تغيير أرصدة المخزون.</p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-barcode">الباركود</Label>
+                  <Input
+                    id="material-barcode"
+                    dir="ltr"
+                    value={form.barcode}
+                    onChange={(event) => setForm((current) => ({ ...current, barcode: event.target.value }))}
+                    placeholder="امسح أو اكتب الباركود"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-min-stock">الحد الأدنى للمخزون</Label>
+                  <Input
+                    id="material-min-stock"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    value={form.minStock}
+                    onChange={(event) => setForm((current) => ({ ...current, minStock: Number(event.target.value) }))}
+                  />
+                </div>
+              </div>
               <div className="flex items-start gap-2">
                 <Checkbox
                   id="material-available-for-spare-parts"

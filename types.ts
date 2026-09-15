@@ -831,6 +831,63 @@ export interface WorkOrderPauseWindow {
   reason: WorkOrderPauseReason;
 }
 
+export type WorkOrderHourlySlotStatus =
+  | 'planned'
+  | 'open'
+  | 'paused'
+  | 'production_submitted'
+  | 'quality_pending'
+  | 'quality_accepted'
+  | 'quality_rejected'
+  | 'packaging'
+  | 'finished';
+
+export interface WorkOrderHourlySlot {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  targetQuantity: number;
+  status: WorkOrderHourlySlotStatus;
+  openedAt?: any;
+  workersSnapshotCount?: number;
+  actualQuantity?: number;
+  rejectedQuantity?: number;
+  executionNotes?: string;
+  productionSubmittedAt?: any;
+  openedBy?: string;
+  productionSubmittedBy?: string;
+  pausedAt?: any;
+  pausedBy?: string;
+  pauseReason?: string;
+  totalPausedSeconds?: number;
+  resumedAt?: any;
+  resumedBy?: string;
+  qualityAcceptedQuantity?: number;
+  qualityRejectedQuantity?: number;
+  qualityNotes?: string;
+  qualityReviewedAt?: any;
+  qualityReviewedBy?: string;
+  packagingQuantity?: number;
+  packagingRejectedQuantity?: number;
+  packagingNotes?: string;
+  packagingStartedAt?: any;
+  packagingCompletedAt?: any;
+  packagingHandledBy?: string;
+}
+
+export interface WorkOrderHourlyDailySummary {
+  date: string;
+  targetQuantity: number;
+  producedQuantity: number;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  packagedQuantity: number;
+  pausedSeconds: number;
+  completedSlots: number;
+  totalSlots: number;
+}
+
 export interface WorkOrder {
   id?: string;
   workOrderNumber: string;
@@ -858,7 +915,16 @@ export interface WorkOrder {
   notes?: string;
   breakStartTime?: string; // HH:mm
   breakEndTime?: string; // HH:mm
+  workdayStartTime?: string; // HH:mm
   workdayEndTime?: string; // HH:mm
+  dailyTarget?: number;
+  /** Client-loaded hourly subcollection. Existing/list views may omit it. */
+  hourlySlots?: WorkOrderHourlySlot[];
+  hourlyScheduleVersion?: number;
+  hourlyScheduleUpdatedAt?: any;
+  hourlyCompletionSummary?: WorkOrderHourlyDailySummary[];
+  hourlyCompletedAt?: any;
+  hourlyCompletedBy?: string;
   scanPauseWindows?: WorkOrderPauseWindow[];
   actualWorkersCount?: number;
   actualProducedFromScans?: number;

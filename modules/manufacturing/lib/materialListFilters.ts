@@ -41,6 +41,7 @@ export function materialMatchesListFilters(
   return (
     row.name.toLowerCase().includes(q)
     || row.code.toLowerCase().includes(q)
+    || String(row.barcode || '').toLowerCase().includes(q)
     || category.includes(q)
   );
 }

@@ -7,6 +7,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { createHash } from 'node:crypto';
+import { assertLegacyReportOrder } from './workOrderCycleBoundary.js';
 import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 import { collectPushTokenTargets } from './pushTokenLookup.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
@@ -434,6 +435,8 @@ export const aggregateProductionReports = onDocumentWritten({
     region: 'us-central1',
     memory: '256MiB',
 }, async (event) => {
+    await assertLegacyReportOrder(event.data?.before?.data() || {});
+    await assertLegacyReportOrder(event.data?.after?.data() || {});
     const before = normalizeReport(event.data?.before?.data());
     const after = normalizeReport(event.data?.after?.data());
     if (before) {
@@ -1975,6 +1978,8 @@ export { issueProductionIssueStock } from './productionIssueStock.js';
 export { approveAndIssueProductionIssue, createProductionIssueDraft, prepareProductionIssueOrder, } from './productionIssuePreparation.js';
 export { applyProductionReportInventory, reverseProductionReportInventory, } from './productionReportInventory.js';
 export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.js';
+export { mutateWorkOrderCycle } from './workOrderCycle.js';
+export { getWorkOrderCycleWorkspace } from './workOrderCycleRead.js';
 export { syncBuiltInRolePermissionGrants } from './rolePermissionMigration.js';
 export { onRepairJobCreatedCustody } from './repairCustomerPortalOps.js';
 export { purgeRepairOperationalData } from './purgeRepairOperationalData.js';

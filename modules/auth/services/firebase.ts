@@ -1,13 +1,15 @@
 import { getApp, getApps, initializeApp, FirebaseApp } from "firebase/app";
 import {
+  connectFirestoreEmulator,
   Firestore,
   getFirestore,
   initializeFirestore,
   memoryLocalCache,
 } from "firebase/firestore";
-import { getStorage, FirebaseStorage } from "firebase/storage";
+import { connectStorageEmulator, getStorage, FirebaseStorage } from "firebase/storage";
 import {
   getAuth,
+  connectAuthEmulator,
   Auth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -17,16 +19,17 @@ import {
   User,
   UserCredential,
 } from "firebase/auth";
-import { getFunctions, httpsCallable, Functions } from "firebase/functions";
+import { connectFunctionsEmulator, getFunctions, httpsCallable, Functions } from "firebase/functions";
 
 const viteEnv = (import.meta.env ?? {}) as Record<string, string | undefined>;
+export const isFirebaseEmulatorMode = viteEnv.VITE_FIREBASE_USE_EMULATORS === "true";
 const firebaseConfig = {
-  apiKey: viteEnv.VITE_FIREBASE_API_KEY,
-  authDomain: viteEnv.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: viteEnv.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: viteEnv.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: viteEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: viteEnv.VITE_FIREBASE_APP_ID,
+  apiKey: isFirebaseEmulatorMode ? "demo-api-key" : viteEnv.VITE_FIREBASE_API_KEY,
+  authDomain: isFirebaseEmulatorMode ? "demo-production-line-lab.firebaseapp.com" : viteEnv.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: isFirebaseEmulatorMode ? "demo-production-line-lab" : viteEnv.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: isFirebaseEmulatorMode ? "demo-production-line-lab.appspot.com" : viteEnv.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: isFirebaseEmulatorMode ? "000000000000" : viteEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: isFirebaseEmulatorMode ? "1:000000000000:web:work-order-lab" : viteEnv.VITE_FIREBASE_APP_ID,
 };
 
 const isConfigured =
@@ -67,6 +70,18 @@ if (isConfigured) {
   auth = getAuth(app);
   storage = getStorage(app);
   functionsClient = getFunctions(app, "us-central1");
+
+  if (isFirebaseEmulatorMode) {
+    const emulatorGuard = window as Window & { __forgeOpsFirebaseEmulatorsConnected?: boolean };
+    if (!emulatorGuard.__forgeOpsFirebaseEmulatorsConnected) {
+      connectFirestoreEmulator(db, "127.0.0.1", Number(viteEnv.VITE_FIRESTORE_EMULATOR_PORT || 8080));
+      connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+      connectFunctionsEmulator(functionsClient, "127.0.0.1", 5001);
+      connectStorageEmulator(storage, "127.0.0.1", 9199);
+      emulatorGuard.__forgeOpsFirebaseEmulatorsConnected = true;
+      console.info("ForgeOps LAB: Firebase clients are connected to local emulators only.");
+    }
+  }
 } else {
   console.warn(
     "⚠ Firebase not configured. Add VITE_FIREBASE_* variables to .env.local",

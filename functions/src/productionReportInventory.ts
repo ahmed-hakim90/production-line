@@ -5,6 +5,7 @@
  */
 import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
+import { assertLegacyReportOrder } from './workOrderCycleBoundary.js';
 import { resolveInventoryRoutingFromSettings } from './productionInventoryRouting.js';
 import {
   assertActorWarehouseInvolved,
@@ -69,6 +70,7 @@ type IssueLine = {
 };
 
 type InventoryPostingOperation = {
+  workOrderId?: string;
   tenantId: string;
   reportId: string;
   state: InventoryOperationState;
@@ -328,9 +330,11 @@ async function claimApplyOperation(params: {
       throw new HttpsError('permission-denied', 'لا يمكن الوصول لتقرير خارج شركتك.');
     }
 
+    await assertLegacyReportOrder(report, t);
     const existing = operationSnap.exists
       ? operationSnap.data() as InventoryPostingOperation
       : null;
+    await assertLegacyReportOrder(existing || {}, t);
     if (existing && existing.tenantId !== params.actor.tenantId) {
       throw new HttpsError('permission-denied', 'عملية المخزون خارج شركتك.');
     }
@@ -381,6 +385,7 @@ async function claimApplyOperation(params: {
         createdAt: now,
         updatedAt: now,
       };
+    operation.workOrderId = String(report.workOrderId || '').trim();
     t.set(operationRef, operation);
     if (!report.inventoryAppliedAt) {
       t.set(reportRef, {
@@ -738,6 +743,8 @@ async function claimReverseOperation(
       ? operationSnap.data() as InventoryPostingOperation
       : null;
     if (!reportSnap.exists && !operation) return 'missing';
+    await assertLegacyReportOrder(reportSnap.data() || {}, t);
+    await assertLegacyReportOrder(operation || {}, t);
     if (reportSnap.exists) {
       const report = reportSnap.data() as { tenantId?: string };
       if (String(report.tenantId || '') !== actor.tenantId) {
@@ -1062,6 +1069,7 @@ export async function applyProductionReportInventoryInternal(
       throw new HttpsError('permission-denied', 'لا يمكن الوصول لتقرير خارج شركتك.');
     }
 
+    await assertLegacyReportOrder(report);
     const reportType = String(report.reportType || 'finished_product').trim() || 'finished_product';
     if (reportType !== 'finished_product') {
       return applyNonFinishedProductionReportInventory(actor, reportId, report);

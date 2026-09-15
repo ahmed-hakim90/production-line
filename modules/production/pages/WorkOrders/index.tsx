@@ -9,7 +9,8 @@ import { Button } from '../../components/UI';
 import { toast } from '../../../../components/Toast';
 import { useGlobalModalManager } from '../../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../../components/modal-manager/modalKeys';
-import { isConfigured } from '../../../auth/services/firebase';
+import { isConfigured, isFirebaseEmulatorMode } from '../../../auth/services/firebase';
+import { WorkOrderCycleTasks } from '../../components/WorkOrderCycleTasks';
 import { useAppStore, useShallowStore } from '../../../../store/useAppStore';
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { addDaysToDate, formatNumber, getTodayDateString } from '../../../../utils/calculations';
@@ -106,6 +107,12 @@ const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
 };
 
 export const WorkOrders: React.FC = () => {
+  const [search] = useSearchParams();
+  if (isFirebaseEmulatorMode && search.get('legacy') !== '1') return <WorkOrderCycleTasks full />;
+  return <LegacyWorkOrders />;
+};
+
+const LegacyWorkOrders: React.FC = () => {
   const navigate = useTenantNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { openModal } = useGlobalModalManager();
@@ -864,12 +871,15 @@ export const WorkOrders: React.FC = () => {
         onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
         onCloseOrder={canUpdateWorkOrderStatus ? handleCloseOrder : undefined}
         onPrint={handlePrintOrder}
+        onOpenFullPage={(order) => navigate(`/work-orders/${order.id}`)}
         onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
         canReopenCompleted={can('workOrders.edit')}
         onReopenCompleted={handleReopenCompletedOrder}
         onViewReports={can('reports.view') || can('reports.create') ? handleViewLinkedReports : undefined}
         onReconcileReports={workOrderReconcileEnabled && (can('workOrders.edit') || can('reports.edit')) ? handleReconcileLinkedReports : undefined}
         reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
+        canExecuteHourlySlots={canUpdateWorkOrderStatus}
+        canReviewHourlyQuality={can('quality.finalInspection.inspect') && isOperationPathEnabled(systemSettings, WORK_ORDER_OPERATION_KEYS.update, WORK_ORDER_UPDATE_PATHS.qualityFinalInspection)}
       />
     </ModuleOpsPageShell>
   );

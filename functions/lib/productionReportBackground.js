@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { getDb } from './adminApp.js';
+import { assertLegacyReportOrder } from './workOrderCycleBoundary.js';
 import { applyProductionReportInventoryInternal } from './productionReportInventory.js';
 import { calculateLaborOnlyProductionCost } from './laborOnlyProductionCost.js';
 const db = getDb();
@@ -88,6 +89,7 @@ const countsTowardProgress = (report) => {
     return type !== 'packaging' && type !== 'component_waste';
 };
 const reconcileWorkOrder = async (report) => {
+    await assertLegacyReportOrder(report);
     const workOrderId = clean(report.workOrderId);
     if (!workOrderId || !countsTowardProgress(report))
         return;
@@ -167,6 +169,7 @@ const calculateAndPostLegacyCost = async (reportId, report) => {
         const workOrderRef = workOrderId ? db.collection(WORK_ORDERS).doc(workOrderId) : null;
         const planRef = planId ? db.collection(PLANS).doc(planId) : null;
         const workOrderSnap = workOrderRef ? await transaction.get(workOrderRef) : null;
+        await assertLegacyReportOrder(report, transaction);
         const planSnap = planRef ? await transaction.get(planRef) : null;
         if (workOrderSnap && (!workOrderSnap.exists || clean(workOrderSnap.data()?.tenantId) !== tenantId)) {
             throw new Error('أمر الشغل غير صالح لترحيل التكلفة.');
@@ -238,6 +241,7 @@ const claim = async (reportId) => {
         const report = snapshot.data();
         if (report.processingState !== 'pending')
             return null;
+        await assertLegacyReportOrder(report, transaction);
         transaction.set(ref, {
             processingState: 'processing',
             processingStage: 'attendance',

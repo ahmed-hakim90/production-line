@@ -1,0 +1,68 @@
+# ADR-013: Full-application local Firebase lab
+
+## Status
+
+Accepted as the prerequisite for the work-order-cycle implementation.
+
+## Context
+
+The normal Vite development application uses the configured live Firebase project. Running new work-order, quality, packaging, or inventory mutations against that configuration would modify operational data even when the frontend itself is only running locally.
+
+## Decision
+
+The new cycle is developed inside the real application modules and routes, not in a separate prototype. Local integration testing uses `npm run dev:lab`. That mode forces a fixed demo Firebase project identity and connects Auth, Firestore, Functions, and Storage clients to localhost emulators.
+
+The regular `npm run dev` command remains unchanged. Production builds do not load `.env.lab`, and emulator mode must never be enabled in a deployed environment.
+
+## Operator workflow
+
+Run these commands in separate terminals:
+
+```bash
+npm run emulators:lab
+npm run seed:lab
+npm run dev:lab
+```
+
+The application displays a persistent red environment banner whenever emulator mode is active.
+The seed command refuses to run unless both emulator hosts point to localhost and the project ID starts with `demo-`.
+
+### Local port isolation (2026-09-13)
+
+The lab uses `firebase.lab.json` with Firestore on `127.0.0.1:8085` to avoid the unrelated Docker service on 8080. `.env.lab` supplies `VITE_FIRESTORE_EMULATOR_PORT=8085`; non-lab configuration and `firebase.json` remain unchanged. Lab seed scripts use the same port. Reload the browser after changing emulator configuration. Seed the base fixture only into an empty lab; it overwrites the sample order. Emulator data is temporary unless explicitly exported and imported.
+
+## Cutover rule
+
+No work-order-cycle change may be deployed until its full journey passes local emulator tests and rendered QA. Server-side validation, tenant isolation, permission checks, idempotency, migration compatibility, and rollback must be reviewed before production activation.
+
+## Delivery 1: work-order preparation and hourly plan
+
+New and safely edited work orders snapshot their operating hours in `hourlySlots`. Each slot records its date, start/end, allocated target, and lifecycle status. The generator excludes the configured break and prorates the daily target across actual operating minutes.
+
+Legacy work orders remain readable without migration. Saving an old order generates its schedule. Once any hourly slot leaves `planned`, schedule regeneration is blocked so an edit cannot rewrite an execution record.
+
+## Delivery 2: hourly execution handoff
+
+An authorized work-order operator opens only the oldest planned slot. Opening snapshots the assigned worker count and moves a pending work order into progress. Only one slot may be open at a time.
+
+The operator submits actual and rejected quantities plus optional execution notes. Submission moves the slot to `quality_pending`; it does not yet post inventory, create a production report, or count accepted output. Those mutations remain owned by their existing server-controlled journeys and will be connected only after the quality decision is implemented.
+
+## Delivery 3: hourly quality gate
+
+Users with final-inspection permission split the submitted hourly quantity into accepted and rejected quantities. The two values must equal the production submission exactly. A batch with accepted units moves to `quality_accepted`; a fully rejected batch moves to `quality_rejected`. The review records the operator, timestamp, and notes while deliberately leaving inventory and production-report posting unchanged for the packaging handoff delivery.
+
+## Delivery 4: full work-order workspace
+
+`/work-orders/:id` is the durable full-page workspace for one work order. It owns the complete hourly timeline and its production and quality actions, while the list drawer remains a quick summary with an explicit link to the full page. The existing scanner keeps its dedicated `/work-orders/:id/scanner` route.
+
+## Delivery 5: hourly packaging close
+
+An accepted hourly batch can be opened for packaging by a user with production-handover approval permission. Closing packaging splits the quality-accepted quantity into packaged and packaging-rejected quantities; the values must balance exactly. The slot then becomes `finished`. This local lifecycle records operational state only and deliberately does not post stock or duplicate the existing server-owned production handover.
+
+## Delivery 6: hourly stop and resume
+
+An authorized operator may pause only the currently open production hour and must resume it before submitting production. The slot records the pause operator, reason, start time, and accumulated stopped seconds. Pausing does not alter the parent work-order status or permit another hour to open, so chronological execution and the single-active-hour invariant remain intact.
+
+## Delivery 7: multi-day review and final close
+
+The workspace groups every hourly slot by date and shows daily target, produced, accepted, rejected, packaged, pause time, and completed-slot totals. The parent work order remains in progress between days. Final close is enabled only when every slot across the complete date range is terminal (`finished` or fully `quality_rejected`). Closing rechecks every slot inside the transaction and snapshots the daily summaries on the parent work order without posting inventory or creating production reports.

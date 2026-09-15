@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { buildCyclePlan, cycleTasks, productionCardPath } from '../modules/production/utils/workOrderCycle';
+import type { CycleOrder } from '../modules/production/services/workOrderCycleService';
+
+const slots = buildCyclePlan({ startDate: '2026-09-08', targetDate: '2026-09-09', workdayStartTime: '08:00', workdayEndTime: '11:00', breakStartTime: '09:00', breakEndTime: '09:30', quantity: 100 });
+assert.equal(new Set(slots.map(slot => slot.date)).size, 2);
+assert.equal(slots.reduce((sum, slot) => sum + slot.targetQuantity, 0), 100);
+assert.ok(slots.every(slot => slot.startTime !== '09:00'));
+assert.throws(() => buildCyclePlan({ startDate: '2026-09-08', targetDate: '2026-09-09', workdayStartTime: '22:00', workdayEndTime: '06:00', quantity: 100 }));
+assert.throws(() => buildCyclePlan({ startDate: '2026-09-08', targetDate: '2026-09-09', workdayStartTime: '08:00', workdayEndTime: '16:00', breakStartTime: '17:00', breakEndTime: '18:00', quantity: 100 }));
+const order = { id: 'order', supervisorUid: 'supervisor', productionStatus: 'draft', workerIds: [], slots: [{ id: 'hour-001', status: 'planned', productionDocumentId: 'order--hour-001--production-v1' }] } as unknown as CycleOrder;
+assert.equal(cycleTasks(order, 'manager', { 'workOrders.approve': true }).length, 1);
+assert.equal(cycleTasks(order, 'supervisor', { 'workOrders.execute': true }).length, 0);
+order.productionStatus = 'approved';
+assert.equal(cycleTasks(order, 'outsider', { 'workOrders.execute': true }).length, 0);
+assert.match(cycleTasks(order, 'supervisor', { 'workOrders.execute': true })[0].title, /العمالة/);
+order.slots[0].status = 'quality_pending';
+order.slots[0].actualQuantity = 100;
+assert.equal(cycleTasks(order, 'inspector', { 'workOrders.inspect': true }).length, 1);
+assert.equal(productionCardPath(order, order.slots[0]), '/work-orders/order?cycle=2&slot=hour-001&document=order--hour-001--production-v1');
+console.log('PASS: cycle planning, role tasks, and stable container deep links');

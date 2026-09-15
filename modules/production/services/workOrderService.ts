@@ -3,7 +3,6 @@ import {
   doc,
   getDocs,
   getDoc,
-  addDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -16,14 +15,17 @@ import {
   onSnapshot,
   Unsubscribe,
   startAfter,
+  writeBatch,
+  runTransaction,
   QueryDocumentSnapshot,
   documentId,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { auth, db, isConfigured } from '../../auth/services/firebase';
 import type { WorkOrder } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { buildSearchPrefixes } from '@/lib/firestoreSearch';
+import { canCompleteHourlyWorkOrder, hasActiveHourlySlot, summarizeHourlySlotsByDay } from '../utils/workOrderHourlySlots';
 
 const COLLECTION = 'work_orders';
 const MAX_PAGE_SIZE = 100;
@@ -44,6 +46,12 @@ export interface WorkOrderPageResult {
 }
 
 export const workOrderService = {
+  async getCycleVersion(id: string): Promise<number> {
+    if (!isConfigured) throw new Error('الاتصال غير متاح.');
+    const snap = await getDoc(doc(db, COLLECTION, id));
+    if (!snap.exists()) throw new Error('أمر الشغل غير موجود.');
+    return Number(snap.data().cycleVersion || 1);
+  },
   async listPaged(params: WorkOrderPagedParams = {}): Promise<WorkOrderPageResult> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params.limit || 25), MAX_PAGE_SIZE));
@@ -86,7 +94,8 @@ export const workOrderService = {
     try {
       const snap = await getDoc(doc(db, COLLECTION, id));
       if (!snap.exists()) return null;
-      return { id: snap.id, ...snap.data() } as WorkOrder;
+      const hourlySlots = await this.getHourlySlots(id);
+      return { id: snap.id, ...snap.data(), hourlySlots } as WorkOrder;
     } catch (error) {
       console.error('workOrderService.getById error:', error);
       throw error;
@@ -184,9 +193,14 @@ export const workOrderService = {
   async create(data: Omit<WorkOrder, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
-      const ref = await addDoc(collection(db, COLLECTION), {
-        ...data,
+      const { hourlySlots = [], ...workOrderData } = data;
+      const ref = doc(collection(db, COLLECTION));
+      const batch = writeBatch(db);
+      batch.set(ref, {
+        ...workOrderData,
         tenantId: getCurrentTenantId(),
+        hourlyScheduleVersion: hourlySlots.length ? 1 : null,
+        hourlyScheduleUpdatedAt: hourlySlots.length ? serverTimestamp() : null,
         searchPrefixes: buildSearchPrefixes([
           data.workOrderNumber,
           (data as WorkOrder & { productCode?: string }).productCode,
@@ -196,6 +210,16 @@ export const workOrderService = {
         ]),
         createdAt: serverTimestamp(),
       });
+      hourlySlots.forEach((slot) => {
+        batch.set(doc(db, COLLECTION, ref.id, 'hourly_slots', slot.id), {
+          ...slot,
+          tenantId: getCurrentTenantId(),
+          workOrderId: ref.id,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      });
+      await batch.commit();
       return ref.id;
     } catch (error) {
       console.error('workOrderService.create error:', error);
@@ -206,7 +230,7 @@ export const workOrderService = {
   async update(id: string, data: Partial<WorkOrder>): Promise<void> {
     if (!isConfigured) return;
     try {
-      const { id: _id, createdAt: _ts, ...fields } = data as any;
+      const { id: _id, createdAt: _ts, hourlySlots, ...fields } = data as any;
       const searchableChanged = ['workOrderNumber', 'productCode', 'productName', 'lineName', 'supervisorName']
         .some((field) => field in fields);
       if (searchableChanged) {
@@ -221,10 +245,223 @@ export const workOrderService = {
         ]);
       }
       await updateDoc(doc(db, COLLECTION, id), fields);
+      if (Array.isArray(hourlySlots)) await this.replacePlannedHourlySlots(id, hourlySlots);
     } catch (error) {
       console.error('workOrderService.update error:', error);
       throw error;
     }
+  },
+
+  async getHourlySlots(workOrderId: string): Promise<WorkOrder['hourlySlots']> {
+    if (!isConfigured || !workOrderId) return [];
+    const snap = await getDocs(collection(db, COLLECTION, workOrderId, 'hourly_slots'));
+    return snap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as NonNullable<WorkOrder['hourlySlots']>[number]))
+      .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+  },
+
+  async replacePlannedHourlySlots(workOrderId: string, slots: NonNullable<WorkOrder['hourlySlots']>): Promise<void> {
+    if (!isConfigured || !workOrderId) return;
+    const slotCollection = collection(db, COLLECTION, workOrderId, 'hourly_slots');
+    const current = await getDocs(slotCollection);
+    if (current.docs.some((row) => row.data().status !== 'planned')) return;
+    const batch = writeBatch(db);
+    current.docs.forEach((row) => batch.delete(row.ref));
+    slots.forEach((slot) => batch.set(doc(slotCollection, slot.id), {
+      ...slot,
+      tenantId: getCurrentTenantId(),
+      workOrderId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }));
+    batch.update(doc(db, COLLECTION, workOrderId), {
+      hourlyScheduleVersion: 1,
+      hourlyScheduleUpdatedAt: serverTimestamp(),
+    });
+    await batch.commit();
+  },
+
+  async openHourlySlot(workOrderId: string, slotId: string, workersSnapshotCount: number): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const workers = Math.floor(Number(workersSnapshotCount));
+    if (!Number.isFinite(workers) || workers < 1) throw new Error('أدخل عدد عمال صحيحًا لفتح الساعة.');
+    const orderRef = doc(db, COLLECTION, workOrderId);
+    const slotRef = doc(orderRef, 'hourly_slots', slotId);
+    const slotsSnap = await getDocs(collection(orderRef, 'hourly_slots'));
+    const ordered = slotsSnap.docs
+      .map((row) => ({ id: row.id, ...row.data() } as NonNullable<WorkOrder['hourlySlots']>[number]))
+      .sort((a, b) => `${a.date}_${a.startTime}`.localeCompare(`${b.date}_${b.startTime}`));
+    const target = ordered.find((slot) => slot.id === slotId);
+    if (!target || target.status !== 'planned') throw new Error('هذه الساعة لم تعد متاحة للفتح.');
+    if (hasActiveHourlySlot(ordered)) throw new Error('أكمل الساعة المفتوحة أو المتوقفة أولًا.');
+    const firstPlanned = ordered.find((slot) => slot.status === 'planned');
+    if (firstPlanned?.id !== slotId) throw new Error('يجب تنفيذ الساعات بالترتيب من الأقدم إلى الأحدث.');
+    await runTransaction(db, async (transaction) => {
+      const orderSnap = await transaction.get(orderRef);
+      const currentSlotSnap = await transaction.get(slotRef);
+      if (!orderSnap.exists()) throw new Error('أمر الشغل غير موجود.');
+      if (!currentSlotSnap.exists() || currentSlotSnap.data().status !== 'planned') throw new Error('هذه الساعة لم تعد متاحة للفتح.');
+      transaction.update(slotRef, {
+        status: 'open',
+        workersSnapshotCount: workers,
+        openedAt: serverTimestamp(),
+        openedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+      if (orderSnap.data().status === 'pending') {
+        transaction.update(orderRef, {
+          status: 'in_progress',
+          updatedAt: serverTimestamp(),
+          'statusHistory.in_progress': serverTimestamp(),
+        });
+      }
+    });
+  },
+
+  async submitHourlyProduction(
+    workOrderId: string,
+    slotId: string,
+    input: { actualQuantity: number; rejectedQuantity?: number; executionNotes?: string },
+  ): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const actualQuantity = Number(input.actualQuantity);
+    const rejectedQuantity = Number(input.rejectedQuantity || 0);
+    if (!Number.isFinite(actualQuantity) || actualQuantity < 0) throw new Error('أدخل كمية إنتاج صحيحة.');
+    if (!Number.isFinite(rejectedQuantity) || rejectedQuantity < 0 || rejectedQuantity > actualQuantity) {
+      throw new Error('الكمية المرفوضة يجب أن تكون بين صفر وإجمالي الإنتاج.');
+    }
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const slotSnap = await transaction.get(slotRef);
+      if (!slotSnap.exists() || slotSnap.data().status !== 'open') throw new Error('الساعة ليست مفتوحة للتسليم.');
+      transaction.update(slotRef, {
+        status: 'quality_pending',
+        actualQuantity,
+        rejectedQuantity,
+        executionNotes: String(input.executionNotes || '').trim(),
+        productionSubmittedAt: serverTimestamp(),
+        productionSubmittedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
+  async pauseHourlySlot(workOrderId: string, slotId: string, reason?: string): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'open') throw new Error('لا يمكن إيقاف ساعة غير مفتوحة.');
+      transaction.update(slotRef, {
+        status: 'paused',
+        pausedAt: serverTimestamp(),
+        pausedBy: auth.currentUser?.uid || null,
+        pauseReason: String(reason || '').trim(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
+  async resumeHourlySlot(workOrderId: string, slotId: string): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'paused') throw new Error('هذه الساعة ليست متوقفة.');
+      const pausedAt = snap.data().pausedAt;
+      const pauseSeconds = pausedAt?.toMillis ? Math.max(0, Math.floor((Date.now() - pausedAt.toMillis()) / 1000)) : 0;
+      transaction.update(slotRef, {
+        status: 'open',
+        totalPausedSeconds: Number(snap.data().totalPausedSeconds || 0) + pauseSeconds,
+        resumedAt: serverTimestamp(),
+        resumedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
+  async reviewHourlyQuality(
+    workOrderId: string,
+    slotId: string,
+    input: { acceptedQuantity: number; rejectedQuantity: number; qualityNotes?: string },
+  ): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const acceptedQuantity = Number(input.acceptedQuantity);
+    const rejectedQuantity = Number(input.rejectedQuantity);
+    if (!Number.isFinite(acceptedQuantity) || acceptedQuantity < 0 || !Number.isFinite(rejectedQuantity) || rejectedQuantity < 0) {
+      throw new Error('أدخل كميات جودة صحيحة.');
+    }
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const slotSnap = await transaction.get(slotRef);
+      if (!slotSnap.exists() || slotSnap.data().status !== 'quality_pending') throw new Error('الساعة ليست بانتظار فحص الجودة.');
+      const actualQuantity = Number(slotSnap.data().actualQuantity || 0);
+      if (Math.abs((acceptedQuantity + rejectedQuantity) - actualQuantity) > 0.001) {
+        throw new Error('مجموع المقبول والمرفوض يجب أن يساوي إنتاج الساعة الفعلي.');
+      }
+      transaction.update(slotRef, {
+        status: acceptedQuantity > 0 ? 'quality_accepted' : 'quality_rejected',
+        qualityAcceptedQuantity: acceptedQuantity,
+        qualityRejectedQuantity: rejectedQuantity,
+        qualityNotes: String(input.qualityNotes || '').trim(),
+        qualityReviewedAt: serverTimestamp(),
+        qualityReviewedBy: auth.currentUser?.uid || null,
+        updatedAt: serverTimestamp(),
+      });
+    });
+  },
+
+  async startHourlyPackaging(workOrderId: string, slotId: string): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'quality_accepted') throw new Error('الدفعة ليست جاهزة للتغليف.');
+      transaction.update(slotRef, { status: 'packaging', packagingStartedAt: serverTimestamp(), packagingHandledBy: auth.currentUser?.uid || null, updatedAt: serverTimestamp() });
+    });
+  },
+
+  async finishHourlyPackaging(workOrderId: string, slotId: string, input: { packagingQuantity: number; rejectedQuantity: number; notes?: string }): Promise<void> {
+    if (!isConfigured || !workOrderId || !slotId) return;
+    const packagingQuantity = Number(input.packagingQuantity);
+    const rejectedQuantity = Number(input.rejectedQuantity);
+    if (!Number.isFinite(packagingQuantity) || packagingQuantity < 0 || !Number.isFinite(rejectedQuantity) || rejectedQuantity < 0) throw new Error('أدخل كميات تغليف صحيحة.');
+    const slotRef = doc(db, COLLECTION, workOrderId, 'hourly_slots', slotId);
+    await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(slotRef);
+      if (!snap.exists() || snap.data().status !== 'packaging') throw new Error('مرحلة التغليف غير مفتوحة لهذه الدفعة.');
+      const accepted = Number(snap.data().qualityAcceptedQuantity || 0);
+      if (Math.abs(packagingQuantity + rejectedQuantity - accepted) > 0.001) throw new Error('مجموع المغلف والمرفوض يجب أن يساوي المقبول من الجودة.');
+      transaction.update(slotRef, { status: 'finished', packagingQuantity, packagingRejectedQuantity: rejectedQuantity, packagingNotes: String(input.notes || '').trim(), packagingCompletedAt: serverTimestamp(), packagingHandledBy: auth.currentUser?.uid || null, updatedAt: serverTimestamp() });
+    });
+  },
+
+  async completeHourlyWorkOrder(workOrderId: string): Promise<void> {
+    if (!isConfigured || !workOrderId) return;
+    const orderRef = doc(db, COLLECTION, workOrderId);
+    const slots = await this.getHourlySlots(workOrderId);
+    if (!canCompleteHourlyWorkOrder(slots)) throw new Error('لا يمكن إقفال أمر الشغل قبل إنهاء جميع ساعات كل الأيام.');
+    const summary = summarizeHourlySlotsByDay(slots);
+    await runTransaction(db, async (transaction) => {
+      const orderSnap = await transaction.get(orderRef);
+      if (!orderSnap.exists()) throw new Error('أمر الشغل غير موجود.');
+      if (orderSnap.data().status === 'cancelled') throw new Error('لا يمكن إقفال أمر شغل ملغي.');
+      for (const slot of slots || []) {
+        const current = await transaction.get(doc(orderRef, 'hourly_slots', slot.id));
+        if (!current.exists() || !['finished', 'quality_rejected'].includes(String(current.data().status))) {
+          throw new Error('تغيرت حالة إحدى الساعات. أعد المراجعة قبل الإقفال.');
+        }
+      }
+      transaction.update(orderRef, {
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        hourlyCompletedAt: serverTimestamp(),
+        hourlyCompletedBy: auth.currentUser?.uid || null,
+        hourlyCompletionSummary: summary,
+        updatedAt: serverTimestamp(),
+        'statusHistory.completed': serverTimestamp(),
+      });
+    });
   },
 
   /** Status change with history stamp — prefer usecase `updateWorkOrderStatus`. */

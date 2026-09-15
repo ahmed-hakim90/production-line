@@ -75,6 +75,7 @@ export type Permission =
   | 'plans.view' | 'plans.create' | 'plans.edit' | 'plans.componentInjection.manage'
   | 'routing.view' | 'routing.manage' | 'routing.execute' | 'routing.analytics'
   | 'workOrders.view' | 'workOrders.create' | 'workOrders.edit' | 'workOrders.delete' | 'workOrders.viewCost' | 'workOrders.componentInjection.manage'
+  | 'workOrders.approve' | 'workOrders.execute' | 'workOrders.assignInspectors' | 'workOrders.inspect'
   | 'quality.view' | 'quality.inspect' | 'quality.approve' | 'quality.print' | 'quality.manageWorkers'
   | 'quality.settings.view' | 'quality.settings.manage'
   | 'quality.workers.view' | 'quality.workers.manage'
@@ -207,6 +208,10 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'plans.componentInjection.manage', label: 'إدارة خطط إنتاج مكونات الحقن' },
       { key: 'workOrders.view', label: 'عرض أوامر الشغل' },
       { key: 'workOrders.create', label: 'إنشاء أمر شغل' },
+      { key: 'workOrders.approve', label: 'اعتماد أمر الشغل — الدورة الجديدة' },
+      { key: 'workOrders.execute', label: 'تشغيل أوامر الشغل المكلّف بها' },
+      { key: 'workOrders.assignInspectors', label: 'توزيع مراقبي الجودة على الخطوط' },
+      { key: 'workOrders.inspect', label: 'فحص حاويات أوامر الشغل — الدورة الجديدة' },
       { key: 'workOrders.edit', label: 'تعديل أمر شغل' },
       { key: 'workOrders.delete', label: 'حذف أمر شغل' },
       { key: 'workOrders.viewCost', label: 'عرض تكاليف أوامر الشغل' },

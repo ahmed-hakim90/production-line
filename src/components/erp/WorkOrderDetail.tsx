@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { ChevronRight, X } from "lucide-react"
+import { CalendarClock, ChevronRight, X } from "lucide-react"
+import type { WorkOrderHourlySlot } from "../../../types"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -8,7 +9,7 @@ import { cn } from "@/lib/utils"
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 
 type WorkOrderDetailStatus = string
-type TabId = "dates" | "costs" | "notes"
+type TabId = "hours" | "dates" | "costs" | "notes"
 
 interface WorkOrderDetailProps {
   order: {
@@ -33,12 +34,17 @@ interface WorkOrderDetailProps {
     actualUnitCost: number
     totalCost: number
     notes?: string
+    hourlySlots?: WorkOrderHourlySlot[]
+    dailyTarget?: number
+    hourlySlotsLoading?: boolean
   }
   open: boolean
   onClose: () => void
   onEdit?: () => void
   onClose_order?: () => void
-  onPrint: () => void
+  onPrint?: () => void
+  presentation?: "drawer" | "page"
+  onOpenFullPage?: () => void
   /** فتح شاشة مسح الباركود لأمر الشغل (مسار /work-orders/:id/scanner) */
   onOpenScanner?: () => void
   /** عند أمر مكتمل: إظهار زر إعادة الفتح (صلاحية التعديل من الصفحة الأم) */
@@ -49,6 +55,10 @@ interface WorkOrderDetailProps {
   onViewReports?: () => void
   onReconcileReports?: () => void
   reconcilingReports?: boolean
+  updatingSlotId?: string | null
+  onOpenHourlySlot?: (slotId: string, workers: number) => Promise<void>
+  onSubmitHourlySlot?: (slotId: string, input: { actualQuantity: number; rejectedQuantity: number; executionNotes: string }) => Promise<void>
+  onReviewHourlyQuality?: (slotId: string, input: { acceptedQuantity: number; rejectedQuantity: number; qualityNotes: string }) => Promise<void>
 }
 
 const numberFormatter = new Intl.NumberFormat("ar-EG")
@@ -64,6 +74,8 @@ export function WorkOrderDetail({
   onEdit,
   onClose_order,
   onPrint,
+  presentation = "drawer",
+  onOpenFullPage,
   onOpenScanner,
   showReopenCompleted,
   onReopenCompleted,
@@ -71,10 +83,17 @@ export function WorkOrderDetail({
   onViewReports,
   onReconcileReports,
   reconcilingReports,
+  updatingSlotId,
+  onOpenHourlySlot,
+  onSubmitHourlySlot,
+  onReviewHourlyQuality,
 }: WorkOrderDetailProps) {
   const { t } = useTranslation()
   const { dir } = useAppDirection();
   const [activeTab, setActiveTab] = useState<TabId>("dates")
+  const [slotDraft, setSlotDraft] = useState({ actualQuantity: "", rejectedQuantity: "0", executionNotes: "" })
+  const [qualityDraft, setQualityDraft] = useState({ slotId: "", acceptedQuantity: "", rejectedQuantity: "", qualityNotes: "" })
+  const [slotError, setSlotError] = useState("")
 
   useEffect(() => {
     if (!open) return
@@ -86,16 +105,23 @@ export function WorkOrderDetail({
   }, [open, onClose])
 
   useEffect(() => {
-    if (open) {
-      setActiveTab("dates")
+    if (open && !order.hourlySlotsLoading) {
+      setActiveTab(order.hourlySlots?.length ? "hours" : "dates")
     }
-  }, [open, order.id])
+  }, [open, order.id, order.hourlySlotsLoading])
 
   const progress = useMemo(() => {
     if (order.targetQty <= 0) return 0
     return Math.max(0, Math.min(100, Math.round((order.producedQty / order.targetQty) * 100)))
   }, [order.producedQty, order.targetQty])
   const progressValue = Number.isFinite(progress) ? progress : 0
+  const firstPlannedSlotId = order.hourlySlots?.find((slot) => slot.status === 'planned')?.id
+
+  const runSlotAction = async (action: () => Promise<void>) => {
+    setSlotError("")
+    try { await action() }
+    catch (error) { setSlotError(error instanceof Error ? error.message : 'تعذر تحديث الساعة.') }
+  }
 
   const remaining = Math.max(0, order.targetQty - order.producedQty)
   const isCompletedFooter =
@@ -109,17 +135,22 @@ export function WorkOrderDetail({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[220] flex" dir="ltr">
-      <button
+    <div className={presentation === "drawer" ? "fixed inset-0 z-[220] flex" : "min-h-full w-full"} dir="ltr">
+      {presentation === "drawer" ? <button
         type="button"
         aria-label={t("erpComponents.workOrderDetail.aria.closeDetails")}
         className="h-full flex-1 bg-[hsl(var(--foreground)/0.36)]"
         onClick={onClose}
-      />
+      /> : null}
 
       <aside
         dir={dir}
-        className="h-full w-[min(560px,96vw)] border-s border-[var(--color-border-ui)] bg-[var(--color-card-bg)]"
+        className={cn(
+          "bg-[var(--color-card-bg)]",
+          presentation === "drawer"
+            ? "h-full w-[min(560px,96vw)] border-s border-[var(--color-border-ui)]"
+            : "mx-auto min-h-[calc(100vh-9rem)] w-full max-w-6xl rounded-lg border border-[var(--color-border-ui)]",
+        )}
       >
         <header className="flex items-center justify-between gap-3 border-b border-[var(--color-border-ui)] px-4 py-3">
           <div className="flex min-w-0 items-center gap-2">
@@ -155,7 +186,7 @@ export function WorkOrderDetail({
           </div>
         </header>
 
-        <div className="h-[calc(100%-128px)] overflow-y-auto">
+        <div className={presentation === "drawer" ? "h-[calc(100%-128px)] overflow-y-auto" : "min-h-0"}>
           <section className="grid grid-cols-2 gap-2 border-b border-[var(--color-border-ui)] p-4">
             {[
               { label: t("erpComponents.workOrderDetail.fields.product"), value: order.productName },
@@ -234,8 +265,9 @@ export function WorkOrderDetail({
           </section>
 
           <section className="border-b border-[var(--color-border-ui)] px-4">
-            <div className="grid grid-cols-3">
+            <div className="grid grid-cols-4">
               {([
+                { id: "hours", label: "الساعات" },
                 { id: "dates", label: t("erpComponents.workOrderDetail.tabs.dates") },
                 { id: "costs", label: t("erpComponents.workOrderDetail.tabs.costs") },
                 { id: "notes", label: t("erpComponents.workOrderDetail.tabs.notes") },
@@ -258,6 +290,72 @@ export function WorkOrderDetail({
           </section>
 
           <section className="p-4">
+            {activeTab === "hours" && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between rounded-md border border-[var(--color-border-ui)] bg-[var(--color-page-bg)] px-3 py-2">
+                  <span className="flex items-center gap-2 text-xs text-[var(--color-text-2)]"><CalendarClock className="h-4 w-4" /> التارجت اليومي</span>
+                  <strong className="text-sm text-[var(--color-text-1)]">{numberFormatter.format(order.dailyTarget || 0)}</strong>
+                </div>
+                {order.hourlySlotsLoading ? (
+                  <div className="rounded-md border border-dashed border-[var(--color-border-ui)] p-6 text-center text-sm text-[var(--color-text-2)]">جاري تحميل جدول الساعات...</div>
+                ) : !order.hourlySlots?.length ? (
+                  <div className="rounded-md border border-dashed border-[var(--color-border-ui)] p-6 text-center text-sm text-[var(--color-text-2)]">
+                    هذا أمر قديم ولا يحتوي على جدول ساعات. افتح التعديل ثم احفظه لإنشاء الجدول.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {slotError ? <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-[var(--color-danger)]">{slotError}</p> : null}
+                    {order.hourlySlots.map((slot) => (
+                      <div key={slot.id} className="space-y-3 rounded-md border border-[var(--color-border-ui)] px-3 py-2">
+                        <div className="grid grid-cols-[1fr_auto] items-center gap-3">
+                          <div>
+                            <p className="text-sm font-medium text-[var(--color-text-1)]" dir="ltr">{slot.startTime} - {slot.endTime}</p>
+                            <p className="text-[11px] text-[var(--color-text-2)]">{slot.date}</p>
+                          </div>
+                          <div className="text-end">
+                            <p className="text-sm font-medium text-[var(--color-primary)]">{numberFormatter.format(slot.targetQuantity)} وحدة</p>
+                            <p className="text-[11px] text-[var(--color-text-2)]">{{ planned: 'مخططة', open: 'مفتوحة', quality_pending: 'بانتظار الجودة', production_submitted: 'تم تسليم الإنتاج', quality_accepted: 'مقبولة', quality_rejected: 'مرفوضة', packaging: 'تغليف', finished: 'منتهية' }[slot.status]}</p>
+                          </div>
+                        </div>
+                        {slot.actualQuantity != null ? <p className="text-xs text-[var(--color-text-2)]">الفعلي: <strong className="text-[var(--color-text-1)]">{numberFormatter.format(slot.actualQuantity)}</strong> · المرفوض: <strong className="text-[var(--color-danger)]">{numberFormatter.format(slot.rejectedQuantity || 0)}</strong></p> : null}
+                        {slot.status === 'planned' && onOpenHourlySlot ? (
+                          <Button type="button" size="sm" variant="outline" disabled={updatingSlotId === slot.id || firstPlannedSlotId !== slot.id} onClick={() => void runSlotAction(() => onOpenHourlySlot(slot.id, Math.max(1, order.maxWorkers)))}>
+                            {updatingSlotId === slot.id ? 'جاري الفتح...' : `فتح الساعة (${Math.max(1, order.maxWorkers)} عمال)`}
+                          </Button>
+                        ) : null}
+                        {slot.status === 'open' && onSubmitHourlySlot ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            <label className="space-y-1 text-xs text-[var(--color-text-2)]">الإنتاج الفعلي<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={slotDraft.actualQuantity} onChange={(event) => setSlotDraft((draft) => ({ ...draft, actualQuantity: event.target.value }))} /></label>
+                            <label className="space-y-1 text-xs text-[var(--color-text-2)]">المرفوض<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={slotDraft.rejectedQuantity} onChange={(event) => setSlotDraft((draft) => ({ ...draft, rejectedQuantity: event.target.value }))} /></label>
+                            <label className="col-span-2 space-y-1 text-xs text-[var(--color-text-2)]">ملاحظات التشغيل<textarea className="min-h-16 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 py-1 text-[var(--color-text-1)]" value={slotDraft.executionNotes} onChange={(event) => setSlotDraft((draft) => ({ ...draft, executionNotes: event.target.value }))} /></label>
+                            <Button type="button" size="sm" className="col-span-2" disabled={updatingSlotId === slot.id || slotDraft.actualQuantity === ''} onClick={() => void runSlotAction(async () => { await onSubmitHourlySlot(slot.id, { actualQuantity: Number(slotDraft.actualQuantity), rejectedQuantity: Number(slotDraft.rejectedQuantity || 0), executionNotes: slotDraft.executionNotes }); setSlotDraft({ actualQuantity: '', rejectedQuantity: '0', executionNotes: '' }) })}>
+                              {updatingSlotId === slot.id ? 'جاري التسليم...' : 'تسليم الساعة للجودة'}
+                            </Button>
+                          </div>
+                        ) : null}
+                        {slot.status === 'quality_pending' && onReviewHourlyQuality ? (
+                          <div className="grid grid-cols-2 gap-2">
+                            {qualityDraft.slotId !== slot.id ? (
+                              <Button type="button" size="sm" variant="outline" className="col-span-2" onClick={() => setQualityDraft({ slotId: slot.id, acceptedQuantity: String(Math.max(0, Number(slot.actualQuantity || 0) - Number(slot.rejectedQuantity || 0))), rejectedQuantity: String(slot.rejectedQuantity || 0), qualityNotes: '' })}>بدء فحص الجودة</Button>
+                            ) : (
+                              <>
+                                <label className="space-y-1 text-xs text-[var(--color-text-2)]">المقبول<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={qualityDraft.acceptedQuantity} onChange={(event) => setQualityDraft((draft) => ({ ...draft, acceptedQuantity: event.target.value }))} /></label>
+                                <label className="space-y-1 text-xs text-[var(--color-text-2)]">المرفوض من الجودة<input type="number" min="0" className="h-9 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 text-[var(--color-text-1)]" value={qualityDraft.rejectedQuantity} onChange={(event) => setQualityDraft((draft) => ({ ...draft, rejectedQuantity: event.target.value }))} /></label>
+                                <p className="col-span-2 text-[11px] text-[var(--color-text-2)]">الإجمالي المطلوب مطابقته: {numberFormatter.format(slot.actualQuantity || 0)} وحدة</p>
+                                <label className="col-span-2 space-y-1 text-xs text-[var(--color-text-2)]">ملاحظة الجودة<textarea className="min-h-16 w-full rounded-md border border-[var(--color-border-ui)] bg-transparent px-2 py-1 text-[var(--color-text-1)]" value={qualityDraft.qualityNotes} onChange={(event) => setQualityDraft((draft) => ({ ...draft, qualityNotes: event.target.value }))} /></label>
+                                <Button type="button" size="sm" className="col-span-2" disabled={updatingSlotId === slot.id || qualityDraft.acceptedQuantity === '' || qualityDraft.rejectedQuantity === ''} onClick={() => void runSlotAction(async () => { await onReviewHourlyQuality(slot.id, { acceptedQuantity: Number(qualityDraft.acceptedQuantity), rejectedQuantity: Number(qualityDraft.rejectedQuantity), qualityNotes: qualityDraft.qualityNotes }); setQualityDraft({ slotId: '', acceptedQuantity: '', rejectedQuantity: '', qualityNotes: '' }) })}>{updatingSlotId === slot.id ? 'جاري اعتماد الفحص...' : 'اعتماد نتيجة الجودة'}</Button>
+                              </>
+                            )}
+                          </div>
+                        ) : null}
+                        {slot.qualityAcceptedQuantity != null ? <p className="text-xs text-[var(--color-text-2)]">نتيجة الجودة: <strong className="text-[var(--color-success)]">{numberFormatter.format(slot.qualityAcceptedQuantity)} مقبول</strong> · <strong className="text-[var(--color-danger)]">{numberFormatter.format(slot.qualityRejectedQuantity || 0)} مرفوض</strong></p> : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === "dates" && (
               <div className="space-y-2">
                 {[
@@ -317,9 +415,8 @@ export function WorkOrderDetail({
         </div>
 
         <footer className="flex flex-wrap gap-2 border-t border-[var(--color-border-ui)] px-4 py-3">
-          <Button type="button" variant="outline" onClick={onPrint} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">
-            {t("erpComponents.workOrderDetail.actions.print")}
-          </Button>
+          {onPrint ? <Button type="button" variant="outline" onClick={onPrint} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">{t("erpComponents.workOrderDetail.actions.print")}</Button> : null}
+          {presentation === "drawer" && onOpenFullPage ? <Button type="button" variant="outline" onClick={onOpenFullPage} className="border-[var(--color-border-ui)] text-[var(--color-text-1)]">فتح الصفحة الكاملة</Button> : null}
           {onOpenScanner ? (
             <Button
               type="button"
