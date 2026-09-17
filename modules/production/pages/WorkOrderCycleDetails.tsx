@@ -35,6 +35,8 @@ export function WorkOrderCycleDetails() {
   if (loading) return <p role="status" className="p-6">جاري تحميل تفاصيل أمر الشغل…</p>;
   if (!data || !order) return <div className="space-y-4 p-6"><p role="alert">{error || 'الأمر غير متاح في نطاقك.'}</p><Button onClick={() => void refresh()}>إعادة المحاولة</Button></div>;
   const canExecute = data.permissions['workOrders.execute'] && order.supervisorUid === data.uid;
+  const canSeeQualityPanel = Boolean(canExecute || data.permissions['workOrders.inspect'] || data.permissions['workOrders.assignInspectors'] || data.permissions['productionHandover.approve']);
+  const canSeeAudit = Boolean(data.permissions['workOrders.approve'] || data.permissions['workOrders.assignInspectors']);
   const docId = search.get('document');
   const badDocument = Boolean(docId && (!slot || docId !== slot.productionDocumentId));
   const selectedValid = slot && !badDocument;
@@ -81,13 +83,13 @@ export function WorkOrderCycleDetails() {
             {order.activeSlotId && <p className="text-sm">يجب حسم الساعة الجارية أولًا.</p>}
           </>}
           {canExecute && (slot.status === 'open' || slot.status === 'paused') && <ProductionActions key={`${id}-${slot.id}-${slot.status}`} slot={slot} disabled={busy || Boolean(error) || Boolean(order.qualityHold)} act={act} />}
-          {(slot.status === 'quality_pending' || slot.status === 'quality_accepted') && <>
+          {(slot.status === 'quality_pending' || slot.status === 'quality_accepted') && canSeeQualityPanel && <>
             <p className="text-sm">تم تسجيل {slot.actualQuantity} وحدة، منها {slot.rejectedQuantity} مرفوض مبدئي. {slot.status === 'quality_pending' ? 'الكمية لا تُحسب مقبولًا معتمدًا ولا تتاح للتغليف بعد.' : 'اعتمد مدير الجودة نتيجة الفحص لهذه الحاوية.'}</p>
             {slot.productionNotes && <p className="text-sm">ملاحظات الإنتاج: {slot.productionNotes}</p>}
             <QualityInspectionPanel key={`${id}-${slot.id}`} order={order} slot={slot} uid={data.uid} canInspect={Boolean(data.permissions['workOrders.inspect'])} canManage={Boolean(data.permissions['workOrders.assignInspectors'])} canPackage={Boolean(data.permissions['productionHandover.approve'])} disabled={busy || Boolean(error)} act={act} />
             {slot.productionDocumentId && <ContainerPrint order={order} slot={slot} tenantSlug={tenantSlug} canPrint={Boolean(canExecute)} disabled={busy || Boolean(error)} />}
           </>}
-          {slot.reworkAttempts?.map(attempt => (
+          {canSeeQualityPanel && slot.reworkAttempts?.map(attempt => (
             <ReworkAttemptPanel
               key={`${id}-${slot.id}-${attempt.id}`}
               order={order}
@@ -106,7 +108,7 @@ export function WorkOrderCycleDetails() {
       </article>
       <aside className="min-w-0 rounded-lg border border-border bg-card p-4" aria-label="جدول الساعات"><h2 className="mb-3 font-semibold">خطة الأيام والساعات</h2><ol className="max-h-[70vh] space-y-2 overflow-auto">{order.slots.map(row => <li key={row.id}><button type="button" aria-current={slot?.id === row.id ? 'step' : undefined} disabled={busy} onClick={() => { setActionError(''); setSuccess(''); setSearch({ cycle: '2', slot: row.id }); }} className={`min-h-11 w-full rounded-md border p-3 text-start focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${slot?.id === row.id ? 'border-primary bg-muted' : 'border-border'}`}><span className="block text-sm">{row.date} • <bdi>{row.startTime}–{row.endTime}</bdi></span><span className="mt-1 block text-sm text-muted-foreground">{cycleSlotLabels[row.status]} • {row.actualQuantity ?? row.targetQuantity} وحدة</span></button></li>)}</ol></aside>
     </div>
-    <CycleAudit order={order} />
+    {canSeeAudit && <CycleAudit order={order} />}
   </main>;
 }
 
