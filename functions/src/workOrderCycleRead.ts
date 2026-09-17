@@ -81,7 +81,20 @@ export async function readWorkOrderCycle(uid: string, input: { orderId?: string;
       return snap.docs.filter(doc => collection === 'employees' ? doc.data().isActive === true : doc.data().isActive !== false).map(doc => ({ id: doc.id, name: String(doc.data().name || doc.id) }));
     };
     if (permissions['workOrders.create'] === true) [directory.products, directory.lines] = await Promise.all([basic('products'), basic('production_lines')]);
-    if (supervisor) directory.workers = await basic('employees');
+    if (supervisor) {
+      const scopeLineId = input.orderId && rows[0] ? String(rows[0].data.lineId || '') : '';
+      if (scopeLineId) {
+        const assignmentsSnap = await db.collection('production_line_worker_assignments')
+          .where('tenantId', '==', tenantId).where('lineId', '==', scopeLineId).where('isActive', '==', true).limit(301).get();
+        const productionWorkerIds = [...new Set(assignmentsSnap.docs.slice(0, 300).map(doc => String(doc.data().workerId || '')).filter(Boolean))];
+        const workerDocs = await Promise.all(productionWorkerIds.map(pwId => db.collection('production_workers').doc(pwId).get()));
+        const employeeIds = new Set(workerDocs.map(doc => String(doc.data()?.employeeId || '')).filter(Boolean));
+        const allEmployees = await basic('employees');
+        directory.workers = allEmployees.filter(employee => employeeIds.has(employee.id));
+      } else {
+        directory.workers = await basic('employees');
+      }
+    }
     if (permissions['workOrders.create'] === true || permissions['workOrders.approve'] === true || permissions['workOrders.assignInspectors'] === true) {
       const [users, roles] = await Promise.all([db.collection('users').where('tenantId', '==', tenantId).limit(DIRECTORY_LIMIT + 1).get(), db.collection('roles').where('tenantId', '==', tenantId).limit(DIRECTORY_LIMIT + 1).get()]);
       if (users.size > DIRECTORY_LIMIT || roles.size > DIRECTORY_LIMIT) throw new HttpsError('resource-exhausted', 'دليل المستخدمين كبير جدًا؛ يحتاج بحثًا مقسمًا (لم يُبنَ بعد).');

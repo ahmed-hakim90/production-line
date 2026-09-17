@@ -23,7 +23,7 @@ const permissions = {
   receivePackaging: 'productionHandover.approve', packageContainer: 'productionHandover.approve',
   deliverToWarehouse: 'productionHandover.approve',
   proposePlanRevision: 'workOrders.approve', applyPlanRevision: 'workOrders.approve',
-  closeProduction: 'workOrders.execute',
+  closeProduction: 'workOrders.approve',
 } as const;
 type Action = keyof typeof permissions;
 type Input = { requestId: string; orderId: string; action: Action; payload?: Record<string, unknown> };
@@ -71,7 +71,7 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
     if (user?.isActive !== true || !user.tenantId || !user.roleId) throw new HttpsError('permission-denied', 'الحساب غير نشط أو غير مرتبط بدور.');
     const tenantId = String(user.tenantId);
     const role = (await tx.get(db.collection('roles').doc(String(user.roleId)))).data();
-    const hasPermission = role?.permissions?.[permissions[input.action]] === true || (input.action === 'closeProduction' && role?.permissions?.['workOrders.approve'] === true);
+    const hasPermission = role?.permissions?.[permissions[input.action]] === true;
     if (role?.tenantId !== tenantId || !hasPermission) throw new HttpsError('permission-denied', 'ليس لديك صلاحية الإجراء.');
     const receiptRef = orderRef.collection('cycle_requests').doc(requestId);
     const receipt = (await tx.get(receiptRef)).data();
@@ -488,12 +488,20 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
       } else {
         if (!['approved', 'in_progress'].includes(order.productionStatus)) fail('الإنتاج غير معتمد أو مقفول.');
         if (input.action === 'assignWorkers') {
-          const workerIds = ids(payload.workerIds);
-          for (const workerId of workerIds) {
-            const worker = (await tx.get(db.collection('employees').doc(workerId))).data();
-            if (worker?.tenantId !== tenantId || worker.isActive !== true) fail('عامل غير نشط أو خارج المصنع.');
+          const hasIds = payload.workerIds !== undefined; const hasCount = payload.workerCount !== undefined;
+          if (hasIds === hasCount) fail('حدد تكليف العمالة إما بالأسماء أو بالعدد، وليس الاثنين معًا.');
+          if (hasIds) {
+            const workerIds = ids(payload.workerIds);
+            for (const workerId of workerIds) {
+              const worker = (await tx.get(db.collection('employees').doc(workerId))).data();
+              if (worker?.tenantId !== tenantId || worker.isActive !== true) fail('عامل غير نشط أو خارج المصنع.');
+            }
+            Object.assign(patch, { workerIds, workerCount: FieldValue.delete() });
+          } else {
+            const workerCount = Number(payload.workerCount);
+            if (!Number.isInteger(workerCount) || workerCount <= 0 || workerCount > 500) fail('عدد العمالة غير صالح.');
+            Object.assign(patch, { workerIds: [], workerCount });
           }
-          Object.assign(patch, { workerIds });
         } else {
           const slotId = id(payload.slotId); const slotRef = orderRef.collection('hourly_slots').doc(slotId);
           const slot = (await tx.get(slotRef)).data();
@@ -505,14 +513,21 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
             const planned = await tx.get(orderRef.collection('hourly_slots').where('status', '==', 'planned'));
             const first = planned.docs.sort((a, b) => (a.data().date + a.data().startTime).localeCompare(b.data().date + b.data().startTime))[0];
             if (first?.id !== slotId) fail('ابدأ الساعة المخططة التالية.');
-            const workerIds = ids(order.workerIds);
-            const workersSnapshot: { id: string; name: string }[] = [];
-            for (const workerId of workerIds) {
-              const worker = (await tx.get(db.collection('employees').doc(workerId))).data();
-              if (worker?.tenantId !== tenantId || worker.isActive !== true) fail('راجع تكليف العمالة قبل التشغيل.');
-              workersSnapshot.push({ id: workerId, name: String(worker.name || workerId) });
+            let workerIds: string[] = []; const workersSnapshot: { id: string; name: string }[] = []; let workersSnapshotCount: number;
+            if (Array.isArray(order.workerIds) && order.workerIds.length) {
+              workerIds = ids(order.workerIds);
+              for (const workerId of workerIds) {
+                const worker = (await tx.get(db.collection('employees').doc(workerId))).data();
+                if (worker?.tenantId !== tenantId || worker.isActive !== true) fail('راجع تكليف العمالة قبل التشغيل.');
+                workersSnapshot.push({ id: workerId, name: String(worker.name || workerId) });
+              }
+              workersSnapshotCount = workerIds.length;
+            } else if (Number(order.workerCount) > 0) {
+              workersSnapshotCount = Number(order.workerCount);
+            } else {
+              fail('اختر التكليف الفعلي أو أدخل عدد العمالة قبل التشغيل.');
             }
-            tx.update(slotRef, { status: 'open', openedAt: now, openedBy: uid, workerIdsSnapshot: workerIds, workersSnapshot, workersSnapshotCount: workerIds.length });
+            tx.update(slotRef, { status: 'open', openedAt: now, openedBy: uid, workerIdsSnapshot: workerIds, workersSnapshot, workersSnapshotCount });
             tx.set(lineRef, { tenantId, activeOrderId: orderId, activeSlotId: slotId });
             Object.assign(patch, { activeSlotId: slotId, productionStatus: 'in_progress', status: 'in_progress' });
           } else {
