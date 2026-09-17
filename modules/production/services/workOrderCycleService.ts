@@ -63,7 +63,7 @@ export type CycleOrder = {
   qualityHoldReason?: string; qualityHoldByName?: string; qualityHoldAt?: string;
   productionClosedAt?: string; productionClosedByName?: string; productionCloseReason?: string;
   productionClosedWithDeficit?: boolean; productionClosedCancelledSlotCount?: number;
-  activeSlotId?: string; workerIds: string[]; inspectorUids: string[]; preparedAt: string;
+  activeSlotId?: string; workerIds: string[]; workerCount?: number; inspectorUids: string[]; preparedAt: string;
   qualityReportTemplate?: QualityCheckTemplate[];
   planRevisionsTruncated?: boolean; planRevisions?: PlanRevision[];
   slots: CycleSlot[];

@@ -64,11 +64,20 @@ export function WorkOrderCycleDetails() {
         {!selectedValid ? <p role="alert">الساعة أو مستند QR غير صالح. اختر ساعة من الجدول.</p> : <>
           <header className="flex flex-wrap justify-between gap-3"><h2 className="text-lg font-semibold">{slot.date} • <bdi>{slot.startTime}–{slot.endTime}</bdi></h2><span>{cycleSlotLabels[slot.status]}</span></header>
           <p className="break-all text-sm text-muted-foreground">الحاوية: {slot.containerId} • الهدف المخطط: {slot.targetQuantity} وحدة</p>
-          {slot.workersSnapshot && <p className="text-sm">العمالة الفعلية عند البداية ({slot.workersSnapshotCount}): {slot.workersSnapshot.map(worker => worker.name).join('، ')}</p>}
+          {Boolean(slot.workersSnapshot?.length) && <p className="text-sm">العمالة الفعلية عند البداية ({slot.workersSnapshotCount}): {slot.workersSnapshot!.map(worker => worker.name).join('، ')}</p>}
+          {!slot.workersSnapshot?.length && Boolean(slot.workersSnapshotCount) && <p className="text-sm">عدد العمالة عند البداية: {slot.workersSnapshotCount} (بدون أسماء).</p>}
           {slot.status === 'planned' && canExecute && order.productionStatus !== 'draft' && <>
-            <Assignment key={`workers-${id}`} title="العمالة الفعلية على الخط" options={data.directory.workers} initial={order.workerIds} disabled={busy || Boolean(error)} onSave={ids => act('assignWorkers', { workerIds: ids })} />
-            <p className="text-sm text-muted-foreground">المحفوظ حاليًا: {order.workerIds.length} عامل. تُحفظ أسماؤهم تاريخيًا عند بدء الساعة.</p>
-            <Button disabled={busy || Boolean(error) || Boolean(order.qualityHold) || Boolean(order.activeSlotId) || !order.workerIds.length || order.slots.find(row => row.status === 'planned')?.id !== slot.id} onClick={() => void act('start', { slotId: slot.id })}>بدء هذه الساعة</Button>
+            {data.directory.workers.length > 0
+              ? <Assignment key={`workers-${id}`} title="العمالة الفعلية على الخط" options={data.directory.workers} initial={order.workerIds} disabled={busy || Boolean(error)} onSave={ids => act('assignWorkers', { workerIds: ids })} />
+              : <WorkerCountInput key={`worker-count-${id}`} initial={order.workerCount} disabled={busy || Boolean(error)} onSave={count => act('assignWorkers', { workerCount: count })} />}
+            <p className="text-sm text-muted-foreground">
+              {order.workerIds.length
+                ? `المحفوظ حاليًا: ${order.workerIds.length} عامل. تُحفظ أسماؤهم تاريخيًا عند بدء الساعة.`
+                : order.workerCount
+                  ? `المحفوظ حاليًا: ${order.workerCount} عامل (بدون أسماء — الخط غير مربوط بعمالة دائمة في "ربط العمالة الدائم").`
+                  : 'لا يوجد تكليف عمالة محفوظ بعد.'}
+            </p>
+            <Button disabled={busy || Boolean(error) || Boolean(order.qualityHold) || Boolean(order.activeSlotId) || !(order.workerIds.length || order.workerCount) || order.slots.find(row => row.status === 'planned')?.id !== slot.id} onClick={() => void act('start', { slotId: slot.id })}>بدء هذه الساعة</Button>
             {order.activeSlotId && <p className="text-sm">يجب حسم الساعة الجارية أولًا.</p>}
           </>}
           {canExecute && (slot.status === 'open' || slot.status === 'paused') && <ProductionActions key={`${id}-${slot.id}-${slot.status}`} slot={slot} disabled={busy || Boolean(error) || Boolean(order.qualityHold)} act={act} />}
@@ -114,6 +123,18 @@ function QualityLockPanel({ order, canManage, disabled, act }: { order: CycleOrd
     <p className="text-sm">لا يمكن بدء ساعة أو إرسال إنتاج أو استئناف حتى فك القفل.</p>
     {canManage && <div className="space-y-2 border-t border-destructive/40 pt-3"><label>ملاحظة فك القفل (اختياري)<Input disabled={disabled} value={unlockReason} maxLength={2000} onChange={e => setUnlockReason(e.target.value)} /></label><Button disabled={disabled} onClick={() => void act('unlockQuality', { reason: unlockReason }).then(() => setUnlockReason(''))}>فك القفل</Button><p className="text-xs text-muted-foreground">يستأنف الساعة تلقائيًا فقط إذا لم يوجد توقف مستقل عنها.</p></div>}
   </div>;
+}
+
+function WorkerCountInput({ initial, disabled, onSave }: { initial?: number; disabled: boolean; onSave: (count: number) => Promise<void> }) {
+  const [value, setValue] = useState(initial ? String(initial) : '');
+  const count = Number(value);
+  const valid = value !== '' && Number.isInteger(count) && count > 0;
+  return <fieldset disabled={disabled} className="space-y-3 rounded-md border border-border p-4">
+    <legend className="px-2 font-semibold">عدد العمالة على الخط</legend>
+    <p className="text-sm">هذا الخط غير مربوط بعمالة دائمة في "ربط العمالة الدائم"؛ أدخل عدد العمالة بدلًا من الأسماء.</p>
+    <label>عدد العمالة<Input type="number" min="1" step="1" value={value} onChange={e => setValue(e.target.value)} /></label>
+    <Button variant="outline" disabled={disabled || !valid} onClick={() => void onSave(count)}>حفظ عدد العمالة</Button>
+  </fieldset>;
 }
 
 function Assignment({ title, options, initial, disabled, onSave }: { title: string; options: CycleOption[]; initial: string[]; disabled: boolean; onSave: (ids: string[]) => Promise<void> }) {
