@@ -15,6 +15,7 @@ const ProductionPlans = lazyNamed(() => import('../pages/ProductionPlans'), 'Pro
 const WorkOrders = lazyNamed(() => import('../pages/WorkOrders/index'), 'WorkOrders');
 const WorkOrderScanner = lazyNamed(() => import('../pages/WorkOrderScanner'), 'WorkOrderScanner');
 const WorkOrderDetailsPage = lazyNamed(() => import('../pages/WorkOrderDetailsPage'), 'WorkOrderDetailsPage');
+const WorkOrderCycleTasksPage = lazyNamed(() => import('../pages/WorkOrderCycleTasksPage'), 'WorkOrderCycleTasksPage');
 const WorkOrderCycleCreate = lazyNamed(() => import('../pages/WorkOrderCycleCreate'), 'WorkOrderCycleCreate');
 const Supervisors = lazyNamed(() => import('../pages/Supervisors'), 'Supervisors');
 const SupervisorDetails = lazyNamed(() => import('../pages/SupervisorDetails'), 'SupervisorDetails');
@@ -110,6 +111,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   },
   { path: '/work-orders', permissionsAny: ['workOrders.view', 'workOrders.create', 'workOrders.approve', 'workOrders.execute', 'workOrders.inspect', 'workOrders.assignInspectors', 'productionHandover.approve'], component: WorkOrders },
   { path: '/work-orders/cycle/new', permission: 'workOrders.create', component: WorkOrderCycleCreate, skeleton: 'form' },
+  { path: '/work-order-cycle', permissionsAny: ['workOrders.create', 'workOrders.approve', 'workOrders.execute', 'workOrders.inspect', 'workOrders.assignInspectors', 'productionHandover.approve'], component: WorkOrderCycleTasksPage, skeleton: 'dashboard' },
   { path: '/work-orders/:id', permissionsAny: ['workOrders.view', 'workOrders.create', 'workOrders.approve', 'workOrders.execute', 'workOrders.inspect', 'workOrders.assignInspectors'], component: WorkOrderDetailsPage, skeleton: 'dashboard' },
   {
     path: '/work-orders/:id/scanner',
