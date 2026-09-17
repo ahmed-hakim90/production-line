@@ -18,6 +18,7 @@ export async function readWorkOrderCycle(uid, input = {}) {
     const tenantId = String(user.tenantId);
     const permissions = role.permissions || {};
     const manager = permissions['workOrders.create'] === true || permissions['workOrders.approve'] === true || permissions['workOrders.assignInspectors'] === true;
+    const canSeeAudit = permissions['workOrders.approve'] === true || permissions['workOrders.assignInspectors'] === true;
     const supervisor = permissions['workOrders.execute'] === true;
     const inspector = permissions['workOrders.inspect'] === true;
     const packaging = permissions['productionHandover.approve'] === true;
@@ -50,7 +51,7 @@ export async function readWorkOrderCycle(uid, input = {}) {
         const [slots, lineAssignment, audit, planRevisions] = await Promise.all([
             db.collection('work_orders').doc(id).collection('hourly_slots').get(),
             db.collection('work_order_line_assignments').doc(`${tenantId}--${data.lineId}`).get(),
-            input.orderId ? db.collection('work_orders').doc(id).collection('cycle_audit').orderBy('revision', 'desc').limit(101).get() : Promise.resolve(null),
+            input.orderId && canSeeAudit ? db.collection('work_orders').doc(id).collection('cycle_audit').orderBy('revision', 'desc').limit(101).get() : Promise.resolve(null),
             input.orderId ? db.collection('work_orders').doc(id).collection('plan_revisions').orderBy('proposedAt', 'desc').limit(101).get() : Promise.resolve(null),
         ]);
         const packagingEventsOf = async (ref, data) => {
@@ -64,7 +65,7 @@ export async function readWorkOrderCycle(uid, input = {}) {
             const [contributions, corrections, reworkAttempts, packagingEvents] = await Promise.all([
                 input.orderId && slotData.inspectedQuantity > 0 ? slot.ref.collection('quality_contributions').orderBy('submittedAt', 'desc').limit(101).get() : Promise.resolve(null),
                 input.orderId && slotData.qualityCorrectionCount > 0 ? slot.ref.collection('quality_corrections').orderBy('createdAt', 'desc').limit(101).get() : Promise.resolve(null),
-                input.orderId ? slot.ref.collection('rework_attempts').orderBy('attemptNumber', 'asc').limit(101).get() : Promise.resolve(null),
+                input.orderId && Number(slotData.rejectedDisposition?.reworkQuantity || 0) > 0 ? slot.ref.collection('rework_attempts').orderBy('attemptNumber', 'asc').limit(101).get() : Promise.resolve(null),
                 packagingEventsOf(slot.ref, slotData),
             ]);
             const attemptRows = await Promise.all((reworkAttempts?.docs.slice(0, 100) || []).map(async (attempt) => {
@@ -77,7 +78,18 @@ export async function readWorkOrderCycle(uid, input = {}) {
             }));
             return { ...clean(slotData), id: slot.id, contributionsTruncated: (contributions?.size || 0) > 100, qualityContributions: contributions?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], qualityCorrections: corrections?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], reworkAttemptsTruncated: (reworkAttempts?.size || 0) > 100, reworkAttempts: attemptRows, packagingEventsTruncated: packagingEvents.truncated, packagingEvents: packagingEvents.rows };
         }));
-        return { ...clean(data), id, auditTruncated: (audit?.size || 0) > 100, audit: audit?.docs.slice(0, 100).map(doc => { const event = doc.data(); return { id: doc.id, action: event.action, actorUid: event.actorUid, actorName: event.actorName || event.actorUid, createdAt: event.createdAt, revision: event.revision, reason: event.payload?.reason || '', previousSupervisorUid: event.previousSupervisorUid || '', supervisorUid: event.action === 'reassignSupervisor' ? event.payload?.supervisorUid : '' }; }) || [], inspectorUids: lineAssignment.data()?.inspectorUids || [], planRevisionsTruncated: (planRevisions?.size || 0) > 100, planRevisions: planRevisions?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], slots: slotRows.sort((a, b) => String(a.date + a.startTime).localeCompare(String(b.date + b.startTime))) };
+        const auditEvents = audit?.docs.slice(0, 100).map(doc => { const event = doc.data(); return { id: doc.id, action: event.action, actorUid: event.actorUid, actorName: event.actorName || event.actorUid, createdAt: event.createdAt, revision: event.revision, reason: event.payload?.reason || '', previousSupervisorUid: String(event.previousSupervisorUid || ''), supervisorUid: event.action === 'reassignSupervisor' ? String(event.payload?.supervisorUid || '') : '' }; }) || [];
+        const supervisorUidsToResolve = new Set();
+        for (const event of auditEvents) {
+            if (event.previousSupervisorUid)
+                supervisorUidsToResolve.add(event.previousSupervisorUid);
+            if (event.supervisorUid)
+                supervisorUidsToResolve.add(event.supervisorUid);
+        }
+        const supervisorNameDocs = await Promise.all([...supervisorUidsToResolve].map(supervisorUid => db.collection('users').doc(supervisorUid).get()));
+        const supervisorNames = new Map(supervisorNameDocs.map(doc => [doc.id, String(doc.data()?.displayName || doc.id)]));
+        const resolvedAudit = auditEvents.map(event => ({ ...event, previousSupervisorUid: event.previousSupervisorUid ? (supervisorNames.get(event.previousSupervisorUid) || event.previousSupervisorUid) : '', supervisorUid: event.supervisorUid ? (supervisorNames.get(event.supervisorUid) || event.supervisorUid) : '' }));
+        return { ...clean(data), id, auditTruncated: (audit?.size || 0) > 100, audit: resolvedAudit, inspectorUids: lineAssignment.data()?.inspectorUids || [], planRevisionsTruncated: (planRevisions?.size || 0) > 100, planRevisions: planRevisions?.docs.slice(0, 100).map(doc => ({ ...clean(doc.data()), id: doc.id })) || [], slots: slotRows.sort((a, b) => String(a.date + a.startTime).localeCompare(String(b.date + b.startTime))) };
     }));
     const directory = { products: [], lines: [], supervisors: [], inspectors: [], workers: [] };
     if (input.directory) {
@@ -90,8 +102,21 @@ export async function readWorkOrderCycle(uid, input = {}) {
         };
         if (permissions['workOrders.create'] === true)
             [directory.products, directory.lines] = await Promise.all([basic('products'), basic('production_lines')]);
-        if (supervisor)
-            directory.workers = await basic('employees');
+        if (supervisor) {
+            const scopeLineId = input.orderId && rows[0] ? String(rows[0].data.lineId || '') : '';
+            if (scopeLineId) {
+                const assignmentsSnap = await db.collection('production_line_worker_assignments')
+                    .where('tenantId', '==', tenantId).where('lineId', '==', scopeLineId).where('isActive', '==', true).limit(301).get();
+                const productionWorkerIds = [...new Set(assignmentsSnap.docs.slice(0, 300).map(doc => String(doc.data().workerId || '')).filter(Boolean))];
+                const workerDocs = await Promise.all(productionWorkerIds.map(pwId => db.collection('production_workers').doc(pwId).get()));
+                const employeeIds = new Set(workerDocs.map(doc => String(doc.data()?.employeeId || '')).filter(Boolean));
+                const allEmployees = await basic('employees');
+                directory.workers = allEmployees.filter(employee => employeeIds.has(employee.id));
+            }
+            else {
+                directory.workers = await basic('employees');
+            }
+        }
         if (permissions['workOrders.create'] === true || permissions['workOrders.approve'] === true || permissions['workOrders.assignInspectors'] === true) {
             const [users, roles] = await Promise.all([db.collection('users').where('tenantId', '==', tenantId).limit(DIRECTORY_LIMIT + 1).get(), db.collection('roles').where('tenantId', '==', tenantId).limit(DIRECTORY_LIMIT + 1).get()]);
             if (users.size > DIRECTORY_LIMIT || roles.size > DIRECTORY_LIMIT)

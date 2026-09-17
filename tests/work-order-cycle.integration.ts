@@ -62,8 +62,10 @@ try {
   await call('manager', 'reassignSupervisor', { supervisorUid: 'outsider', expectedRevision: 3, reason: 'تغيير التكليف' }, 'reassign');
   await assert.rejects(readWorkOrderCycle('supervisor', { orderId }));
   const transferred = await readWorkOrderCycle('outsider', { orderId });
-  assert.equal(transferred.orders[0].audit[0].reason, 'تغيير التكليف');
-  assert.equal(transferred.orders[0].audit[0].previousSupervisorUid, 'supervisor');
+  assert.deepEqual(transferred.orders[0].audit, [], 'A plain execute-permission supervisor cannot see the audit trail, only that they can open the order');
+  const auditedByManager = await readWorkOrderCycle('manager', { orderId });
+  assert.equal(auditedByManager.orders[0].audit[0].reason, 'تغيير التكليف');
+  assert.equal(auditedByManager.orders[0].audit[0].previousSupervisorUid, 'supervisor', 'Falls back to the raw uid when the user document has no displayName');
   await assert.rejects(call('supervisor', 'assignWorkers', { workerIds: ['cycle-worker'] }));
   await call('manager', 'reassignSupervisor', { supervisorUid: 'supervisor', expectedRevision: 4, reason: 'استعادة المشرف' });
   await assert.rejects(call('manager', 'approve'));
