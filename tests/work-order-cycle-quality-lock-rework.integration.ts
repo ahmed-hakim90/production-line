@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { getDb } from '../functions/src/adminApp';
 import { executeWorkOrderCycle } from '../functions/src/workOrderCycle';
+import { readWorkOrderCycle } from '../functions/src/workOrderCycleRead';
 
 if (!process.env.GCLOUD_PROJECT?.startsWith('demo-') || !/^(127\.0\.0\.1|localhost):\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST || '')) throw new Error('Local demo emulator required');
 const db = getDb(); const suffix = Date.now().toString(); const tenantId = `qlr-${suffix}`;
@@ -125,6 +126,10 @@ function makeCall(orderId: string) {
   // Split the 20 rejected units: 12 to rework, 8 to final scrap.
   await call('quality', 'decideRejectedDisposition', { slotId: 'hour-001', reworkQuantity: 12, scrapQuantity: 8, reason: 'قابلة لإعادة الفرز' });
   await assert.rejects(call('quality', 'decideRejectedDisposition', { slotId: 'hour-001', reworkQuantity: 12, scrapQuantity: 8, reason: 'x' }), 'A disposition decision cannot be repeated for the same container');
+
+  const withRework = await readWorkOrderCycle(uid('manager'), { orderId });
+  const readSlot = withRework.orders[0].slots.find(row => row.id === 'hour-001')!;
+  assert.equal(readSlot.reworkAttempts?.length, 1, 'The rework_attempts subcollection is fetched for a slot with a decided rework quantity, not skipped');
 
   const attempts = await db.collection(`work_orders/${orderId}/hourly_slots/hour-001/rework_attempts`).get();
   assert.equal(attempts.size, 1);
