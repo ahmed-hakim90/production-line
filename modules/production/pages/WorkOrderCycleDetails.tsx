@@ -50,7 +50,7 @@ export function WorkOrderCycleDetails() {
     {actionError && <p role="alert" className="text-destructive">{actionError} يمكن إعادة المحاولة بنفس البيانات بأمان.</p>}
     {success && <p role="status" className="text-sm">{success}</p>}
     <PlanningPanel order={order} canManage={Boolean(data.permissions['workOrders.approve'])} disabled={busy || Boolean(error)} act={act} />
-    <ClosingPanel order={order} canClose={Boolean(data.permissions['workOrders.approve'] || data.permissions['workOrders.execute'])} disabled={busy || Boolean(error)} act={act} />
+    <ClosingPanel order={order} canClose={Boolean(data.permissions['workOrders.approve'])} disabled={busy || Boolean(error)} act={act} />
     <QualityLockPanel order={order} canManage={Boolean(data.permissions['workOrders.assignInspectors'])} disabled={busy || Boolean(error)} act={act} />
     {order.productionStatus === 'draft' && <section className="space-y-3 rounded-lg border border-border bg-card p-4"><h2 className="font-semibold">مراجعة واعتماد مدير الإنتاج</h2><p className="text-sm text-muted-foreground">راجع المنتج والخط والمشرف والكمية وجدول الساعات بالأسفل. لن يبدأ المشرف قبل الاعتماد.</p>{data.permissions['workOrders.approve'] ? <Button disabled={busy || Boolean(error)} onClick={() => void act('approve')}>اعتماد أمر الشغل</Button> : <p>بانتظار اعتماد مدير الإنتاج.</p>}</section>}
     {data.permissions['workOrders.assignInspectors'] && <Assignment key={`inspectors-${id}`} title="توزيع مراقبي الجودة على الخط" options={data.directory.inspectors} initial={order.inspectorUids} disabled={busy || Boolean(error)} onSave={ids => act('assignInspectors', { inspectorUids: ids })} />}

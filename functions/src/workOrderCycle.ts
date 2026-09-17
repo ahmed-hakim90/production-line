@@ -23,7 +23,7 @@ const permissions = {
   receivePackaging: 'productionHandover.approve', packageContainer: 'productionHandover.approve',
   deliverToWarehouse: 'productionHandover.approve',
   proposePlanRevision: 'workOrders.approve', applyPlanRevision: 'workOrders.approve',
-  closeProduction: 'workOrders.execute',
+  closeProduction: 'workOrders.approve',
 } as const;
 type Action = keyof typeof permissions;
 type Input = { requestId: string; orderId: string; action: Action; payload?: Record<string, unknown> };
@@ -71,7 +71,7 @@ export async function executeWorkOrderCycle(uid: string, input: Input) {
     if (user?.isActive !== true || !user.tenantId || !user.roleId) throw new HttpsError('permission-denied', 'الحساب غير نشط أو غير مرتبط بدور.');
     const tenantId = String(user.tenantId);
     const role = (await tx.get(db.collection('roles').doc(String(user.roleId)))).data();
-    const hasPermission = role?.permissions?.[permissions[input.action]] === true || (input.action === 'closeProduction' && role?.permissions?.['workOrders.approve'] === true);
+    const hasPermission = role?.permissions?.[permissions[input.action]] === true;
     if (role?.tenantId !== tenantId || !hasPermission) throw new HttpsError('permission-denied', 'ليس لديك صلاحية الإجراء.');
     const receiptRef = orderRef.collection('cycle_requests').doc(requestId);
     const receipt = (await tx.get(receiptRef)).data();

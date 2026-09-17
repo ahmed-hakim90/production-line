@@ -170,13 +170,15 @@ function callFor(orderId: string) {
   assert.equal(order.approvedAcceptedQuantity, 23, '20 from the original inspection + 3 from the accepted rework attempt, counted once');
   await assert.rejects(call('manager', 'closeProduction'), 'A reason is mandatory when there is a deficit or unstarted hours to cancel');
 
-  // The "both" permission decision: an execute-permission holder who is NOT this order's assigned supervisor can still close it.
-  await call('otherSupervisor', 'closeProduction', { reason: 'End of shift; remaining demand cancelled' });
+  // Only workOrders.approve may close production — a plain execute-permission supervisor, even one uninvolved in this order, cannot.
+  await assert.rejects(call('otherSupervisor', 'closeProduction', { reason: 'End of shift; remaining demand cancelled' }), 'An execute-only supervisor cannot close production');
+
+  await call('manager', 'closeProduction', { reason: 'End of shift; remaining demand cancelled' });
   const closed = (await db.doc(`work_orders/${orderId}`).get()).data()!;
   assert.equal(closed.productionStatus, 'closed');
   assert.equal(closed.productionClosedWithDeficit, true);
   assert.equal(closed.productionClosedCancelledSlotCount, 3);
-  assert.equal(closed.productionClosedByName, 'otherSupervisor');
+  assert.equal(closed.productionClosedByName, 'manager');
   for (const id of ['hour-002', 'hour-003', 'hour-004']) {
     const cancelled = (await db.doc(`work_orders/${orderId}/hourly_slots/${id}`).get()).data()!;
     assert.equal(cancelled.status, 'cancelled');
