@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import type { QualityCheckTemplate } from '../services/workOrderCycleService';
+import { qualitySettingsService } from '../../quality/services/qualitySettingsService';
+import type { QualityInspectionTemplate } from '@/types';
 
 export function QualityReportTemplateView({ template }: { template: QualityCheckTemplate[] }) {
   return (
@@ -29,10 +31,16 @@ export function QualityReportTemplateEditor({
   initialTemplate = [],
   disabled = false,
   onSave,
+  productId,
+  lineId,
 }: {
   initialTemplate?: QualityCheckTemplate[];
   disabled?: boolean;
   onSave: (template: QualityCheckTemplate[]) => Promise<void>;
+  productId?: string;
+  lineId?: string;
+  productName?: string;
+  lineName?: string;
 }) {
   const [template, setTemplate] = useState<QualityCheckTemplate[]>(initialTemplate);
   const [busy, setBusy] = useState(false);
@@ -41,6 +49,63 @@ export function QualityReportTemplateEditor({
   const [newMinValue, setNewMinValue] = useState('');
   const [newMaxValue, setNewMaxValue] = useState('');
   const [newRequired, setNewRequired] = useState(true);
+
+  const [centralTemplates, setCentralTemplates] = useState<QualityInspectionTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [saveAsName, setSaveAsName] = useState('');
+  const [saveAsBusy, setSaveAsBusy] = useState(false);
+  const [saveAsMessage, setSaveAsMessage] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    qualitySettingsService.getSettingsHub().then(hub => {
+      if (!cancelled) setCentralTemplates(hub.inspectionTemplates);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const matchingTemplates = centralTemplates.filter(candidate =>
+    candidate.isActive !== false
+    && (!candidate.productId || candidate.productId === productId)
+    && (!candidate.lineId || candidate.lineId === lineId),
+  );
+
+  function handleLoadTemplate() {
+    const selected = matchingTemplates.find(candidate => candidate.id === selectedTemplateId);
+    if (!selected) return;
+    const critical = new Set(selected.criticalChecks || []);
+    const loaded: QualityCheckTemplate[] = (selected.checklist || []).map((label, idx) => ({
+      id: `tpl-${selected.id}-${idx}-${Date.now()}`,
+      label: critical.has(label) ? `${label} (حرج)` : label,
+      inputType: 'text',
+      required: true,
+    }));
+    setTemplate([...template, ...loaded]);
+    setSelectedTemplateId('');
+  }
+
+  async function handleSaveAsTemplate() {
+    if (!saveAsName.trim() || template.length === 0) return;
+    setSaveAsBusy(true);
+    setSaveAsMessage('');
+    try {
+      await qualitySettingsService.upsertInspectionTemplate({
+        id: `tpl-${Date.now()}`,
+        name: saveAsName.trim(),
+        productId,
+        lineId,
+        checklist: template.map(check => check.label),
+        criticalChecks: template.filter(check => check.required).map(check => check.label),
+        isActive: true,
+      });
+      setSaveAsName('');
+      setSaveAsMessage('تم حفظ القالب في موديول الجودة.');
+    } catch (reason) {
+      setSaveAsMessage((reason as Error).message || 'تعذر حفظ القالب.');
+    } finally {
+      setSaveAsBusy(false);
+    }
+  }
 
   async function handleSave() {
     setBusy(true);
@@ -107,6 +172,28 @@ export function QualityReportTemplateEditor({
               </Button>
             </div>
           ))}
+        </div>
+      )}
+
+      {matchingTemplates.length > 0 && (
+        <div className="space-y-3 rounded-md border border-border p-3">
+          <p className="text-sm font-medium">قوالب الجودة المتاحة</p>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <select
+              disabled={disabled}
+              value={selectedTemplateId}
+              onChange={e => setSelectedTemplateId(e.target.value)}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            >
+              <option value="">اختر قالبًا…</option>
+              {matchingTemplates.map(candidate => (
+                <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
+              ))}
+            </select>
+            <Button type="button" variant="outline" disabled={disabled || !selectedTemplateId} onClick={handleLoadTemplate}>
+              تحميل القالب
+            </Button>
+          </div>
         </div>
       )}
 
@@ -198,6 +285,28 @@ export function QualityReportTemplateEditor({
       >
         حفظ نموذج الجودة
       </Button>
+
+      <div className="space-y-2 rounded-md border border-border p-3">
+        <p className="text-sm font-medium">حفظ كقالب في موديول الجودة</p>
+        <p className="text-xs text-muted-foreground">لإعادة استخدام هذه المعايير في أوامر شغل مستقبلية لنفس المنتج والخط.</p>
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+          <Input
+            disabled={disabled}
+            placeholder="اسم القالب"
+            value={saveAsName}
+            onChange={e => setSaveAsName(e.target.value)}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || saveAsBusy || !saveAsName.trim() || template.length === 0}
+            onClick={() => void handleSaveAsTemplate()}
+          >
+            حفظ كقالب
+          </Button>
+        </div>
+        {saveAsMessage && <p className="text-sm text-muted-foreground">{saveAsMessage}</p>}
+      </div>
     </fieldset>
   );
 }
