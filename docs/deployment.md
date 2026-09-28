@@ -37,7 +37,11 @@ npm run typecheck:functions
 
 Never hand-edit `functions/lib`. Rebuild before deploy and before tests that load compiled JS. ADR: [adr/ADR-003-functions-src-is-source-of-truth.md](./adr/ADR-003-functions-src-is-source-of-truth.md).
 
-## Web build & hosting
+## Production frontend (Vercel)
+
+The user-facing production frontend is `https://production-line.vercel.app`, linked to GitHub `main` (see README). Firebase Hosting is a separate mirror; publishing there alone does not update the production Vercel URL. Deploy the reviewed source through the linked Git integration or authenticated `vercel deploy --prod`, then verify the assets served from the Vercel production alias.
+
+## Firebase Hosting mirror
 
 ```bash
 npm run build          # Vite → dist/

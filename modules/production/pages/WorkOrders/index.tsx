@@ -106,10 +106,6 @@ const resolveEstimatedDays = (order: WorkOrder, avgDaily: number): number => {
 };
 
 export const WorkOrders: React.FC = () => {
-  return <LegacyWorkOrders />;
-};
-
-const LegacyWorkOrders: React.FC = () => {
   const navigate = useTenantNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { openModal } = useGlobalModalManager();
@@ -868,15 +864,12 @@ const LegacyWorkOrders: React.FC = () => {
         onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
         onCloseOrder={canUpdateWorkOrderStatus ? handleCloseOrder : undefined}
         onPrint={handlePrintOrder}
-        onOpenFullPage={(order) => navigate(`/work-orders/${order.id}`)}
         onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
         canReopenCompleted={can('workOrders.edit')}
         onReopenCompleted={handleReopenCompletedOrder}
         onViewReports={can('reports.view') || can('reports.create') ? handleViewLinkedReports : undefined}
         onReconcileReports={workOrderReconcileEnabled && (can('workOrders.edit') || can('reports.edit')) ? handleReconcileLinkedReports : undefined}
         reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
-        canExecuteHourlySlots={canUpdateWorkOrderStatus}
-        canReviewHourlyQuality={can('quality.finalInspection.inspect') && isOperationPathEnabled(systemSettings, WORK_ORDER_OPERATION_KEYS.update, WORK_ORDER_UPDATE_PATHS.qualityFinalInspection)}
       />
     </ModuleOpsPageShell>
   );
