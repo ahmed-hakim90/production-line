@@ -56,6 +56,16 @@ Changing a warehouse role or routing id without updating both client resolvers a
 
 ## Report behavior — Quick Action work order
 
+Report creation refreshes tenant settings from the Firestore server before evaluating
+operation paths, plan requirements, or report behavior. A failed server read fails
+the save; a long-lived supervisor session must not apply stale plan policy. A tenant
+change during that read also cancels the save.
+
+`planSettings.allowReportWithoutPlan` is a separate positive permission: **true**
+allows reports without a plan/work order; **false** blocks them when no matching
+context exists. Disabling `requireWorkOrderOnQuickAction` alone does not enable this
+permission. The rejection message points to the exact settings toggle.
+
 - Field: `planSettings.reportBehavior.requireWorkOrderOnQuickAction` (default **false**, opt-in)
 - Resolver: `modules/production/lib/reportBehaviorSettings.ts`
 - UI toggle: Settings → production report behavior (`ProductionReportBehaviorSettingsSection`)

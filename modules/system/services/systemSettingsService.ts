@@ -1,4 +1,4 @@
-import { doc, getDoc, runTransaction, setDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, runTransaction, setDoc } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import type { SystemSettings } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -22,7 +22,7 @@ export const systemSettingsService = {
   /** Strict read for mutation policy checks; provider errors must fail the operation closed. */
   async getStrict(): Promise<SystemSettings | null> {
     if (!isConfigured) return null;
-    const snap = await getDoc(doc(db, COLLECTION, getCurrentTenantId()));
+    const snap = await getDocFromServer(doc(db, COLLECTION, getCurrentTenantId()));
     return snap.exists() ? snap.data() as SystemSettings : null;
   },
 

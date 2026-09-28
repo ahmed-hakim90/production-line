@@ -55,6 +55,14 @@ function extractFunctionBody(source: string, name: string): string {
 }
 
 const createWorkOrderBody = extractFunctionBody(storeSource, 'createWorkOrder');
+const createReportPolicyBody = extractFunctionBody(storeSource, 'createReport');
+const settingsRead = createReportPolicyBody.indexOf('await systemSettingsService.getStrict()');
+const settingsApplied = createReportPolicyBody.indexOf('systemSettings: resolveSystemSettings(latestSettings)');
+assert.ok(settingsRead >= 0 && settingsApplied > settingsRead, 'report creation must refresh policy from the server');
+assert.ok(settingsApplied < createReportPolicyBody.indexOf('assertOperationPathEnabled('), 'refresh must precede policy checks');
+assert.match(createReportPolicyBody, /planSettings\.allowReportWithoutPlan === false/, 'only explicit disallow should block reports without a plan');
+const settingsServiceSource = readFileSync(new URL('../modules/system/services/systemSettingsService.ts', import.meta.url), 'utf8');
+assert.match(settingsServiceSource, /async getStrict\(\)[\s\S]*?await getDocFromServer\(/, 'strict policy reads must not fall back to offline cache');
 const createPlanBody = extractFunctionBody(storeSource, 'createProductionPlan');
 const updatePlanBody = extractFunctionBody(storeSource, 'updateProductionPlan');
 const deletePlanBody = extractFunctionBody(storeSource, 'deleteProductionPlan');

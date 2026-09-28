@@ -4015,6 +4015,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       return cachedRawMaterials;
     };
     try {
+      // Report policy can change while a supervisor keeps this form open.
+      // A failed server read must not silently fall back to stale policy.
+      const settingsTenantId = getCurrentTenantId();
+      const latestSettings = await systemSettingsService.getStrict();
+      if (getCurrentTenantId() !== settingsTenantId) {
+        throw new Error('تغيرت الشركة أثناء الحفظ. أعد فتح التقرير وحاول مرة أخرى.');
+      }
+      set({ systemSettings: resolveSystemSettings(latestSettings) });
       assertOperationPathEnabled(
         get().systemSettings,
         PRODUCTION_REPORT_OPERATION_KEYS.create,
@@ -4256,8 +4264,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         Boolean(activePlan?.id) &&
         reportType !== 'packaging';
 
-      if (!activePlan && !activeWO && !hasMatchingPlanContext && !planSettings.allowReportWithoutPlan) {
-        set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
+      if (!activePlan && !activeWO && !hasMatchingPlanContext && planSettings.allowReportWithoutPlan === false) {
+        set({ error: 'التسجيل بدون خطة أو أمر شغل غير مسموح. فعّل «السماح بالتقارير بدون خطة» من إعدادات سلوك تقارير الإنتاج.' });
         return null;
       }
 
