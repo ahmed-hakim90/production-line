@@ -8,7 +8,7 @@ Modern Manufacturing ERP visual language for Hakimo Production Line.
 
 | Token | Value |
 |-------|--------|
-| Primary | `#4F46E5` / hover `#4338CA` |
+| Primary | `#C1101C` (El Maghraby red) / hover `#91050F` |
 | Success | `#059669` |
 | Warning | `#D97706` |
 | Danger | `#DC2626` |

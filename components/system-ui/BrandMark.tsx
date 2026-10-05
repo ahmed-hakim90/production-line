@@ -1,4 +1,5 @@
 import React from 'react';
+import { PRODUCT_BRAND } from '@/lib/productBrand';
 
 type BrandMarkProps = {
   size?: number;
@@ -7,12 +8,12 @@ type BrandMarkProps = {
   decorative?: boolean;
 };
 
-/** Shared ForgeOps mark — SVG for crisp UI; PNG fallbacks live under /icons for PWA. */
+/** Shared El Maghraby emblem — PNG square icons for PWA live under /icons. */
 export function BrandMark({ size = 40, className = '', decorative = true }: BrandMarkProps) {
   return (
     <img
-      src="/icons/forgeops-app-icon.svg"
-      alt={decorative ? '' : 'ForgeOps'}
+      src={PRODUCT_BRAND.emblemSrc}
+      alt={decorative ? '' : 'المغربي EL MAGHRABY'}
       width={size}
       height={size}
       className={['brand-mark', className].filter(Boolean).join(' ')}

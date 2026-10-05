@@ -4,15 +4,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#8f2424" />
+    <meta name="theme-color" content="#C1101C" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="ForgeOps" />
-    <title>ForgeOps</title>
-    <link rel="icon" type="image/svg+xml" href="/icons/forgeops-app-icon.svg" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/forgeops-app-icon-192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icons/forgeops-app-icon-512.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/forgeops-app-icon-180.png" />
+    <meta name="apple-mobile-web-app-title" content="Maghraby Group" />
+    <title>Maghraby Group</title>
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/elmaghraby-icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/elmaghraby-icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/elmaghraby-icon-180.png" />
+    <link rel="preload" as="image" href="/brand/elmaghraby-logo-white.png" fetchpriority="high" />
     <meta name="mobile-web-app-capable" content="yes" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -20,36 +20,47 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
     <style>
-      /* Cold boot: branded splash — fixed ForgeOps blue (not tenant theme) */
+      /* Cold boot: El Maghraby CI splash — fixed red (not tenant theme). Keep in sync with AppSplashScreen. */
       #html-splash {
         position: fixed;
         inset: 0;
         z-index: 99999;
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 20px;
-        background: linear-gradient(165deg, var(--splash-brand, #1E4D8C) 0%, var(--splash-brand-dark, #163A6B) 100%);
-        color: #fff;
+        overflow: hidden;
+        background: linear-gradient(168deg, #91050F 0%, #C1101C 46%, #ED1F26 100%);
+        color: #FFF2E3;
       }
-      #html-splash img {
-        width: 80px;
-        height: 80px;
-        border-radius: 20px;
-        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+      #html-splash .html-splash-cold {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+      }
+      #html-splash .html-splash-watermark {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+      #html-splash .html-splash-logo {
+        width: clamp(200px, 42vmin, 320px);
+        height: auto;
       }
       #html-splash p {
         margin: 0;
         font-family: 'Cairo', 'Noto Sans Arabic', system-ui, sans-serif;
-        font-size: 15px;
+        font-size: clamp(15px, 2.6vmin, 19px);
         font-weight: 600;
-        opacity: 0.9;
       }
       #html-splash .html-splash-bar {
-        width: 160px;
+        width: min(140px, 42vw);
         height: 3px;
-        background: rgba(255, 255, 255, 0.22);
+        background: rgba(255, 242, 227, 0.25);
         border-radius: 99px;
         overflow: hidden;
       }
@@ -57,7 +68,7 @@
         display: block;
         height: 100%;
         width: 40%;
-        background: #fff;
+        background: #FFF2E3;
         border-radius: 99px;
         animation: html-splash-slide 1.4s ease-in-out infinite;
       }
@@ -189,9 +200,13 @@
 </head>
   <body>
     <div id="html-splash" role="status" aria-live="polite" aria-busy="true" aria-label="جاري التحميل">
+      <svg class="html-splash-cold html-splash-watermark" viewBox="0 0 900 900" fill="none" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <path d="M120 900V500a300 300 0 0 1 600 0v400" stroke="white" stroke-opacity="0.09" stroke-width="40" />
+        <path d="M420 900V500a300 300 0 0 1 600 0v400" stroke="white" stroke-opacity="0.09" stroke-width="40" />
+      </svg>
       <div class="html-splash-cold">
-        <img src="/icons/forgeops-app-icon.svg" alt="" width="80" height="80" decoding="async" />
-        <p>جاري تحميل النظام...</p>
+        <img class="html-splash-logo" src="/brand/elmaghraby-logo-white.png" alt="المغربي EL MAGHRABY" width="720" height="172" decoding="async" fetchpriority="high" />
+        <p>ثقة تكمل معاك</p>
         <div class="html-splash-bar" aria-hidden="true"><span></span></div>
       </div>
       <div class="html-splash-warm" aria-hidden="true">
@@ -238,23 +253,14 @@
 
     <script>
       /**
-       * Cold splash uses fixed ForgeOps brand blue — never tenant theme primary.
+       * Cold splash / auth panels use fixed El Maghraby red — must match lib/productBrand.ts.
        * Tenant theme still applies to the app chrome after login.
        */
       (function () {
-        var SPLASH = '#1E4D8C';
-        var SPLASH_DARK = '#163A6B';
-        var SPLASH_LIGHT = '#2B63B5';
         try {
-          document.documentElement.style.setProperty('--splash-brand', SPLASH);
-          document.documentElement.style.setProperty('--splash-brand-dark', SPLASH_DARK);
-          document.documentElement.style.setProperty('--splash-brand-light', SPLASH_LIGHT);
-          var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', SPLASH);
-          var el = document.getElementById('html-splash');
-          if (el && !el.classList.contains('html-splash--warm')) {
-            el.style.background = 'linear-gradient(165deg, ' + SPLASH + ' 0%, ' + SPLASH_DARK + ' 100%)';
-          }
+          document.documentElement.style.setProperty('--splash-brand', '#C1101C');
+          document.documentElement.style.setProperty('--splash-brand-dark', '#91050F');
+          document.documentElement.style.setProperty('--splash-brand-light', '#ED1F26');
         } catch (e) { /* ignore */ }
       })();
     </script>

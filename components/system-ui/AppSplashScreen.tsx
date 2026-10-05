@@ -1,30 +1,23 @@
 import React, { useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { BrandMark } from './BrandMark';
+import { PRODUCT_BRAND } from '@/lib/productBrand';
 import { dismissHtmlSplash } from '../../lib/dismissHtmlSplash';
 
 export type AppSplashVariant = 'branded' | 'resume';
 
 export type AppSplashScreenProps = {
-  /** Status line under the app name (default: i18n splash.loading) */
+  /** Status line under the slogan (default: i18n splash.loading / splash.resuming) */
   subtitle?: string;
   /**
-   * `branded` — full cold-boot splash (panel + features).
-   * `resume` — compact loader for returning sessions (same visual language, no marketing panel).
+   * `branded` — cold boot: logo + slogan + progress.
+   * `resume` — same El Maghraby splash with a session-restore status line.
    */
   variant?: AppSplashVariant;
 };
 
-const SPLASH_FEATURES = [
-  { icon: 'precision_manufacturing', key: 'production' as const },
-  { icon: 'inventory_2', key: 'inventory' as const },
-  { icon: 'build', key: 'repair' as const },
-  { icon: 'groups', key: 'hr' as const },
-];
-
 /**
- * Full-screen branded splash for initial app boot (mobile + desktop).
- * Use `variant="resume"` for warm session restore — not for in-page data loading.
+ * Full-screen El Maghraby CI splash for initial app boot (mobile + desktop).
+ * Visually identical to the static `#html-splash` in index.html so the hand-off is seamless.
  */
 export function AppSplashScreen({ subtitle, variant = 'branded' }: AppSplashScreenProps) {
   const { t } = useTranslation();
@@ -38,61 +31,39 @@ export function AppSplashScreen({ subtitle, variant = 'branded' }: AppSplashScre
 
   return (
     <div
-      className={isResume ? 'app-splash app-splash--resume' : 'app-splash'}
+      className="app-splash"
       role="status"
       aria-live="polite"
       aria-busy="true"
       aria-label={statusLine}
     >
-      {!isResume && (
-        <div className="app-splash__panel" aria-hidden="true">
-          <div className="app-splash__panel-glow app-splash__panel-glow--top" />
-          <div className="app-splash__panel-glow app-splash__panel-glow--bottom" />
+      <svg
+        className="app-splash__watermark"
+        viewBox="0 0 900 900"
+        fill="none"
+        preserveAspectRatio="xMidYMid slice"
+        aria-hidden="true"
+      >
+        <path d="M120 900V500a300 300 0 0 1 600 0v400" stroke="white" strokeOpacity="0.09" strokeWidth="40" />
+        <path d="M420 900V500a300 300 0 0 1 600 0v400" stroke="white" strokeOpacity="0.09" strokeWidth="40" />
+      </svg>
+      <div className="app-splash__glow" aria-hidden="true" />
 
-          <BrandMark size={56} className="app-splash__panel-logo" />
-
-          <h1 className="app-splash__panel-title">{t('splash.appName')}</h1>
-          <p className="app-splash__panel-desc">{t('splash.tagline')}</p>
-
-          <ul className="app-splash__features">
-            {SPLASH_FEATURES.map(({ icon, key }) => (
-              <li key={key} className="app-splash__feature">
-                <span className="material-icons-round">{icon}</span>
-                <span>{t(`splash.features.${key}`)}</span>
-              </li>
-            ))}
-          </ul>
+      <div className="app-splash__stack">
+        <img
+          className="app-splash__logo"
+          src={PRODUCT_BRAND.logoWhiteSrc}
+          alt="المغربي EL MAGHRABY"
+          width={720}
+          height={172}
+          decoding="async"
+          draggable={false}
+        />
+        <p className="app-splash__slogan">{PRODUCT_BRAND.slogan}</p>
+        <div className="app-splash__progress" aria-hidden="true">
+          <span className="app-splash__progress-bar" />
         </div>
-      )}
-
-      <div className="app-splash__main">
-        {!isResume && (
-          <div className="app-splash__mobile-brand" aria-hidden="true">
-            <BrandMark size={72} className="app-splash__mobile-logo" />
-            <h1 className="app-splash__mobile-title">{t('splash.appName')}</h1>
-          </div>
-        )}
-
-        <div className="app-splash__loader">
-          <div className="app-splash__icon-shell">
-            <BrandMark size={64} className="app-splash__icon" />
-            <div className="app-splash__ring" />
-          </div>
-
-          <p className="app-splash__status">{statusLine}</p>
-
-          <div className="erp-loading-dots app-splash__dots">
-            <span />
-            <span />
-            <span />
-          </div>
-
-          <div className="app-splash__progress">
-            <div className="app-splash__progress-bar" />
-          </div>
-        </div>
-
-        {!isResume && <p className="app-splash__footer">{t('splash.footer')}</p>}
+        {isResume || subtitle ? <p className="app-splash__status">{statusLine}</p> : null}
       </div>
     </div>
   );

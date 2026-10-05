@@ -22,7 +22,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
           <div className="erp-auth-logo erp-auth-logo--mark">
             <BrandMark size={48} />
           </div>
-          <div className="erp-auth-app-name">ForgeOps</div>
+          <div className="erp-auth-app-name">Maghraby Group</div>
           <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 
@@ -83,7 +83,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
           </div>
         </div>
 
-        <p className="erp-auth-copyright">&copy; {new Date().getFullYear()} ForgeOps</p>
+        <p className="erp-auth-copyright">&copy; {new Date().getFullYear()} Maghraby Group</p>
       </div>
     </div>
   );

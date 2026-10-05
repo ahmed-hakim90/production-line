@@ -4,7 +4,7 @@ import { PRODUCT_BRAND } from '@/lib/productBrand';
 import { tenantSlugFromPathname, tenantHomePath } from '@/lib/tenantPaths';
 import { getLastVisitedTenantSlug, setLastVisitedTenantSlug } from '@/lib/lastTenantSlugStorage';
 
-const THEME_COLOR = '#8f2424';
+const THEME_COLOR = PRODUCT_BRAND.splashHex;
 
 /** Blob manifests resolve relative paths against `blob:` — always use absolute http(s) URLs. */
 function absoluteUrl(path: string): string {
@@ -13,8 +13,9 @@ function absoluteUrl(path: string): string {
 }
 
 function buildManifest(startPath: string): Record<string, unknown> {
-  const icon192 = absoluteUrl('/icons/forgeops-app-icon-192.png');
-  const icon512 = absoluteUrl('/icons/forgeops-app-icon-512.png');
+  const icon192 = absoluteUrl(PRODUCT_BRAND.icon192Src);
+  const icon512 = absoluteUrl(PRODUCT_BRAND.icon512Src);
+  const iconMaskable = absoluteUrl(PRODUCT_BRAND.iconMaskable512Src);
   return {
     name: PRODUCT_BRAND.name,
     short_name: PRODUCT_BRAND.name,
@@ -40,7 +41,7 @@ function buildManifest(startPath: string): Record<string, unknown> {
         purpose: 'any',
       },
       {
-        src: icon512,
+        src: iconMaskable,
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',

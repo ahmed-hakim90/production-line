@@ -385,14 +385,14 @@ button {
   overflow: hidden;
 }
 
-/* ── Left branding panel (desktop only) — fixed ForgeOps blue, not tenant theme ── */
+/* ── Left branding panel (desktop only) — fixed El Maghraby red, not tenant theme ── */
 .erp-auth-panel {
   display: none;
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
   padding: 48px 48px;
-  background: linear-gradient(155deg, var(--splash-brand-light, #2B63B5) 0%, var(--splash-brand-dark, #163A6B) 100%);
+  background: linear-gradient(168deg, var(--splash-brand-dark, #91050F) 0%, var(--splash-brand, #C1101C) 46%, var(--splash-brand-light, #ED1F26) 100%);
   position: relative;
   overflow: hidden;
   min-width: 360px;
@@ -412,11 +412,11 @@ button {
   color: var(--color-text);
 }
 
+/* El Maghraby emblem has its own silhouette — never crop or round it. */
 .brand-mark {
   display: block;
-  border-radius: 22%;
   flex-shrink: 0;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .landing-marketing-nav {
@@ -451,10 +451,6 @@ button {
   min-width: 0;
   text-decoration: none;
   color: inherit;
-}
-
-.landing-marketing-brand__logo {
-  box-shadow: 0 6px 18px rgb(var(--color-primary) / 0.28);
 }
 
 .landing-marketing-brand__text {
@@ -621,7 +617,7 @@ button {
 }
 
 .landing-marketing-hero__logo {
-  box-shadow: 0 16px 40px rgb(0 0 0 / 0.35);
+  filter: drop-shadow(0 12px 28px rgb(0 0 0 / 0.35));
 }
 
 .landing-marketing-hero__product {
@@ -875,16 +871,14 @@ button {
   overflow: hidden;
 }
 
+/* Red brand panel: white tile keeps the red emblem visible. */
 .erp-auth-panel-logo--mark {
-  background: transparent;
+  background: #fff;
   width: auto;
   height: auto;
-  border-radius: 0;
-  padding: 0;
-}
-
-.erp-auth-panel-logo--mark .brand-mark {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  border-radius: 14px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
 
 .erp-auth-panel-name {
@@ -984,10 +978,6 @@ button {
   height: auto;
   box-shadow: none;
   border-radius: 0;
-}
-
-.erp-auth-logo--mark .brand-mark {
-  box-shadow: 0 6px 20px rgb(var(--color-primary) / 0.3);
 }
 
 .erp-auth-app-name {
@@ -1240,14 +1230,14 @@ button {
   margin-top: 6px;
 }
 
-/* Register company — branded panel background (fixed ForgeOps blue + asset) */
+/* Register company — branded panel background (fixed El Maghraby red + asset) */
 .register-company-auth-panel.erp-auth-panel {
   background:
     linear-gradient(
       155deg,
-      color-mix(in srgb, var(--splash-brand-light, #2B63B5) 92%, transparent) 0%,
-      color-mix(in srgb, var(--splash-brand, #1E4D8C) 90%, #0f172a) 55%,
-      color-mix(in srgb, var(--splash-brand-dark, #163A6B) 88%, #0f172a) 100%
+      color-mix(in srgb, var(--splash-brand-light, #ED1F26) 92%, transparent) 0%,
+      color-mix(in srgb, var(--splash-brand, #C1101C) 90%, #0f172a) 55%,
+      color-mix(in srgb, var(--splash-brand-dark, #91050F) 88%, #0f172a) 100%
     ),
     url('/landing/register-panel-bg.png') center / cover no-repeat;
 }
@@ -1348,10 +1338,6 @@ button {
   padding: 0;
 }
 
-.erp-auth-loading-icon--mark .brand-mark {
-  box-shadow: 0 12px 32px rgb(var(--color-primary) / 0.35);
-}
-
 .erp-auth-loading-ring {
   position: absolute;
   inset: -6px;
@@ -1437,328 +1423,112 @@ button {
 }
 
 /* ══════════════════════════════════════════════════════════
-   APP SPLASH SCREEN (boot / PWA open)
+   APP SPLASH SCREEN (boot / PWA open) — El Maghraby CI
+   Same visual as the static #html-splash in index.html so the
+   hand-off from HTML to React is seamless.
    ══════════════════════════════════════════════════════════ */
 
-.app-splash {
-  /* Fixed ForgeOps public brand — never follows tenant --color-primary */
-  --splash-brand: #1E4D8C;
-  --splash-brand-dark: #163A6B;
-  --splash-brand-light: #2B63B5;
-
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(165deg, var(--splash-brand) 0%, var(--splash-brand-dark) 100%);
-  color: #fff;
-  overflow: hidden;
-  position: relative;
-}
-
-@media (min-width: 900px) {
-  .app-splash {
-    flex-direction: row;
-    background: var(--color-bg, #f8fafc);
-    color: var(--color-text, #1e1b4b);
-  }
-}
-
-/* Warm resume: same brand tokens, no marketing panel — brief gate only */
-.app-splash--resume {
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  background: var(--color-bg, #f8fafc);
-  color: var(--color-text, #1e1b4b);
-}
-
-.app-splash--resume .app-splash__main {
-  flex: 0 1 auto;
-  width: 100%;
-  max-width: 420px;
-  min-height: auto;
-  padding: 32px 24px;
-}
-
-.app-splash--resume .app-splash__icon-shell {
-  width: 72px;
-  height: 72px;
-}
-
-.app-splash--resume .app-splash__status {
-  color: var(--color-text-muted, #64748b);
-}
-
-.app-splash__panel {
-  display: none;
-}
-
-@media (min-width: 900px) {
-  .app-splash__panel {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 48px;
-    min-width: 360px;
-    max-width: 420px;
-    flex: 1;
-    position: relative;
-    background: linear-gradient(155deg, var(--splash-brand-light) 0%, var(--splash-brand-dark) 100%);
-    color: #fff;
-    overflow: hidden;
-  }
-}
-
-.app-splash__panel-glow {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  pointer-events: none;
-}
-
-.app-splash__panel-glow--top {
-  top: -80px;
-  left: -80px;
-  width: 340px;
-  height: 340px;
-}
-
-.app-splash__panel-glow--bottom {
-  bottom: -60px;
-  right: -60px;
-  width: 240px;
-  height: 240px;
-}
-
-.app-splash__panel-logo {
-  width: 56px;
-  height: 56px;
-  border-radius: 14px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  margin-bottom: 28px;
-  position: relative;
-  z-index: 1;
-}
-
-.app-splash__panel-title {
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.5px;
-  line-height: 1.1;
-  margin: 0;
-  position: relative;
-  z-index: 1;
-}
-
-.app-splash__panel-desc {
-  font-size: 13.5px;
-  color: rgba(255, 255, 255, 0.78);
-  margin: 10px 0 0;
-  line-height: 1.6;
-  position: relative;
-  z-index: 1;
-}
-
-.app-splash__features {
-  margin: 36px 0 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  position: relative;
-  z-index: 1;
-}
-
-.app-splash__feature {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.app-splash__feature .material-icons-round {
-  font-size: 17px;
-  color: rgba(255, 255, 255, 0.65);
-  flex-shrink: 0;
-}
-
-.app-splash__main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
-  position: relative;
-  z-index: 1;
-}
-
-@media (min-width: 900px) {
-  .app-splash__main {
-    background: #fff;
-    min-height: 100vh;
-    min-height: 100dvh;
-  }
-}
-
-.app-splash__mobile-brand {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-@media (min-width: 900px) {
-  .app-splash__mobile-brand {
-    display: none;
-  }
-}
-
-.app-splash__mobile-logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
-  animation: app-splash-logo-pulse 2.4s ease-in-out infinite;
-}
-
-.app-splash__mobile-title {
-  font-size: 22px;
-  font-weight: 800;
-  margin: 16px 0 0;
-  letter-spacing: -0.3px;
-}
-
-.app-splash__loader {
-  text-align: center;
-  width: 100%;
-  max-width: 320px;
-}
-
-.app-splash__icon-shell {
-  position: relative;
-  display: none;
-  justify-content: center;
-  margin-bottom: 28px;
-}
-
-@media (min-width: 900px) {
-  .app-splash__icon-shell {
-    display: inline-flex;
-  }
-}
-
-.app-splash__icon {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--splash-brand) 35%, transparent);
-}
-
-.app-splash__ring {
-  position: absolute;
-  inset: -8px;
-  border: 2.5px solid color-mix(in srgb, var(--splash-brand) 15%, transparent);
-  border-top-color: var(--splash-brand);
-  border-radius: 50%;
-  animation: erp-spin 1s linear infinite;
-}
-
-.app-splash__status {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 24px;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-@media (min-width: 900px) {
-  .app-splash__status {
-    color: var(--color-text-muted, #6b7280);
-    font-weight: 500;
-  }
-}
-
-.app-splash__dots {
-  justify-content: center;
-  margin-bottom: 24px;
-}
-
-.app-splash__dots span {
-  background: rgba(255, 255, 255, 0.95);
-}
-
-@media (min-width: 900px) {
-  .app-splash__dots span {
-    background: var(--splash-brand);
-  }
-}
-
-.app-splash__progress {
-  width: min(220px, 70vw);
-  height: 3px;
-  background: rgba(255, 255, 255, 0.22);
-  border-radius: 99px;
-  overflow: hidden;
-  margin: 0 auto;
-}
-
-@media (min-width: 900px) {
-  .app-splash__progress {
-    background: color-mix(in srgb, var(--splash-brand) 12%, transparent);
-  }
-}
-
-.app-splash__progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0.55));
-  border-radius: 99px;
-  animation: erp-loading-bar 1.6s ease-in-out infinite;
-}
-
-@media (min-width: 900px) {
-  .app-splash__progress-bar {
-    background: linear-gradient(90deg, var(--splash-brand), color-mix(in srgb, var(--splash-brand) 55%, transparent));
-  }
-}
-
-.app-splash__footer {
-  position: absolute;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.55);
-  margin: 0;
-}
-
-@media (min-width: 900px) {
-  .app-splash__footer {
-    color: var(--color-text-muted, #9ca3af);
-  }
-}
-
-@keyframes app-splash-logo-pulse {
-  0%, 100% { transform: scale(1); }
-  50%      { transform: scale(1.04); }
-}
-
-/* Static HTML splash (index.html) — shown before JS bundle loads */
+.app-splash,
 #html-splash {
   position: fixed;
   inset: 0;
   z-index: 99999;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: linear-gradient(168deg, #91050F 0%, #C1101C 46%, #ED1F26 100%);
+  color: #FFF2E3;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.app-splash__watermark,
+#html-splash .html-splash-watermark {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.app-splash__glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 50% 42%,
+    rgb(255 255 255 / 0.1) 0%,
+    rgb(255 255 255 / 0.04) 32%,
+    rgb(255 255 255 / 0) 62%
+  );
+  animation: app-splash-glow-pulse 2400ms ease-in-out infinite;
+}
+
+.app-splash__stack,
+#html-splash .html-splash-cold:not(svg) {
+  position: relative;
+  z-index: 1;
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  background: linear-gradient(165deg, var(--splash-brand) 0%, var(--splash-brand-dark) 100%);
-  color: #fff;
-  transition: opacity 0.35s ease, visibility 0.35s ease;
+  gap: 1.125rem;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.app-splash__stack {
+  animation: app-splash-stack-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.app-splash__logo,
+#html-splash .html-splash-logo {
+  display: block;
+  width: clamp(200px, 42vmin, 320px);
+  height: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.app-splash__slogan,
+#html-splash p {
+  margin: 0;
+  font-family: 'Cairo', 'Noto Sans Arabic', system-ui, sans-serif;
+  font-size: clamp(15px, 2.6vmin, 19px);
+  font-weight: 600;
+  color: #FFF2E3;
+  letter-spacing: 0.01em;
+}
+
+.app-splash__status {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(255 242 227 / 0.78);
+}
+
+.app-splash__progress,
+#html-splash .html-splash-bar {
+  width: min(140px, 42vw);
+  height: 3px;
+  border-radius: 9999px;
+  background: rgb(255 242 227 / 0.25);
+  overflow: hidden;
+}
+
+.app-splash__progress-bar,
+#html-splash .html-splash-bar span {
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: inherit;
+  background: #FFF2E3;
+  animation: app-splash-slide 1.4s ease-in-out infinite;
+}
+
+#html-splash {
+  transition: opacity 0.38s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.38s ease;
 }
 
 #html-splash.html-splash--exit {
@@ -1773,7 +1543,6 @@ button {
   background: var(--color-bg, #f7f9fc);
   color: var(--color-text, #0f172a);
   padding: 0;
-  gap: 0;
   align-items: stretch;
   justify-content: flex-start;
 }
@@ -1783,40 +1552,32 @@ button {
   opacity: 0;
 }
 
-#html-splash img {
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
-  animation: app-splash-logo-pulse 2.4s ease-in-out infinite;
+@keyframes app-splash-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
 }
 
-#html-splash.html-splash--warm img {
-  animation: none;
+@keyframes app-splash-glow-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
-#html-splash p {
-  margin: 0;
-  font-family: 'Cairo', system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  opacity: 0.9;
+@keyframes app-splash-stack-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 
-#html-splash .html-splash-bar {
-  width: 160px;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.22);
-  border-radius: 99px;
-  overflow: hidden;
-}
-
-#html-splash .html-splash-bar span {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0.55));
-  border-radius: 99px;
-  animation: erp-loading-bar 1.6s ease-in-out infinite;
+@media (prefers-reduced-motion: reduce) {
+  .app-splash__glow,
+  .app-splash__stack,
+  .app-splash__progress-bar,
+  #html-splash .html-splash-bar span {
+    animation: none;
+  }
+  .app-splash__progress-bar,
+  #html-splash .html-splash-bar span {
+    width: 100%;
+  }
 }
 
 .erp-auth-meta {
@@ -4866,7 +4627,7 @@ input[type="radio"] {
 .erp-ds-clean .erp-date-seg-btn.active,
 .erp-ds-clean .erp-date-seg-btn[aria-pressed="true"],
 .erp-ds-clean .erp-date-seg-btn[data-active="true"] {
-  background-color: #4f46e5 !important;
+  background-color: rgb(var(--color-primary)) !important;
   color: #ffffff !important;
 }
 

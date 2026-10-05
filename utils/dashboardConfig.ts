@@ -318,14 +318,14 @@ export function resolveUiFontFamily(family?: string | null): string {
 }
 
 export const DEFAULT_THEME: ThemeSettings = {
-  primaryColor: '#4F46E5',
-  secondaryColor: '#6366F1',
+  primaryColor: '#C1101C',
+  secondaryColor: '#ED1F26',
   successColor: '#059669',
   warningColor: '#D97706',
   dangerColor: '#DC2626',
   backgroundColor: '#F8FAFC',
   cssVars: {
-    '--primary': '239 84% 60%',
+    '--primary': '356 85% 41%',
     '--primary-foreground': '0 0% 100%',
     '--secondary': '240 5% 96%',
     '--secondary-foreground': '240 6% 10%',
@@ -333,11 +333,11 @@ export const DEFAULT_THEME: ThemeSettings = {
     '--foreground': '222 84% 5%',
     '--muted': '210 40% 96%',
     '--muted-foreground': '215 16% 47%',
-    '--accent': '239 84% 97%',
-    '--accent-foreground': '239 84% 30%',
+    '--accent': '356 85% 97%',
+    '--accent-foreground': '356 85% 30%',
     '--border': '214 32% 91%',
     '--input': '214 32% 91%',
-    '--ring': '239 84% 60%',
+    '--ring': '356 85% 41%',
     '--card': '0 0% 100%',
     '--card-foreground': '222 84% 5%',
   },

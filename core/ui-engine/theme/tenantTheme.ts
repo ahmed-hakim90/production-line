@@ -28,7 +28,7 @@ export interface TenantTheme {
 const THEME_STORAGE_KEY = 'tenant_theme_cache_v1';
 
 /** Normalize theme primary/surface colors to #rrggbb for HSL conversion. */
-function colorToHex(color: string, fallback = '#4F46E5'): string {
+function colorToHex(color: string, fallback = '#C1101C'): string {
   const value = color.trim();
   if (!value) return fallback;
   if (value.startsWith('#')) {
@@ -38,7 +38,7 @@ function colorToHex(color: string, fallback = '#4F46E5'): string {
       return `#${[...h].map((ch) => ch + ch).join('')}`.toLowerCase();
     }
   }
-  const ch = toRgbChannels(value, '79 70 229');
+  const ch = toRgbChannels(value, '193 16 28');
   const [r, g, b] = ch.split(/\s+/).map((n) => Number(n));
   if ([r, g, b].some((n) => Number.isNaN(n))) return fallback;
   return `#${[r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('')}`;
@@ -81,7 +81,7 @@ function rgbToHslTriplet(r: number, g: number, b: number): string {
   return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
-function hexToHslTriplet(hex: string, fallback = '239 84% 60%'): string {
+function hexToHslTriplet(hex: string, fallback = '356 85% 41%'): string {
   const rgb = hexToRgb(hex);
   if (!rgb) return fallback;
   return rgbToHslTriplet(rgb.r, rgb.g, rgb.b);
@@ -104,7 +104,7 @@ function primaryForegroundHsl(primaryHex: string): string {
 function accentFromPrimary(primaryHex: string): { accent: string; accentFg: string } {
   const rgb = hexToRgb(primaryHex);
   if (!rgb) {
-    return { accent: '239 84% 97%', accentFg: '239 84% 30%' };
+    return { accent: '356 85% 97%', accentFg: '356 85% 30%' };
   }
   const triplet = rgbToHslTriplet(rgb.r, rgb.g, rgb.b);
   const [hStr, sPart, lPart] = triplet.split(' ');
@@ -125,7 +125,7 @@ function applyShadcnTokensFromTheme(theme: TenantTheme, root: HTMLElement) {
   const textHex = colorToHex(theme.colorText, '#0f172a');
   const cardHex = colorToHex(theme.colorCard, '#ffffff');
   const borderHex = colorToHex(theme.colorBorder, '#e2e8f0');
-  const primaryHex = colorToHex(theme.primaryColor, '#4F46E5');
+  const primaryHex = colorToHex(theme.primaryColor, '#C1101C');
 
   root.style.setProperty('--background', hexToHslTriplet(bgHex));
   root.style.setProperty('--foreground', hexToHslTriplet(textHex));
@@ -190,7 +190,7 @@ function applyShadcnTokensFromTheme(theme: TenantTheme, root: HTMLElement) {
 const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
   'indigo-pro': {
     preset: 'indigo-pro',
-    primaryColor: '#4F46E5',
+    primaryColor: '#C1101C',
     colorBg: '#F8FAFC',
     colorCard: '#ffffff',
     colorBorder: '#e2e8f0',
@@ -200,7 +200,7 @@ const PRESETS: Record<Exclude<TenantThemePreset, 'custom'>, TenantTheme> = {
   },
   light: {
     preset: 'light',
-    primaryColor: '#4F46E5',
+    primaryColor: '#C1101C',
     colorBg: '#F8FAFC',
     colorCard: '#ffffff',
     colorBorder: '#e2e8f0',
@@ -386,7 +386,7 @@ export function applyTenantTheme(theme: TenantTheme, themeSettings?: ThemeSettin
   root.style.setProperty('--color-text', theme.colorText);
   root.style.setProperty('--color-primary', toRgbChannels(theme.primaryColor));
   root.style.setProperty('--color-primary-hex', theme.primaryColor);
-  // Public splash/auth brand panel — fixed ForgeOps blue (never tenant primary).
+  // Public splash/auth brand panel — fixed El Maghraby red (never tenant primary).
   root.style.setProperty('--splash-brand', PRODUCT_BRAND.splashHex);
   root.style.setProperty('--splash-brand-dark', PRODUCT_BRAND.splashDarkHex);
   root.style.setProperty('--splash-brand-light', PRODUCT_BRAND.splashLightHex);
@@ -419,11 +419,11 @@ export function applyTenantTheme(theme: TenantTheme, themeSettings?: ThemeSettin
     root.style.setProperty('--color-warning-hex', settings.warningColor);
     root.style.setProperty('--color-danger-hex', settings.dangerColor);
   } else {
-    root.style.setProperty('--color-secondary', '99 102 241');
+    root.style.setProperty('--color-secondary', '237 31 38');
     root.style.setProperty('--color-success', '5 150 105');
     root.style.setProperty('--color-warning', '217 119 6');
     root.style.setProperty('--color-danger', '220 38 38');
-    root.style.setProperty('--color-secondary-hex', '#6366F1');
+    root.style.setProperty('--color-secondary-hex', '#ED1F26');
     root.style.setProperty('--color-success-hex', '#059669');
     root.style.setProperty('--color-warning-hex', '#D97706');
     root.style.setProperty('--color-danger-hex', '#DC2626');

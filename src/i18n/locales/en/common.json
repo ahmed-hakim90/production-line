@@ -1,5 +1,5 @@
 {
-  "appName": "ForgeOps",
+  "appName": "Maghraby Group",
   "appTagline": "Run production and repair from one platform",
   "appSubtitle": "Factory operations platform",
   "language": {
@@ -341,17 +341,8 @@
     }
   },
   "splash": {
-    "appName": "ForgeOps",
-    "tagline": "Run production and repair from one platform",
     "loading": "Loading the system...",
-    "resuming": "Restoring your session...",
-    "footer": "ForgeOps",
-    "features": {
-      "production": "Production lines and plans",
-      "inventory": "Inventory and materials",
-      "repair": "Repair and maintenance",
-      "hr": "HR and attendance"
-    }
+    "resuming": "Restoring your session..."
   },
   "modalManager": {
     "createWorkOrder": {
@@ -997,7 +988,7 @@
     "dailyWelcome": {
       "morningGreeting": "Good morning",
       "eveningGreeting": "Good evening",
-      "subtitle": "Welcome to ForgeOps.",
+      "subtitle": "Welcome to Maghraby Group.",
       "message": "Have a productive day. You can now track reports, tasks, and daily notifications with ease.",
       "continue": "Continue",
       "notification": {

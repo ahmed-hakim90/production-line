@@ -338,7 +338,7 @@ export const Login: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          © {new Date().getFullYear()} ForgeOps
+          © {new Date().getFullYear()} Maghraby Group
         </p>
       </div>
     </div>

@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
-**Identity:** Arabic (RTL) multi-tenant factory ERP **ForgeOps** — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-19 (product brand: ForgeOps)
+**Identity:** Arabic (RTL) multi-tenant factory ERP **Maghraby Group** — production, inventory, repair, HR, costing.  
+**Last updated:** 2026-10-05 (product brand: Maghraby Group, El Maghraby red CI)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -31,7 +31,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 - Tenant-scoped routes under `/t/:tenantSlug/...`
 - Shared permissions (`utils/permissions.ts`), menu (`config/menu.config.ts`), inventory warehouse scope
 - Visual language: **Hakimo Flow** — tokens in `src/index.css` / `DEFAULT_THEME`; runtime apply via `applyAppTheme` (`core/ui-engine/theme/tenantTheme.ts`); shells `DomainHomeShell` + `ModuleOpsPageShell`; doc `docs/HAKIMO_FLOW.md`
-- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars (`applyAppTheme`); product UI is guarded by `npm run arch:check:theme-tokens` (blocks hex + slate/gray + semantic Tailwind palettes mapped to success/warning/danger/primary/secondary; sidebar colorful + charts use `--chart-*` via `core/ui-engine/theme/chartColors.ts`). `systemSettings.printTemplate` drives paper / WhatsApp PNG plus per-document field visibility / custom lines / print font (full registry: production/worker/missing/supervisor/BOM, repair invoice/payment/spare/treasury/receipt/card/delivery, stock transfer/receipt/issue/item/supplies/department consumable/replenishment, accounting, quality, payslip, routing, catalog product detail). **Runtime print** goes through one host: `PrintEngineProvider` in `App.tsx` (`useManagedPrint` / `printDocument`). Preview: `/settings/reports` + `/dev/image-export`. Auth/splash branding panel uses **fixed ForgeOps blue** (`PRODUCT_BRAND.splashHex` / `--splash-brand`) — never tenant primary. Print/WhatsApp soft accents derive from `printTemplate.primaryColor` with UI theme fallback via `resolvePrintAccentHex`. Theme-preset color pickers still use literal hex by design.
+- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars (`applyAppTheme`); product UI is guarded by `npm run arch:check:theme-tokens` (blocks hex + slate/gray + semantic Tailwind palettes mapped to success/warning/danger/primary/secondary; sidebar colorful + charts use `--chart-*` via `core/ui-engine/theme/chartColors.ts`). `systemSettings.printTemplate` drives paper / WhatsApp PNG plus per-document field visibility / custom lines / print font (full registry: production/worker/missing/supervisor/BOM, repair invoice/payment/spare/treasury/receipt/card/delivery, stock transfer/receipt/issue/item/supplies/department consumable/replenishment, accounting, quality, payslip, routing, catalog product detail). **Runtime print** goes through one host: `PrintEngineProvider` in `App.tsx` (`useManagedPrint` / `printDocument`). Preview: `/settings/reports` + `/dev/image-export`. Auth/splash branding panel uses **fixed El Maghraby red** (`PRODUCT_BRAND.splashHex` / `--splash-brand`) — never tenant primary. Print/WhatsApp soft accents derive from `printTemplate.primaryColor` with UI theme fallback via `resolvePrintAccentHex`. Theme-preset color pickers still use literal hex by design.
 
 ## Modules (MOD)
 

@@ -3,7 +3,7 @@ import { DEFAULT_THEME, resolveUiFontFamily } from '@/utils/dashboardConfig';
 
 export type ThemePresetForCss = 'indigo-pro' | 'light' | 'dark' | 'factory' | 'custom';
 
-export function toRgbChannels(color: string, fallback = '79 70 229'): string {
+export function toRgbChannels(color: string, fallback = '193 16 28'): string {
   const value = color.trim();
   if (!value) return fallback;
 

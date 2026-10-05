@@ -28,7 +28,7 @@ export const PendingApproval: React.FC = () => {
           <div className="erp-auth-logo erp-auth-logo--mark">
             <BrandMark size={48} />
           </div>
-          <div className="erp-auth-app-name">ForgeOps</div>
+          <div className="erp-auth-app-name">Maghraby Group</div>
           <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 
@@ -155,7 +155,7 @@ export const PendingApproval: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          &copy; {new Date().getFullYear()} ForgeOps
+          &copy; {new Date().getFullYear()} Maghraby Group
         </p>
       </div>
     </div>

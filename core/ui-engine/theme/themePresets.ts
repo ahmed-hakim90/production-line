@@ -186,9 +186,16 @@ function buildPreset(input: PresetBuildInput): ThemePresetOption {
  */
 export const THEME_PRESETS: ThemePresetOption[] = [
   buildPreset({
-    id: 'indigo-pro',
-    name: 'Indigo Pro ⭐',
+    id: 'el-maghraby',
+    name: 'المغربي ⭐',
     description: 'الثيم الافتراضي الرسمي',
+    primary: '#C1101C',
+    sidebarIconStyle: 'primary',
+  }),
+  buildPreset({
+    id: 'indigo-pro',
+    name: 'Indigo Pro',
+    description: 'بنفسجي هادئ',
     primary: '#4F46E5',
     sidebarIconStyle: 'primary',
   }),
