@@ -6,7 +6,7 @@ import {
   resolveImageExportPalette,
 } from '@/utils/imageExportTheme'
 import { resolvePrintAccentHex } from '@/utils/printTheme'
-import { PrintBrandHeader } from './PrintBrandHeader'
+import { PrintBrandHeader, type PrintBrandHeaderVariant } from './PrintBrandHeader'
 import { PrintExtraLines } from './PrintExtraLines'
 import { PRINT_SURFACE } from '@/utils/print/printSurface'
 import {
@@ -63,6 +63,10 @@ export type FactoryPrintShellProps = {
   fontFamily?: string
   /** CSS font-size (e.g. 10pt) */
   fontSize?: string
+  /** Production reports use the stationery letterhead. Other documents stay on the standard header. */
+  headerVariant?: PrintBrandHeaderVariant
+  /** When false, the timestamp under the document title is omitted. */
+  showPrintDate?: boolean
 }
 
 const gridColsClass = (count: number) => {
@@ -127,6 +131,8 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
       dense = false,
       fontFamily = "'Cairo', 'Noto Sans Arabic', Tahoma, sans-serif",
       fontSize,
+      headerVariant = 'standard',
+      showPrintDate = true,
     },
     ref,
   ) => {
@@ -186,6 +192,8 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
           logoUrl={logoUrl}
           brandAccent={accent}
           dense={dense}
+          variant={headerVariant}
+          showPrintDate={showPrintDate}
         />
 
         <PrintExtraLines lines={customLines} dense={dense} />

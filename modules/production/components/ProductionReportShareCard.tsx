@@ -4,6 +4,7 @@ import {
   formatPackagingLineDisplay,
   formatReportCartonsCount,
   resolveReportCartonsCount,
+  singleLineFontScale,
   totalWorkersForPrintRow,
   type ReportPrintRow,
 } from './ProductionReportPrint';
@@ -11,12 +12,15 @@ import { getInjectionShiftLabel } from '../utils/injectionReportShift';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { resolvePrintFont } from '@/utils/print/printFont';
 import { PrintExtraLines } from '@/src/components/erp/PrintExtraLines';
+import {
+  EL_MAGHRABY_LETTERHEAD_LOGO,
+  EL_MAGHRABY_LETTERHEAD_RED,
+} from '@/src/components/erp/PrintBrandHeader';
 import { resolveImageExportPalette } from '@/utils/imageExportTheme';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 
 export interface ProductionReportShareCardProps {
   report: ReportPrintRow;
-  generatedAt?: string;
   printSettings?: PrintTemplateSettings;
   version?: string;
 }
@@ -68,13 +72,20 @@ const producedQuantity = (report: ReportPrintRow): number => {
   return total && total > 0 ? total : Number(report.quantityProduced || 0);
 };
 
-const shouldShowReferenceWarning = (report: ReportPrintRow): boolean => {
-  const banner = report.shareStandardVariance;
-  if (!banner) return false;
-  return banner.tone === 'amber' || banner.headline.includes('لا يتوفر مرجع') || banner.headline.includes('تعذر احتساب');
-};
+/** Approx. characters that fit the 734px value column at 26px. */
+const SHARE_PRODUCT_NAME_CAPACITY = 52;
 
-const DetailRow = ({ label, value, ltr = false }: { label: string; value: string; ltr?: boolean }) => (
+const DetailRow = ({
+  label,
+  value,
+  ltr = false,
+  singleLine = false,
+}: {
+  label: string;
+  value: string;
+  ltr?: boolean;
+  singleLine?: boolean;
+}) => (
   <div style={{ ...baseText, display: 'grid', gridTemplateColumns: '220px 1fr', gap: 18, padding: '16px 0', borderBottom: '1px solid #e5e7eb' }}>
     <div style={{ ...baseText, color: '#64748b', fontSize: 24, fontWeight: 700 }}>{label}</div>
     <div
@@ -83,9 +94,9 @@ const DetailRow = ({ label, value, ltr = false }: { label: string; value: string
         ...baseText,
         ...(ltr ? ltrText : {}),
         color: '#0f172a',
-        fontSize: 26,
+        fontSize: singleLine ? Math.round(26 * singleLineFontScale(value, SHARE_PRODUCT_NAME_CAPACITY)) : 26,
         fontWeight: 800,
-        overflowWrap: 'anywhere',
+        ...(singleLine ? { whiteSpace: 'nowrap' as const } : { overflowWrap: 'anywhere' as const }),
       }}
     >
       {value || '—'}
@@ -95,7 +106,6 @@ const DetailRow = ({ label, value, ltr = false }: { label: string; value: string
 
 export function ProductionReportShareCard({
   report,
-  generatedAt = new Date().toLocaleString('ar-EG'),
   printSettings,
   version = __APP_VERSION__,
 }: ProductionReportShareCardProps) {
@@ -119,7 +129,10 @@ export function ProductionReportShareCard({
     report.costPerUnit != null && report.costPerUnit > 0
       ? `${formatNumber(report.costPerUnit, 2)} EGP`
       : '—';
-  const showWarning = shouldShowReferenceWarning(report);
+  const tenantLogo = String(printSettings?.logoUrl || '').trim();
+  const usingWordmark = !tenantLogo;
+  const letterheadLogo = tenantLogo || EL_MAGHRABY_LETTERHEAD_LOGO;
+  const letterheadColor = usingWordmark ? EL_MAGHRABY_LETTERHEAD_RED : accent;
   const packagingLines = report.packagingPrintLines || [];
   const detailTitle = report.sourceReportType === 'packaging' ? 'تفاصيل التغليف' : 'تفاصيل الإنتاج';
   const productTitle =
@@ -158,54 +171,14 @@ export function ProductionReportShareCard({
         overflow: 'visible',
       }}
     >
-      {showWarning ? (
-        <div
-          style={{
-            ...baseText,
-            border: '2px solid #fde68a',
-            background: '#fffbeb',
-            color: '#78350f',
-            borderRadius: 8,
-            padding: '22px 26px',
-            marginBottom: 28,
-          }}
-        >
-          <div style={{ ...baseText, fontSize: 27, fontWeight: 900, marginBottom: 8 }}>
-            {report.shareStandardVariance?.headline}
-          </div>
-          {(report.shareStandardVariance?.lines || []).map((line, index) => (
-            <div key={index} style={{ ...baseText, fontSize: 21, fontWeight: 700 }}>
-              {line}
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      <header style={{ ...baseText, display: 'flex', justifyContent: 'space-between', gap: 32, alignItems: 'flex-start' }}>
-        <div style={{ ...baseText, textAlign: 'right' }}>
-          <div style={{ ...baseText, fontSize: 42, fontWeight: 950, color: '#111827' }}>{companyName}</div>
-          <div dir="ltr" style={{ ...baseText, ...ltrText, fontSize: 24, fontWeight: 800, color: accent, marginTop: 4 }}>
-            Hakim Production System
-          </div>
-        </div>
-        <div style={{ ...baseText, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
-          <div
-            style={{
-              ...baseText,
-              background: palette.badgeBg,
-              color: palette.badgeText,
-              border: `1px solid ${palette.progressTrack}`,
-              borderRadius: 8,
-              padding: '10px 18px',
-              fontSize: 24,
-              fontWeight: 900,
-            }}
-          >
-            {reportTypeLabel(report)}
-          </div>
-          <div dir="ltr" style={{ ...baseText, ...ltrText, color: '#64748b', fontSize: 20, fontWeight: 700 }}>
-            {generatedAt}
-          </div>
+      <header style={{ ...baseText, display: 'flex', justifyContent: 'space-between', gap: 32, alignItems: 'center' }}>
+        <img
+          src={letterheadLogo}
+          alt={usingWordmark ? 'المغربي EL MAGHRABY' : companyName}
+          style={{ display: 'block', height: 170, width: 'auto', maxWidth: 360, objectFit: 'contain' }}
+        />
+        <div style={{ ...baseText, fontSize: 38, fontWeight: 950, color: letterheadColor }}>
+          {reportTypeLabel(report)}
         </div>
       </header>
 
@@ -215,7 +188,7 @@ export function ProductionReportShareCard({
         </div>
       ) : null}
 
-      <div style={{ ...baseText, height: 3, background: accent, margin: '30px 0' }} />
+      <div style={{ ...baseText, height: 5, background: letterheadColor, margin: '26px 0 30px' }} />
 
       <section style={{ ...baseText, display: 'grid', gridTemplateColumns: `repeat(${showEmployee ? 4 : 3}, 1fr)`, border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'visible' }}>
         {[
@@ -299,7 +272,7 @@ export function ProductionReportShareCard({
               />
             ))
           ) : (
-            <DetailRow label="المنتج" value={shortProductName(report.productName || '—')} />
+            <DetailRow label="المنتج" value={String(report.productName || '').trim() || '—'} singleLine />
           )}
           {showWorkOrder ? (
             <DetailRow label="أمر الشغل" value={report.workOrderNumber || '—'} ltr />

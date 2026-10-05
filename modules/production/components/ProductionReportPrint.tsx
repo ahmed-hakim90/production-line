@@ -19,9 +19,7 @@ import type { FactoryPrintTableRow } from '@/src/components/erp/FactoryPrintTabl
 import { Factory_DEFAULT_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import { resolvePrintFont } from '@/utils/print/printFont';
-import { cn } from '@/lib/utils';
 import type { ShareStandardVarianceTone } from '../../../utils/productionReportStandardVariance';
-import { shareVarianceTailwindToneClass } from '../../../utils/productionReportStandardVariance';
 import { resolveReportType } from '../utils/reportTypes';
 import { getInjectionShiftLabel } from '../utils/injectionReportShift';
 import { summarizeWorkerPresenceDays } from '../utils/workerPresence';
@@ -201,11 +199,41 @@ const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
   thermal: { width: '80mm', minHeight: 'auto' },
 };
 
+/** Approx. characters that fit the single-report value column at full size. */
+const PRINT_PRODUCT_NAME_CAPACITY = 42;
+
 function fmtNum(value: number, decimalPlaces: number): string {
   return value.toLocaleString('en-US', {
     minimumFractionDigits: decimalPlaces,
     maximumFractionDigits: decimalPlaces,
   });
+}
+
+/**
+ * Font scale (≤ 1) that keeps `text` on one line within roughly `capacityChars` characters
+ * at full size. Arabic/Latin glyph widths are estimated, so capacity should stay conservative.
+ */
+export function singleLineFontScale(text: string, capacityChars: number, minScale = 0.55): number {
+  const length = Array.from(String(text || '').trim()).length;
+  if (length <= capacityChars) return 1;
+  return Math.max(minScale, capacityChars / length);
+}
+
+/** Full product name on a single line, shrinking the font for long names instead of truncating. */
+export function SingleLineProductName({ name, capacityChars }: { name: string; capacityChars: number }) {
+  const text = String(name || '').trim() || '—';
+  return (
+    <span
+      title={text}
+      style={{
+        display: 'block',
+        whiteSpace: 'nowrap',
+        fontSize: `${singleLineFontScale(text, capacityChars)}em`,
+      }}
+    >
+      {text}
+    </span>
+  );
 }
 
 function shortProductName(name: string): string {
@@ -386,10 +414,11 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
         dense={isThermal}
         fontFamily={font.fontFamily}
         fontSize={isThermal ? font.denseFontSize : font.fontSize}
+        headerVariant="letterhead"
+        showPrintDate={false}
         metaCards={[
           ...(subtitle ? [{ label: 'الوصف', value: subtitle }] : []),
           { label: 'عدد السجلات', value: String(rows.length) },
-          { label: 'تاريخ الطباعة', value: now },
         ]}
         kpis={[
           { label: 'الكمية المنتجة', value: fmtNum(t.totalProduced, dp), unit: 'وحدة', tone: 'indigo' as const },
@@ -542,9 +571,9 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         highlight: true as const,
       }))
       : rt === 'packaging'
-        ? [{ label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const }]
+        ? [{ label: 'المنتج', value: <SingleLineProductName name={report.productName} capacityChars={PRINT_PRODUCT_NAME_CAPACITY} />, highlight: true as const }]
         : [
-          { label: 'المنتج', value: shortProductName(report.productName || '—'), highlight: true as const },
+          { label: 'المنتج', value: <SingleLineProductName name={report.productName} capacityChars={PRINT_PRODUCT_NAME_CAPACITY} />, highlight: true as const },
           ...(showWorkOrder ? [{ label: 'أمر الشغل', value: report.workOrderNumber || '—' }] : []),
         ];
 
@@ -578,6 +607,8 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         extraLines={doc.customLines}
         fontFamily={font.fontFamily}
         fontSize={font.fontSize}
+        headerVariant="letterhead"
+        showPrintDate={false}
         signatures={showSignatures ? [{ title: 'المشرف' }, { title: 'مدير الخط' }] : undefined}
         sections={[
           {
@@ -593,7 +624,6 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
       />
     );
 
-    const v = report.shareStandardVariance;
     if (!shareOuterCapture) {
       return layout;
     }
@@ -616,22 +646,6 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           overflow: 'visible',
         }}
       >
-        {v ? (
-          <div
-            className={cn(
-              'mx-auto w-full max-w-[640px] border-2 rounded-lg px-4 py-3 mb-3',
-              shareVarianceTailwindToneClass[v.tone],
-            )}
-            style={{ letterSpacing: 'normal' }}
-          >
-            <p className="text-[13px] font-bold leading-snug mb-1.5">{v.headline}</p>
-            {v.lines.map((line, i) => (
-              <p key={i} className="text-[11px] font-semibold leading-relaxed opacity-95">
-                {line}
-              </p>
-            ))}
-          </div>
-        ) : null}
         {layout}
       </div>
     );

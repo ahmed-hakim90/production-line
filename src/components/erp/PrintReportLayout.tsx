@@ -15,6 +15,7 @@ import {
   FactoryPrintSectionTitle,
   FactoryPrintShell,
 } from "./FactoryPrintShell"
+import type { PrintBrandHeaderVariant } from "./PrintBrandHeader"
 
 export interface ReportMetaCard {
   label: string
@@ -77,6 +78,8 @@ export interface PrintReportLayoutProps {
   paperWidth?: string
   minHeight?: string
   padding?: string
+  headerVariant?: PrintBrandHeaderVariant
+  showPrintDate?: boolean
 }
 
 /**
@@ -106,6 +109,8 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       paperWidth,
       minHeight,
       padding,
+      headerVariant,
+      showPrintDate,
     },
     ref,
   ) => {
@@ -141,6 +146,8 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
         paperWidth={paperWidth}
         minHeight={minHeight}
         padding={padding}
+        headerVariant={headerVariant}
+        showPrintDate={showPrintDate}
         className={nestedInShareWrapper ? "w-full max-w-none" : undefined}
         metaCards={metaCells.length > 0 ? metaCells : undefined}
         kpis={

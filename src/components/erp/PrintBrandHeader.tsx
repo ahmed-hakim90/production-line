@@ -3,6 +3,13 @@ import { cn } from '@/lib/utils'
 import { resolveImageExportPalette } from '@/utils/imageExportTheme'
 import { resolvePrintAccentHex } from '@/utils/printTheme'
 
+/** Official El Maghraby wordmark used as the production-report letterhead when no tenant logo is set. */
+export const EL_MAGHRABY_LETTERHEAD_LOGO = '/brand/elmaghraby-logo.png'
+export const EL_MAGHRABY_LETTERHEAD_RED = '#E30613'
+const LETTERHEAD_RED = EL_MAGHRABY_LETTERHEAD_RED
+
+export type PrintBrandHeaderVariant = 'standard' | 'letterhead'
+
 export type PrintBrandHeaderProps = {
   companyName: string
   documentType: string
@@ -11,6 +18,10 @@ export type PrintBrandHeaderProps = {
   brandAccent?: string
   dense?: boolean
   className?: string
+  /** Stationery header for production reports. Other documents keep the standard header. */
+  variant?: PrintBrandHeaderVariant
+  /** When false, the header timestamp is omitted from the printed document. */
+  showPrintDate?: boolean
 }
 
 /** First 1–2 chars for logo fallback when tenant has no logoUrl. */
@@ -40,26 +51,40 @@ export function PrintBrandHeader({
   brandAccent,
   dense = false,
   className,
+  variant = 'standard',
+  showPrintDate = true,
 }: PrintBrandHeaderProps) {
   const palette = resolveImageExportPalette(resolvePrintAccentHex(brandAccent))
   const accent = palette.primary
+  const isLetterhead = variant === 'letterhead'
+  const usingWordmark = isLetterhead && !String(logoUrl || '').trim()
+  const resolvedLogo = String(logoUrl || '').trim() || (isLetterhead ? EL_MAGHRABY_LETTERHEAD_LOGO : '')
+  const ruleColor = usingWordmark ? LETTERHEAD_RED : accent
   const initials = companyPrintInitials(companyName)
-  const logoBox: CSSProperties = dense
-    ? { height: 44, maxWidth: '9rem', padding: '0 6px' }
-    : { height: 56, maxWidth: '11rem', padding: '0 8px' }
-  const imgStyle: CSSProperties = dense
-    ? { maxHeight: 36, maxWidth: '8.5rem', width: 'auto', objectFit: 'contain', objectPosition: 'right' }
-    : { maxHeight: 48, maxWidth: '10.5rem', width: 'auto', objectFit: 'contain', objectPosition: 'right' }
+  const logoBox: CSSProperties = isLetterhead
+      ? (dense
+      ? { height: 64, maxWidth: '9rem', padding: 0 }
+      : { height: 108, maxWidth: '12.5rem', padding: 0 })
+    : (dense
+      ? { height: 44, maxWidth: '9rem', padding: '0 6px' }
+      : { height: 56, maxWidth: '11rem', padding: '0 8px' })
+  const imgStyle: CSSProperties = isLetterhead
+      ? (dense
+      ? { maxHeight: 64, maxWidth: '9rem', width: 'auto', objectFit: 'contain', objectPosition: 'right' }
+      : { maxHeight: 108, maxWidth: '12.5rem', width: 'auto', objectFit: 'contain', objectPosition: 'right' })
+    : (dense
+      ? { maxHeight: 36, maxWidth: '8.5rem', width: 'auto', objectFit: 'contain', objectPosition: 'right' }
+      : { maxHeight: 48, maxWidth: '10.5rem', width: 'auto', objectFit: 'contain', objectPosition: 'right' })
 
   return (
     <header
       className={cn('print-brand-header', className)}
       style={{
         display: 'flex',
-        alignItems: 'flex-start',
+        alignItems: isLetterhead ? 'center' : 'flex-start',
         justifyContent: 'space-between',
         gap: 12,
-        borderBottom: `2px solid ${accent}`,
+        borderBottom: isLetterhead ? `3px solid ${ruleColor}` : `2px solid ${accent}`,
         paddingBottom: dense ? 10 : 12,
         marginBottom: dense ? 12 : 16,
       }}
@@ -68,7 +93,7 @@ export function PrintBrandHeader({
         className="print-brand-identity"
         style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}
       >
-        {logoUrl ? (
+        {resolvedLogo ? (
           <div
             className="print-brand-logo"
             style={{
@@ -77,12 +102,12 @@ export function PrintBrandHeader({
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              borderRadius: 6,
-              border: `1px solid ${palette.primarySoft}`,
-              background: '#ffffff',
+              borderRadius: isLetterhead ? 0 : 6,
+              border: isLetterhead ? 'none' : `1px solid ${palette.primarySoft}`,
+              background: 'transparent',
             }}
           >
-            <img src={logoUrl} alt="" style={imgStyle} />
+            <img src={resolvedLogo} alt={usingWordmark ? 'المغربي EL MAGHRABY' : ''} style={imgStyle} />
           </div>
         ) : (
           <div
@@ -108,22 +133,24 @@ export function PrintBrandHeader({
             {initials}
           </div>
         )}
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h1
-            className="print-brand-name"
-            style={{
-              margin: 0,
-              fontSize: dense ? '1.35em' : 'var(--print-heading-size, 1.4em)',
-              fontWeight: 800,
-              lineHeight: 1.4,
-              color: '#0f172a',
-              letterSpacing: 'normal',
-              wordBreak: 'break-word',
-            }}
-          >
-            {companyName}
-          </h1>
-        </div>
+        {usingWordmark ? null : (
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h1
+              className="print-brand-name"
+              style={{
+                margin: 0,
+                fontSize: dense ? '1.35em' : 'var(--print-heading-size, 1.4em)',
+                fontWeight: 800,
+                lineHeight: 1.4,
+                color: '#0f172a',
+                letterSpacing: 'normal',
+                wordBreak: 'break-word',
+              }}
+            >
+              {companyName}
+            </h1>
+          </div>
+        )}
       </div>
       <div
         className="print-brand-meta"
@@ -142,28 +169,32 @@ export function PrintBrandHeader({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: dense ? '0.95em' : 'var(--print-label-size, 1em)',
+            fontSize: isLetterhead
+              ? (dense ? '1.05em' : '1.25em')
+              : (dense ? '0.95em' : 'var(--print-label-size, 1em)'),
             fontWeight: 800,
             lineHeight: 1.4,
-            padding: dense ? '4px 8px' : '5px 10px',
-            borderRadius: 6,
-            background: palette.badgeBg,
-            color: palette.badgeText,
+            padding: isLetterhead ? 0 : (dense ? '4px 8px' : '5px 10px'),
+            borderRadius: isLetterhead ? 0 : 6,
+            background: isLetterhead ? 'transparent' : palette.badgeBg,
+            color: isLetterhead ? ruleColor : palette.badgeText,
             letterSpacing: 'normal',
             textAlign: 'center',
           }}
         >
           {documentType}
         </span>
-        <span
-          style={{
-            fontSize: dense ? '0.85em' : 'var(--print-caption-size, 0.85em)',
-            color: '#64748b',
-            letterSpacing: 'normal',
-          }}
-        >
-          {printDate}
-        </span>
+        {showPrintDate && printDate ? (
+          <span
+            style={{
+              fontSize: dense ? '0.85em' : 'var(--print-caption-size, 0.85em)',
+              color: '#64748b',
+              letterSpacing: 'normal',
+            }}
+          >
+            {printDate}
+          </span>
+        ) : null}
       </div>
     </header>
   )
