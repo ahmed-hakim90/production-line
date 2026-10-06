@@ -134,6 +134,17 @@ assert.equal(validateProductionReportAssignment({
 })?.code, 'permission-denied');
 assert.equal(validateProductionReportAssignment({
   ...validAssignment,
+  workOrderId: '',
+  workOrder: null,
+}), null, 'delegated hall entry must not require a work order');
+assert.equal(validateProductionReportAssignment({
+  ...validAssignment,
+  workOrderId: '',
+  workOrder: null,
+  targetEmployeeActive: false,
+})?.code, 'failed-precondition', 'delegated entry still requires an active target supervisor');
+assert.equal(validateProductionReportAssignment({
+  ...validAssignment,
   workOrder: { ...validAssignment.workOrder, tenantId: 'tenant-2' },
 })?.message, 'أمر الشغل غير موجود أو غير نشط.');
 assert.equal(validateProductionReportAssignment({

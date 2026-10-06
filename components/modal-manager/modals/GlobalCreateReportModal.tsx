@@ -32,7 +32,6 @@ import {
 } from '@/modules/production/utils/injectionReportShift';
 import { resolveReportBehaviorSettings } from '@/modules/production/lib/reportBehaviorSettings';
 import {
-  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
   REPORT_SAVE_PENDING_MESSAGE,
   REPORT_SAVE_SUCCESS_MESSAGE,
   REPORT_SAVE_TOAST_ID,
@@ -591,13 +590,6 @@ export const GlobalCreateReportModal: React.FC = () => {
     close();
   };
 
-  const isDelegatedEntry = Boolean(
-    canCreateForAnySupervisor
-    && currentEmployee?.id
-    && form.employeeId
-    && form.employeeId !== currentEmployee.id,
-  );
-
   const openErrorOverlay = (text: string) => {
     showAppToast('error', text, { duration: SAVE_ERROR_TOAST_DURATION_MS });
   };
@@ -624,10 +616,6 @@ export const GlobalCreateReportModal: React.FC = () => {
     const selectedWorkOrder = form.workOrderId
       ? activeWorkOrders.find((row) => row.id === form.workOrderId) ?? null
       : null;
-    if (isDelegatedEntry && !selectedWorkOrder) {
-      openErrorOverlay(DELEGATED_WORK_ORDER_REQUIRED_MESSAGE);
-      return;
-    }
     if (selectedWorkOrder) {
       const mismatch = describeSelectedWorkOrderMismatch({
         workOrderSupervisorId: selectedWorkOrder.supervisorId,
@@ -775,7 +763,7 @@ export const GlobalCreateReportModal: React.FC = () => {
 
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-              {isDelegatedEntry ? t('modalManager.createReport.workOrderRequired') : t('modalManager.createReport.workOrderOptional')}
+              {t('modalManager.createReport.workOrderOptional')}
             </label>
             <SearchableSelect
               options={workOrderOptions}
@@ -825,11 +813,6 @@ export const GlobalCreateReportModal: React.FC = () => {
               placeholder={t('modalManager.createReport.workOrderNone')}
               searchPlaceholder="ابحث برقم أمر الشغل أو الصنف أو الخط"
             />
-            {isDelegatedEntry && (
-              <p className="text-[11px] font-medium text-[rgb(var(--color-warning))]">
-                {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}
-              </p>
-            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

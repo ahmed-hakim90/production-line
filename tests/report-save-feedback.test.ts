@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import {
-  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
   REPORT_SAVE_PENDING_MESSAGE,
   describeMissingReportSaveFields,
   describeSelectedWorkOrderMismatch,
@@ -70,7 +69,6 @@ assert.match(
   /بلا مشرف/,
 );
 
-assert.match(DELEGATED_WORK_ORDER_REQUIRED_MESSAGE, /مشرف آخر/);
 assert.match(productionIssueRequiredMessage(true), /أمر الشغل أو الخطة المرتبطة/);
 assert.match(productionIssueRequiredMessage(false), /أوقف «إلزام صرف إنتاج معتمد»/);
 assert.equal(REPORT_SAVE_PENDING_MESSAGE.includes('حفظ'), true);

@@ -202,7 +202,6 @@ import {
   resolveReportBehaviorSettings,
 } from '../modules/production/lib/reportBehaviorSettings';
 import {
-  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
   productionIssueRequiredMessage,
 } from '../modules/production/lib/reportSaveFeedback';
 import { resolveRequiresProductionIssueOnReport } from '../modules/production/lib/requiresProductionIssue';
@@ -4249,15 +4248,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: 'يجب أن يكون التقرير باسم المشرف النشط المعيّن على أمر الشغل.' });
         return null;
       }
-      if (isDelegatedEntry && (
-        !canCreateForAnySupervisor
-        || !requestedWorkOrderId
-        || activeWO?.id !== requestedWorkOrderId
-        || activeWO.supervisorId !== savePayload.employeeId
-        || !targetEmployee
-        || targetEmployee.isActive === false
-      )) {
-        set({ error: DELEGATED_WORK_ORDER_REQUIRED_MESSAGE });
+      if (isDelegatedEntry && (!targetEmployee || targetEmployee.isActive === false)) {
+        set({ error: 'مشرف التقرير غير موجود أو غير نشط.' });
         return null;
       }
       const shouldPostToPlan =

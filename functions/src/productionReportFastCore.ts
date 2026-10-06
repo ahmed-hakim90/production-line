@@ -39,16 +39,12 @@ export function validateProductionReportAssignment(
     input.actorEmployeeId
     && input.actorEmployeeId !== input.targetEmployeeId,
   );
-  const delegated = input.canCreateForAnySupervisor && targetsAnotherEmployee;
   if (
     input.actorEmployeeLevel === 2
     && targetsAnotherEmployee
     && !input.canCreateForAnySupervisor
   ) {
     return { code: 'permission-denied', message: 'غير مصرح بإنشاء تقرير لمشرف آخر.' };
-  }
-  if (delegated && !input.workOrderId) {
-    return { code: 'failed-precondition', message: 'إنشاء التقرير بالنيابة يتطلب أمر شغل.' };
   }
   if (!input.workOrderId) return null;
 

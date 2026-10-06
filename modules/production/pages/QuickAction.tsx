@@ -91,7 +91,6 @@ import {
 } from '../utils/injectionMaterialFilter';
 import { resolveReportBehaviorSettings } from '../lib/reportBehaviorSettings';
 import {
-  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
   REPORT_SAVE_PENDING_MESSAGE,
   REPORT_SAVE_SUCCESS_MESSAGE,
   REPORT_SAVE_TOAST_ID,
@@ -1246,13 +1245,7 @@ export const QuickAction: React.FC<QuickActionProps> = ({ initialWorkOrderId }) 
     return bySupervisor.filter((wo) => workOrderMatchesReportType(wo, resolveReportType(reportType)));
   }, [activeWOs, canCreateForAnySupervisor, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId, reportType]);
 
-  const isDelegatedEntry = Boolean(
-    canCreateForAnySupervisor
-    && currentEmployee?.id
-    && employeeId
-    && employeeId !== currentEmployee.id,
-  );
-  const workOrderRequired = reportBehavior.requireWorkOrderOnQuickAction || isDelegatedEntry;
+  const workOrderRequired = reportBehavior.requireWorkOrderOnQuickAction;
   const quickWorkOrderOptions = useMemo(() => {
     const productNames = new Map(_rawProducts.map((product) => [product.id, product.name]));
     const lineNames = new Map(_rawLines.map((line) => [line.id, line.name]));
@@ -1299,14 +1292,10 @@ export const QuickAction: React.FC<QuickActionProps> = ({ initialWorkOrderId }) 
       missingHours: reportBehavior.requireWorkHoursOnReports && Number(hours || 0) <= 0,
       missingLabor: reportBehavior.requireLaborForFinishedReports && requiresWorkers && workersTotal <= 0 && !packagingLaborOptionalQuick,
       missingShift: reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(injectionShift),
-      missingWorkOrder: reportBehavior.requireWorkOrderOnQuickAction && !isDelegatedEntry && !selectedWorkOrder,
+      missingWorkOrder: reportBehavior.requireWorkOrderOnQuickAction && !selectedWorkOrder,
     });
     if (missingFieldsMessage) {
       showAppToast('error', missingFieldsMessage, { duration: SAVE_ERROR_TOAST_DURATION_MS });
-      return;
-    }
-    if (isDelegatedEntry && !selectedWorkOrder) {
-      showAppToast('error', DELEGATED_WORK_ORDER_REQUIRED_MESSAGE, { duration: SAVE_ERROR_TOAST_DURATION_MS });
       return;
     }
     if (selectedWorkOrder) {
@@ -1769,20 +1758,13 @@ export const QuickAction: React.FC<QuickActionProps> = ({ initialWorkOrderId }) 
               {scopedActiveWOs.length === 0 && (
                 <p className={`mt-1.5 text-[11px] font-medium ${workOrderRequired ? 'text-[rgb(var(--color-danger))]' : 'text-[var(--color-text-muted)]'}`}>
                   {workOrderRequired
-                    ? (isDelegatedEntry
-                      ? DELEGATED_WORK_ORDER_REQUIRED_MESSAGE
-                      : 'لا توجد أوامر شغل نشطة موجّهة لهذا المشرف — أنشئ أمر شغل أو راجع التوجيه قبل الحفظ.')
+                    ? 'لا توجد أوامر شغل نشطة موجّهة لهذا المشرف — أنشئ أمر شغل أو راجع التوجيه قبل الحفظ.'
                     : 'لا توجد أوامر شغل مرتبطة بالمشرف المختار. يمكن الحفظ بدون أمر شغل.'}
                 </p>
               )}
               {!workOrderRequired && scopedActiveWOs.length > 0 && (
                 <p className="mt-1.5 text-[11px] font-medium text-[var(--color-text-muted)]">
                   أمر الشغل غير إلزامي من الإعدادات. اتركه «بدون أمر شغل» إذا لا تريد الربط.
-                </p>
-              )}
-              {isDelegatedEntry && scopedActiveWOs.length > 0 && (
-                <p className="mt-1.5 text-[11px] font-medium text-[rgb(var(--color-warning))]">
-                  {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}
                 </p>
               )}
             </div>

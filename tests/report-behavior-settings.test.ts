@@ -53,7 +53,7 @@ assert.equal(
 const quickActionSource = readFileSync(new URL('../modules/production/pages/QuickAction.tsx', import.meta.url), 'utf8');
 assert.match(
   quickActionSource,
-  /workOrderRequired = reportBehavior.requireWorkOrderOnQuickAction \|\| isDelegatedEntry/,
+  /workOrderRequired = reportBehavior.requireWorkOrderOnQuickAction;/,
 );
 assert.match(quickActionSource, /بدون أمر شغل/);
 assert.doesNotMatch(

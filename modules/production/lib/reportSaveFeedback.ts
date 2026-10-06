@@ -3,9 +3,6 @@ export const REPORT_SAVE_TOAST_ID = 'production-report-save';
 export const REPORT_SAVE_PENDING_MESSAGE = 'جارٍ حفظ التقرير...';
 export const REPORT_SAVE_SUCCESS_MESSAGE = 'تم حفظ التقرير بنجاح.';
 
-export const DELEGATED_WORK_ORDER_REQUIRED_MESSAGE =
-  'التسجيل باسم مشرف آخر يحتاج أمر شغل مطابق، حتى لو كان أمر الشغل غير إلزامي في الإعدادات.';
-
 export type MissingReportSaveFields = {
   missingLine?: boolean;
   missingEmployee?: boolean;

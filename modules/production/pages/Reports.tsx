@@ -159,7 +159,6 @@ import {
   matchesProductionReportProductCategory,
 } from '../lib/productionReportCategoryFilter';
 import {
-  DELEGATED_WORK_ORDER_REQUIRED_MESSAGE,
   REPORT_SAVE_PENDING_MESSAGE,
   REPORT_SAVE_SUCCESS_MESSAGE,
   REPORT_SAVE_TOAST_ID,
@@ -2679,20 +2678,9 @@ export const Reports: React.FC = () => {
       setSaveToast(missingFieldsMessage);
       return;
     }
-    const isDelegatedEntry = Boolean(
-      canCreateForAnySupervisor
-      && currentEmployee?.id
-      && form.employeeId
-      && form.employeeId !== currentEmployee.id,
-    );
     const selectedWorkOrder = String(form.workOrderId || '').trim()
       ? workOrders.find((row) => row.id === form.workOrderId) ?? null
       : null;
-    if (isDelegatedEntry && !selectedWorkOrder) {
-      setSaveToastType('error');
-      setSaveToast(DELEGATED_WORK_ORDER_REQUIRED_MESSAGE);
-      return;
-    }
     if (selectedWorkOrder) {
       const mismatch = describeSelectedWorkOrderMismatch({
         workOrderSupervisorId: selectedWorkOrder.supervisorId,
@@ -5156,14 +5144,8 @@ export const Reports: React.FC = () => {
                   if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return true;
                   return w.supervisorId === currentEmployee.id;
                 });
-                const delegated = Boolean(
-                  canCreateForAnySupervisor
-                  && currentEmployee?.id
-                  && form.employeeId
-                  && form.employeeId !== currentEmployee.id,
-                );
                 const workOrderOptions = [
-                  ...(!delegated ? [{ value: '', label: 'بدون أمر شغل' }] : []),
+                  { value: '', label: 'بدون أمر شغل' },
                   ...activeWOs.map((wo) => {
                     const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
                     const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
@@ -5180,14 +5162,13 @@ export const Reports: React.FC = () => {
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                       <ReportIcon name="assignment" className="text-sm align-middle ml-1 text-primary inline" />
-                      {delegated ? 'أمر شغل موجّه للمشرف (إلزامي)' : 'أمر شغل (اختياري)'}
+                      أمر شغل (اختياري)
                     </label>
                     <SearchableSelect
                       options={workOrderOptions}
                       value={form.workOrderId}
                       onChange={(value) => {
                         if (!value) {
-                          if (delegated) return;
                           setForm({ ...form, workOrderId: '' });
                           return;
                         }
@@ -5205,19 +5186,13 @@ export const Reports: React.FC = () => {
                           employeeId: shouldLockEmployeeToCurrent && currentEmployee?.id ? currentEmployee.id : wo.supervisorId,
                         });
                       }}
-                      placeholder={delegated ? 'اختر أمر شغل موجّه للمشرف' : 'بدون أمر شغل'}
+                      placeholder="بدون أمر شغل"
                       searchPlaceholder="ابحث برقم أمر الشغل أو الصنف أو الخط"
                       className="w-full"
                     />
-                    {delegated ? (
-                      <p className="text-[11px] font-medium text-[rgb(var(--color-warning))]">
-                        {DELEGATED_WORK_ORDER_REQUIRED_MESSAGE}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] font-medium text-[var(--color-text-muted)]">
-                        أمر الشغل اختياري. يمكن الحفظ بدون اختيار أمر شغل.
-                      </p>
-                    )}
+                    <p className="text-[11px] font-medium text-[var(--color-text-muted)]">
+                      أمر الشغل اختياري. يمكن الحفظ بدون اختيار أمر شغل.
+                    </p>
                   </div>
                 );
               })()}
