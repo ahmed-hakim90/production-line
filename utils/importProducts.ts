@@ -398,7 +398,6 @@ export function parseProductsFromBuffer(
     }
 
     const normalizedBarcode = barcode.toUpperCase();
-    if (action === 'create' && !barcode) errors.push('باركود عبوة المنتج مفقود');
     if (normalizedBarcode) {
       if (seenBarcodes.has(normalizedBarcode)) errors.push(`الباركود "${barcode}" مكرر في الملف`);
       seenBarcodes.add(normalizedBarcode);
@@ -608,7 +607,8 @@ export function toProductDataWithExisting(
     name: row.providedFields.name ? row.name : base.name,
     // Identity: code is match key only and must not change on update.
     code: base.code,
-    barcode: row.providedFields.barcode ? row.barcode : base.barcode,
+    // Blank barcode cells keep the current barcode; clearing is done from the product form.
+    barcode: row.providedFields.barcode && row.barcode ? row.barcode : base.barcode,
     model: row.providedFields.model ? row.model : base.model,
     openingBalance: base.openingBalance,
     chineseUnitCost: row.providedFields.chineseUnitCost ? row.chineseUnitCost : base.chineseUnitCost,

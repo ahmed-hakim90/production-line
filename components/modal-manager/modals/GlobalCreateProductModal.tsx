@@ -258,10 +258,6 @@ export const GlobalCreateProductModal: React.FC = () => {
       toast.error(t('modalManager.createProduct.categoryRequiredError'));
       return;
     }
-    if (!String(form.barcode || '').trim()) {
-      toast.error('باركود عبوة المنتج مطلوب.');
-      return;
-    }
     const nonNegativeValues = [
       form.sellingPrice,
       form.chineseUnitCost,
@@ -517,7 +513,7 @@ export const GlobalCreateProductModal: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="product-barcode">باركود عبوة المنتج</Label>
+                    <Label htmlFor="product-barcode">باركود عبوة المنتج (اختياري)</Label>
                     <Input
                       id="product-barcode"
                       dir="ltr"
@@ -527,7 +523,7 @@ export const GlobalCreateProductModal: React.FC = () => {
                       placeholder="مثال: 6221234567890"
                     />
                     <p className="text-xs text-muted-foreground">
-                      باركود واحد وفريد داخل الشركة، ويستخدمه العميل لإنشاء طلب الصيانة.
+                      اختياري. لو أدخلته يجب أن يكون فريدًا داخل الشركة، ويستخدمه العميل لإنشاء طلب الصيانة.
                     </p>
                   </div>
                 </section>

@@ -53,6 +53,30 @@ describe('product import single code column', () => {
     expect(result.errorCount).toBe(1);
     expect(result.rows[0].errors.some((e) => /تغيير كود المنتج/.test(e))).toBe(true);
   });
+
+  it('creates a product without a barcode', () => {
+    const result = parseProductsFromBuffer(
+      makeBuffer([
+        ['اسم المنتج', 'كود المنتج', 'باركود العبوة'],
+        ['مكواة', 'SK-NO-BC', ''],
+      ]),
+      existing,
+    );
+    expect(result.errorCount).toBe(0);
+    expect(result.rows[0].barcode).toBe('');
+  });
+
+  it('keeps the existing barcode when the import cell is blank', () => {
+    const result = parseProductsFromBuffer(
+      makeBuffer([
+        ['اسم المنتج', 'كود المنتج', 'باركود العبوة'],
+        ['خلاط', 'SK-999N', ''],
+      ]),
+      existing,
+    );
+    const payload = toProductDataWithExisting(result.rows[0], existing[0]);
+    expect(payload.barcode).toBe('622000000001');
+  });
 });
 
 console.log('products-import-code.test.ts: ok');

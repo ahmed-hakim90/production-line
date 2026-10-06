@@ -153,7 +153,6 @@ export const productService = {
       const trimmed = String(data.code ?? '').trim();
       const tenantId = getCurrentTenantId();
       const barcodeNormalized = normalizeBarcode(data.barcode);
-      if (!barcodeNormalized) throw new Error('باركود عبوة المنتج مطلوب.');
       const basePayload = stripUndefined({
         ...(data as Record<string, unknown>),
         ...(barcodeNormalized ? { barcode: String(data.barcode || '').trim(), barcodeNormalized } : {}),
@@ -235,7 +234,6 @@ export const productService = {
       if (data.barcode !== undefined) {
         const tenantId = getCurrentTenantId();
         const normalized = normalizeBarcode(data.barcode);
-        if (!normalized) throw new Error('لا يمكن إزالة باركود المنتج.');
         await runTransaction(db, async (transaction) => {
           const productRef = doc(db, COLLECTION, id);
           const productSnap = await transaction.get(productRef);
