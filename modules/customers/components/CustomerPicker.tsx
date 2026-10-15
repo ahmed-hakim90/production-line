@@ -26,6 +26,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { pinListScrollToTop, scrollOptionWithinList } from '@/lib/listboxScroll';
 import { cn, getRootPortalContainer } from '@/lib/utils';
 import { FLOATING_MENU_Z_CLASS } from '@/lib/overlayStack';
 import { toEnglishDigits } from '@/lib/englishDigits';
@@ -109,10 +110,12 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
     setHighlight(clamped);
   }, [matches.length]);
 
-  useEffect(() => {
+  const [trackedQuery, setTrackedQuery] = useState(query);
+  if (query !== trackedQuery) {
+    setTrackedQuery(query);
     highlightRef.current = 0;
     setHighlight(0);
-  }, [query]);
+  }
 
   useEffect(() => {
     if (highlightRef.current > Math.max(0, matches.length - 1)) {
@@ -155,13 +158,17 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
     };
   }, [showList, matches.length, updateListPosition]);
 
-  useEffect(() => {
-    if (!showList) return;
-    const el = listRef.current?.querySelector<HTMLElement>(
+  useLayoutEffect(() => {
+    if (!showList || !listRef.current) return;
+    if (query.trim() && highlight === 0) {
+      pinListScrollToTop(listRef.current);
+      return;
+    }
+    const el = listRef.current.querySelector<HTMLElement>(
       `[data-customer-opt-index="${highlight}"]`,
     );
-    el?.scrollIntoView({ block: 'nearest' });
-  }, [highlight, showList, matches.length]);
+    scrollOptionWithinList(listRef.current, el);
+  }, [highlight, showList, matches.length, query]);
 
   useEffect(() => {
     const onDocPointer = (event: MouseEvent) => {
@@ -236,6 +243,7 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
               zIndex: 10100,
               margin: 0,
               overflow: 'auto',
+              overflowAnchor: 'none',
               borderRadius: 'var(--border-radius-base, 12px)',
               border: '1px solid var(--color-border, #e5e7eb)',
               backgroundColor: 'var(--color-card, #ffffff)',

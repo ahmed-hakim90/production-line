@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import { cn, getRootPortalContainer } from '@/lib/utils';
 import { FLOATING_MENU_Z_CLASS } from '@/lib/overlayStack';
 import { toEnglishDigits } from '@/lib/englishDigits';
+import { pinListScrollToTop, scrollOptionWithinList } from '@/lib/listboxScroll';
 import { findItemOptionByCode, type TransferItemOption } from '../utils/transferFormShared';
 
 export type VoucherItemComboboxOption = {
@@ -109,11 +110,12 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
       setHighlight(clamped);
     }, [filtered.length]);
 
-    // Reset highlight only when the search query changes — not when opening via arrows.
-    useEffect(() => {
+    const [trackedQuery, setTrackedQuery] = useState(query);
+    if (query !== trackedQuery) {
+      setTrackedQuery(query);
       highlightRef.current = 0;
       setHighlight(0);
-    }, [query]);
+    }
 
     // Keep highlight in range when the filtered list shrinks.
     useEffect(() => {
@@ -122,13 +124,17 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
       }
     }, [filtered.length, moveHighlight]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       if (!open || !listRef.current) return;
+      if (query.trim() && highlight === 0) {
+        pinListScrollToTop(listRef.current);
+        return;
+      }
       const el = listRef.current.querySelector<HTMLElement>(
         `[data-voucher-opt-index="${highlight}"]`,
       );
-      el?.scrollIntoView({ block: 'nearest' });
-    }, [highlight, open, filtered.length]);
+      scrollOptionWithinList(listRef.current, el);
+    }, [highlight, open, filtered.length, query]);
 
     const updateListPosition = useCallback(() => {
       const el = inputRef.current;
@@ -305,6 +311,7 @@ export const VoucherItemCombobox = forwardRef<HTMLInputElement, VoucherItemCombo
                 margin: 0,
                 padding: 0,
                 overflow: 'auto',
+                overflowAnchor: 'none',
                 listStyle: 'none',
                 borderRadius: 'var(--border-radius-base, 12px)',
                 border: '1px solid var(--color-border, #e5e7eb)',

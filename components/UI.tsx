@@ -1,5 +1,5 @@
 
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BarChart3,
@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { LegacyLoadingSkeleton } from '@/src/shared/ui/skeletons';
 import { cn } from '@/lib/utils';
+import { pinListScrollToTop } from '@/lib/listboxScroll';
 import { matchSelectOptionByScan, searchableSelectFilter } from '@/lib/searchableSelectFilter';
 import { isListboxNavKey, isListboxOpenKey } from '@/lib/listboxKeyboard';
 import { tableIconActionToneClass } from '@/src/components/erp/TableIconAction';
@@ -315,6 +316,7 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
     const [search, setSearch] = useState('');
     const [cmdValue, setCmdValue] = useState('');
     const pointerOpenedRef = useRef(false);
+    const commandListRef = useRef<HTMLDivElement>(null);
 
     const selectedLabel = useMemo(
       () => options.find((o) => o.value === value)?.label ?? '',
@@ -325,6 +327,16 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
       () => options.filter((opt) => searchableSelectFilter(optionCommandValue(opt), search) > 0),
       [options, search],
     );
+
+    // While typing, keep the first match directly under the search field.
+    // Depending only on the query avoids yanking the list back to the top
+    // when the user moves with the arrow keys.
+    useLayoutEffect(() => {
+      if (!open || !search.trim()) return;
+      pinListScrollToTop(commandListRef.current);
+      const frame = requestAnimationFrame(() => pinListScrollToTop(commandListRef.current));
+      return () => cancelAnimationFrame(frame);
+    }, [open, search]);
 
     const handleSelect = (val: string) => {
       onChange(val);
@@ -432,11 +444,20 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
           value={search}
           placeholder={searchPlaceholder || resolvedPlaceholder || t('shared.searchPlaceholder')}
           onValueChange={(next) => {
+            if (selectByScan(next)) return;
             setSearch(next);
-            selectByScan(next);
+            if (!next.trim()) {
+              setCmdValue(value || '');
+              return;
+            }
+            const first = options.find((opt) => searchableSelectFilter(optionCommandValue(opt), next) > 0);
+            setCmdValue(first?.value || (first ? 'opt-0' : ''));
           }}
         />
-        <CommandList className="max-h-[min(var(--radix-popover-content-available-height,42dvh),18rem)] overscroll-contain">
+        <CommandList
+          ref={commandListRef}
+          className="max-h-[min(var(--radix-popover-content-available-height,42dvh),18rem)] overscroll-contain [overflow-anchor:none]"
+        >
           <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
           <CommandGroup>
             {filteredOptions.map((opt, idx) => (
