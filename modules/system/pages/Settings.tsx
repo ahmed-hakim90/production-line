@@ -1,7 +1,8 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage, isConfigured } from '../../../services/firebase';
+import { toast } from 'sonner';
+import { isConfigured } from '../../../services/firebase';
+import { storageService } from '@/services/storageService';
 import { useAppStore } from '../../../store/useAppStore';
 import {
   usePermission,
@@ -357,39 +358,40 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     isSuperAdmin,
   } = useBackupRestore({ activeTab: activeSection, isAdmin });
 
+  const uploadSettingsLogo = useCallback(async (file: File, folder: 'print-logo' | 'branding') => {
+    const uploaded = await storageService.uploadTenantFile(file, 'documents', folder, {
+      allowedTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'],
+    });
+    return uploaded.imageUrl;
+  }, []);
+
   const handleLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !isConfigured) return;
     setUploadingLogo(true);
     try {
-      const fileRef = storageRef(storage, `print_settings/logo_${Date.now()}_${file.name}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadSettingsLogo(file, 'print-logo');
       setLocalPrint((prev) => ({ ...prev, logoUrl: url }));
     } catch (err) {
-      console.error('Logo upload error:', err);
-      setSaveMessage('فشل رفع الشعار');
+      toast.error(err instanceof Error ? err.message : 'فشل رفع الشعار');
     }
     setUploadingLogo(false);
     if (logoInputRef.current) logoInputRef.current.value = '';
-  }, []);
+  }, [uploadSettingsLogo]);
 
   const handleBrandingLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !isConfigured) return;
     setUploadingLogo(true);
     try {
-      const fileRef = storageRef(storage, `branding/logo_${Date.now()}_${file.name}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
+      const url = await uploadSettingsLogo(file, 'branding');
       setLocalBranding((prev) => ({ ...prev, logoUrl: url }));
     } catch (err) {
-      console.error('Logo upload error:', err);
-      setSaveMessage('فشل رفع الشعار');
+      toast.error(err instanceof Error ? err.message : 'فشل رفع الشعار');
     }
     setUploadingLogo(false);
     if (brandingLogoRef.current) brandingLogoRef.current.value = '';
-  }, []);
+  }, [uploadSettingsLogo]);
 
   // ── Widget drag & drop ─────────────────────────────────────────────────────
 

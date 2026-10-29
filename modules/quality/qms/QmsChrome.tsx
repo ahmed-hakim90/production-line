@@ -108,7 +108,7 @@ export function MasterSelect(props: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; keywords?: string }>;
   placeholder: string;
 }) {
   return (

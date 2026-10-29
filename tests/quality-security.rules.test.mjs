@@ -275,6 +275,17 @@ await assertFails(getBytes(ref(storageOf('qualityOther'), photoPath)));
 await assertFails(getBytes(ref(testEnv.unauthenticatedContext().storage(), photoPath)));
 await assertFails(uploadBytes(ref(storageOf('qualityPhoto'), 'company/tenantB/quality/handover-1/photo.jpg'), bytes));
 
+const repairPath = 'company/tenantA/repair_jobs/job-1/photo.jpg';
+const logoPath = 'company/tenantA/documents/branding/logo.png';
+await assertSucceeds(uploadBytes(ref(storageOf('qualityPhoto'), repairPath), bytes));
+await assertSucceeds(getBytes(ref(storageOf('qualityViewer'), repairPath)));
+await assertFails(uploadBytes(ref(storageOf('qualityPhoto'), 'company/repair_jobs/tenantA__job-1/photo.jpg'), bytes));
+await assertFails(uploadBytes(ref(storageOf('qualityPhoto'), 'print_settings/logo.png'), bytes));
+await assertFails(uploadBytes(ref(storageOf('qualityPhoto'), 'branding/logo.png'), bytes));
+await assertSucceeds(uploadBytes(ref(storageOf('qualityViewer'), logoPath), bytes));
+await assertFails(uploadBytes(ref(storageOf('qualityOther'), repairPath), bytes));
+await assertFails(getBytes(ref(storageOf('qualityOther'), repairPath)));
+
 await assertFails(closer.collection('work_orders').doc('open-a').update({
   tenantId: 'tenantA',
   status: 'completed',

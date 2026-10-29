@@ -1,16 +1,12 @@
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import { storage, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { storageService } from '../../production/services/storageService';
 
-const sanitizeName = (name: string) => String(name || 'photo').replace(/[^\w.\-]+/g, '_').slice(0, 120);
-
-/** رفع صورة استلام/ورشة — المسار تحت company/repair_jobs حسب قواعد التخزين */
+/** رفع صورة استلام/ورشة تحت company/{tenantId}/repair_jobs/{jobId}/ */
 export async function uploadRepairJobPhoto(jobId: string, file: File): Promise<string> {
-  if (!isConfigured || !storage) throw new Error('التخزين غير مهيأ.');
   const tenantId = getCurrentTenantId();
-  const ts = Date.now();
-  const path = `company/repair_jobs/${tenantId}__${jobId}/${ts}_${sanitizeName(file.name)}`;
-  const r = ref(storage, path);
-  await uploadBytes(r, file, { contentType: file.type || 'image/jpeg' });
-  return getDownloadURL(r);
+  const uploaded = await storageService.uploadTenantFile(file, 'repair_jobs', jobId, {
+    companyId: tenantId,
+    allowedTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'],
+  });
+  return uploaded.imageUrl;
 }

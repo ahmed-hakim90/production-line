@@ -232,6 +232,8 @@ Isolated handler test, not run and not production evidence: start the Functions 
 | Cross-tenant account | No second authorized session. Credentials were not guessed. | BLOCKED | No |
 | Signed-in production bundle | No production login was provided. Credentials were not entered. | BLOCKED | No |
 
+On 2026-10-29 the quality indexes, Firestore rules, and Storage rules already matched production and were not deployed again. Ruleset `2215d864-2daf-46e0-9eef-8fcc8c57403b` and storage ruleset `62bcf1f1-798d-4ad7-96b8-9a0b7e764489` hashed equal to the local files. The four tenant functions that still used the 2026-10-05 collection list were updated from commit `52ab396`: `getTenantFirestoreFootprint`, `exportTenantBackup`, `adminDeleteTenantCascade`, and `importTenantBackup`. They were not invoked. `closeWorkOrder` and both production-report handlers were already active from 2026-10-28 and were not redeployed.
+
 On 2026-10-29 the current client was committed as `193b0640`, pushed to `origin/main`, and published to Hosting. The live page now serves `/assets/index-DYC11ybz.js`, which still calls `closeWorkOrder`. This release also includes the shell, modal, and manufacturing route changes that were left out of `index-hZFYG3Ga.js`. Firestore rules, indexes, Storage rules, and Cloud Functions were not deployed again. `closeRequiresQualityApproval` was not changed and `WO-2026-0001` was not used.
 
 Prerequisites, all required before another production attempt:

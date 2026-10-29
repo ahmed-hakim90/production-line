@@ -6,6 +6,7 @@ import { usePrintEngine } from '@/utils/printManager';
 import { QualityPalletInspectionPrint } from '../components/QualityPrintDocuments';
 import { localDateIso } from '../domain/time';
 import type { QualityDefectLine, QualityPallet } from '../model';
+import { palletWorkOrderOptionLabel } from '../domain/palletWorkOrderLabel';
 import { resolveRecordSector, type QualitySector } from '../domain/sector';
 import { qualityRecordPrintAllowed, rowsMatchingTenant } from '../print/qualityPrintModel';
 import { activeTenantId, qualityUserMessage } from '../services/qualityGateway';
@@ -219,7 +220,7 @@ export const QualityPallets: React.FC = () => {
           <MasterSelect label="الخط" value={lineId} onChange={setLineId} placeholder="اختر الخط" options={lines.map((line) => ({ value: line.id || '', label: line.code ? `${line.name} (${line.code})` : line.name }))} />
           <MasterSelect label="المنتج" value={productId} onChange={setProductId} placeholder="اختر المنتج" options={products.map((product) => ({ value: product.id || '', label: product.code ? `${product.name} (${product.code})` : product.name }))} />
           <MasterSelect label="الوردية" value={shiftId} onChange={setShiftId} placeholder="اختر الوردية" options={masters.shifts.map((shift) => ({ value: shift.id, label: `${shift.name} (${shift.startTime || ''})` }))} />
-          <MasterSelect label="أمر الشغل" value={workOrderId} onChange={setWorkOrderId} placeholder="اختياري" options={orders.map((order) => ({ value: order.id || '', label: order.workOrderNumber }))} />
+          <MasterSelect label="أمر الشغل" value={workOrderId} onChange={setWorkOrderId} placeholder="اختياري" options={orders.map((order) => ({ value: order.id || '', label: palletWorkOrderOptionLabel(order, masters.products), keywords: order.workOrderNumber }))} />
           <label><span className="qms-label">رقم البالتة</span><input className="qms-input" type="number" min={1} value={palletNumber} onChange={(event) => setPalletNumber(Number(event.target.value))} /></label>
           <label><span className="qms-label">كمية البالتة</span><input className="qms-input" type="number" min={0} value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
           <label style={{ flex: 1 }}><span className="qms-label">ملاحظات</span><input className="qms-input" value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
