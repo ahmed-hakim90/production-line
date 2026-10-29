@@ -10,6 +10,7 @@ export const QUALITY_COLLECTIONS = {
   REWORK_ORDERS: 'quality_rework_orders',
   CAPA: 'quality_capa',
   PRINT_LOGS: 'quality_print_logs',
+  SAVED_FILTERS: 'quality_saved_filters',
 } as const;
 
 export const QUALITY_SETTINGS_DOC_ID = 'global';

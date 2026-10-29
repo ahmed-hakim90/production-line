@@ -90,6 +90,7 @@ import {
   createProductionReportFastHandler,
   retryProductionReportProcessingHandler,
 } from './productionReportFast.js';
+import { closeWorkOrderHandler } from './workOrderClose.js';
 import {
   processProductionReportBackground,
   shouldProcessProductionReportUpdate,
@@ -2609,6 +2610,16 @@ export const mutateRepairCustomerOps = onCall(
 export const getCustomerFinancialAnalytics = onCall(
   { region: 'us-central1', memory: '512MiB' },
   getCustomerFinancialAnalyticsHandler,
+);
+
+export const closeWorkOrder = onCall(
+  {
+    region: 'us-central1',
+    memory: '256MiB',
+    cors: true,
+    invoker: 'public',
+  },
+  wrapCallableUserSafe('تعذر إغلاق أمر الشغل.', closeWorkOrderHandler),
 );
 
 export const createProductionReportFast = onCall(

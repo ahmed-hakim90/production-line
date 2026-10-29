@@ -3,7 +3,9 @@
 ## Phase 4 quick wins (done)
 
 - Home dashboards: `HomeDashboardRouter` lazy-loads each portal shell (`Admin` / `Factory` / `Employee` / generic) so only the active portal chunk loads.
-- Global modals: `ModalHost` uses a per-modal `React.lazy` registry (still always mounted for managed-modal registration).
+- Global modals: `ModalHost` registers keys immediately, and downloads a modal chunk only after that modal is opened. The chunk stays mounted for the session so the next open is instant.
+- Production live listeners (today's reports, line status, work orders, today's scans) stay on home, factory routes, and `/inventory/production-issues`. Repair, the rest of inventory, catalog, manufacturing, quality, customers, accounting, costs, and HR do not open those listeners; those screens keep their own fetches.
+- Manufacturing routes (`Materials`, details, categories, planning, purchase gap) are lazy like the other modules, so they are not in the first shell chunk.
 - Report lists: `reportService.getByDateRange` / `getAll` cap pagination at `REPORT_LIST_MAX_PAGES` (10).
 - Operational decision snapshot: tenant-scoped cache key + TTL early-return + `pageDataCache` in-flight dedupe across dashboard mounts.
 - Presence: `presenceService.subscribeAll` / `subscribeOnline` use `tenantQuery`; heartbeats stamp `tenantId`.

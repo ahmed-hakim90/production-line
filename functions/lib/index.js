@@ -35,6 +35,7 @@ import { saveGeneralStockIssueDraftHandler, saveGeneralStockReceiptDraftHandler,
 import { createCustomerServiceRequestHandler, customerPortalLoginHandler, getCustomerPortalHomeHandler, lookupPortalProductHandler, mutateRepairCustomerOpsHandler, } from './repairCustomerPortalOps.js';
 import { getCustomerFinancialAnalyticsHandler } from './customerFinancialAnalytics.js';
 import { createProductionReportFastHandler, retryProductionReportProcessingHandler, } from './productionReportFast.js';
+import { closeWorkOrderHandler } from './workOrderClose.js';
 import { processProductionReportBackground, shouldProcessProductionReportUpdate, } from './productionReportBackground.js';
 initializeApp();
 const db = getFirestore();
@@ -1958,6 +1959,12 @@ export const lookupPortalProduct = onCall({ region: 'us-central1', memory: '256M
 export const createCustomerServiceRequest = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, createCustomerServiceRequestHandler);
 export const mutateRepairCustomerOps = onCall({ region: 'us-central1', memory: '512MiB', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, mutateRepairCustomerOpsHandler);
 export const getCustomerFinancialAnalytics = onCall({ region: 'us-central1', memory: '512MiB' }, getCustomerFinancialAnalyticsHandler);
+export const closeWorkOrder = onCall({
+    region: 'us-central1',
+    memory: '256MiB',
+    cors: true,
+    invoker: 'public',
+}, wrapCallableUserSafe('تعذر إغلاق أمر الشغل.', closeWorkOrderHandler));
 export const createProductionReportFast = onCall({
     region: 'us-central1',
     memory: '512MiB',

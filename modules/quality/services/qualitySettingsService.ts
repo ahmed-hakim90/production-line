@@ -1,303 +1,264 @@
+import { getDoc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { assertAqlPlanRange, STANDARD_AQL_LEVEL_II, type AqlPlanRange } from '../domain/aql';
+import { assertSlotWindow, STANDARD_SAMPLE_SLOTS } from '../domain/time';
+import type { QualityReason, QualitySampleSlot, QualitySectorTag, QualityShiftOption, QualityStation } from '../model';
+import { qualityStaffService } from './qualityStaffService';
+import type { QualitySector } from '../domain/sector';
 import {
-  addDoc,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  type Unsubscribe,
-} from 'firebase/firestore';
-import { isConfigured } from '@/services/firebase';
-import { activityLogService } from '@/services/activityLogService';
-import type {
-  QualityInspectionTemplate,
-  QualityPolicySettings,
-  QualityPrintTemplateSettings,
-  QualityReasonCatalogItem,
-  QualityReworkPolicySettings,
-  QualitySamplingPlan,
-  QualitySettingsDocument,
-} from '@/types';
-import { qualityReasonCatalogRef, qualitySettingsDocRef } from '../collections';
+  QMS_COLLECTIONS,
+  activeTenantId,
+  assertQualityPermission,
+  auditQuality,
+  currentQualityActor,
+  listByTenant,
+  qmsCollection,
+  qmsDoc,
+  requireQualityDb,
+  stampTenant,
+} from './qualityGateway';
+import { getDocs, query, where } from 'firebase/firestore';
+import { HR_COLLECTIONS } from '@/modules/hr/collections';
+import { collection } from 'firebase/firestore';
+import { db } from '@/services/firebase';
 
-const DEFAULT_POLICIES: QualityPolicySettings = {
-  closeRequiresQualityApproval: false,
-};
+export interface QualityPolicySettings {
+  closeRequiresQualityApproval: boolean;
+}
 
-const DEFAULT_REWORK_POLICIES: QualityReworkPolicySettings = {
-  autoCreateReworkOnFail: true,
-  allowDirectScrap: false,
-  requireCapaForCritical: true,
-};
+const DEFAULT_POLICIES: QualityPolicySettings = { closeRequiresQualityApproval: false };
 
-const DEFAULT_PRINT_TEMPLATES: QualityPrintTemplateSettings = {
-  headerText: 'تقرير الجودة',
-  footerText: 'تم الإنشاء تلقائياً من الإنتاج',
-  showSignatureInspector: true,
-  showSignatureSupervisor: true,
-  showSignatureQualityManager: true,
-};
-
-const DEFAULT_SETTINGS_HUB: QualitySettingsDocument = {
-  closeRequiresQualityApproval: false,
-  inspectionTemplates: [],
-  samplingPlans: [],
-  reworkPolicies: DEFAULT_REWORK_POLICIES,
-  printTemplates: DEFAULT_PRINT_TEMPLATES,
-};
+async function settingsRef() {
+  requireQualityDb();
+  return qmsDoc(QMS_COLLECTIONS.SETTINGS, activeTenantId());
+}
 
 export const qualitySettingsService = {
-  async getSettingsHub(): Promise<QualitySettingsDocument> {
-    if (!isConfigured) return DEFAULT_SETTINGS_HUB;
-    const snap = await getDoc(qualitySettingsDocRef());
-    if (!snap.exists()) return DEFAULT_SETTINGS_HUB;
-    const data = snap.data() as Partial<QualitySettingsDocument>;
-    return {
-      ...DEFAULT_SETTINGS_HUB,
-      ...data,
-      inspectionTemplates: Array.isArray(data.inspectionTemplates) ? data.inspectionTemplates : [],
-      samplingPlans: Array.isArray(data.samplingPlans) ? data.samplingPlans : [],
-      reworkPolicies: {
-        ...DEFAULT_REWORK_POLICIES,
-        ...(data.reworkPolicies ?? {}),
-      },
-      printTemplates: {
-        ...DEFAULT_PRINT_TEMPLATES,
-        ...(data.printTemplates ?? {}),
-      },
-    };
-  },
-
-  async setSettingsHub(payload: Partial<QualitySettingsDocument>): Promise<void> {
-    if (!isConfigured) return;
-    await setDoc(
-      qualitySettingsDocRef(),
-      {
-        ...payload,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-    if (payload.reworkPolicies) {
-      await activityLogService.logCurrentUser(
-        'QUALITY_UPDATE_REWORK_POLICIES',
-        'تحديث سياسات إعادة التشغيل',
-        { reworkPolicies: payload.reworkPolicies },
-      );
-    }
-    if (payload.printTemplates) {
-      await activityLogService.logCurrentUser(
-        'QUALITY_UPDATE_PRINT_TEMPLATES',
-        'تحديث إعدادات طباعة الجودة',
-        { printTemplates: payload.printTemplates },
-      );
-    }
-  },
-
   async getPolicies(): Promise<QualityPolicySettings> {
-    if (!isConfigured) return DEFAULT_POLICIES;
-    const snap = await getDoc(qualitySettingsDocRef());
+    requireQualityDb();
+    const snap = await getDoc(await settingsRef());
     if (!snap.exists()) return DEFAULT_POLICIES;
-    return {
-      ...DEFAULT_POLICIES,
-      ...(snap.data() as Partial<QualityPolicySettings>),
-    };
+    return { closeRequiresQualityApproval: snap.data().closeRequiresQualityApproval === true };
   },
 
-  async setPolicies(payload: QualityPolicySettings): Promise<void> {
-    if (!isConfigured) return;
-    await setDoc(
-      qualitySettingsDocRef(),
-      {
+  async setPolicies(policies: QualityPolicySettings): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const actor = currentQualityActor();
+    await setDoc(await settingsRef(), stampTenant({
+      closeRequiresQualityApproval: policies.closeRequiresQualityApproval === true,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    }), { merge: true });
+    await auditQuality('QUALITY_SET_POLICIES', 'تحديث سياسة إغلاق أمر الشغل من الجودة', {
+      closeRequiresQualityApproval: policies.closeRequiresQualityApproval,
+    });
+  },
+
+  async listReasons(): Promise<QualityReason[]> {
+    return listByTenant<QualityReason>(QMS_COLLECTIONS.REASONS, activeTenantId());
+  },
+
+  async saveReason(input: Omit<QualityReason, 'id' | 'tenantId'> & { id?: string }): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const code = input.code.trim();
+    const labelAr = input.labelAr.trim();
+    if (!code || !labelAr) throw new Error('رمز السبب والاسم مطلوبان.');
+    const actor = currentQualityActor();
+    const tenantId = activeTenantId();
+    const existing = await this.listReasons();
+    const duplicate = existing.find((reason) => reason.code === code && reason.id !== input.id);
+    if (duplicate) throw new Error('رمز سبب العيب مستخدم بالفعل.');
+    const duplicateName = existing.find((reason) => reason.isActive !== false && reason.labelAr === labelAr && reason.id !== input.id);
+    if (duplicateName) throw new Error('اسم سبب العيب مستخدم بالفعل.');
+    const payload = stampTenant({
+      code,
+      labelAr,
+      category: input.category.trim() || 'عام',
+      sector: input.sector || null,
+      isActive: input.isActive !== false,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    if (input.id) {
+      await updateDoc(qmsDoc(QMS_COLLECTIONS.REASONS, input.id), payload);
+    } else {
+      await addDoc(qmsCollection(QMS_COLLECTIONS.REASONS), {
         ...payload,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
-    await activityLogService.logCurrentUser(
-      'QUALITY_SET_POLICIES',
-      'تحديث سياسات الجودة',
-      { policies: payload },
-    );
+        tenantId,
+        createdAt: serverTimestamp(),
+      });
+    }
+    await auditQuality('QUALITY_UPDATE_REASON', `حفظ سبب عيب: ${labelAr}`, { code });
   },
 
-  async getReasons(onlyActive = false): Promise<QualityReasonCatalogItem[]> {
-    if (!isConfigured) return [];
-    const q = query(qualityReasonCatalogRef(), orderBy('labelAr', 'asc'));
-    const snap = await getDocs(q);
-    const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() } as QualityReasonCatalogItem));
-    return onlyActive ? rows.filter((row) => row.isActive) : rows;
+  async deactivateReason(id: string): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    await updateDoc(qmsDoc(QMS_COLLECTIONS.REASONS, id), { isActive: false, updatedAt: serverTimestamp() });
+    await auditQuality('QUALITY_DELETE_REASON', 'إيقاف سبب عيب', { reasonId: id });
   },
 
-  async createReason(payload: Omit<QualityReasonCatalogItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<string | null> {
-    if (!isConfigured) return null;
-    const ref = await addDoc(qualityReasonCatalogRef(), {
-      ...payload,
-      createdAt: serverTimestamp(),
+  async listAqlPlans(): Promise<AqlPlanRange[]> {
+    const rows = await listByTenant<AqlPlanRange>(QMS_COLLECTIONS.AQL_PLANS, activeTenantId());
+    return rows.sort((a, b) => a.batchMin - b.batchMin);
+  },
+
+  /** Effective plans: saved tenant rows when any are active, otherwise the standard Level II table. */
+  async effectiveAqlPlans(): Promise<AqlPlanRange[]> {
+    const saved = await this.listAqlPlans();
+    const active = saved.filter((plan) => plan.isActive);
+    return active.length > 0 ? active : STANDARD_AQL_LEVEL_II;
+  },
+
+  async saveAqlPlan(input: AqlPlanRange): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    assertAqlPlanRange(input);
+    const actor = currentQualityActor();
+    const payload = stampTenant({
+      batchMin: input.batchMin,
+      batchMax: input.batchMax,
+      sampleSize: input.sampleSize,
+      acceptLimit: input.acceptLimit,
+      rejectLimit: input.rejectLimit,
+      aqlLevel: input.aqlLevel || 'المستوى العام الثاني (Level II)',
+      notes: input.notes || '',
+      isActive: input.isActive !== false,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    if (input.id) await updateDoc(qmsDoc(QMS_COLLECTIONS.AQL_PLANS, input.id), payload);
+    else await addDoc(qmsCollection(QMS_COLLECTIONS.AQL_PLANS), { ...payload, createdAt: serverTimestamp() });
+    await auditQuality('QUALITY_UPSERT_SAMPLING_PLAN', 'حفظ نطاق فحص AQL', {
+      batchMin: input.batchMin,
+      batchMax: input.batchMax,
+    });
+  },
+
+  async listSlots(kind: 'hourly' | 'line'): Promise<QualitySampleSlot[]> {
+    const rows = await listByTenant<QualitySampleSlot>(QMS_COLLECTIONS.SLOTS, activeTenantId());
+    const custom = rows.filter((slot) => slot.kind === kind).sort((a, b) => a.displayOrder - b.displayOrder);
+    if (custom.some((slot) => slot.isActive)) return custom.filter((slot) => slot.isActive);
+    return STANDARD_SAMPLE_SLOTS.map((slot) => ({
+      ...slot,
+      id: slot.slotKey,
+      tenantId: activeTenantId(),
+      kind,
+      isActive: true,
+    }));
+  },
+
+  async saveSlot(input: Omit<QualitySampleSlot, 'tenantId' | 'id'> & { id?: string }): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const stored = await listByTenant<QualitySampleSlot>(QMS_COLLECTIONS.SLOTS, activeTenantId());
+    assertSlotWindow({
+      startTime: input.startTime,
+      endTime: input.endTime,
+      kind: input.kind,
+      id: input.id,
+      existing: stored,
+    });
+    const actor = currentQualityActor();
+    const payload = stampTenant({
+      slotKey: input.slotKey || `${input.kind}-${input.startTime}-${input.endTime}`,
+      slotName: input.slotName || `${input.startTime} - ${input.endTime}`,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      displayOrder: input.displayOrder || 1,
+      kind: input.kind,
+      isActive: input.isActive !== false,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    if (input.id && !input.id.startsWith('standard-')) {
+      await updateDoc(qmsDoc(QMS_COLLECTIONS.SLOTS, input.id), payload);
+    } else {
+      await addDoc(qmsCollection(QMS_COLLECTIONS.SLOTS), { ...payload, createdAt: serverTimestamp() });
+    }
+    await auditQuality('QUALITY_SET_POLICIES', 'حفظ فترة سحب عينات', { slotName: payload.slotName });
+  },
+
+  async listStations(options?: { includeInactive?: boolean }): Promise<QualityStation[]> {
+    const rows = await listByTenant<QualityStation>(QMS_COLLECTIONS.STATIONS, activeTenantId());
+    return options?.includeInactive ? rows : rows.filter((station) => station.isActive !== false);
+  },
+
+  async saveStation(input: { id?: string; name: string; defaultInspectorEmployeeId?: string }): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const name = input.name.trim();
+    if (!name) throw new Error('اسم محطة الفحص مطلوب.');
+    if (!input.defaultInspectorEmployeeId) throw new Error('اختر المراقب المسؤول عن محطة الفحص.');
+    await qualityStaffService.requireSelectableInspector({
+      employeeId: input.defaultInspectorEmployeeId,
+      stationId: input.id,
+      stationIsNew: !input.id,
+    });
+    const stations = await this.listStations();
+    if (stations.some((station) => station.name === name && station.id !== input.id)) {
+      throw new Error('اسم محطة الفحص مسجل بالفعل.');
+    }
+    const actor = currentQualityActor();
+    const payload = stampTenant({
+      name,
+      defaultInspectorEmployeeId: input.defaultInspectorEmployeeId || null,
+      isActive: true,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    if (input.id) await updateDoc(qmsDoc(QMS_COLLECTIONS.STATIONS, input.id), payload);
+    else await addDoc(qmsCollection(QMS_COLLECTIONS.STATIONS), { ...payload, createdAt: serverTimestamp() });
+    await auditQuality('QUALITY_SET_POLICIES', `حفظ محطة فحص: ${name}`, { name });
+  },
+
+  async hideStation(id: string): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    await updateDoc(qmsDoc(QMS_COLLECTIONS.STATIONS, id), { isActive: false, updatedAt: serverTimestamp() });
+    await auditQuality('QUALITY_SET_POLICIES', 'إخفاء محطة فحص مع الإبقاء على السحبات السابقة', { stationId: id });
+  },
+
+  async listSectorTags(): Promise<QualitySectorTag[]> {
+    return listByTenant<QualitySectorTag>(QMS_COLLECTIONS.SECTOR_TAGS, activeTenantId());
+  },
+
+  async saveSectorTag(input: { entityType: 'product' | 'line'; entityId: string; sector: QualitySector }): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const existing = await this.listSectorTags();
+    const match = existing.find((tag) => tag.entityType === input.entityType && tag.entityId === input.entityId);
+    const payload = stampTenant({
+      entityType: input.entityType,
+      entityId: input.entityId,
+      sector: input.sector,
       updatedAt: serverTimestamp(),
     });
-    await activityLogService.logCurrentUser(
-      'QUALITY_UPDATE_REASON',
-      `إضافة سبب عيب: ${payload.labelAr}`,
-      { reasonId: ref.id, code: payload.code, category: payload.category },
+    if (match?.id) await updateDoc(qmsDoc(QMS_COLLECTIONS.SECTOR_TAGS, match.id), payload);
+    else await addDoc(qmsCollection(QMS_COLLECTIONS.SECTOR_TAGS), payload);
+  },
+
+  async listShifts(): Promise<QualityShiftOption[]> {
+    requireQualityDb();
+    const tenantId = activeTenantId();
+    const snap = await getDocs(query(collection(db, HR_COLLECTIONS.SHIFTS), where('tenantId', '==', tenantId)));
+    return snap.docs
+      .map((item) => ({ id: item.id, ...item.data() }) as QualityShiftOption & { isActive?: boolean })
+      .filter((shift) => shift.isActive !== false && shift.id)
+      .map((shift) => ({
+        id: shift.id,
+        name: shift.name,
+        startTime: shift.startTime,
+        endTime: shift.endTime,
+      }));
+  },
+
+  subscribeReasons(onData: (rows: QualityReason[]) => void): () => void {
+    const tenantId = activeTenantId();
+    return onSnapshot(
+      query(qmsCollection(QMS_COLLECTIONS.REASONS), where('tenantId', '==', tenantId)),
+      (snap) => onData(snap.docs.map((item) => ({ id: item.id, ...item.data() }) as QualityReason)),
+      () => onData([]),
     );
-    return ref.id;
-  },
-
-  async seedDefaultReasons(): Promise<void> {
-    if (!isConfigured) return;
-    const existing = await this.getReasons(false);
-    if (existing.length > 0) return;
-    const defaults: Omit<QualityReasonCatalogItem, 'id' | 'createdAt' | 'updatedAt'>[] = [
-      { code: 'FIN-SCRATCH', labelAr: 'خدش في الطلاء', category: 'تشطيب', severityDefault: 'medium', isActive: true },
-      { code: 'ASSY-MISS', labelAr: 'نقص في التجميع', category: 'تجميع', severityDefault: 'high', isActive: true },
-      { code: 'COLOR-MISMATCH', labelAr: 'اختلاف لون', category: 'لون', severityDefault: 'low', isActive: true },
-      { code: 'SIZE-OFF', labelAr: 'مقاس غير مطابق', category: 'مقاس', severityDefault: 'high', isActive: true },
-      { code: 'PACK-DAMAGE', labelAr: 'تلف في التعبئة', category: 'تعبئة', severityDefault: 'medium', isActive: true },
-    ];
-    await Promise.all(defaults.map((item) => this.createReason(item)));
-  },
-
-  async updateReason(id: string, payload: Partial<Omit<QualityReasonCatalogItem, 'id'>>): Promise<void> {
-    if (!isConfigured) return;
-    await updateDoc(doc(qualityReasonCatalogRef(), id), {
-      ...payload,
-      updatedAt: serverTimestamp(),
-    });
-    await activityLogService.logCurrentUser(
-      'QUALITY_UPDATE_REASON',
-      'تحديث سبب عيب',
-      { reasonId: id, changes: payload },
-    );
-  },
-
-  async deleteReason(id: string): Promise<void> {
-    if (!isConfigured) return;
-    await deleteDoc(doc(qualityReasonCatalogRef(), id));
-    await activityLogService.logCurrentUser(
-      'QUALITY_DELETE_REASON',
-      'حذف سبب عيب',
-      { reasonId: id },
-    );
-  },
-
-  subscribePolicies(cb: (data: QualityPolicySettings) => void): Unsubscribe {
-    if (!isConfigured) return () => {};
-    return onSnapshot(qualitySettingsDocRef(), (snap) => {
-      cb({
-        ...DEFAULT_POLICIES,
-        ...((snap.data() ?? {}) as Partial<QualityPolicySettings>),
-      });
-    });
-  },
-
-  subscribeSettingsHub(cb: (data: QualitySettingsDocument) => void): Unsubscribe {
-    if (!isConfigured) return () => {};
-    return onSnapshot(qualitySettingsDocRef(), (snap) => {
-      const data = (snap.data() ?? {}) as Partial<QualitySettingsDocument>;
-      cb({
-        ...DEFAULT_SETTINGS_HUB,
-        ...data,
-        inspectionTemplates: Array.isArray(data.inspectionTemplates) ? data.inspectionTemplates : [],
-        samplingPlans: Array.isArray(data.samplingPlans) ? data.samplingPlans : [],
-        reworkPolicies: {
-          ...DEFAULT_REWORK_POLICIES,
-          ...(data.reworkPolicies ?? {}),
-        },
-        printTemplates: {
-          ...DEFAULT_PRINT_TEMPLATES,
-          ...(data.printTemplates ?? {}),
-        },
-      });
-    });
-  },
-
-  async upsertInspectionTemplate(template: QualityInspectionTemplate): Promise<void> {
-    const settings = await this.getSettingsHub();
-    const next = settings.inspectionTemplates.some((item) => item.id === template.id)
-      ? settings.inspectionTemplates.map((item) => (item.id === template.id ? template : item))
-      : [template, ...settings.inspectionTemplates];
-    await this.setSettingsHub({ inspectionTemplates: next });
-    await activityLogService.logCurrentUser(
-      'QUALITY_UPSERT_TEMPLATE',
-      'حفظ نموذج فحص جودة',
-      { templateId: template.id, name: template.name },
-    );
-  },
-
-  async removeInspectionTemplate(id: string): Promise<void> {
-    const settings = await this.getSettingsHub();
-    await this.setSettingsHub({
-      inspectionTemplates: settings.inspectionTemplates.filter((item) => item.id !== id),
-    });
-    await activityLogService.logCurrentUser(
-      'QUALITY_REMOVE_TEMPLATE',
-      'حذف نموذج فحص جودة',
-      { templateId: id },
-    );
-  },
-
-  async upsertSamplingPlan(plan: QualitySamplingPlan): Promise<void> {
-    const settings = await this.getSettingsHub();
-    const next = settings.samplingPlans.some((item) => item.id === plan.id)
-      ? settings.samplingPlans.map((item) => (item.id === plan.id ? plan : item))
-      : [plan, ...settings.samplingPlans];
-    await this.setSettingsHub({ samplingPlans: next });
-    await activityLogService.logCurrentUser(
-      'QUALITY_UPSERT_SAMPLING_PLAN',
-      'حفظ خطة سحب عينات',
-      { planId: plan.id, frequencyMinutes: plan.frequencyMinutes, sampleSize: plan.sampleSize },
-    );
-  },
-
-  async removeSamplingPlan(id: string): Promise<void> {
-    const settings = await this.getSettingsHub();
-    await this.setSettingsHub({
-      samplingPlans: settings.samplingPlans.filter((item) => item.id !== id),
-    });
-    await activityLogService.logCurrentUser(
-      'QUALITY_REMOVE_SAMPLING_PLAN',
-      'حذف خطة سحب عينات',
-      { planId: id },
-    );
-  },
-
-  subscribeReasons(cb: (reasons: QualityReasonCatalogItem[]) => void): Unsubscribe {
-    if (!isConfigured) return () => {};
-    const q = query(qualityReasonCatalogRef(), orderBy('labelAr', 'asc'));
-    return onSnapshot(q, (snap) => {
-      cb(snap.docs.map((d) => ({ id: d.id, ...d.data() } as QualityReasonCatalogItem)));
-    });
-  },
-
-  resolveInspectionRuntimeConfig(
-    settings: QualitySettingsDocument,
-    input: { lineId?: string; productId?: string; unitsProduced?: number },
-  ): {
-    templateIds: string[];
-    dueSamplingPlans: QualitySamplingPlan[];
-  } {
-    const templates = Array.isArray(settings.inspectionTemplates) ? settings.inspectionTemplates : [];
-    const plans = Array.isArray(settings.samplingPlans) ? settings.samplingPlans : [];
-    const lineId = String(input.lineId || '');
-    const productId = String(input.productId || '');
-    const unitsProduced = Math.max(0, Number(input.unitsProduced || 0));
-    const dueSamplingPlans = plans.filter((plan) => {
-      const targetLine = String((plan as any).lineId || '');
-      const targetProduct = String((plan as any).productId || '');
-      const hasLineMatch = !targetLine || targetLine === lineId;
-      const hasProductMatch = !targetProduct || targetProduct === productId;
-      const sampleSize = Math.max(1, Number(plan.sampleSize || 1));
-      return hasLineMatch && hasProductMatch && unitsProduced >= sampleSize;
-    });
-    return {
-      templateIds: templates.map((template) => String(template.id || '')).filter(Boolean),
-      dueSamplingPlans,
-    };
   },
 };
+
+export { deleteDoc };

@@ -1246,6 +1246,29 @@ export const createProductionReportFastCallable = async (
   }
 };
 
+export const closeWorkOrderCallable = async (input: {
+  workOrderId: string;
+  mode?: 'operator' | 'quantity_reached';
+  actualWorkHours?: number;
+  actualProducedFromScans?: number;
+  actualWorkersCount?: number;
+  scanSummary?: Record<string, unknown>;
+  scanSessionClosedAt?: string;
+  notes?: string;
+}): Promise<{ ok: true; workOrderId: string; alreadyClosed: boolean }> => {
+  if (!isConfigured || !functionsClient) throw new Error("Firebase not configured");
+  const callable = httpsCallable<
+    typeof input,
+    { ok: true; workOrderId: string; alreadyClosed: boolean }
+  >(functionsClient, "closeWorkOrder");
+  try {
+    const result = await callable(input);
+    return result.data;
+  } catch (error: unknown) {
+    throw normalizeCallableError(error);
+  }
+};
+
 export const retryProductionReportProcessingCallable = async (
   reportId: string,
 ): Promise<{ ok: true; reportId: string }> => {

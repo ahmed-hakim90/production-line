@@ -1,6 +1,70 @@
 {
   "indexes": [
     {
+      "collectionGroup": "quality_pallets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_pallets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "inspectionStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_pallets",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "workOrderId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_hourly_samples",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_line_sample_pulls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_line_period_statuses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_scrap_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "reportDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_second_sort_reports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "reportDate", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "production_gate_sessions",
       "queryScope": "COLLECTION",
       "fields": [

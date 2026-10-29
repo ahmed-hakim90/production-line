@@ -1,840 +1,269 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Button } from '../components/UI';
-import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
-import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
-import { usePermission } from '@/utils/permissions';
+import React, { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { useAppStore } from '@/store/useAppStore';
-import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { usePermission } from '@/utils/permissions';
+import { STANDARD_AQL_LEVEL_II, type AqlPlanRange } from '../domain/aql';
+import type { QualitySector } from '../domain/sector';
+import type { QualityReason, QualitySampleSlot, QualitySectorTag, QualityStation } from '../model';
+import { qualityUserMessage } from '../services/qualityGateway';
 import { qualitySettingsService } from '../services/qualitySettingsService';
-import {
-  fetchCachedPageData,
-  invalidatePageDataCache,
-  peekPageDataCache,
-} from '../../shared/lib/pageDataCache';
-import type {
-  QualityDefectSeverity,
-  QualityInspectionTemplate,
-  QualityPolicySettings,
-  QualityPrintTemplateSettings,
-  QualityReasonCatalogItem,
-  QualityReworkPolicySettings,
-  QualitySamplingPlan,
-} from '@/types';
-
-type QualitySettingsTab =
-  | 'policies'
-  | 'reasonCatalog'
-  | 'inspectionTemplates'
-  | 'samplingPlans'
-  | 'reworkPolicies'
-  | 'printTemplates';
-
-const SETTINGS_TABS: { key: QualitySettingsTab; label: string; icon: string }[] = [
-  { key: 'policies', label: 'السياسات', icon: 'policy' },
-  { key: 'reasonCatalog', label: 'كتالوج أسباب العيوب', icon: 'category' },
-  { key: 'inspectionTemplates', label: 'قوالب الفحص', icon: 'checklist' },
-  { key: 'samplingPlans', label: 'خطط المعاينة', icon: 'science' },
-  { key: 'reworkPolicies', label: 'سياسات إعادة التشغيل', icon: 'autorenew' },
-  { key: 'printTemplates', label: 'قوالب الطباعة', icon: 'print' },
-];
-
-const SEVERITY_OPTIONS: { value: QualityDefectSeverity; label: string }[] = [
-  { value: 'low', label: 'منخفض' },
-  { value: 'medium', label: 'متوسط' },
-  { value: 'high', label: 'مرتفع' },
-  { value: 'critical', label: 'حرج' },
-];
-
-const categoryOptions = ['تشطيب', 'مقاس', 'لون', 'تجميع', 'مواد خام', 'تعبئة'];
-const splitCsv = (value: string): string[] =>
-  value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-type QualitySettingsPageData = {
-  policies: QualityPolicySettings;
-  reasons: QualityReasonCatalogItem[];
-  inspectionTemplates: QualityInspectionTemplate[];
-  samplingPlans: QualitySamplingPlan[];
-  reworkPolicies: QualityReworkPolicySettings;
-  printTemplates: QualityPrintTemplateSettings;
-};
-
-const QUALITY_SETTINGS_CACHE_KEY = 'quality:settings';
+import { inspectorOptions, useQualityAssignments } from '../hooks/useQualityAssignments';
+import { MasterSelect, QmsPage, useQualityMasters } from '../qms/QmsChrome';
 
 export const QualitySettings: React.FC = () => {
-  const referenceDataLoading = useEnsureStoreData(['products', 'lines']);
   const { can } = usePermission();
-  const canManageSettings = can('quality.settings.manage');
-  const canManageCatalog = can('quality.settings.manage');
-  const rawProducts = useAppStore((s) => s._rawProducts);
-  const rawLines = useAppStore((s) => s._rawLines);
-
-  const initialSettingsCache = peekPageDataCache<QualitySettingsPageData>(QUALITY_SETTINGS_CACHE_KEY);
-  const [activeTab, setActiveTab] = useState<QualitySettingsTab>('policies');
-  const [loading, setLoading] = useState(() => initialSettingsCache == null);
-  const [policies, setPolicies] = useState<QualityPolicySettings>(
-    () => initialSettingsCache?.policies ?? { closeRequiresQualityApproval: false },
-  );
-  const [reasons, setReasons] = useState<QualityReasonCatalogItem[]>(
-    () => initialSettingsCache?.reasons ?? [],
-  );
-  const [savingPolicies, setSavingPolicies] = useState(false);
-  const [savingReason, setSavingReason] = useState(false);
-  const [message, setMessage] = useState('');
-
-  const [reasonForm, setReasonForm] = useState({
-    id: '',
-    code: '',
-    labelAr: '',
-    category: categoryOptions[0],
-    severityDefault: 'medium' as QualityDefectSeverity,
-    isActive: true,
-  });
-  const [inspectionTemplates, setInspectionTemplates] = useState<QualityInspectionTemplate[]>(
-    () => initialSettingsCache?.inspectionTemplates ?? [],
-  );
-  const [samplingPlans, setSamplingPlans] = useState<QualitySamplingPlan[]>(
-    () => initialSettingsCache?.samplingPlans ?? [],
-  );
-  const [reworkPolicies, setReworkPolicies] = useState<QualityReworkPolicySettings>(
-    () => initialSettingsCache?.reworkPolicies ?? {
-      autoCreateReworkOnFail: true,
-      allowDirectScrap: false,
-      requireCapaForCritical: true,
-    },
-  );
-  const [printTemplates, setPrintTemplates] = useState<QualityPrintTemplateSettings>(
-    () => initialSettingsCache?.printTemplates ?? {
-      headerText: 'تقرير الجودة',
-      footerText: 'تم الإنشاء تلقائياً من الإنتاج',
-      showSignatureInspector: true,
-      showSignatureSupervisor: true,
-      showSignatureQualityManager: true,
-    },
-  );
-  const [templateForm, setTemplateForm] = useState({
-    id: '',
-    name: '',
-    productId: '',
-    lineId: '',
-    checklistCsv: '',
-    criticalChecksCsv: '',
-    isActive: true,
-  });
-  const [samplingForm, setSamplingForm] = useState({
-    id: '',
-    productId: '',
-    lineId: '',
-    frequencyMinutes: 60,
-    sampleSize: 5,
-    isActive: true,
+  const masters = useQualityMasters();
+  const allEmployees = useAppStore((state) => state._rawEmployees);
+  const staff = useQualityAssignments();
+  const canManage = can('quality.settings.manage');
+  const [plans, setPlans] = useState<AqlPlanRange[]>([]);
+  const [usingStandard, setUsingStandard] = useState(true);
+  const [closeRequired, setCloseRequired] = useState(false);
+  const [reasonCode, setReasonCode] = useState('');
+  const [reasonLabel, setReasonLabel] = useState('');
+  const [reasonCategory, setReasonCategory] = useState('عام');
+  const [reasonSector, setReasonSector] = useState<'' | QualitySector>('');
+  const [editingReasonId, setEditingReasonId] = useState('');
+  const [catalogReasons, setCatalogReasons] = useState<QualityReason[]>([]);
+  const [stationName, setStationName] = useState('');
+  const [stationInspector, setStationInspector] = useState('');
+  const [editingStationId, setEditingStationId] = useState('');
+  const [tagEntity, setTagEntity] = useState('');
+  const [tagType, setTagType] = useState<'product' | 'line'>('product');
+  const [tagSector, setTagSector] = useState<QualitySector>('home');
+  const [stations, setStations] = useState<QualityStation[]>([]);
+  const [slots, setSlots] = useState<QualitySampleSlot[]>([]);
+  const [tags, setTags] = useState<QualitySectorTag[]>([]);
+  const [reasonQuery, setReasonQuery] = useState('');
+  const [slotKind, setSlotKind] = useState<'hourly' | 'line'>('hourly');
+  const [slotStart, setSlotStart] = useState('08:00');
+  const [slotEnd, setSlotEnd] = useState('09:00');
+  const [planForm, setPlanForm] = useState<AqlPlanRange>({
+    batchMin: 91, batchMax: 150, sampleSize: 20, acceptLimit: 2, rejectLimit: 3, aqlLevel: 'المستوى العام الثاني (Level II)', isActive: true,
   });
 
-  const applySettingsData = useCallback((data: QualitySettingsPageData) => {
-    setPolicies(data.policies);
-    setReasons(data.reasons);
-    setInspectionTemplates(data.inspectionTemplates);
-    setSamplingPlans(data.samplingPlans);
-    setReworkPolicies(data.reworkPolicies);
-    setPrintTemplates(data.printTemplates);
-  }, []);
+  const load = async () => {
+    const [saved, policies, nextStations, hourlySlots, lineSlots, nextTags, nextReasons] = await Promise.all([
+      qualitySettingsService.listAqlPlans(),
+      qualitySettingsService.getPolicies(),
+      qualitySettingsService.listStations({ includeInactive: true }),
+      qualitySettingsService.listSlots('hourly'),
+      qualitySettingsService.listSlots('line'),
+      qualitySettingsService.listSectorTags(),
+      qualitySettingsService.listReasons(),
+    ]);
+    setCatalogReasons(nextReasons);
+    setStations(nextStations);
+    setSlots([...hourlySlots, ...lineSlots]);
+    setTags(nextTags);
+    const active = saved.filter((plan) => plan.isActive);
+    setUsingStandard(active.length === 0);
+    setPlans(active.length > 0 ? active : STANDARD_AQL_LEVEL_II);
+    setCloseRequired(policies.closeRequiresQualityApproval);
+  };
 
-  const loadData = useCallback(async (opts?: { force?: boolean }) => {
-    const cached = peekPageDataCache<QualitySettingsPageData>(QUALITY_SETTINGS_CACHE_KEY);
-    if (cached) {
-      applySettingsData(cached);
-      setLoading(false);
-    } else {
-      setLoading(true);
-    }
+  useEffect(() => { void load().catch((error: unknown) => toast.error(qualityUserMessage(error, 'تعذر التحميل'))); }, []);
+
+  const save = async (work: () => Promise<void>, message: string) => {
     try {
-      const { data } = await fetchCachedPageData(
-        QUALITY_SETTINGS_CACHE_KEY,
-        async () => {
-          await qualitySettingsService.seedDefaultReasons();
-          const [policiesData, reasonsData, settingsHub] = await Promise.all([
-            qualitySettingsService.getPolicies(),
-            qualitySettingsService.getReasons(false),
-            qualitySettingsService.getSettingsHub(),
-          ]);
-          return {
-            policies: policiesData,
-            reasons: reasonsData,
-            inspectionTemplates: settingsHub.inspectionTemplates ?? [],
-            samplingPlans: settingsHub.samplingPlans ?? [],
-            reworkPolicies: settingsHub.reworkPolicies,
-            printTemplates: settingsHub.printTemplates,
-          };
-        },
-        { force: opts?.force === true, maxAgeMs: 60_000 },
-      );
-      applySettingsData(data);
-    } finally {
-      setLoading(false);
-    }
-  }, [applySettingsData]);
-
-  const reload = useCallback(async () => {
-    invalidatePageDataCache(QUALITY_SETTINGS_CACHE_KEY);
-    await loadData({ force: true });
-  }, [loadData]);
-
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
-
-  const activeReasonsCount = useMemo(() => reasons.filter((item) => item.isActive).length, [reasons]);
-  const productNameById = useMemo(
-    () => new Map(rawProducts.filter((p) => p.id).map((p) => [p.id as string, p.name])),
-    [rawProducts],
-  );
-  const lineNameById = useMemo(
-    () => new Map(rawLines.filter((l) => l.id).map((l) => [l.id as string, l.name])),
-    [rawLines],
-  );
-
-  const onSavePolicies = async () => {
-    if (!canManageSettings) return;
-    setSavingPolicies(true);
-    setMessage('');
-    try {
-      await qualitySettingsService.setPolicies(policies);
-      setMessage('تم حفظ سياسات الجودة بنجاح');
-    } catch {
-      setMessage('تعذر حفظ سياسات الجودة');
-    } finally {
-      setSavingPolicies(false);
+      await work();
+      toast.success(message);
+      masters.reloadAux();
+      await load();
+    } catch (error) {
+      toast.error(qualityUserMessage(error, 'تعذر الحفظ'));
     }
   };
-
-  const resetReasonForm = () => {
-    setReasonForm({
-      id: '',
-      code: '',
-      labelAr: '',
-      category: categoryOptions[0],
-      severityDefault: 'medium',
-      isActive: true,
-    });
-  };
-
-  const onSubmitReason = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canManageCatalog) return;
-    if (!reasonForm.code.trim() || !reasonForm.labelAr.trim()) {
-      setMessage('يرجى إدخال كود واسم السبب');
-      return;
-    }
-
-    setSavingReason(true);
-    setMessage('');
-    try {
-      const payload = {
-        code: reasonForm.code.trim(),
-        labelAr: reasonForm.labelAr.trim(),
-        category: reasonForm.category.trim(),
-        severityDefault: reasonForm.severityDefault,
-        isActive: reasonForm.isActive,
-      };
-
-      if (reasonForm.id) {
-        await qualitySettingsService.updateReason(reasonForm.id, payload);
-      } else {
-        await qualitySettingsService.createReason(payload);
-      }
-
-      await reload();
-      resetReasonForm();
-      setMessage('تم حفظ سبب العيب');
-    } catch {
-      setMessage('تعذر حفظ سبب العيب');
-    } finally {
-      setSavingReason(false);
-    }
-  };
-
-  const onEditReason = (reason: QualityReasonCatalogItem) => {
-    setReasonForm({
-      id: reason.id ?? '',
-      code: reason.code,
-      labelAr: reason.labelAr,
-      category: reason.category,
-      severityDefault: reason.severityDefault,
-      isActive: reason.isActive,
-    });
-    setActiveTab('reasonCatalog');
-  };
-
-  const onDeleteReason = async (id?: string) => {
-    if (!canManageCatalog || !id) return;
-    if (!window.confirm('هل تريد حذف هذا السبب؟')) return;
-    try {
-      await qualitySettingsService.deleteReason(id);
-      await reload();
-      setMessage('تم حذف سبب العيب');
-    } catch {
-      setMessage('تعذر حذف سبب العيب');
-    }
-  };
-
-  const saveTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canManageSettings || !templateForm.name.trim()) return;
-    const id = templateForm.id || `tpl-${Date.now()}`;
-    await qualitySettingsService.upsertInspectionTemplate({
-      id,
-      name: templateForm.name.trim(),
-      productId: templateForm.productId || undefined,
-      lineId: templateForm.lineId || undefined,
-      checklist: splitCsv(templateForm.checklistCsv),
-      criticalChecks: splitCsv(templateForm.criticalChecksCsv),
-      isActive: templateForm.isActive,
-    });
-    setTemplateForm({
-      id: '',
-      name: '',
-      productId: '',
-      lineId: '',
-      checklistCsv: '',
-      criticalChecksCsv: '',
-      isActive: true,
-    });
-    await reload();
-    setMessage('تم حفظ قالب الفحص');
-  };
-
-  const saveSampling = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canManageSettings) return;
-    const id = samplingForm.id || `smp-${Date.now()}`;
-    await qualitySettingsService.upsertSamplingPlan({
-      id,
-      productId: samplingForm.productId || undefined,
-      lineId: samplingForm.lineId || undefined,
-      frequencyMinutes: Math.max(1, Number(samplingForm.frequencyMinutes) || 1),
-      sampleSize: Math.max(1, Number(samplingForm.sampleSize) || 1),
-      isActive: samplingForm.isActive,
-    });
-    setSamplingForm({
-      id: '',
-      productId: '',
-      lineId: '',
-      frequencyMinutes: 60,
-      sampleSize: 5,
-      isActive: true,
-    });
-    await reload();
-    setMessage('تم حفظ خطة المعاينة');
-  };
-
-  const saveReworkPolicies = async () => {
-    if (!canManageSettings) return;
-    await qualitySettingsService.setSettingsHub({ reworkPolicies });
-    await reload();
-    setMessage('تم حفظ سياسات إعادة التشغيل');
-  };
-
-  const savePrintTemplates = async () => {
-    if (!canManageSettings) return;
-    await qualitySettingsService.setSettingsHub({ printTemplates });
-    await reload();
-    setMessage('تم حفظ قوالب الطباعة');
-  };
-
-  if ((loading && reasons.length === 0) || referenceDataLoading) return <PageContentSkeleton variant="form" />;
 
   return (
-    <ModuleOpsPageShell
-      eyebrow="إعدادات الجودة"
-      rangeLabel="مركز ضبط سياسات الجودة وكتالوج أسباب العيوب"
-      actions={(
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant={policies.closeRequiresQualityApproval ? 'warning' : 'neutral'}>
-            إغلاق أمر الشغل: {policies.closeRequiresQualityApproval ? 'يتطلب اعتماد جودة' : 'مفتوح بدون اعتماد'}
-          </Badge>
-          <Badge variant="info">الأسباب الفعالة: {activeReasonsCount}</Badge>
+    <QmsPage title="إعدادات الجودة" subtitle="معايير الفحص ووسوم القطاع. الأجهزة المنزلية والسريا وسمان للجودة وليسا قسم موارد بشرية ولا تصنيف منتج.">
+      <section className="qms-card" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">إغلاق أمر الشغل</h2>
+        <label className="qms-row">
+          <input type="checkbox" checked={closeRequired} disabled={!canManage} onChange={(event) => setCloseRequired(event.target.checked)} />
+          <span>منع إغلاق أمر الشغل قبل اعتماد الجودة</span>
+        </label>
+        <p className="qms-muted">يُقبل الإغلاق إذا كانت حالة الجودة القديمة معتمدة أو غير مطلوبة، أو إذا كانت كل بالته مرتبطة بالأمر مكتملة ومقبولة.</p>
+        <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage} onClick={() => void save(() => qualitySettingsService.setPolicies({ closeRequiresQualityApproval: closeRequired }), 'تم حفظ السياسة')}>حفظ السياسة</button>
+      </section>
+      <section className="qms-card" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">خطط AQL {usingStandard ? '(الجدول القياسي، لم يُحفظ بعد)' : ''}</h2>
+        <table className="qms-table">
+          <thead><tr><th>من</th><th>إلى</th><th>العينة</th><th>قبول</th><th>رفض</th></tr></thead>
+          <tbody>
+            {plans.map((plan) => (
+              <tr key={`${plan.batchMin}-${plan.batchMax}`}><td>{plan.batchMin}</td><td>{plan.batchMax}</td><td>{plan.sampleSize}</td><td>{plan.acceptLimit}</td><td>{plan.rejectLimit}</td></tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="qms-row" style={{ marginTop: 8 }}>
+          <label><span className="qms-label">من</span><input className="qms-input" type="number" value={planForm.batchMin} onChange={(event) => setPlanForm({ ...planForm, batchMin: Number(event.target.value) })} /></label>
+          <label><span className="qms-label">إلى</span><input className="qms-input" type="number" value={planForm.batchMax} onChange={(event) => setPlanForm({ ...planForm, batchMax: Number(event.target.value) })} /></label>
+          <label><span className="qms-label">العينة</span><input className="qms-input" type="number" value={planForm.sampleSize} onChange={(event) => setPlanForm({ ...planForm, sampleSize: Number(event.target.value) })} /></label>
+          <label><span className="qms-label">قبول</span><input className="qms-input" type="number" value={planForm.acceptLimit} onChange={(event) => setPlanForm({ ...planForm, acceptLimit: Number(event.target.value) })} /></label>
+          <label><span className="qms-label">رفض</span><input className="qms-input" type="number" value={planForm.rejectLimit} onChange={(event) => setPlanForm({ ...planForm, rejectLimit: Number(event.target.value) })} /></label>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage} onClick={() => void save(() => qualitySettingsService.saveAqlPlan(planForm), 'تم حفظ النطاق')}>حفظ النطاق</button>
         </div>
-      )}
-    >
-      {message ? (
-        <OpsDashPanel accent="quality">
-          <p className="text-sm font-semibold text-[var(--color-text)]">{message}</p>
-        </OpsDashPanel>
-      ) : null}
-
-      <OpsDashPanel accent="quality">
-        <div className="flex flex-wrap gap-2">
-          {SETTINGS_TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setActiveTab(tab.key)}
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all ${
-                  isActive
-                    ? 'bg-primary text-white shadow-md shadow-primary/30'
-                    : 'bg-[var(--color-surface-hover)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
-                }`}
-              >
-                <span className="material-icons-round text-base">{tab.icon}</span>
-                <span>{tab.label}</span>
-              </button>
-            );
+      </section>
+      <section className="qms-card" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">أسباب العيوب</h2>
+        <label><span className="qms-label">بحث</span><input className="qms-input" value={reasonQuery} onChange={(event) => setReasonQuery(event.target.value)} placeholder="الرمز أو الاسم أو التصنيف" /></label>
+        <table className="qms-table">
+          <thead><tr><th>الرمز</th><th>الاسم</th><th>التصنيف</th><th>القطاع</th><th></th></tr></thead>
+          <tbody>
+            {catalogReasons.filter((reason) => {
+              const query = reasonQuery.trim();
+              return !query || `${reason.code} ${reason.labelAr} ${reason.category}`.includes(query);
+            }).map((reason) => (
+              <tr key={reason.id}>
+                <td>{reason.code}</td>
+                <td>{reason.labelAr}{reason.isActive === false ? ' — موقوف' : ''}</td>
+                <td>{reason.category}</td>
+                <td>{reason.sector === 'seria' ? 'السريا' : reason.sector === 'home' ? 'الأجهزة المنزلية' : 'مشترك'}</td>
+                <td>{canManage ? (
+                  <>
+                    <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
+                      setEditingReasonId(reason.id);
+                      setReasonCode(reason.code);
+                      setReasonLabel(reason.labelAr);
+                      setReasonCategory(reason.category);
+                      setReasonSector(reason.sector || '');
+                    }}>تعديل</button>
+                    {reason.isActive !== false ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void save(() => qualitySettingsService.deactivateReason(reason.id), 'تم إيقاف السبب')}>إيقاف</button> : null}
+                  </>
+                ) : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="qms-muted">الإيقاف يخفي السبب من التسجيل الجديد ويبقي العيوب المسجلة سابقاً. المصدر كان يحذف السجل؛ الحذف هنا غير مستخدم حتى لا تنقطع مراجع الفحص.</p>
+        <div className="qms-row">
+          <label><span className="qms-label">الرمز</span><input className="qms-input" value={reasonCode} onChange={(event) => setReasonCode(event.target.value)} /></label>
+          <label><span className="qms-label">الاسم</span><input className="qms-input" value={reasonLabel} onChange={(event) => setReasonLabel(event.target.value)} /></label>
+          <label><span className="qms-label">التصنيف</span><input className="qms-input" value={reasonCategory} onChange={(event) => setReasonCategory(event.target.value)} /></label>
+          <label><span className="qms-label">القطاع</span>
+            <select value={reasonSector} onChange={(event) => setReasonSector(event.target.value as '' | QualitySector)}>
+              <option value="">مشترك</option>
+              <option value="home">الأجهزة المنزلية</option>
+              <option value="seria">السريا</option>
+            </select>
+          </label>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage} onClick={() => void save(async () => {
+            await qualitySettingsService.saveReason({
+              id: editingReasonId || undefined,
+              code: reasonCode,
+              labelAr: reasonLabel,
+              category: reasonCategory,
+              sector: reasonSector || undefined,
+              isActive: true,
+            });
+            setEditingReasonId('');
+            setReasonCode('');
+            setReasonLabel('');
+          }, 'تم حفظ السبب')}>{editingReasonId ? 'حفظ التعديل' : 'إضافة سبب'}</button>
+        </div>
+      </section>
+      <section className="qms-card" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">محطات الفحص</h2>
+        <div className="qms-row">
+          <label><span className="qms-label">اسم المحطة</span><input className="qms-input" value={stationName} onChange={(event) => setStationName(event.target.value)} /></label>
+          <MasterSelect label="المراقب الافتراضي" value={stationInspector} onChange={setStationInspector} placeholder="تعيين نشط" options={inspectorOptions(masters.employees, staff.assignments, { stationId: editingStationId || undefined, stationIsNew: !editingStationId })} />
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage || !stationInspector} onClick={() => void save(async () => {
+            await qualitySettingsService.saveStation({ id: editingStationId || undefined, name: stationName, defaultInspectorEmployeeId: stationInspector });
+            setEditingStationId('');
+            setStationName('');
+          }, 'تم حفظ المحطة')}>{editingStationId ? 'حفظ تعديل المحطة' : 'حفظ المحطة'}</button>
+        </div>
+        <table className="qms-table">
+          <thead><tr><th>المحطة</th><th>المراقب الافتراضي</th><th></th></tr></thead>
+          <tbody>
+            {stations.map((station) => {
+              const inspector = allEmployees.find((employee) => employee.id === station.defaultInspectorEmployeeId);
+              return (
+                <tr key={station.id}>
+                  <td>{station.name}{station.isActive === false ? ' — موقوفة' : ''}</td>
+                  <td>{inspector ? inspector.name : '—'}</td>
+                  <td>{canManage ? (
+                    <>
+                      <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
+                        setEditingStationId(station.id);
+                        setStationName(station.name);
+                        setStationInspector(station.defaultInspectorEmployeeId || '');
+                      }}>تعديل</button>
+                      {station.isActive !== false ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void save(() => qualitySettingsService.hideStation(station.id), 'تم إيقاف المحطة')}>إيقاف</button> : null}
+                    </>
+                  ) : null}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <p className="qms-muted">المحطة لها اسم ومراقب افتراضي فقط. لا يوجد رمز محطة ولا ربط إلزامي بخط أو منتج في المصدر. الإيقاف يخفيها من السحب الجديد.</p>
+      </section>
+      <section className="qms-card" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">فترات السحب</h2>
+        <p className="qms-muted">الفترات الظاهرة بلا معرف محفوظ هي الجدول القياسي 08:00–16:00. حفظ فترة ينشئ جدولاً خاصاً بالشركة.</p>
+        <div className="qms-row">
+          <label><span className="qms-label">النوع</span>
+            <select value={slotKind} onChange={(event) => setSlotKind(event.target.value as 'hourly' | 'line')}>
+              <option value="hourly">عينات الساعة</option>
+              <option value="line">سحب الخط</option>
+            </select>
+          </label>
+          <label><span className="qms-label">من</span><input className="qms-input" type="time" value={slotStart} onChange={(event) => setSlotStart(event.target.value)} /></label>
+          <label><span className="qms-label">إلى</span><input className="qms-input" type="time" value={slotEnd} onChange={(event) => setSlotEnd(event.target.value)} /></label>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage} onClick={() => void save(() => qualitySettingsService.saveSlot({
+            slotKey: `${slotKind}-${slotStart}-${slotEnd}`,
+            slotName: `${slotStart}–${slotEnd}`,
+            startTime: slotStart,
+            endTime: slotEnd,
+            displayOrder: slots.filter((slot) => slot.kind === slotKind).length + 1,
+            kind: slotKind,
+            isActive: true,
+          }), 'تم حفظ الفترة')}>حفظ الفترة</button>
+        </div>
+        <ul>
+          {slots.filter((slot) => slot.kind === slotKind).map((slot) => (
+            <li key={`${slot.kind}-${slot.id}`}>{slot.slotName}{slot.id.startsWith('standard-') ? ' — قياسي' : ''}</li>
+          ))}
+        </ul>
+      </section>
+      <section className="qms-card">
+        <h2 className="qms-title">وسم قطاع الجودة</h2>
+        <p className="qms-muted">الوسم يفلتر قوائم الجودة فقط. لا يغيّر قسم الموظف ولا فئة المنتج.</p>
+        <div className="qms-row">
+          <label><span className="qms-label">النوع</span>
+            <select value={tagType} onChange={(event) => setTagType(event.target.value as 'product' | 'line')}>
+              <option value="product">منتج</option>
+              <option value="line">خط</option>
+            </select>
+          </label>
+          <MasterSelect
+            label={tagType === 'product' ? 'المنتج' : 'الخط'}
+            value={tagEntity}
+            onChange={setTagEntity}
+            placeholder="اختر"
+            options={(tagType === 'product' ? masters.products : masters.lines).map((item) => ({
+              value: item.id || '',
+              label: 'code' in item && item.code ? `${item.name} (${item.code})` : item.name,
+            }))}
+          />
+          <label><span className="qms-label">القطاع</span>
+            <select value={tagSector} onChange={(event) => setTagSector(event.target.value as QualitySector)}>
+              <option value="home">الأجهزة المنزلية</option>
+              <option value="seria">قسم السريا</option>
+            </select>
+          </label>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage || !tagEntity} onClick={() => void save(() => qualitySettingsService.saveSectorTag({ entityType: tagType, entityId: tagEntity, sector: tagSector }), 'تم حفظ الوسم')}>حفظ الوسم</button>
+        </div>
+        <ul>
+          {tags.map((tag) => {
+            const source = tag.entityType === 'product' ? masters.products : masters.lines;
+            const entity = source.find((item) => item.id === tag.entityId);
+            return <li key={tag.id}>{tag.entityType === 'product' ? 'منتج' : 'خط'}: {entity?.name || tag.entityId} — {tag.sector === 'seria' ? 'السريا' : 'الأجهزة المنزلية'}</li>;
           })}
-        </div>
-      </OpsDashPanel>
-
-      {activeTab === 'policies' && (
-        <OpsDashPanel title="سياسات الاعتماد والإغلاق" accent="quality">
-          <div className="space-y-6">
-            <div className="flex items-start justify-between gap-4 p-4 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-              <div>
-                <h3 className="text-sm font-extrabold text-[var(--color-text)]">إغلاق أمر الشغل باعتماد الجودة</h3>
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                  عند التفعيل، لن يمكن تحويل أمر الشغل إلى مكتمل إلا إذا كانت حالة الجودة معتمدة.
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={!canManageSettings || savingPolicies}
-                onClick={() => setPolicies((prev) => ({ ...prev, closeRequiresQualityApproval: !prev.closeRequiresQualityApproval }))}
-                className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors ${
-                  policies.closeRequiresQualityApproval ? 'bg-primary' : 'bg-[var(--color-border)]'
-                } ${!canManageSettings || savingPolicies ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-              >
-                <span
-                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-[var(--color-card)] shadow-lg transition ${
-                    policies.closeRequiresQualityApproval ? '-translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="flex justify-end">
-              <Button onClick={onSavePolicies} disabled={!canManageSettings || savingPolicies}>
-                <span className="material-icons-round text-sm">{savingPolicies ? 'hourglass_top' : 'save'}</span>
-                <span>{savingPolicies ? 'جاري الحفظ...' : 'حفظ السياسات'}</span>
-              </Button>
-            </div>
-          </div>
-        </OpsDashPanel>
-      )}
-
-      {activeTab === 'reasonCatalog' && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <OpsDashPanel className="xl:col-span-1" title={reasonForm.id ? 'تعديل سبب عيب' : 'إضافة سبب عيب'} accent="quality">
-            <form onSubmit={onSubmitReason} className="space-y-3">
-              <div className="space-y-1">
-                <label className="block text-sm font-bold text-[var(--color-text)]">الكود</label>
-                <input
-                  value={reasonForm.code}
-                  onChange={(e) => setReasonForm((prev) => ({ ...prev, code: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                  placeholder="DEF-001"
-                  disabled={!canManageCatalog || savingReason}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-sm font-bold text-[var(--color-text)]">اسم السبب</label>
-                <input
-                  value={reasonForm.labelAr}
-                  onChange={(e) => setReasonForm((prev) => ({ ...prev, labelAr: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                  placeholder="عيب التجميع"
-                  disabled={!canManageCatalog || savingReason}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-sm font-bold text-[var(--color-text)]">التصنيف</label>
-                <input
-                  list="quality-reason-categories"
-                  value={reasonForm.category}
-                  onChange={(e) => setReasonForm((prev) => ({ ...prev, category: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                  disabled={!canManageCatalog || savingReason}
-                />
-                <datalist id="quality-reason-categories">
-                  {categoryOptions.map((category) => (
-                    <option key={category} value={category} />
-                  ))}
-                </datalist>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block text-sm font-bold text-[var(--color-text)]">الشدة الافتراضية</label>
-                <select
-                  value={reasonForm.severityDefault}
-                  onChange={(e) => setReasonForm((prev) => ({ ...prev, severityDefault: e.target.value as QualityDefectSeverity }))}
-                  className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                  disabled={!canManageCatalog || savingReason}
-                >
-                  {SEVERITY_OPTIONS.map((severity) => (
-                    <option key={severity.value} value={severity.value}>
-                      {severity.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <label className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
-                <input
-                  type="checkbox"
-                  checked={reasonForm.isActive}
-                  onChange={(e) => setReasonForm((prev) => ({ ...prev, isActive: e.target.checked }))}
-                  disabled={!canManageCatalog || savingReason}
-                />
-                <span>نشط</span>
-              </label>
-
-              <div className="flex gap-2 pt-2">
-                <Button type="submit" disabled={!canManageCatalog || savingReason} className="flex-1">
-                  <span className="material-icons-round text-sm">{savingReason ? 'hourglass_top' : 'save'}</span>
-                  <span>{reasonForm.id ? 'حفظ التعديل' : 'إضافة السبب'}</span>
-                </Button>
-                {reasonForm.id && (
-                  <Button type="button" variant="outline" onClick={resetReasonForm}>
-                    إلغاء
-                  </Button>
-                )}
-              </div>
-            </form>
-          </OpsDashPanel>
-
-          <OpsDashPanel className="xl:col-span-2" title="قائمة أسباب العيوب" accent="quality">
-            <div className="overflow-x-auto">
-              <table className="erp-table min-w-full text-sm">
-                <thead className="erp-thead">
-                  <tr>
-                    <th className="erp-th">الكود</th>
-                    <th className="erp-th">السبب</th>
-                    <th className="erp-th">التصنيف</th>
-                    <th className="erp-th">الشدة</th>
-                    <th className="erp-th">الحالة</th>
-                    <th className="erp-th">إجراءات</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reasons.map((reason) => (
-                    <tr key={reason.id} className="border-b border-[var(--color-border)]">
-                      <td className="py-2 px-2 font-mono text-xs">{reason.code}</td>
-                      <td className="py-2 px-2">{reason.labelAr}</td>
-                      <td className="py-2 px-2">{reason.category}</td>
-                      <td className="py-2 px-2">{SEVERITY_OPTIONS.find((item) => item.value === reason.severityDefault)?.label}</td>
-                      <td className="py-2 px-2">
-                        <Badge variant={reason.isActive ? 'success' : 'neutral'}>
-                          {reason.isActive ? 'نشط' : 'معطّل'}
-                        </Badge>
-                      </td>
-                      <td className="py-2 px-2">
-                        <div className="flex flex-wrap gap-1">
-                          <Button variant="outline" className="!px-2 !py-1" onClick={() => onEditReason(reason)}>
-                            تعديل
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="!px-2 !py-1"
-                            onClick={() => onDeleteReason(reason.id)}
-                            disabled={!canManageCatalog}
-                          >
-                            حذف
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {reasons.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="py-6 text-center text-[var(--color-text-muted)]">
-                        لا توجد أسباب عيوب حتى الآن.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </OpsDashPanel>
-        </div>
-      )}
-
-      {activeTab === 'inspectionTemplates' && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <OpsDashPanel className="xl:col-span-1" title="إضافة/تعديل قالب فحص" accent="quality">
-            <form className="space-y-3" onSubmit={saveTemplate}>
-              <input
-                value={templateForm.name}
-                onChange={(e) => setTemplateForm((p) => ({ ...p, name: e.target.value }))}
-                placeholder="اسم القالب"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-              />
-              <select
-                value={templateForm.productId}
-                onChange={(e) => setTemplateForm((p) => ({ ...p, productId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-              >
-                <option value="">كل المنتجات</option>
-                {rawProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <select
-                value={templateForm.lineId}
-                onChange={(e) => setTemplateForm((p) => ({ ...p, lineId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-              >
-                <option value="">كل الخطوط</option>
-                {rawLines.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-              <input
-                value={templateForm.checklistCsv}
-                onChange={(e) => setTemplateForm((p) => ({ ...p, checklistCsv: e.target.value }))}
-                placeholder="Checklist CSV"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-              />
-              <input
-                value={templateForm.criticalChecksCsv}
-                onChange={(e) => setTemplateForm((p) => ({ ...p, criticalChecksCsv: e.target.value }))}
-                placeholder="Critical Checks CSV"
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-              />
-              <Button type="submit" disabled={!canManageSettings}>حفظ القالب</Button>
-            </form>
-          </OpsDashPanel>
-          <OpsDashPanel className="xl:col-span-2" title="قوالب الفحص" accent="quality">
-            <div className="space-y-2">
-              {inspectionTemplates.map((tpl) => (
-                <div key={tpl.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-bold text-sm">{tpl.name}</p>
-                    <p className="text-xs text-[var(--color-text-muted)]">Checklist: {tpl.checklist.join(', ') || '-'}</p>
-                    <p className="text-xs text-[var(--color-text-muted)]">Critical: {tpl.criticalChecks.join(', ') || '-'}</p>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      className="!px-2 !py-1"
-                      onClick={() => setTemplateForm({
-                        id: tpl.id,
-                        name: tpl.name,
-                        productId: tpl.productId ?? '',
-                        lineId: tpl.lineId ?? '',
-                        checklistCsv: tpl.checklist.join(', '),
-                        criticalChecksCsv: tpl.criticalChecks.join(', '),
-                        isActive: tpl.isActive,
-                      })}
-                    >
-                      تعديل
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="!px-2 !py-1"
-                      disabled={!canManageSettings}
-                      onClick={async () => {
-                        await qualitySettingsService.removeInspectionTemplate(tpl.id);
-                        await reload();
-                      }}
-                    >
-                      حذف
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {inspectionTemplates.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">لا توجد قوالب فحص.</p>}
-            </div>
-          </OpsDashPanel>
-        </div>
-      )}
-
-      {activeTab === 'samplingPlans' && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <OpsDashPanel className="xl:col-span-1" title="إضافة/تعديل خطة معاينة" accent="quality">
-            <form className="space-y-3" onSubmit={saveSampling}>
-              <select
-                value={samplingForm.productId}
-                onChange={(e) => setSamplingForm((p) => ({ ...p, productId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-              >
-                <option value="">كل المنتجات</option>
-                {rawProducts.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <select
-                value={samplingForm.lineId}
-                onChange={(e) => setSamplingForm((p) => ({ ...p, lineId: e.target.value }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-              >
-                <option value="">كل الخطوط</option>
-                {rawLines.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={samplingForm.frequencyMinutes}
-                onChange={(e) => setSamplingForm((p) => ({ ...p, frequencyMinutes: Number(e.target.value) }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-                placeholder="تكرار المعاينة بالدقائق"
-              />
-              <input
-                type="number"
-                value={samplingForm.sampleSize}
-                onChange={(e) => setSamplingForm((p) => ({ ...p, sampleSize: Number(e.target.value) }))}
-                className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-                disabled={!canManageSettings}
-                placeholder="حجم العينة"
-              />
-              <Button type="submit" disabled={!canManageSettings}>حفظ خطة المعاينة</Button>
-            </form>
-          </OpsDashPanel>
-          <OpsDashPanel className="xl:col-span-2" title="خطط المعاينة" accent="quality">
-            <div className="space-y-2">
-              {samplingPlans.map((plan) => (
-                <div key={plan.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-center justify-between gap-3">
-                  <div className="text-sm">
-                    <p className="font-bold">كل {plan.frequencyMinutes} دقيقة - عينة {plan.sampleSize}</p>
-                    <p className="text-xs text-[var(--color-text-muted)]">
-                      المنتج: {plan.productId ? (productNameById.get(plan.productId) ?? plan.productId) : 'كل المنتجات'} | الخط: {plan.lineId ? (lineNameById.get(plan.lineId) ?? plan.lineId) : 'كل الخطوط'}
-                    </p>
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      className="!px-2 !py-1"
-                      onClick={() => setSamplingForm({
-                        id: plan.id,
-                        productId: plan.productId ?? '',
-                        lineId: plan.lineId ?? '',
-                        frequencyMinutes: plan.frequencyMinutes,
-                        sampleSize: plan.sampleSize,
-                        isActive: plan.isActive,
-                      })}
-                    >
-                      تعديل
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="!px-2 !py-1"
-                      disabled={!canManageSettings}
-                      onClick={async () => {
-                        await qualitySettingsService.removeSamplingPlan(plan.id);
-                        await reload();
-                      }}
-                    >
-                      حذف
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {samplingPlans.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">لا توجد خطط معاينة.</p>}
-            </div>
-          </OpsDashPanel>
-        </div>
-      )}
-
-      {activeTab === 'reworkPolicies' && (
-        <OpsDashPanel title="سياسات إعادة التشغيل" accent="quality">
-          <div className="space-y-3">
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={reworkPolicies.autoCreateReworkOnFail}
-                onChange={(e) => setReworkPolicies((p) => ({ ...p, autoCreateReworkOnFail: e.target.checked }))}
-                disabled={!canManageSettings}
-              />
-              <span>إنشاء Rework تلقائي عند الفشل</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={reworkPolicies.allowDirectScrap}
-                onChange={(e) => setReworkPolicies((p) => ({ ...p, allowDirectScrap: e.target.checked }))}
-                disabled={!canManageSettings}
-              />
-              <span>السماح بتحويل مباشر إلى Scrap</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={reworkPolicies.requireCapaForCritical}
-                onChange={(e) => setReworkPolicies((p) => ({ ...p, requireCapaForCritical: e.target.checked }))}
-                disabled={!canManageSettings}
-              />
-              <span>إلزام CAPA للعيوب الحرجة</span>
-            </label>
-            <div className="flex justify-end">
-              <Button onClick={saveReworkPolicies} disabled={!canManageSettings}>حفظ سياسات Rework</Button>
-            </div>
-          </div>
-        </OpsDashPanel>
-      )}
-
-      {activeTab === 'printTemplates' && (
-        <OpsDashPanel title="قوالب الطباعة" accent="quality">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              value={printTemplates.headerText}
-              onChange={(e) => setPrintTemplates((p) => ({ ...p, headerText: e.target.value }))}
-              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-              placeholder="Header"
-              disabled={!canManageSettings}
-            />
-            <input
-              value={printTemplates.footerText}
-              onChange={(e) => setPrintTemplates((p) => ({ ...p, footerText: e.target.value }))}
-              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)]"
-              placeholder="Footer"
-              disabled={!canManageSettings}
-            />
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={printTemplates.showSignatureInspector}
-                onChange={(e) => setPrintTemplates((p) => ({ ...p, showSignatureInspector: e.target.checked }))}
-                disabled={!canManageSettings}
-              />
-              <span>توقيع المفتش</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold">
-              <input
-                type="checkbox"
-                checked={printTemplates.showSignatureSupervisor}
-                onChange={(e) => setPrintTemplates((p) => ({ ...p, showSignatureSupervisor: e.target.checked }))}
-                disabled={!canManageSettings}
-              />
-              <span>توقيع مشرف الخط</span>
-            </label>
-            <label className="inline-flex items-center gap-2 text-sm font-semibold md:col-span-2">
-              <input
-                type="checkbox"
-                checked={printTemplates.showSignatureQualityManager}
-                onChange={(e) => setPrintTemplates((p) => ({ ...p, showSignatureQualityManager: e.target.checked }))}
-                disabled={!canManageSettings}
-              />
-              <span>توقيع مدير الجودة</span>
-            </label>
-          </div>
-          <div className="mt-4 flex justify-end">
-            <Button onClick={savePrintTemplates} disabled={!canManageSettings}>حفظ قالب الطباعة</Button>
-          </div>
-        </OpsDashPanel>
-      )}
-    </ModuleOpsPageShell>
+        </ul>
+      </section>
+    </QmsPage>
   );
 };
-

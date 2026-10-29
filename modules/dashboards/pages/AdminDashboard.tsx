@@ -48,6 +48,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useDashboardSlice } from '../../../store/selectors';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
+import { useWaitingPalletCount } from '@/modules/quality/hooks/useWaitingPalletCount';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import {
   buildManufacturingItemCodeMap,
@@ -430,6 +431,7 @@ export const AdminDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
+  const waitingPallets = useWaitingPalletCount();
 
   const {
     _rawProducts,
@@ -1641,6 +1643,14 @@ export const AdminDashboard: React.FC = () => {
       });
     }
 
+    if (waitingPallets > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'inventory_2',
+        message: `${waitingPallets} بالته بانتظار فحص الجودة`,
+      });
+    }
+
     if (workOrderRisk.atRiskCount > 0) {
       result.push({
         type: 'danger',
@@ -1688,7 +1698,7 @@ export const AdminDashboard: React.FC = () => {
     }
 
     return result;
-  }, [kpis, productionPlans, planReports, systemUsers, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, workOrderRisk.atRiskCount]);
+  }, [kpis, productionPlans, planReports, systemUsers, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, waitingPallets, workOrderRisk.atRiskCount]);
 
   const reportAnalysis = useMemo(() => {
     const productionDays = new Set(productionReports.map((report) => report.date)).size;

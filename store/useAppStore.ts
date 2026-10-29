@@ -57,6 +57,7 @@ import {
   runAssetDepreciationCallable,
   syncBuiltInRolePermissionGrants,
   createProductionReportFastCallable,
+  closeWorkOrderCallable,
 } from '../services/firebase';
 import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
 import { resolveActivityPacks, type ActivityPackId } from '../lib/activityPacks';
@@ -68,7 +69,7 @@ import {
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
-import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
+import { qualityReleaseService } from '../modules/quality/services/qualityReleaseService';
 import { reportService } from '../modules/production/services/reportService';
 import {
   createRole as createRoleUseCase,
@@ -3350,20 +3351,29 @@ export const useAppStore = create<AppState>((set, get) => ({
           set({ error: msg });
           throw new Error(msg);
         }
-        const policies = await qualitySettingsService.getPolicies();
-        if (
-          policies.closeRequiresQualityApproval &&
-          existing.qualityStatus !== 'approved' &&
-          existing.qualityStatus !== 'not_required'
-        ) {
-          const msg = 'لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة (Policy: closeRequiresQualityApproval).';
+        const qualityReleased = await qualityReleaseService.workOrderMayClose(id, existing.qualityStatus);
+        if (!qualityReleased) {
+          const msg = 'لا يمكن إغلاق أمر الشغل قبل اعتماد الجودة.';
           set({
             error: msg,
           });
           throw new Error(msg);
         }
+        await closeWorkOrderCallable({
+          workOrderId: id,
+          mode: 'operator',
+          actualWorkHours: closingWorkHours,
+          actualProducedFromScans: typeof data.actualProducedFromScans === 'number' ? data.actualProducedFromScans : undefined,
+          actualWorkersCount: typeof data.actualWorkersCount === 'number' ? data.actualWorkersCount : undefined,
+          scanSummary: data.scanSummary && typeof data.scanSummary === 'object'
+            ? data.scanSummary as unknown as Record<string, unknown>
+            : undefined,
+          scanSessionClosedAt: typeof data.scanSessionClosedAt === 'string' ? data.scanSessionClosedAt : undefined,
+          notes: typeof data.notes === 'string' ? data.notes : undefined,
+        });
+      } else {
+        await workOrderService.update(id, data);
       }
-      await workOrderService.update(id, data);
       const updatedWorkOrder: WorkOrder = existing
         ? { ...existing, ...data, id }
         : { ...(data as WorkOrder), id };
@@ -5999,16 +6009,24 @@ export const useAppStore = create<AppState>((set, get) => ({
         lastProducingReportDate,
         getTodayDateString(),
       );
-      const statusPatch: Partial<WorkOrder> = {
-        producedQuantity,
-        status: nextStatus,
-      };
-      if (nextStatus === 'completed') {
-        statusPatch.completedAt = wo.completedAt || new Date().toISOString();
-      } else if (wo.status === 'completed') {
-        statusPatch.completedAt = null;
+      const statusPatch: Partial<WorkOrder> = { producedQuantity };
+      if (nextStatus === 'completed' && wo.status !== 'completed') {
+        await workOrderService.update(id, { producedQuantity });
+        try {
+          await closeWorkOrderCallable({ workOrderId: id, mode: 'quantity_reached' });
+          statusPatch.status = 'completed';
+          statusPatch.completedAt = wo.completedAt || new Date().toISOString();
+        } catch (closeError) {
+          console.warn('إغلاق أمر الشغل بعد بلوغ الكمية بقي على العملية المعتمدة.', closeError);
+          statusPatch.status = wo.status;
+        }
+      } else {
+        if (nextStatus !== 'completed') {
+          statusPatch.status = nextStatus;
+          if (wo.status === 'completed') statusPatch.completedAt = null;
+        }
+        await workOrderService.update(id, statusPatch);
       }
-      await workOrderService.update(id, statusPatch);
 
       set((state) => ({
         workOrders: upsertLoadedWorkOrder(state.workOrders, { ...wo, ...statusPatch, id }),

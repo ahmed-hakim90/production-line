@@ -11,7 +11,7 @@ import { ManagedModalPortal } from '@/components/modal-manager/ManagedModalPorta
 import { scanEventService } from '../services/scanEventService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { formatNumber, getTodayDateString } from '../../../utils/calculations';
-import { qualitySettingsService } from '../../quality/services/qualitySettingsService';
+import { qualityReleaseService } from '../../quality/services/qualityReleaseService';
 import {
   WORK_ORDER_OPERATION_KEYS,
   WORK_ORDER_UPDATE_PATHS,
@@ -334,8 +334,8 @@ export const WorkOrderScanner: React.FC = () => {
     setScanMsg(null);
     setScanError(null);
     try {
-      const qualityPolicies = await qualitySettingsService.getPolicies();
-      if (qualityPolicies.closeRequiresQualityApproval && workOrder.qualityStatus !== 'approved') {
+      const qualityReleased = await qualityReleaseService.workOrderMayClose(workOrderId, workOrder.qualityStatus);
+      if (!qualityReleased) {
         setScanError('لا يمكن إنهاء أمر الشغل قبل اعتماد الجودة');
         playFeedbackTone('error');
         return;

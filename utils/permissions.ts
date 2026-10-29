@@ -82,7 +82,14 @@ export type Permission =
   | 'quality.ipqc.view' | 'quality.ipqc.inspect'
   | 'quality.rework.view' | 'quality.rework.manage'
   | 'quality.capa.view' | 'quality.capa.manage'
-  | 'quality.reports.view'
+  | 'quality.reports.view' | 'quality.reports.export'
+  | 'quality.pallets.view' | 'quality.pallets.inspect' | 'quality.pallets.override'
+  | 'quality.samples.view' | 'quality.samples.inspect'
+  | 'quality.defects.record'
+  | 'quality.records.reopen' | 'quality.records.delete'
+  | 'quality.scrap.view' | 'quality.scrap.manage'
+  | 'quality.secondSort.view' | 'quality.secondSort.manage'
+  | 'quality.photos.view' | 'quality.photos.manage'
   | 'employeeDashboard.view'
   | 'selfService.view'
   | 'factoryDashboard.view'
@@ -285,20 +292,28 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     key: 'quality',
     label: 'الجودة',
     permissions: [
+      { key: 'quality.view', label: 'عرض وحدة الجودة' },
+      { key: 'quality.pallets.view', label: 'عرض فحص البالتات' },
+      { key: 'quality.pallets.inspect', label: 'استلام وتنفيذ فحص البالتات' },
+      { key: 'quality.pallets.override', label: 'تجاوز قرار AQL' },
+      { key: 'quality.samples.view', label: 'عرض سحب العينات' },
+      { key: 'quality.samples.inspect', label: 'تسجيل سحب العينات' },
+      { key: 'quality.defects.record', label: 'تسجيل العيوب' },
+      { key: 'quality.records.reopen', label: 'إعادة فتح سجل جودة مغلق' },
+      { key: 'quality.records.delete', label: 'حذف سجل جودة' },
+      { key: 'quality.scrap.view', label: 'عرض الهالك' },
+      { key: 'quality.scrap.manage', label: 'تسجيل الهالك' },
+      { key: 'quality.secondSort.view', label: 'عرض تسليم الفرز الثاني' },
+      { key: 'quality.secondSort.manage', label: 'إدارة تسليم الفرز الثاني' },
+      { key: 'quality.photos.view', label: 'عرض صور الجودة' },
+      { key: 'quality.photos.manage', label: 'رفع صور الجودة' },
+      { key: 'quality.reports.view', label: 'عرض تقارير الجودة' },
+      { key: 'quality.reports.export', label: 'تصدير تقارير الجودة' },
       { key: 'quality.print', label: 'طباعة مستندات الجودة' },
       { key: 'quality.settings.view', label: 'عرض إعدادات الجودة' },
-      { key: 'quality.settings.manage', label: 'إدارة إعدادات الجودة' },
-      { key: 'quality.workers.view', label: 'عرض عمال الجودة' },
-      { key: 'quality.workers.manage', label: 'إدارة عمال الجودة' },
-      { key: 'quality.finalInspection.view', label: 'عرض الفحص النهائي' },
-      { key: 'quality.finalInspection.inspect', label: 'تنفيذ الفحص النهائي' },
-      { key: 'quality.ipqc.view', label: 'عرض IPQC' },
-      { key: 'quality.ipqc.inspect', label: 'تنفيذ IPQC' },
-      { key: 'quality.rework.view', label: 'عرض إعادة التشغيل' },
-      { key: 'quality.rework.manage', label: 'إدارة إعادة التشغيل' },
-      { key: 'quality.capa.view', label: 'عرض CAPA' },
-      { key: 'quality.capa.manage', label: 'إدارة CAPA' },
-      { key: 'quality.reports.view', label: 'عرض تقارير الجودة' },
+      { key: 'quality.settings.manage', label: 'إدارة إعدادات ومعايير الفحص' },
+      { key: 'quality.workers.view', label: 'عرض دليل موظفي الجودة' },
+      { key: 'quality.workers.manage', label: 'إدارة تعيينات موظفي الجودة' },
     ],
   },
   {
@@ -536,14 +551,49 @@ export function checkPermission(
         || permissions['roles.manage'] === true
       );
   }
-  if (permission === 'quality.finalInspection.view' || permission === 'quality.ipqc.view' || permission === 'quality.rework.view' || permission === 'quality.capa.view' || permission === 'quality.reports.view') {
+  if (
+    permission === 'quality.pallets.view'
+    || permission === 'quality.samples.view'
+    || permission === 'quality.scrap.view'
+    || permission === 'quality.secondSort.view'
+    || permission === 'quality.reports.view'
+    || permission === 'quality.photos.view'
+    || permission === 'quality.finalInspection.view'
+    || permission === 'quality.ipqc.view'
+    || permission === 'quality.rework.view'
+    || permission === 'quality.capa.view'
+  ) {
     return permissions['quality.view'] === true;
   }
-  if (permission === 'quality.finalInspection.inspect' || permission === 'quality.ipqc.inspect') {
+  if (
+    permission === 'quality.pallets.inspect'
+    || permission === 'quality.samples.inspect'
+    || permission === 'quality.defects.record'
+    || permission === 'quality.scrap.manage'
+    || permission === 'quality.finalInspection.inspect'
+    || permission === 'quality.ipqc.inspect'
+  ) {
     return permissions['quality.inspect'] === true;
   }
-  if (permission === 'quality.workers.manage') {
-    return permissions['quality.manageWorkers'] === true;
+  if (
+    permission === 'quality.pallets.override'
+    || permission === 'quality.records.reopen'
+    || permission === 'quality.secondSort.manage'
+    || permission === 'quality.photos.manage'
+  ) {
+    return permissions['quality.approve'] === true;
+  }
+  if (permission === 'quality.records.delete' || permission === 'quality.workers.manage') {
+    return permissions['quality.settings.manage'] === true || permissions['quality.manageWorkers'] === true;
+  }
+  if (permission === 'quality.workers.view') {
+    return permissions['quality.settings.view'] === true
+      || permissions['quality.settings.manage'] === true
+      || permissions['quality.workers.manage'] === true
+      || permissions['quality.manageWorkers'] === true;
+  }
+  if (permission === 'quality.reports.export') {
+    return permissions['quality.print'] === true;
   }
   if (
     permission === 'inventory.transactions.edit' ||

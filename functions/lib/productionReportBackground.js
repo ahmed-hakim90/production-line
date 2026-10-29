@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { getDb } from './adminApp.js';
+import { evaluateWorkOrderClose, policyStateFromSettings } from './workOrderCloseCore.js';
 import { applyProductionReportInventoryInternal } from './productionReportInventory.js';
 import { calculateLaborOnlyProductionCost } from './laborOnlyProductionCost.js';
 const db = getDb();
@@ -106,7 +107,45 @@ const reconcileWorkOrder = async (report) => {
         return countsTowardProgress(row) ? sum + number(row.quantityProduced) : sum;
     }, 0);
     const target = number(workOrder?.quantity);
-    const status = target > 0 && produced >= target ? 'completed' : produced > 0 ? 'in_progress' : 'pending';
+    let status = target > 0 && produced >= target ? 'completed' : produced > 0 ? 'in_progress' : 'pending';
+    if (status === 'completed' && clean(workOrder?.status) !== 'completed') {
+        const tenantId = clean(workOrder?.tenantId);
+        const settingsSnap = await db.collection('quality_settings').doc(tenantId).get();
+        const settings = settingsSnap.data();
+        let pallets = [];
+        let palletReadFailed = false;
+        const policyState = policyStateFromSettings(settingsSnap.exists, settings?.closeRequiresQualityApproval);
+        if (policyState === 'on') {
+            try {
+                const palletSnap = await db.collection('quality_pallets')
+                    .where('tenantId', '==', tenantId)
+                    .where('workOrderId', '==', workOrderId)
+                    .get();
+                pallets = palletSnap.docs.map((item) => item.data());
+            }
+            catch {
+                palletReadFailed = true;
+            }
+        }
+        const decision = evaluateWorkOrderClose({
+            actorTenantId: tenantId,
+            actorIsSuperAdmin: false,
+            hasClosePermission: true,
+            workOrderTenantId: tenantId,
+            workOrderStatus: clean(workOrder?.status),
+            mode: 'quantity_reached',
+            policyState,
+            legacyQualityStatus: clean(workOrder?.qualityStatus) || undefined,
+            pallets,
+            palletReadFailed,
+            actualWorkHours: 0,
+            openSessions: 0,
+            producedQuantity: produced,
+            targetQuantity: target,
+        });
+        if (!decision.ok)
+            status = produced > 0 ? 'in_progress' : 'pending';
+    }
     await ref.set({
         producedQuantity: produced,
         status,

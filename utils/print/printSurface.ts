@@ -252,5 +252,25 @@ export const PRINT_ENGINE_IFRAME_CSS = `
 .print-root table td, .print-report table td {
   border: 1px solid ${PRINT_SURFACE.border};
   padding: 8px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.print-root thead, .print-report thead {
+  display: table-header-group;
+}
+.print-root tr, .print-report tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.print-root img, .print-report img {
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.print-root button, .print-root input, .print-root select, .print-root textarea,
+.print-report button, .print-report input, .print-report select, .print-report textarea {
+  display: none !important;
 }
 `

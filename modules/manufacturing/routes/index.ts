@@ -1,9 +1,11 @@
 import type { AppRouteDef } from '../../shared/routes';
-import { Materials } from '../pages/Materials';
-import { MaterialDetails } from '../pages/MaterialDetails';
-import { MaterialPlanningRun } from '../pages/MaterialPlanningRun';
-import { MaterialCategories } from '../pages/MaterialCategories';
-import { PurchaseGapReport } from '../pages/PurchaseGapReport';
+import { lazyNamed } from '../../shared/routes/lazyNamed';
+
+const Materials = lazyNamed(() => import('../pages/Materials'), 'Materials');
+const MaterialDetails = lazyNamed(() => import('../pages/MaterialDetails'), 'MaterialDetails');
+const MaterialPlanningRun = lazyNamed(() => import('../pages/MaterialPlanningRun'), 'MaterialPlanningRun');
+const MaterialCategories = lazyNamed(() => import('../pages/MaterialCategories'), 'MaterialCategories');
+const PurchaseGapReport = lazyNamed(() => import('../pages/PurchaseGapReport'), 'PurchaseGapReport');
 
 export const MANUFACTURING_ROUTES: AppRouteDef[] = [
   {

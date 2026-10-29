@@ -438,7 +438,7 @@ export const OPERATION_PATH_REGISTRY: ReadonlyArray<OperationPathRegistryEntry> 
       { key: WORK_ORDER_UPDATE_PATHS.employeeDashboard, label: 'لوحة الموظف', description: 'بدء أو إنهاء الأمر من لوحة التشغيل.' },
       { key: WORK_ORDER_UPDATE_PATHS.scanner, label: 'ماسح أمر الشغل', description: 'تحديث أوقات وحالة التشغيل بالمسح.' },
       { key: WORK_ORDER_UPDATE_PATHS.qualityIpqc, label: 'فحص الجودة أثناء التشغيل', description: 'تحديث ملخص الجودة من IPQC.' },
-      { key: WORK_ORDER_UPDATE_PATHS.qualityFinalInspection, label: 'الفحص النهائي', description: 'تحديث ملخص الجودة من الفحص النهائي.' },
+      { key: WORK_ORDER_UPDATE_PATHS.qualityFinalInspection, label: 'فحص البالتات', description: 'ربط أمر الشغل بسجلات فحص البالتات.' },
     ],
   },
   {

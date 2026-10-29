@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP **Maghraby Group** — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-10-05 (product brand: Maghraby Group, El Maghraby red CI)
+**Last updated:** 2026-10-28 (quality module replaced with factory AQL, samples, scrap, and second-sort)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -45,7 +45,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | MOD / 06 | Customers | Customer master + repair links |
 | MOD / 07 | HR | Employees, attendance, payroll, approvals |
 | MOD / 08 | Accounting / Costs | Journals, valuation, monthly production cost |
-| MOD / 09 | Quality | IPQC, final inspection, CAPA |
+| MOD / 09 | Quality | AQL pallet inspection, hourly and line samples, scrap, second-sort handover, pallet saved filters, defect-rate flowchart |
 | MOD / 10 | System | Users, roles, settings, import/export |
 
 ## Primary path

@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { shouldDeferProductionRealtime } from '../lib/productionRealtimeRoutes';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthUiSlice } from '../store/selectors';
 
@@ -11,31 +12,8 @@ function tenantRelativePathFromLocation(pathname: string): string | null {
 }
 
 /**
- * HR / system screens rarely need live work-order + line listeners; deferring cuts
- * Firestore reads when users stay on those routes.
- */
-const DEFER_PRODUCTION_REALTIME_PREFIXES = [
-  /** Legacy attendance URLs (redirect to `/hr/attendance/*`). */
-  'attendance',
-  'system/users',
-  'roles',
-  'activity-log',
-  'settings',
-  'dev',
-];
-
-function shouldDeferProductionRealtime(relPath: string | null): boolean {
-  if (relPath === null) return true;
-  if (!relPath) return false;
-  if (relPath.startsWith('hr/')) return true;
-  return DEFER_PRODUCTION_REALTIME_PREFIXES.some(
-    (p) => relPath === p || relPath.startsWith(`${p}/`),
-  );
-}
-
-/**
  * Mount inside `BrowserRouter`. Subscribes to dashboard / lines / work orders / scans
- * only when the tenant route is not a deferred (HR/system-heavy) path.
+ * on home and factory routes only. Other modules keep their own fetches.
  */
 export function RouterRealtimeSubscriptions() {
   const location = useLocation();

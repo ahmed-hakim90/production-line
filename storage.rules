@@ -24,16 +24,71 @@ service firebase.storage {
       return ['employees', 'products', 'production_batches', 'qc_reports', 'documents', 'repair_jobs'];
     }
 
+    function permissionIsTrue(perms, key) {
+      return key in perms && perms[key] == true;
+    }
+
+    function canReadQualityPhoto() {
+      let roleId = userDoc().data.roleId;
+      let rolePath = /databases/(default)/documents/roles/$(roleId);
+      let role = firestore.get(rolePath).data;
+      return userDoc().data.isSuperAdmin == true
+        || (
+          roleId is string
+          && firestore.exists(rolePath)
+          && role.tenantId == currentTenantId()
+          && (
+            permissionIsTrue(role.permissions, 'quality.photos.view')
+            || (
+              !('quality.photos.view' in role.permissions)
+              && (
+                permissionIsTrue(role.permissions, 'quality.secondSort.view')
+                || permissionIsTrue(role.permissions, 'quality.view')
+                || permissionIsTrue(role.permissions, 'quality.reports.view')
+              )
+            )
+          )
+        );
+    }
+
+    function canWriteQualityPhoto() {
+      let roleId = userDoc().data.roleId;
+      let rolePath = /databases/(default)/documents/roles/$(roleId);
+      let role = firestore.get(rolePath).data;
+      return userDoc().data.isSuperAdmin == true
+        || (
+          roleId is string
+          && firestore.exists(rolePath)
+          && role.tenantId == currentTenantId()
+          && (
+            permissionIsTrue(role.permissions, 'quality.photos.manage')
+            || (
+              !('quality.photos.manage' in role.permissions)
+              && (
+                permissionIsTrue(role.permissions, 'quality.secondSort.manage')
+                || permissionIsTrue(role.permissions, 'quality.approve')
+              )
+            )
+          )
+        );
+    }
+
     // Preferred multi-tenant path:
     // company/{tenantId}/{module}/{documentId}/{fileName}
     match /company/{tenantId}/{module}/{documentId}/{fileName} {
       allow read: if isActiveTenantUser()
         && tenantId == currentTenantId()
-        && module in allowedModules();
+        && (
+          (module in allowedModules() && module != 'quality')
+          || (module == 'quality' && canReadQualityPhoto())
+        );
       allow write: if isActiveTenantUser()
         && tenantId == currentTenantId()
-        && module in allowedModules()
-        && request.resource.size < 15 * 1024 * 1024;
+        && request.resource.size < 15 * 1024 * 1024
+        && (
+          (module in allowedModules() && module != 'quality')
+          || (module == 'quality' && canWriteQualityPhoto())
+        );
     }
 
     // Legacy single-company path (compat). Authenticated only — migrate to tenant path.

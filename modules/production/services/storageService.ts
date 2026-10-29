@@ -13,7 +13,8 @@ export type StorageModule =
   | 'products'
   | 'production_batches'
   | 'qc_reports'
-  | 'documents';
+  | 'documents'
+  | 'quality';
 
 export interface UploadedFileMeta {
   imageUrl: string;

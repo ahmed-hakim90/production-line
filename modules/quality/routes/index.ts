@@ -1,20 +1,35 @@
 import type { AppRouteDef } from '../../shared/routes';
 import { lazyNamed } from '../../shared/routes/lazyNamed';
 
-const QualitySettings = lazyNamed(() => import('../pages/QualitySettings'), 'QualitySettings');
-const QualityWorkers = lazyNamed(() => import('../pages/QualityWorkers'), 'QualityWorkers');
-const FinalInspection = lazyNamed(() => import('../pages/FinalInspection'), 'FinalInspection');
-const IPQC = lazyNamed(() => import('../pages/IPQC'), 'IPQC');
-const ReworkOrders = lazyNamed(() => import('../pages/ReworkOrders'), 'ReworkOrders');
-const CAPA = lazyNamed(() => import('../pages/CAPA'), 'CAPA');
+const QualityHome = lazyNamed(() => import('../pages/QualityHome'), 'QualityHome');
+const QualityPallets = lazyNamed(() => import('../pages/QualityPallets'), 'QualityPallets');
+const QualityHourlySamples = lazyNamed(() => import('../pages/QualityHourlySamples'), 'QualityHourlySamples');
+const QualityLineSamples = lazyNamed(() => import('../pages/QualityLineSamples'), 'QualityLineSamples');
+const QualitySummaries = lazyNamed(() => import('../pages/QualitySummaries'), 'QualitySummaries');
+const QualityFlowchart = lazyNamed(() => import('../pages/QualityFlowchart'), 'QualityFlowchart');
+const QualityScrap = lazyNamed(() => import('../pages/QualityScrap'), 'QualityScrap');
+const QualitySecondSort = lazyNamed(() => import('../pages/QualitySecondSort'), 'QualitySecondSort');
 const QualityReports = lazyNamed(() => import('../pages/QualityReports'), 'QualityReports');
+const QualitySettings = lazyNamed(() => import('../pages/QualitySettings'), 'QualitySettings');
+const QualityStaff = lazyNamed(() => import('../pages/QualityStaff'), 'QualityStaff');
+
+const view: AppRouteDef['permission'] = 'quality.view';
 
 export const QUALITY_ROUTES: AppRouteDef[] = [
-  { path: '/quality/settings', permission: 'quality.settings.view', component: QualitySettings },
-  { path: '/quality/workers', permission: 'quality.workers.view', component: QualityWorkers },
-  { path: '/quality/final-inspection', permission: 'quality.finalInspection.view', component: FinalInspection },
-  { path: '/quality/ipqc', permission: 'quality.ipqc.view', component: IPQC },
-  { path: '/quality/rework', permission: 'quality.rework.view', component: ReworkOrders },
-  { path: '/quality/capa', permission: 'quality.capa.view', component: CAPA },
+  { path: '/quality', permission: view, component: QualityHome },
+  { path: '/quality/pallets', permission: 'quality.pallets.view', component: QualityPallets },
+  { path: '/quality/hourly-samples', permission: 'quality.samples.view', component: QualityHourlySamples },
+  { path: '/quality/line-samples', permission: 'quality.samples.view', component: QualityLineSamples },
+  { path: '/quality/summaries', permission: 'quality.reports.view', component: QualitySummaries },
+  { path: '/quality/flowchart', permission: 'quality.reports.view', component: QualityFlowchart },
+  { path: '/quality/scrap', permission: 'quality.scrap.view', component: QualityScrap },
+  { path: '/quality/second-sort', permission: 'quality.secondSort.view', component: QualitySecondSort },
   { path: '/quality/reports', permission: 'quality.reports.view', component: QualityReports },
+  { path: '/quality/settings', permission: 'quality.settings.view', component: QualitySettings },
+  { path: '/quality/staff', permission: 'quality.workers.view', component: QualityStaff },
+  { path: '/quality/final-inspection', redirectTo: '/quality/pallets' },
+  { path: '/quality/ipqc', redirectTo: '/quality/line-samples' },
+  { path: '/quality/rework', redirectTo: '/quality/scrap' },
+  { path: '/quality/capa', redirectTo: '/quality/second-sort' },
+  { path: '/quality/workers', redirectTo: '/quality/staff' },
 ];

@@ -17,6 +17,8 @@ type GlobalModalManagerValue = {
   hasModalOpener: (modalKey: string) => boolean;
   hasModalTarget: (modalKey: string) => boolean;
   getManagedModalState: (modalKey: string) => ManagedModalState;
+  /** Keys currently open. ModalHost uses this to load a chunk only after a real open. */
+  openedModalKeys: readonly string[];
   resetAllModals: () => void;
 };
 
@@ -103,6 +105,11 @@ export const GlobalModalManagerProvider: React.FC<{ children: React.ReactNode }>
     setManagedStates({});
   }, []);
 
+  const openedModalKeys = useMemo(
+    () => Object.keys(managedStates).filter((key) => managedStates[key]?.isOpen),
+    [managedStates],
+  );
+
   const value = useMemo<GlobalModalManagerValue>(() => ({
     registerModalOpener,
     registerManagedModal,
@@ -111,8 +118,9 @@ export const GlobalModalManagerProvider: React.FC<{ children: React.ReactNode }>
     hasModalOpener,
     hasModalTarget,
     getManagedModalState,
+    openedModalKeys,
     resetAllModals,
-  }), [registerModalOpener, registerManagedModal, openModal, closeModal, hasModalOpener, hasModalTarget, getManagedModalState, resetAllModals]);
+  }), [registerModalOpener, registerManagedModal, openModal, closeModal, hasModalOpener, hasModalTarget, getManagedModalState, openedModalKeys, resetAllModals]);
 
   return (
     <GlobalModalManagerContext.Provider value={value}>

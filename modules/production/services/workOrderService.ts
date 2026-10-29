@@ -209,6 +209,9 @@ export const workOrderService = {
       const { id: _id, createdAt: _ts, ...fields } = data as any;
       const searchableChanged = ['workOrderNumber', 'productCode', 'productName', 'lineName', 'supervisorName']
         .some((field) => field in fields);
+      if (fields.status === 'completed') {
+        throw new Error('إغلاق أمر الشغل يتم من العملية المعتمدة فقط.');
+      }
       if (searchableChanged) {
         const current = await getDoc(doc(db, COLLECTION, id));
         const merged = { ...(current.data() || {}), ...fields };
@@ -230,6 +233,9 @@ export const workOrderService = {
   /** Status change with history stamp — prefer usecase `updateWorkOrderStatus`. */
   async updateStatus(id: string, status: WorkOrder['status']): Promise<void> {
     if (!isConfigured) return;
+    if (status === 'completed') {
+      throw new Error('إغلاق أمر الشغل يتم من العملية المعتمدة فقط.');
+    }
     await updateDoc(doc(db, COLLECTION, id), {
       status,
       updatedAt: serverTimestamp(),
@@ -299,6 +305,9 @@ export const workOrderService = {
     if (!isConfigured) return;
     try {
       const { id: _id, createdAt: _createdAt, ...fields } = payload as any;
+      if (fields.status === 'completed') {
+        throw new Error('إغلاق أمر الشغل يتم من العملية المعتمدة فقط.');
+      }
       await updateDoc(doc(db, COLLECTION, id), fields);
     } catch (error) {
       console.error('workOrderService.updateCompletionFromScans error:', error);

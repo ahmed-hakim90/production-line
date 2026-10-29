@@ -1,569 +1,217 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Button } from '../components/UI';
-import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
-import { OpsMoreActionsMenu } from '@/modules/dashboards/components/OpsMoreActionsMenu';
-import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 import { useAppStore } from '@/store/useAppStore';
-import { usePermission } from '@/utils/permissions';
 import { usePrintEngine } from '@/utils/printManager';
-import { qualityInspectionService } from '../services/qualityInspectionService';
-import { qualityPrintService } from '../services/qualityPrintService';
-import { workOrderService } from '@/modules/production/services/workOrderService';
-import type { QualityDefect } from '@/types';
-import { QualityDefectsPrint, QualityReportPrint } from '../components/QualityReportPrint';
-import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
-import { formatNumber } from '@/utils/calculations';
-import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
-import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { usePermission } from '@/utils/permissions';
+import { QualityPalletInspectionPrint, QualityPalletReportPrint } from '../components/QualityPrintDocuments';
+import { localDateIso } from '../domain/time';
+import type { QualityPallet } from '../model';
+import {
+  filterQualityPallets,
+  formatQualityRange,
+  qualityRecordPrintAllowed,
+  qualityReportTotals,
+  rowsMatchingTenant,
+} from '../print/qualityPrintModel';
+import { activeTenantId, qualityUserMessage } from '../services/qualityGateway';
+import { qualityPalletService } from '../services/qualityPalletService';
+import { qualityProductionQuery } from '../services/qualityProductionQuery';
+import { qualityScrapService } from '../services/qualitySecondSortService';
+import { MasterSelect, QmsPage, useQualityMasters } from '../qms/QmsChrome';
+
+const rangeDays = (from: string, to: string): number => {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  return Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+};
 
 export const QualityReports: React.FC = () => {
-  const referenceDataLoading = useEnsureStoreData(['products', 'lines', 'employees', 'workOrders']);
   const { can } = usePermission();
-  const canPrint = can('quality.print');
-  const canDeleteQualityReports =
-    can('quality.finalInspection.inspect') || can('quality.ipqc.inspect') || can('quality.rework.manage');
-  const [searchParams] = useSearchParams();
-  const workOrders = useAppStore((s) => s.workOrders);
-  const _rawProducts = useAppStore((s) => s._rawProducts);
-  const _rawLines = useAppStore((s) => s._rawLines);
-  const _rawEmployees = useAppStore((s) => s._rawEmployees);
-  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
-  const [selectedWorkOrderId, setSelectedWorkOrderId] = useState(searchParams.get('workOrderId') ?? '');
-  const dateFromQuery = String(searchParams.get('dateFrom') || '').trim();
-  const dateToQuery = String(searchParams.get('dateTo') || '').trim();
-  const [summary, setSummary] = useState({
-    inspectedUnits: 0,
-    passedUnits: 0,
-    failedUnits: 0,
-    reworkUnits: 0,
-    defectRate: 0,
-    firstPassYield: 0,
-  });
-  const [loading, setLoading] = useState(false);
-  const [tableQuery, setTableQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'approved' | 'rejected' | 'pending' | 'not_required'>('all');
-  const [defects, setDefects] = useState<QualityDefect[]>([]);
-  const [deletingWorkOrderId, setDeletingWorkOrderId] = useState<string | null>(null);
-  const printRef = useRef<HTMLDivElement>(null);
-  const defectsPrintRef = useRef<HTMLDivElement>(null);
+  const permissions = useAppStore((state) => state.userPermissions);
+  const printTemplate = useAppStore((state) => state.systemSettings.printTemplate);
   const { printDocument } = usePrintEngine();
+  const masters = useQualityMasters();
+  const [params] = useSearchParams();
+  const linkedWorkOrderId = params.get('workOrderId') || '';
+  const today = localDateIso();
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+  const [lineId, setLineId] = useState('');
+  const [productId, setProductId] = useState('');
+  const [workOrderId, setWorkOrderId] = useState(linkedWorkOrderId);
+  const [inspectionStatus, setInspectionStatus] = useState('');
+  const [reasonId, setReasonId] = useState('');
+  const [rows, setRows] = useState<QualityPallet[]>([]);
+  const [productionRows, setProductionRows] = useState<Awaited<ReturnType<typeof qualityProductionQuery.quantitiesForRange>> | null>(null);
+  const [scrapRows, setScrapRows] = useState<Awaited<ReturnType<typeof qualityScrapService.listRange>> | null>(null);
+  const [scrapDenied, setScrapDenied] = useState(false);
+  const [error, setError] = useState('');
+  const scrapReadable = can('quality.scrap.view');
+  const canPrintReport = qualityRecordPrintAllowed(permissions, 'quality.reports.view');
+  const canPrintPallet = qualityRecordPrintAllowed(permissions, 'quality.pallets.view');
 
-  const selectedWorkOrder = useMemo(
-    () => workOrders.find((wo) => wo.id === selectedWorkOrderId) ?? null,
-    [workOrders, selectedWorkOrderId],
-  );
-  const qualityStatusMeta = (status?: string) => {
-    const normalized = status ?? 'pending';
-    if (normalized === 'approved') {
-      return { label: 'معتمد', className: 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' };
-    }
-    if (normalized === 'rejected') {
-      return { label: 'مرفوض', className: 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]' };
-    }
-    if (normalized === 'not_required') {
-      return { label: 'غير مطلوب', className: 'bg-[var(--color-surface-hover)] text-[var(--color-text)]' };
-    }
-    return { label: 'قيد المراجعة', className: 'bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]' };
-  };
-  const qualityReportRows = useMemo(
-    () =>
-      workOrders
-        .filter((wo) => !!wo.qualitySummary || !!wo.qualityStatus || !!wo.qualityReportCode)
-        .slice()
-        .sort((a, b) => {
-          const aMs = a.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.() ?? new Date(a.qualityApprovedAt || 0).getTime();
-          const bMs = b.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.() ?? new Date(b.qualityApprovedAt || 0).getTime();
-          return (bMs || 0) - (aMs || 0);
-        }),
-    [workOrders],
-  );
-  const filteredQualityReportRows = useMemo(() => {
-    const query = tableQuery.trim().toLowerCase();
-    return qualityReportRows.filter((wo) => {
-      const normalizedStatus = (wo.qualityStatus ?? 'pending') as 'approved' | 'rejected' | 'pending' | 'not_required';
-      if (statusFilter !== 'all' && normalizedStatus !== statusFilter) return false;
-      if (dateFromQuery || dateToQuery) {
-        const ts =
-          wo.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.()
-          ?? new Date(wo.qualityApprovedAt || wo.createdAt || 0).getTime();
-        if (Number.isFinite(ts) && ts > 0) {
-          const day = new Date(ts).toISOString().slice(0, 10);
-          if (dateFromQuery && day < dateFromQuery) return false;
-          if (dateToQuery && day > dateToQuery) return false;
-        }
-      }
-      if (!query) return true;
-      const productName = (_rawProducts.find((p) => p.id === wo.productId)?.name ?? '').toLowerCase();
-      const lineName = (_rawLines.find((l) => l.id === wo.lineId)?.name ?? '').toLowerCase();
-      const orderNo = String(wo.workOrderNumber ?? '').toLowerCase();
-      const reportCode = String(wo.qualityReportCode ?? '').toLowerCase();
-      return (
-        productName.includes(query) ||
-        lineName.includes(query) ||
-        orderNo.includes(query) ||
-        reportCode.includes(query)
-      );
-    });
-  }, [_rawLines, _rawProducts, qualityReportRows, statusFilter, tableQuery, dateFromQuery, dateToQuery]);
-
-  const aggregateFromFiltered = useMemo(() => {
-    let inspectedUnits = 0;
-    let failedUnits = 0;
-    let passedUnits = 0;
-    let reworkUnits = 0;
-    for (const wo of filteredQualityReportRows) {
-      inspectedUnits += Number(wo.qualitySummary?.inspectedUnits ?? 0) || 0;
-      failedUnits += Number(wo.qualitySummary?.failedUnits ?? 0) || 0;
-      passedUnits += Number(wo.qualitySummary?.passedUnits ?? 0) || 0;
-      reworkUnits += Number(wo.qualitySummary?.reworkUnits ?? 0) || 0;
-    }
-    const defectRate =
-      inspectedUnits > 0
-        ? Number((((failedUnits + reworkUnits) / inspectedUnits) * 100).toFixed(2))
-        : 0;
-    const firstPassYield =
-      inspectedUnits > 0
-        ? Number(((passedUnits / inspectedUnits) * 100).toFixed(2))
-        : 0;
-    return { inspectedUnits, passedUnits, failedUnits, reworkUnits, defectRate, firstPassYield };
-  }, [filteredQualityReportRows]);
-
-  const heroMetrics = selectedWorkOrder ? summary : aggregateFromFiltered;
-
-  const hero = useMemo(
-    () => [
-      {
-        key: 'inspected',
-        label: 'تم الفحص',
-        value: loading && selectedWorkOrder ? '…' : formatNumber(heroMetrics.inspectedUnits),
-      },
-      {
-        key: 'passed',
-        label: 'مقبول',
-        value: loading && selectedWorkOrder ? '…' : formatNumber(heroMetrics.passedUnits),
-      },
-      {
-        key: 'failed',
-        label: 'مرفوض',
-        value: loading && selectedWorkOrder ? '…' : formatNumber(heroMetrics.failedUnits),
-        accent: heroMetrics.failedUnits > 0,
-        toneClassName: heroMetrics.failedUnits > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined,
-      },
-      {
-        key: 'rework',
-        label: 'إعادة تشغيل',
-        value: loading && selectedWorkOrder ? '…' : formatNumber(heroMetrics.reworkUnits),
-      },
-      {
-        key: 'defect_rate',
-        label: 'نسبة العيوب',
-        value: loading && selectedWorkOrder ? '…' : `${formatNumber(heroMetrics.defectRate)}%`,
-      },
-      {
-        key: 'fpy',
-        label: 'القبول من أول مرة',
-        value: loading && selectedWorkOrder ? '…' : `${formatNumber(heroMetrics.firstPassYield)}%`,
-      },
-    ],
-    [heroMetrics, loading, selectedWorkOrder],
-  );
-
-  const runReport = async () => {
-    if (!selectedWorkOrderId) return;
-    setLoading(true);
-    try {
-      const [built, defectsRows] = await Promise.all([
-        qualityInspectionService.buildWorkOrderSummary(selectedWorkOrderId),
-        qualityInspectionService.getDefectsByWorkOrder(selectedWorkOrderId),
-      ]);
-      setSummary(built);
-      setDefects(defectsRows);
-    } catch (error) {
-      toast.error('تعذر تحميل تقرير الجودة.');
-    } finally {
-      setLoading(false);
-    }
-  };
   useEffect(() => {
-    if (selectedWorkOrderId) {
-      void runReport();
+    let cancelled = false;
+    setError('');
+    if (to < from || rangeDays(from, to) > 31) {
+      setError('نطاق التقرير 31 يوماً كحد أقصى.');
+      setRows([]);
+      return;
     }
-  }, [selectedWorkOrderId]);
+    Promise.all([
+      qualityPalletService.listByDateRange(from, to).then((list) => qualityPalletService.withDefects(list)),
+      qualityProductionQuery.quantitiesForRange(from, to).catch(() => null),
+      scrapReadable ? qualityScrapService.listRange(from, to).catch(() => null) : Promise.resolve(null),
+    ]).then(([pallets, production, scrap]) => {
+      if (cancelled) return;
+      setRows(rowsMatchingTenant(pallets, activeTenantId()));
+      setProductionRows(production);
+      setScrapDenied(!scrapReadable || scrap == null);
+      setScrapRows(scrap ? rowsMatchingTenant(scrap, activeTenantId()) : null);
+    }).catch((loadError: unknown) => {
+      if (!cancelled) setError(qualityUserMessage(loadError, 'تعذر تحميل التقرير'));
+    });
+    return () => { cancelled = true; };
+  }, [from, to, scrapReadable]);
 
-  const topDefectReasons = useMemo(() => {
-    const grouped = defects.reduce<Record<string, number>>((acc, item) => {
-      acc[item.reasonLabel] = (acc[item.reasonLabel] ?? 0) + (item.quantity || 1);
-      return acc;
-    }, {});
-    return Object.entries(grouped)
-      .map(([reasonLabel, quantity]) => ({ reasonLabel, quantity: Number(quantity) || 0 }))
-      .sort((a, b) => Number(b.quantity) - Number(a.quantity))
-      .slice(0, 5);
-  }, [defects]);
+  const filtered = useMemo(() => filterQualityPallets(rows, {
+    lineId,
+    productId,
+    workOrderId,
+    inspectionStatus,
+    reasonId,
+  }), [rows, lineId, productId, workOrderId, inspectionStatus, reasonId]);
 
-  const printSubtitle = useMemo(() => {
-    if (!selectedWorkOrder) return undefined;
-    const productName = _rawProducts.find((p) => p.id === selectedWorkOrder.productId)?.name ?? '—';
-    const lineName = _rawLines.find((l) => l.id === selectedWorkOrder.lineId)?.name ?? '—';
-    const supervisorName = _rawEmployees.find((e) => e.id === selectedWorkOrder.supervisorId)?.name ?? '—';
-    return `${selectedWorkOrder.workOrderNumber} — ${productName} — ${lineName} — المشرف: ${supervisorName}`;
-  }, [_rawEmployees, _rawLines, _rawProducts, selectedWorkOrder]);
-  const defectPrintRows = useMemo(
-    () =>
-      defects.map((row) => ({
-        reasonLabel: row.reasonLabel,
-        quantity: row.quantity || 1,
-        severity: row.severity,
-        status: row.status,
-        serialBarcode: row.serialBarcode,
-      })),
-    [defects],
-  );
+  const inspectionFilters = Boolean(workOrderId || inspectionStatus || reasonId);
+  const matchingProduction = (productionRows || []).filter((row) => (!lineId || row.lineId === lineId) && (!productId || row.productId === productId));
+  const matchingScrap = (scrapRows || []).filter((row) => (!lineId || row.lineId === lineId) && (!productId || row.productId === productId));
+  const reportedProduction = inspectionFilters || !productionRows || matchingProduction.length === 0
+    ? null
+    : matchingProduction.reduce((sum, row) => sum + Number(row.quantityProduced || 0), 0);
+  const scrapQuantity = inspectionFilters || scrapDenied || !scrapRows || matchingScrap.length === 0
+    ? null
+    : matchingScrap.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+  const totals = qualityReportTotals({
+    pallets: filtered,
+    reportedProduction,
+    scrapQuantity,
+  });
 
-  const handlePrint = () => {
+  const filterLabels = [
+    lineId ? masters.lines.find((line) => line.id === lineId)?.name : '',
+    productId ? masters.products.find((product) => product.id === productId)?.name : '',
+    workOrderId ? `أمر ${filtered[0]?.workOrderNumber || workOrderId}` : '',
+    inspectionStatus,
+    reasonId ? masters.reasons.find((reason) => reason.id === reasonId)?.labelAr : '',
+  ].filter((label): label is string => Boolean(label));
+
+  const printReport = () => {
+    if (!canPrintReport || filtered.length === 0) return;
     printDocument({
-      documentTitle: selectedWorkOrder
-        ? `تقرير-جودة-${selectedWorkOrder.workOrderNumber}`
-        : 'تقرير-الجودة',
+      documentTitle: `جودة-${from}`,
       printSettings: printTemplate,
       render: (ref) => (
-        <QualityReportPrint
+        <QualityPalletReportPrint
           ref={ref}
-          title="تقرير الجودة"
-          subtitle={printSubtitle}
-          workOrderNumber={selectedWorkOrder?.workOrderNumber}
-          summary={summary}
-          topDefects={topDefectReasons}
+          from={from}
+          to={to}
+          filters={filterLabels}
+          pallets={filtered}
+          totals={totals}
+          scrapDenied={scrapDenied}
           printSettings={printTemplate}
         />
       ),
     });
   };
 
-  const handleDeleteQualityReport = async (workOrderId: string, workOrderNumber: string) => {
-    if (!canDeleteQualityReports || !workOrderId) return;
-    const confirmed = window.confirm(`هل تريد حذف تقرير الجودة لأمر الشغل #${workOrderNumber}؟`);
-    if (!confirmed) return;
-
-    setDeletingWorkOrderId(workOrderId);
-    try {
-      const deleted = await qualityInspectionService.deleteWorkOrderQualityReport(workOrderId);
-      await workOrderService.clearQualityData(workOrderId);
-      if (selectedWorkOrderId === workOrderId) {
-        setSelectedWorkOrderId('');
-        setSummary({
-          inspectedUnits: 0,
-          passedUnits: 0,
-          failedUnits: 0,
-          reworkUnits: 0,
-          defectRate: 0,
-          firstPassYield: 0,
-        });
-        setDefects([]);
-      }
-      const totalDeleted = deleted.inspections + deleted.defects + deleted.rework + deleted.capa;
-      toast.success(`تم حذف تقرير الجودة بنجاح (#${workOrderNumber}) — عناصر محذوفة: ${totalDeleted}.`);
-    } catch (error) {
-      toast.error('تعذر حذف تقرير الجودة.');
-    } finally {
-      setDeletingWorkOrderId(null);
-    }
+  const printPallet = (row: QualityPallet) => {
+    if (!canPrintPallet) return;
+    printDocument({
+      documentTitle: `بالته-${row.palletNumber}`,
+      printSettings: printTemplate,
+      render: (ref) => <QualityPalletInspectionPrint ref={ref} row={row} printSettings={printTemplate} />,
+    });
   };
 
-  if (referenceDataLoading) {
-    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
-  }
-
   return (
-    <ModuleOpsPageShell
-      eyebrow="تقارير الجودة"
-      hero={hero}
-      onRefresh={selectedWorkOrderId ? () => void runReport() : undefined}
-      refreshing={loading}
-      rangeLabel={
-        selectedWorkOrder
-          ? `#${selectedWorkOrder.workOrderNumber}`
-          : `التقارير: ${filteredQualityReportRows.length} / ${qualityReportRows.length}`
-      }
-      actions={(
-        <>
-          {canPrint && selectedWorkOrder ? (
-            <Button variant="primary" onClick={() => handlePrint()}>
-              طباعة
-            </Button>
+    <QmsPage title="تقارير الجودة" subtitle={workOrderId ? `النطاق ${formatQualityRange(from, to)}` : 'بالتات النطاق المحدد'}>
+      <div className="qms-card" style={{ marginBottom: 12 }}>
+        <div className="qms-row">
+          <label><span className="qms-label">من</span><input className="qms-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
+          <label><span className="qms-label">إلى</span><input className="qms-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
+          <MasterSelect label="الخط" value={lineId} onChange={setLineId} placeholder="كل الخطوط" options={masters.lines.map((line) => ({ value: line.id || '', label: line.name }))} />
+          <MasterSelect label="المنتج" value={productId} onChange={setProductId} placeholder="كل المنتجات" options={masters.products.map((product) => ({ value: product.id || '', label: product.name }))} />
+          <label><span className="qms-label">أمر الشغل</span><input className="qms-input" value={workOrderId} onChange={(event) => setWorkOrderId(event.target.value)} placeholder="معرّف الأمر" /></label>
+          <label><span className="qms-label">الحالة</span>
+            <select className="qms-input" value={inspectionStatus} onChange={(event) => setInspectionStatus(event.target.value)}>
+              <option value="">الكل</option>
+              <option value="في انتظار الفحص">في انتظار الفحص</option>
+              <option value="جاري الفحص">جاري الفحص</option>
+              <option value="تم الفحص">تم الفحص</option>
+            </select>
+          </label>
+          <MasterSelect label="سبب العيب" value={reasonId} onChange={setReasonId} placeholder="كل الأسباب" options={masters.reasons.map((reason) => ({ value: reason.id, label: `${reason.labelAr} (${reason.code})` }))} />
+        </div>
+        <div className="qms-row">
+          {canPrintReport ? (
+            <button type="button" className="qms-btn qms-btn-ghost" disabled={filtered.length === 0 || Boolean(error)} onClick={printReport}>طباعة التقرير</button>
           ) : null}
-          <OpsMoreActionsMenu
-            items={[
-              {
-                label: 'PDF KPI',
-                icon: 'picture_as_pdf',
-                group: 'تصدير',
-                hidden: !(canPrint && selectedWorkOrder?.id),
-                onClick: () => {
-                  void (async () => {
-                    if (!printRef.current) return;
-                    try {
-                      await qualityPrintService.exportDocumentPdf(
-                        printRef.current,
-                        `quality-kpi-${selectedWorkOrder?.workOrderNumber ?? 'snapshot'}`,
-                        'quality_kpi',
-                        selectedWorkOrder?.id,
-                        { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
-                      );
-                      toast.success('تم تصدير تقرير KPI بنجاح.');
-                    } catch {
-                      toast.error('تعذر تصدير تقرير KPI.');
-                    }
-                  })();
-                },
-              },
-              {
-                label: 'PDF العيوب',
-                icon: 'picture_as_pdf',
-                group: 'تصدير',
-                hidden: !(canPrint && selectedWorkOrder?.id),
-                onClick: () => {
-                  void (async () => {
-                    if (!defectsPrintRef.current || !selectedWorkOrder?.id) return;
-                    try {
-                      await qualityPrintService.exportDocumentPdf(
-                        defectsPrintRef.current,
-                        `quality-defects-${selectedWorkOrder.workOrderNumber ?? 'snapshot'}`,
-                        'defects',
-                        selectedWorkOrder.id,
-                        { paperSize: printTemplate?.paperSize, orientation: printTemplate?.orientation, copies: printTemplate?.copies },
-                      );
-                      toast.success('تم تصدير تقرير العيوب بنجاح.');
-                    } catch {
-                      toast.error('تعذر تصدير تقرير العيوب.');
-                    }
-                  })();
-                },
-              },
-            ]}
-          />
-        </>
-      )}
-    >
-      <OpsDashPanel title="اختيار أمر الشغل" accent="quality" bodyClassName="p-3 sm:p-4">
-        <div className="grid md:grid-cols-4 gap-3">
-          <select
-            value={selectedWorkOrderId}
-            onChange={(e) => setSelectedWorkOrderId(e.target.value)}
-            className="md:col-span-3 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
-          >
-            <option value="">اختر أمر شغل</option>
-            {workOrders.map((wo) => (
-              <option key={wo.id} value={wo.id}>#{wo.workOrderNumber}</option>
-            ))}
-          </select>
-          <Button variant="primary" disabled={loading || !selectedWorkOrderId} onClick={runReport}>
-            {loading ? 'جاري التحميل...' : 'تحميل التقرير'}
-          </Button>
+          {can('quality.reports.export') ? (
+            <button type="button" className="qms-btn qms-btn-primary" disabled={filtered.length === 0} onClick={() => {
+              const sheet = XLSX.utils.json_to_sheet(filtered.map((row) => ({
+                البالتة: row.palletNumber,
+                الخط: row.lineName,
+                المنتج: row.productName,
+                الدفعة: row.quantityOnPallet,
+                العينة: row.inspectedQuantity,
+                العيوب: row.rejectedQuantity,
+                الحالة: row.inspectionStatus,
+                القرار: row.palletDecision,
+                'أمر الشغل': row.workOrderNumber || '',
+              })));
+              const book = XLSX.utils.book_new();
+              XLSX.utils.book_append_sheet(book, sheet, 'الجودة');
+              saveAs(new Blob([XLSX.write(book, { bookType: 'xlsx', type: 'array' })]), `quality-${from}.xlsx`);
+            }}>تصدير Excel</button>
+          ) : null}
         </div>
-      </OpsDashPanel>
-
-      <OpsDashPanel title="جدول تقارير الجودة" accent="quality" bodyClassName="p-0">
-        <div className="p-3 sm:p-4 border-b">
-          <SmartFilterBar
-            pageId="quality-reports"
-            searchPlaceholder="بحث برقم أمر الشغل / كود التقرير / المنتج / الخط"
-            searchValue={tableQuery}
-            onSearchChange={setTableQuery}
-            quickFilters={[
-              {
-                key: 'status',
-                placeholder: 'كل الحالات',
-                options: [
-                  { value: 'approved', label: 'معتمد' },
-                  { value: 'rejected', label: 'مرفوض' },
-                  { value: 'pending', label: 'قيد المراجعة' },
-                  { value: 'not_required', label: 'غير مطلوب' },
-                ],
-                width: 'w-[160px]',
-              },
-            ]}
-            quickFilterValues={{ status: statusFilter }}
-            onQuickFilterChange={(key, value) => {
-              if (key === 'status') setStatusFilter(value === 'all' ? 'all' : value as typeof statusFilter);
-            }}
-            className="mb-0 border-0 rounded-none"
-          />
-        </div>
-        {qualityReportRows.length === 0 ? (
-          <p className="p-4 text-sm text-muted-foreground">لا توجد تقارير جودة مرتبطة بأوامر الشغل حاليًا.</p>
-        ) : filteredQualityReportRows.length === 0 ? (
-          <p className="p-4 text-sm text-muted-foreground">لا توجد نتائج مطابقة للبحث/التصفية الحالية.</p>
-        ) : (
-          <div className="space-y-2.5 p-3 sm:p-4">
-            <div className="md:hidden space-y-2.5">
-              {filteredQualityReportRows.map((wo) => {
-                const qm = qualityStatusMeta(wo.qualityStatus);
-                const productName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '—';
-                const lineName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
-                const lastInspectionDate =
-                  wo.qualitySummary?.lastInspectionAt?.toDate?.()?.toLocaleString?.('ar-EG') ??
-                  (wo.qualityApprovedAt ? new Date(wo.qualityApprovedAt).toLocaleString('ar-EG') : '—');
-                return (
-                  <div key={wo.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-sm font-bold text-[var(--color-text)]">#{wo.workOrderNumber}</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">{productName} - {lineName}</p>
-                      </div>
-                      <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full ${qm.className}`}>{qm.label}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
-                        <p className="text-[var(--color-text-muted)] mb-0.5">Inspected</p>
-                        <p className="font-bold">{wo.qualitySummary?.inspectedUnits ?? 0}</p>
-                      </div>
-                      <div className="rounded-[var(--border-radius-base)] bg-[var(--color-bg)] p-2">
-                        <p className="text-[var(--color-text-muted)] mb-0.5">Failed</p>
-                        <p className="font-bold">{wo.qualitySummary?.failedUnits ?? 0}</p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-[var(--color-text-muted)]"><span className="font-bold">آخر تحديث:</span> {lastInspectionDate}</p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        className="!px-2 !py-1"
-                        onClick={() => setSelectedWorkOrderId(wo.id ?? '')}
-                        disabled={!wo.id}
-                      >
-                        <span className="material-icons-round text-sm">open_in_new</span>
-                        فتح
-                      </Button>
-                      {canDeleteQualityReports && (
-                        <Button
-                          variant="outline"
-                          className="!px-2 !py-1 !border-[rgb(var(--color-danger)/0.25)] !text-[rgb(var(--color-danger))] hover:!bg-[rgb(var(--color-danger)/0.1)]"
-                          onClick={() => void handleDeleteQualityReport(wo.id ?? '', wo.workOrderNumber)}
-                          disabled={!wo.id || deletingWorkOrderId === wo.id}
-                        >
-                          <span className="material-icons-round text-sm">delete</span>
-                          {deletingWorkOrderId === wo.id ? 'جاري الحذف...' : 'حذف التقرير'}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="hidden md:block overflow-x-auto">
-              <table className="erp-table min-w-full text-sm">
-                <thead className="erp-thead">
-                  <tr>
-                    <th className="erp-th">أمر الشغل</th>
-                    <th className="erp-th">المنتج</th>
-                    <th className="erp-th">الخط</th>
-                    <th className="erp-th">كود تقرير الجودة</th>
-                    <th className="erp-th">الحالة</th>
-                    <th className="erp-th">Inspected</th>
-                    <th className="erp-th">Failed</th>
-                    <th className="erp-th">آخر تحديث</th>
-                    <th className="erp-th">إجراء</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredQualityReportRows.map((wo) => {
-                    const qm = qualityStatusMeta(wo.qualityStatus);
-                    const productName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '—';
-                    const lineName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '—';
-                    const lastInspectionDate =
-                      wo.qualitySummary?.lastInspectionAt?.toDate?.()?.toLocaleString?.('ar-EG') ??
-                      (wo.qualityApprovedAt ? new Date(wo.qualityApprovedAt).toLocaleString('ar-EG') : '—');
-                    return (
-                      <tr key={wo.id} className="border-b border-[var(--color-border)]">
-                        <td className="py-2 px-2 font-bold">#{wo.workOrderNumber}</td>
-                        <td className="py-2 px-2">{productName}</td>
-                        <td className="py-2 px-2">{lineName}</td>
-                        <td className="py-2 px-2 font-mono text-xs text-primary">{wo.qualityReportCode || '—'}</td>
-                        <td className="py-2 px-2">
-                          <span className={`inline-flex text-xs font-bold px-2 py-0.5 rounded-full ${qm.className}`}>{qm.label}</span>
-                        </td>
-                        <td className="py-2 px-2">{wo.qualitySummary?.inspectedUnits ?? 0}</td>
-                        <td className="py-2 px-2">{wo.qualitySummary?.failedUnits ?? 0}</td>
-                        <td className="py-2 px-2 text-xs text-[var(--color-text-muted)]">{lastInspectionDate}</td>
-                        <td className="py-2 px-2">
-                          <div className="flex items-center gap-2">
-                            <Button
-                              variant="outline"
-                              className="!px-2 !py-1"
-                              onClick={() => setSelectedWorkOrderId(wo.id ?? '')}
-                              disabled={!wo.id}
-                            >
-                              <span className="material-icons-round text-sm">open_in_new</span>
-                              فتح
-                            </Button>
-                            {canDeleteQualityReports && (
-                              <Button
-                                variant="outline"
-                                className="!px-2 !py-1 !border-[rgb(var(--color-danger)/0.25)] !text-[rgb(var(--color-danger))] hover:!bg-[rgb(var(--color-danger)/0.1)]"
-                                onClick={() => void handleDeleteQualityReport(wo.id ?? '', wo.workOrderNumber)}
-                                disabled={!wo.id || deletingWorkOrderId === wo.id}
-                              >
-                                <span className="material-icons-round text-sm">delete</span>
-                                {deletingWorkOrderId === wo.id ? 'جاري الحذف...' : 'حذف التقرير'}
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        <p className="px-4 pb-3 text-xs text-muted-foreground">
-          إجمالي التقارير: {filteredQualityReportRows.length} / {qualityReportRows.length}
+        <p className="qms-muted">
+          إنتاج التقارير: {inspectionFilters ? 'غير مرتبط بهذه التصفية' : totals.reportedProduction == null ? 'لا توجد تقارير' : totals.reportedProduction}
+          . حجم الدفعات: {totals.lotUnits}
+          . العينة: {totals.inspected}
+          . عيوب الفحص: {totals.defects}
+          . الهالك: {scrapDenied ? 'غير متاح' : inspectionFilters ? 'غير مرتبط بهذه التصفية' : totals.scrap == null ? 'لا توجد سجلات' : totals.scrap}
+          .
         </p>
-      </OpsDashPanel>
-
-      {selectedWorkOrder && (
-        <OpsDashPanel title="أعلى أسباب العيوب" accent="quality">
-          {loading ? (
-            <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
-              جاري التحميل...
-            </p>
-          ) : topDefectReasons.length === 0 ? (
-            <p className="text-sm text-muted-foreground">لا توجد عيوب مسجلة لأمر الشغل المحدد.</p>
-          ) : (
-            <div className="space-y-2">
-              {topDefectReasons.map((item) => (
-                <div key={item.reasonLabel} className="flex items-center justify-between text-sm py-2 border-b border-[var(--color-border)]">
-                  <span className="font-semibold text-[var(--color-text)]">{item.reasonLabel}</span>
-                  <span className="font-bold text-primary">{item.quantity}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </OpsDashPanel>
-      )}
-
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <QualityReportPrint
-          ref={printRef}
-          title="تقرير الجودة"
-          subtitle={printSubtitle}
-          workOrderNumber={selectedWorkOrder?.workOrderNumber}
-          summary={summary}
-          topDefects={topDefectReasons}
-          printSettings={printTemplate}
-        />
+        {error ? <p>{error}</p> : null}
       </div>
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <QualityDefectsPrint
-          ref={defectsPrintRef}
-          workOrderNumber={selectedWorkOrder?.workOrderNumber}
-          rows={defectPrintRows}
-          printSettings={printTemplate}
-        />
+      <div className="qms-card" style={{ overflowX: 'auto' }}>
+        <table className="qms-table">
+          <thead><tr><th>البالتة</th><th>الخط</th><th>المنتج</th><th>الحالة</th><th>القرار</th><th>أمر الشغل</th><th></th></tr></thead>
+          <tbody>
+            {filtered.map((row) => (
+              <tr key={row.id} className={row.palletDecision === 'مرفوض' ? 'qms-rejected' : undefined}>
+                <td>{row.palletNumber}</td>
+                <td>{row.lineName}</td>
+                <td>{row.productCode ? `${row.productName} (${row.productCode})` : row.productName}</td>
+                <td>{row.inspectionStatus}</td>
+                <td>{row.palletDecision}</td>
+                <td>{row.workOrderNumber || '—'}</td>
+                <td>
+                  {canPrintPallet ? (
+                    <button type="button" className="qms-btn qms-btn-ghost" onClick={() => printPallet(row)}>طباعة</button>
+                  ) : null}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 ? <p>لا توجد بالتات في هذا النطاق.</p> : null}
       </div>
-    </ModuleOpsPageShell>
+    </QmsPage>
   );
 };

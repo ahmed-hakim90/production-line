@@ -23,6 +23,9 @@ import { PRINT_ENGINE_IFRAME_CSS } from '../utils/print/printSurface.ts';
   assert.match(style, /line-height: 1.5/);
   assert.match(style, /Cairo/);
   assert.ok(style.includes(PRINT_ENGINE_IFRAME_CSS.trim().slice(0, 40)));
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /thead/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /table-header-group/);
+  assert.match(PRINT_ENGINE_IFRAME_CSS, /overflow-wrap: anywhere/);
 }
 
 {
@@ -74,11 +77,13 @@ import { PRINT_ENGINE_IFRAME_CSS } from '../utils/print/printSurface.ts';
     'modules/accounting/pages/AccountingLedger.tsx',
     'modules/accounting/pages/AccountingTrialBalance.tsx',
     'modules/accounting/pages/AccountingInventoryValuation.tsx',
-    'modules/quality/pages/CAPA.tsx',
-    'modules/quality/pages/ReworkOrders.tsx',
-    'modules/quality/pages/IPQC.tsx',
-    'modules/quality/pages/FinalInspection.tsx',
+    'modules/quality/pages/QualityPallets.tsx',
+    'modules/quality/pages/QualitySecondSort.tsx',
     'modules/quality/pages/QualityReports.tsx',
+    'modules/quality/pages/QualityHourlySamples.tsx',
+    'modules/quality/pages/QualityLineSamples.tsx',
+    'modules/quality/pages/QualityScrap.tsx',
+    'modules/quality/pages/QualityFlowchart.tsx',
     'modules/production/pages/Reports.tsx',
     'modules/repair/pages/RepairPayments.tsx',
     'modules/repair/pages/RepairJobDetail.tsx',

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useEnsureStoreData } from '@/hooks/useEnsureStoreData';
+import { useWaitingPalletCount } from '@/modules/quality/hooks/useWaitingPalletCount';
 import { DomainHomeShell } from '../components/DomainHomeShell';
 import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
 import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
@@ -102,6 +103,7 @@ const resolveWorkOrderProducedNow = (
 };
 
 export const FactoryManagerDashboard: React.FC = () => {
+  const waitingPallets = useWaitingPalletCount();
   const referenceDataLoading = useEnsureStoreData([
     'products',
     'lines',
@@ -642,6 +644,14 @@ export const FactoryManagerDashboard: React.FC = () => {
       });
     }
 
+    if (waitingPallets > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'inventory_2',
+        message: `${waitingPallets} بالته بانتظار فحص الجودة`,
+      });
+    }
+
     if (workOrderRisk.atRiskCount > 0) {
       result.push({
         type: 'danger',
@@ -681,7 +691,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     }
 
     return result;
-  }, [kpis, productionPlans, planReports, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, workOrderRisk.atRiskCount]);
+  }, [kpis, productionPlans, planReports, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, waitingPallets, workOrderRisk.atRiskCount]);
 
   const hero = useMemo(
     () => [
