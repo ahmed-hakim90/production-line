@@ -232,6 +232,8 @@ Isolated handler test, not run and not production evidence: start the Functions 
 | Cross-tenant account | No second authorized session. Credentials were not guessed. | BLOCKED | No |
 | Signed-in production bundle | No production login was provided. Credentials were not entered. | BLOCKED | No |
 
+On 2026-10-29 the current client was committed as `193b0640`, pushed to `origin/main`, and published to Hosting. The live page now serves `/assets/index-DYC11ybz.js`, which still calls `closeWorkOrder`. This release also includes the shell, modal, and manufacturing route changes that were left out of `index-hZFYG3Ga.js`. Firestore rules, indexes, Storage rules, and Cloud Functions were not deployed again. `closeRequiresQualityApproval` was not changed and `WO-2026-0001` was not used.
+
 Prerequisites, all required before another production attempt:
 
 1. A work order id that is not `WO-2026-0001`, with status other than `completed`, `actualWorkHours` of 0, and written approval that notes and pause may be changed and then restored. The product cannot exclude it from dashboards, the scanner, numbering, or report triggers.
