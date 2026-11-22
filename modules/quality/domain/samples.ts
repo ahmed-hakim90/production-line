@@ -19,14 +19,53 @@ export function validateAdditionalInspector(input: AdditionalInspectorInput): {
   if (inspectorId === input.primaryInspectorId) {
     throw new Error('يجب اختيار مراقب إضافي مختلف عن المراقب الأساسي.');
   }
-  if (!Number.isInteger(sampleCount) || sampleCount < 1 || sampleCount > input.sampleCount) {
-    throw new Error('عدد عينات المراقب الإضافي يجب أن يكون من 1 إلى إجمالي عينات السحبة.');
+  if (!Number.isInteger(sampleCount) || sampleCount < 1) {
+    throw new Error('عدد عينات المراقب الإضافي يجب أن يكون عددًا صحيحًا موجبًا.');
   }
   return { additionalInspectorId: inspectorId, additionalSampleCount: sampleCount };
 }
 
-export function primaryInspectorSampleCount(sampleCount: number, additionalSampleCount: number): number {
-  return Math.max(0, sampleCount - additionalSampleCount);
+export function primaryInspectorSampleCount(
+  sampleCount: number,
+  additionalSampleCount: number,
+  semantics?: 'base_plus_additional',
+): number {
+  return semantics === 'base_plus_additional'
+    ? sampleCount
+    : Math.max(0, sampleCount - additionalSampleCount);
+}
+
+export function totalLinePullSampleCount(input: {
+  sampleCount: number;
+  additionalSampleCount?: number;
+  sampleCountSemantics?: 'base_plus_additional';
+}): number {
+  const sampleCount = Math.max(0, Number(input.sampleCount) || 0);
+  if (input.sampleCountSemantics === 'base_plus_additional') {
+    return sampleCount + Math.max(0, Number(input.additionalSampleCount) || 0);
+  }
+  return sampleCount;
+}
+
+export function isLinePullRejectedByLimit(defectCount: number, rejectLimit: number): boolean {
+  if (!Number.isInteger(defectCount) || defectCount < 0) {
+    throw new Error('إجمالي العيوب يجب أن يكون عددًا صحيحًا غير سالب.');
+  }
+  if (!Number.isInteger(rejectLimit) || rejectLimit < 0) {
+    throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
+  }
+  return defectCount > rejectLimit;
+}
+
+export function resolveLinePullDecision(
+  defectCount: number,
+  rejectLimit: number,
+  mode: 'auto' | 'manual_accept' | 'manual_reject' = 'auto',
+): boolean {
+  const automaticDecision = isLinePullRejectedByLimit(defectCount, rejectLimit);
+  if (mode === 'manual_accept') return false;
+  if (mode === 'manual_reject') return true;
+  return automaticDecision;
 }
 
 export function assertSampleCount(sampleCount: number): void {

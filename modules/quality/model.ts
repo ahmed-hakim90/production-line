@@ -88,8 +88,35 @@ export interface QualityStation {
   id: string;
   tenantId: string;
   name: string;
+  defaultInspectorName?: string;
   defaultInspectorEmployeeId?: string;
+  defaultInspectorTechnicianId?: string;
   isActive: boolean;
+  displayOrder?: number;
+  createdAt?: { toMillis?: () => number } | string;
+}
+
+export interface QualityTechnician {
+  id: string;
+  tenantId: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  displayOrder?: number;
+  createdAt?: { toMillis?: () => number } | string;
+}
+
+export interface QualityProductionTag {
+  id: string;
+  tenantId: string;
+  lineId?: string;
+  lineName: string;
+  productId: string;
+  productName: string;
+  sector: QualitySector;
+  isActive: boolean;
+  displayOrder: number;
+  createdAt?: { toMillis?: () => number } | string;
 }
 
 export interface QualitySectorTag {
@@ -135,6 +162,7 @@ export interface QualityLinePull {
   endTime: string;
   lineId: string;
   lineName: string;
+  productionTagId?: string;
   productId: string;
   productName: string;
   stationId: string;
@@ -145,9 +173,12 @@ export interface QualityLinePull {
   additionalInspectorName?: string;
   sampleCount: number;
   additionalSampleCount: number;
+  sampleCountSemantics?: 'base_plus_additional';
+  rejectLimit?: number;
   status: 'pending' | 'completed';
   defectCount: number;
   palletRejected?: boolean;
+  decisionMode?: 'auto' | 'manual_accept' | 'manual_reject';
   sector: QualitySector;
   notes?: string;
   reopenReason?: string;

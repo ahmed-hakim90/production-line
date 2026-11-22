@@ -60,6 +60,16 @@ Hosting (`firebase.json`):
 - Deploy: `firebase deploy --only firestore:indexes`
 - After new composite queries fail in console, add the suggested index to the JSON and redeploy (do not rely on console-only indexes for durable envs).
 
+## Firestore rules and indexes only
+
+After confirming the active Firebase project with `firebase use`, deploy only the Firestore rules and index definitions with:
+
+```bash
+npm run deploy:firestore
+```
+
+This composes `firestore.rules` first, then deploys only `firestore:rules` and `firestore:indexes`. It does not deploy or modify Firestore documents, Hosting, Functions, or Storage. Rules deployment replaces the live ruleset, and the index file is the desired index configuration; check that it contains every index you need before deploying.
+
 ## Full deploy recipe
 
 ```bash

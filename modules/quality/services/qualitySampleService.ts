@@ -1,6 +1,6 @@
 import { addDoc, deleteDoc, getDocs, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/services/firebase';
-import { assertIsoDate, assertRequiredText, assertSampleCount, validateAdditionalInspector } from '../domain/samples';
+import { assertIsoDate, assertRequiredText, assertSampleCount, resolveLinePullDecision, totalLinePullSampleCount, validateAdditionalInspector } from '../domain/samples';
 import { assertSectorMatch, type QualitySector } from '../domain/sector';
 import { localTimeHm } from '../domain/time';
 import type { QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus } from '../model';
@@ -27,11 +27,28 @@ async function loadSampleDefects(parentCollection: string, parentId: string): Pr
   return snap.docs.map((item) => ({ id: item.id, ...item.data() }) as QualityDefectLine);
 }
 
-async function replaceChildDefects(parentCollection: string, parentId: string, tenantId: string, defects: QualityDefectLine[]) {
+async function replaceChildDefects(
+  parentCollection: string,
+  parentId: string,
+  tenantId: string,
+  defects: QualityDefectLine[],
+  parentPatch?: Record<string, unknown>,
+) {
   const existing = await getDocs(qmsChildCollection(parentCollection, parentId, 'defects'));
   const batch = writeBatch(db);
   existing.docs.forEach((item) => batch.delete(item.ref));
+  const grouped = new Map<string, QualityDefectLine>();
   defects.forEach((defect) => {
+    const previous = grouped.get(defect.reasonId);
+    grouped.set(defect.reasonId, previous
+      ? {
+        ...previous,
+        count: previous.count + defect.count,
+        notes: [previous.notes, defect.notes].filter(Boolean).join(' · '),
+      }
+      : defect);
+  });
+  grouped.forEach((defect) => {
     const ref = qmsChildDoc(
       parentCollection,
       parentId,
@@ -47,6 +64,7 @@ async function replaceChildDefects(parentCollection: string, parentId: string, t
       notes: defect.notes || '',
     });
   });
+  if (parentPatch) batch.update(qmsDoc(parentCollection, parentId), parentPatch);
   await batch.commit();
 }
 
@@ -127,6 +145,11 @@ export const qualitySampleService = {
     return listByTenantDate<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, activeTenantId(), 'date', date);
   },
 
+  async listPullsRange(from: string, to: string): Promise<QualityLinePull[]> {
+    assertAnyQualityPermission(['quality.samples.view', 'quality.reports.view']);
+    return listByTenantDateRange<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, activeTenantId(), 'date', from, to);
+  },
+
   async createPull(input: {
     date: string;
     slotKey: string;
@@ -134,6 +157,7 @@ export const qualitySampleService = {
     endTime: string;
     lineId: string;
     lineName: string;
+    productionTagId?: string;
     productId: string;
     productName: string;
     stationId: string;
@@ -144,12 +168,13 @@ export const qualitySampleService = {
     additionalInspectorName?: string;
     additionalSampleCount?: number;
     sampleCount: number;
+    rejectLimit?: number;
     sector: QualitySector;
     lineSector?: QualitySector | null;
     productSector?: QualitySector | null;
     notes?: string;
   }): Promise<void> {
-    assertQualityPermission('quality.samples.inspect');
+    assertAnyQualityPermission(['quality.samples.inspect', 'quality.settings.manage']);
     assertIsoDate(input.date);
     assertSampleCount(input.sampleCount);
     assertSectorMatch(input.lineSector, input.productSector);
@@ -174,6 +199,11 @@ export const qualitySampleService = {
       primaryInspectorId: input.inspectorEmployeeId,
       sampleCount: input.sampleCount,
     });
+    assertSampleCount(input.sampleCount + additional.additionalSampleCount);
+    const rejectLimit = input.rejectLimit ?? 1;
+    if (!Number.isInteger(rejectLimit) || rejectLimit < 0) {
+      throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
+    }
     const actor = currentQualityActor();
     await addDoc(qmsCollection(QMS_COLLECTIONS.LINE_PULLS), stampTenant({
       moduleSource: 'qms',
@@ -183,6 +213,7 @@ export const qualitySampleService = {
       endTime: input.endTime,
       lineId: input.lineId,
       lineName: input.lineName,
+      productionTagId: input.productionTagId || '',
       productId: input.productId,
       productName: input.productName,
       stationId: input.stationId,
@@ -193,6 +224,8 @@ export const qualitySampleService = {
       additionalInspectorName: extraInspector?.name || '',
       sampleCount: input.sampleCount,
       additionalSampleCount: additional.additionalSampleCount,
+      sampleCountSemantics: 'base_plus_additional',
+      rejectLimit,
       status: 'pending',
       defectCount: 0,
       palletRejected: null,
@@ -211,24 +244,147 @@ export const qualitySampleService = {
     });
   },
 
-  async completePull(id: string, input: { defects: QualityDefectLine[]; palletRejected: boolean }): Promise<void> {
+  async updatePendingPull(id: string, input: {
+    date: string;
+    slotKey: string;
+    startTime: string;
+    endTime: string;
+    lineId: string;
+    lineName: string;
+    productionTagId?: string;
+    productId: string;
+    productName: string;
+    stationId: string;
+    stationName: string;
+    inspectorEmployeeId: string;
+    inspectorName: string;
+    additionalInspectorEmployeeId?: string;
+    additionalInspectorName?: string;
+    additionalSampleCount?: number;
+    sampleCount: number;
+    rejectLimit: number;
+    sector: QualitySector;
+    lineSector?: QualitySector | null;
+    productSector?: QualitySector | null;
+  }): Promise<void> {
+    assertQualityPermission('quality.samples.inspect');
+    const pull = await readQualityDoc<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, id);
+    if (pull.status !== 'pending') throw new Error('يجب إعادة فتح السحبة المكتملة قبل تعديل بياناتها.');
+    assertIsoDate(input.date);
+    assertSampleCount(input.sampleCount);
+    assertSampleCount(input.sampleCount + Number(input.additionalSampleCount || 0));
+    assertSectorMatch(input.lineSector, input.productSector);
+    if (!input.slotKey || !input.lineId || !input.productId || !input.stationId || !input.inspectorEmployeeId) {
+      throw new Error('الفترة والخط والمنتج ومحطة الفحص والمراقب مطلوبة.');
+    }
+    if (!Number.isInteger(input.rejectLimit) || input.rejectLimit < 0) {
+      throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
+    }
+    const inspector = await qualityStaffService.requireSelectableInspector({
+      employeeId: input.inspectorEmployeeId,
+      lineId: input.lineId,
+      stationId: input.stationId,
+    });
+    const additional = validateAdditionalInspector({
+      additionalInspectorId: input.additionalInspectorEmployeeId,
+      additionalSampleCount: input.additionalSampleCount,
+      primaryInspectorId: input.inspectorEmployeeId,
+      sampleCount: input.sampleCount,
+    });
+    const extraInspector = additional.additionalInspectorId
+      ? await qualityStaffService.requireSelectableInspector({
+        employeeId: additional.additionalInspectorId,
+        lineId: input.lineId,
+        stationId: input.stationId,
+      })
+      : null;
+    const actor = currentQualityActor();
+    await updateDoc(qmsDoc(QMS_COLLECTIONS.LINE_PULLS, id), {
+      date: input.date,
+      slotKey: input.slotKey,
+      startTime: input.startTime,
+      endTime: input.endTime,
+      lineId: input.lineId,
+      lineName: input.lineName,
+      productionTagId: input.productionTagId || '',
+      productId: input.productId,
+      productName: input.productName,
+      stationId: input.stationId,
+      stationName: input.stationName,
+      inspectorEmployeeId: inspector.id,
+      inspectorName: inspector.name,
+      additionalInspectorEmployeeId: additional.additionalInspectorId,
+      additionalInspectorName: extraInspector?.name || '',
+      sampleCount: input.sampleCount,
+      additionalSampleCount: additional.additionalSampleCount,
+      sampleCountSemantics: 'base_plus_additional',
+      rejectLimit: input.rejectLimit,
+      sector: input.sector,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    await auditQuality('QUALITY_RECORD_SAMPLE', 'تعديل بيانات سحبة عينات خط', { pullId: id });
+  },
+
+  async completePull(id: string, input: {
+    defects: QualityDefectLine[];
+    rejectLimit: number;
+    decisionMode?: 'auto' | 'manual_accept' | 'manual_reject';
+  }): Promise<{ palletRejected: boolean; defectCount: number }> {
     assertQualityPermission('quality.samples.inspect');
     const pull = await readQualityDoc<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, id);
     if (pull.status === 'completed') throw new Error('تم إنهاء فحص هذه السحبة بالفعل.');
+    if (input.defects.some((defect) => !Number.isInteger(defect.count) || defect.count < 1)) {
+      throw new Error('كل عيب يجب أن يكون له عدد صحيح موجب.');
+    }
     const defectCount = input.defects.reduce((sum, defect) => sum + Number(defect.count || 0), 0);
-    if (defectCount > 0) assertQualityPermission('quality.defects.record');
+    const inspectedCount = pull.sampleCount + (pull.sampleCountSemantics === 'base_plus_additional'
+      ? Number(pull.additionalSampleCount || 0)
+      : 0);
+    if (defectCount > inspectedCount) throw new Error('عدد العيوب لا يمكن أن يتجاوز إجمالي العينات المفحوصة.');
+    const rejectLimit = input.rejectLimit;
+    const decisionMode = input.decisionMode || 'auto';
+    const palletRejected = resolveLinePullDecision(defectCount, rejectLimit, decisionMode);
+    const existingDefects = await getDocs(qmsChildCollection(QMS_COLLECTIONS.LINE_PULLS, id, 'defects'));
+    if (defectCount > 0 || existingDefects.size > 0) assertQualityPermission('quality.defects.record');
     const actor = currentQualityActor();
-    await replaceChildDefects(QMS_COLLECTIONS.LINE_PULLS, id, pull.tenantId, input.defects);
-    await updateDoc(qmsDoc(QMS_COLLECTIONS.LINE_PULLS, id), {
+    await replaceChildDefects(QMS_COLLECTIONS.LINE_PULLS, id, pull.tenantId, input.defects, {
       status: 'completed',
       defectCount,
-      palletRejected: input.palletRejected,
+      rejectLimit,
+      palletRejected,
+      decisionMode,
       completedAt: `${localTimeHm()}`,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,
       updatedByName: actor.name,
     });
-    await auditQuality('QUALITY_RECORD_SAMPLE', 'إنهاء سحبة عينات خط', { pullId: id, palletRejected: input.palletRejected });
+    await auditQuality('QUALITY_RECORD_SAMPLE', 'إنهاء سحبة عينات خط', { pullId: id, palletRejected, decisionMode });
+    return { palletRejected, defectCount };
+  },
+
+  async savePendingPullDefects(id: string, defects: QualityDefectLine[]): Promise<number> {
+    assertQualityPermission('quality.samples.inspect');
+    const pull = await readQualityDoc<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, id);
+    if (pull.status !== 'pending') throw new Error('لا يمكن تعديل العيوب إلا في سحبة قيد الفحص.');
+    if (defects.some((defect) => !Number.isInteger(defect.count) || defect.count < 1)) {
+      throw new Error('كل عيب يجب أن يكون له عدد صحيح موجب.');
+    }
+    const defectCount = defects.reduce((sum, defect) => sum + defect.count, 0);
+    const inspectedCount = totalLinePullSampleCount(pull);
+    if (defectCount > inspectedCount) throw new Error('عدد العيوب لا يمكن أن يتجاوز إجمالي العينات المفحوصة.');
+    const existingDefects = await getDocs(qmsChildCollection(QMS_COLLECTIONS.LINE_PULLS, id, 'defects'));
+    if (defectCount > 0 || existingDefects.size > 0) assertQualityPermission('quality.defects.record');
+    const actor = currentQualityActor();
+    await replaceChildDefects(QMS_COLLECTIONS.LINE_PULLS, id, pull.tenantId, defects, {
+      defectCount,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    await auditQuality('QUALITY_RECORD_SAMPLE', 'حفظ عيوب سحبة قيد الفحص', { pullId: id, defectCount });
+    return defectCount;
   },
 
   async reopenPull(id: string, reason: string): Promise<void> {
@@ -254,7 +410,11 @@ export const qualitySampleService = {
   async deletePull(id: string): Promise<void> {
     assertQualityPermission('quality.records.delete');
     await readQualityDoc(QMS_COLLECTIONS.LINE_PULLS, id);
-    await deleteDoc(qmsDoc(QMS_COLLECTIONS.LINE_PULLS, id));
+    const defects = await getDocs(qmsChildCollection(QMS_COLLECTIONS.LINE_PULLS, id, 'defects'));
+    const batch = writeBatch(db);
+    defects.docs.forEach((item) => batch.delete(item.ref));
+    batch.delete(qmsDoc(QMS_COLLECTIONS.LINE_PULLS, id));
+    await batch.commit();
     await auditQuality('QUALITY_RECORD_SAMPLE', 'حذف سحبة عينات', { pullId: id });
   },
 
@@ -266,7 +426,10 @@ export const qualitySampleService = {
   async savePeriodStatus(input: { date: string; slotKey: string; lineId: string; isStopped: boolean; noSampleReason: string }): Promise<void> {
     assertQualityPermission('quality.samples.inspect');
     assertIsoDate(input.date);
-    if (!input.isStopped && !input.noSampleReason.trim() && false) return;
+    if (!input.slotKey || !input.lineId) throw new Error('الفترة والخط مطلوبان لتسجيل حالة عدم السحب.');
+    if (!input.isStopped && !input.noSampleReason.trim()) {
+      throw new Error('اكتب سبب عدم السحب أو سجّل أن الخط متوقف.');
+    }
     const actor = currentQualityActor();
     const id = [activeTenantId(), input.date, input.slotKey, input.lineId]
       .map((part) => part.replace(/[^A-Za-z0-9_-]/g, '_'))

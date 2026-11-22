@@ -363,6 +363,49 @@ await assertFails(inspector.collection('quality_line_sample_pulls').doc('pull-st
   lineId: 'line-1',
   stationId: 'station-2',
 }));
+await assertSucceeds(manager.collection('quality_inspection_stations').doc('station-monitor').set({
+  tenantId: 'tenantA',
+  name: 'محطة اختبار',
+  defaultInspectorEmployeeId: 'station-monitor',
+  defaultInspectorName: 'مراقب المحطة',
+  isActive: true,
+}));
+await assertSucceeds(manager.collection('quality_line_sample_pulls').doc('pull-manager-station').set({
+  tenantId: 'tenantA',
+  status: 'pending',
+  inspectorEmployeeId: 'station-monitor',
+  inspectorName: 'مراقب المحطة',
+  lineId: 'line-1',
+  stationId: 'station-monitor',
+}));
+await assertFails(manager.collection('quality_line_sample_pulls').doc('pull-manager-station').update({
+  status: 'completed',
+}));
+await assertFails(manager.collection('quality_pallets').doc('manager-pallet').set(inspectedPallet('manager')));
+await assertSucceeds(inspector.collection('quality_line_sample_pulls').doc('pull-station-monitor').set({
+  tenantId: 'tenantA',
+  status: 'pending',
+  inspectorEmployeeId: 'station-monitor',
+  inspectorName: 'مراقب المحطة',
+  lineId: 'line-1',
+  stationId: 'station-monitor',
+}));
+await assertFails(inspector.collection('quality_line_sample_pulls').doc('pull-station-monitor-wrong-name').set({
+  tenantId: 'tenantA',
+  status: 'pending',
+  inspectorEmployeeId: 'station-monitor',
+  inspectorName: 'اسم مختلف',
+  lineId: 'line-1',
+  stationId: 'station-monitor',
+}));
+await assertFails(inspector.collection('quality_line_sample_pulls').doc('pull-station-monitor').update({
+  tenantId: 'tenantA',
+  status: 'pending',
+  inspectorEmployeeId: 'station-monitor',
+  inspectorName: 'اسم مختلف',
+  lineId: 'line-1',
+  stationId: 'station-monitor',
+}));
 await assertSucceeds(inspector.collection('quality_line_sample_pulls').doc('pull-ok').set({
   tenantId: 'tenantA',
   status: 'pending',

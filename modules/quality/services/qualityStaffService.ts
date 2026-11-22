@@ -6,7 +6,7 @@ import { employeeService } from '@/modules/hr/employeeService';
 import { userManagementService } from '@/modules/system/services/userManagementService';
 import { userService } from '@/services/userService';
 import type { FirestoreEmployee } from '@/types';
-import type { QualityStaffAssignment } from '../model';
+import type { QualityStaffAssignment, QualityStation } from '../model';
 import {
   assertStaffDraft,
   inspectorMayBeSelected,
@@ -23,6 +23,7 @@ import {
   listByTenant,
   qmsDoc,
   qualityTimestamps,
+  readQualityDoc,
   stampTenant,
 } from './qualityGateway';
 
@@ -141,6 +142,12 @@ export const qualityStaffService = {
     stationIsNew?: boolean;
   }): Promise<{ id: string; name: string }> {
     const tenantId = activeTenantId();
+    if (input.stationId && input.employeeId === input.stationId) {
+      const station = await readQualityDoc<QualityStation>(QMS_COLLECTIONS.STATIONS, input.stationId);
+      if (station.isActive !== false && station.defaultInspectorEmployeeId === input.employeeId && station.defaultInspectorName?.trim()) {
+        return { id: input.employeeId, name: station.defaultInspectorName.trim() };
+      }
+    }
     const employee = await loadEmployee(input.employeeId);
     const assignmentSnap = await getDoc(qmsDoc(QMS_COLLECTIONS.WORKERS, staffAssignmentDocId(tenantId, employee.id || '')));
     const assignment = assignmentSnap.exists()

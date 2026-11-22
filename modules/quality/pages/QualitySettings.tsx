@@ -1,20 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { STANDARD_AQL_LEVEL_II, type AqlPlanRange } from '../domain/aql';
 import type { QualitySector } from '../domain/sector';
-import type { QualityReason, QualitySampleSlot, QualitySectorTag, QualityStation } from '../model';
+import type {
+  QualityProductionTag,
+  QualityReason,
+  QualitySampleSlot,
+  QualitySectorTag,
+  QualityStation,
+  QualityTechnician,
+} from '../model';
 import { qualityUserMessage } from '../services/qualityGateway';
 import { qualitySettingsService } from '../services/qualitySettingsService';
-import { inspectorOptions, useQualityAssignments } from '../hooks/useQualityAssignments';
 import { MasterSelect, QmsPage, useQualityMasters } from '../qms/QmsChrome';
 
 export const QualitySettings: React.FC = () => {
   const { can } = usePermission();
   const masters = useQualityMasters();
-  const allEmployees = useAppStore((state) => state._rawEmployees);
-  const staff = useQualityAssignments();
   const canManage = can('quality.settings.manage');
   const [plans, setPlans] = useState<AqlPlanRange[]>([]);
   const [usingStandard, setUsingStandard] = useState(true);
@@ -26,11 +29,22 @@ export const QualitySettings: React.FC = () => {
   const [editingReasonId, setEditingReasonId] = useState('');
   const [catalogReasons, setCatalogReasons] = useState<QualityReason[]>([]);
   const [stationName, setStationName] = useState('');
-  const [stationInspector, setStationInspector] = useState('');
+  const [stationTechnicianId, setStationTechnicianId] = useState('');
   const [editingStationId, setEditingStationId] = useState('');
+  const [technicians, setTechnicians] = useState<QualityTechnician[]>([]);
+  const [technicianName, setTechnicianName] = useState('');
+  const [technicianCode, setTechnicianCode] = useState('');
+  const [editingTechnicianId, setEditingTechnicianId] = useState('');
   const [tagEntity, setTagEntity] = useState('');
   const [tagType, setTagType] = useState<'product' | 'line'>('product');
   const [tagSector, setTagSector] = useState<QualitySector>('home');
+  const [productionTags, setProductionTags] = useState<QualityProductionTag[]>([]);
+  const [productionTagId, setProductionTagId] = useState('');
+  const [productionTagLineId, setProductionTagLineId] = useState('');
+  const [productionTagCustomLine, setProductionTagCustomLine] = useState(false);
+  const [productionTagLineName, setProductionTagLineName] = useState('');
+  const [productionTagProductId, setProductionTagProductId] = useState('');
+  const [productionTagSector, setProductionTagSector] = useState<QualitySector>('home');
   const [stations, setStations] = useState<QualityStation[]>([]);
   const [slots, setSlots] = useState<QualitySampleSlot[]>([]);
   const [tags, setTags] = useState<QualitySectorTag[]>([]);
@@ -43,7 +57,7 @@ export const QualitySettings: React.FC = () => {
   });
 
   const load = async () => {
-    const [saved, policies, nextStations, hourlySlots, lineSlots, nextTags, nextReasons] = await Promise.all([
+    const [saved, policies, nextStations, hourlySlots, lineSlots, nextTags, nextReasons, nextTechnicians, nextProductionTags] = await Promise.all([
       qualitySettingsService.listAqlPlans(),
       qualitySettingsService.getPolicies(),
       qualitySettingsService.listStations({ includeInactive: true }),
@@ -51,11 +65,15 @@ export const QualitySettings: React.FC = () => {
       qualitySettingsService.listSlots('line'),
       qualitySettingsService.listSectorTags(),
       qualitySettingsService.listReasons(),
+      qualitySettingsService.listTechnicians({ includeInactive: true }),
+      qualitySettingsService.listProductionTags({ includeInactive: true }),
     ]);
     setCatalogReasons(nextReasons);
     setStations(nextStations);
     setSlots([...hourlySlots, ...lineSlots]);
     setTags(nextTags);
+    setTechnicians(nextTechnicians);
+    setProductionTags(nextProductionTags);
     const active = saved.filter((plan) => plan.isActive);
     setUsingStandard(active.length === 0);
     setPlans(active.length > 0 ? active : STANDARD_AQL_LEVEL_II);
@@ -163,32 +181,93 @@ export const QualitySettings: React.FC = () => {
           }, 'تم حفظ السبب')}>{editingReasonId ? 'حفظ التعديل' : 'إضافة سبب'}</button>
         </div>
       </section>
-      <section className="qms-card" style={{ marginBottom: 12 }}>
+      <section className="qms-card" id="quality-technicians" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">فنيون الجودة</h2>
+        <p className="qms-muted">أضف الفنيين مرة واحدة، ثم اختر الفني المسجل عند إعداد كل محطة بدل كتابة اسمه يدويًا.</p>
+        <div className="qms-row">
+          <label><span className="qms-label">اسم الفني</span><input className="qms-input" value={technicianName} onChange={(event) => setTechnicianName(event.target.value)} /></label>
+          <label><span className="qms-label">الكود</span><input className="qms-input" value={technicianCode} onChange={(event) => setTechnicianCode(event.target.value)} /></label>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage || !technicianName.trim() || !technicianCode.trim()} onClick={() => void save(async () => {
+            await qualitySettingsService.saveTechnician({
+              id: editingTechnicianId || undefined,
+              name: technicianName,
+              code: technicianCode,
+            });
+            setEditingTechnicianId('');
+            setTechnicianName('');
+            setTechnicianCode('');
+          }, 'تم حفظ فني الجودة')}>{editingTechnicianId ? 'حفظ تعديل الفني' : 'إضافة فني'}</button>
+          {editingTechnicianId ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
+            setEditingTechnicianId('');
+            setTechnicianName('');
+            setTechnicianCode('');
+          }}>إلغاء التعديل</button> : null}
+        </div>
+        <table className="qms-table">
+          <thead><tr><th>الفني</th><th>الكود</th><th>الحالة</th><th></th></tr></thead>
+          <tbody>
+            {technicians.map((technician) => (
+              <tr key={technician.id}>
+                <td>{technician.name}</td>
+                <td>{technician.code}</td>
+                <td>{technician.isActive === false ? 'موقوف' : 'نشط'}</td>
+                <td>{canManage ? (
+                  <>
+                      <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
+                        setEditingTechnicianId(technician.id);
+                        setTechnicianName(technician.name);
+                        setTechnicianCode(technician.code);
+                      }}>تعديل</button>
+                      {technician.isActive !== false ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void save(() => qualitySettingsService.hideTechnician(technician.id), 'تم إيقاف الفني')}>إيقاف</button> : null}
+                  </>
+                ) : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {technicians.length === 0 ? <p className="qms-muted">لم تتم إضافة فنيين بعد.</p> : null}
+      </section>
+      <section className="qms-card" id="quality-stations" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">محطات الفحص</h2>
         <div className="qms-row">
           <label><span className="qms-label">اسم المحطة</span><input className="qms-input" value={stationName} onChange={(event) => setStationName(event.target.value)} /></label>
-          <MasterSelect label="المراقب الافتراضي" value={stationInspector} onChange={setStationInspector} placeholder="تعيين نشط" options={inspectorOptions(masters.employees, staff.assignments, { stationId: editingStationId || undefined, stationIsNew: !editingStationId })} />
-          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage || !stationInspector} onClick={() => void save(async () => {
-            await qualitySettingsService.saveStation({ id: editingStationId || undefined, name: stationName, defaultInspectorEmployeeId: stationInspector });
+          <MasterSelect
+            label="فني الجودة"
+            value={stationTechnicianId}
+            onChange={setStationTechnicianId}
+            placeholder="اختر فنيًا مسجلًا"
+            options={technicians.filter((technician) => technician.isActive !== false).map((technician) => ({
+              value: technician.id,
+              label: `${technician.name} (${technician.code})`,
+            }))}
+          />
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage || !stationName.trim() || !stationTechnicianId} onClick={() => void save(async () => {
+            await qualitySettingsService.saveStation({
+              id: editingStationId || undefined,
+              name: stationName,
+              defaultInspectorTechnicianId: stationTechnicianId,
+            });
             setEditingStationId('');
             setStationName('');
+            setStationTechnicianId('');
           }, 'تم حفظ المحطة')}>{editingStationId ? 'حفظ تعديل المحطة' : 'حفظ المحطة'}</button>
         </div>
         <table className="qms-table">
-          <thead><tr><th>المحطة</th><th>المراقب الافتراضي</th><th></th></tr></thead>
+          <thead><tr><th>الترتيب</th><th>المحطة</th><th>فني الجودة</th><th></th></tr></thead>
           <tbody>
-            {stations.map((station) => {
-              const inspector = allEmployees.find((employee) => employee.id === station.defaultInspectorEmployeeId);
+            {stations.map((station, index) => {
+              const technician = technicians.find((item) => item.id === station.defaultInspectorTechnicianId);
               return (
                 <tr key={station.id}>
+                  <td>{index + 1}</td>
                   <td>{station.name}{station.isActive === false ? ' — موقوفة' : ''}</td>
-                  <td>{inspector ? inspector.name : '—'}</td>
+                  <td>{technician ? `${technician.name} (${technician.code})` : station.defaultInspectorName || '—'}</td>
                   <td>{canManage ? (
                     <>
                       <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
                         setEditingStationId(station.id);
                         setStationName(station.name);
-                        setStationInspector(station.defaultInspectorEmployeeId || '');
+                        setStationTechnicianId(station.defaultInspectorTechnicianId || '');
                       }}>تعديل</button>
                       {station.isActive !== false ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void save(() => qualitySettingsService.hideStation(station.id), 'تم إيقاف المحطة')}>إيقاف</button> : null}
                     </>
@@ -198,9 +277,9 @@ export const QualitySettings: React.FC = () => {
             })}
           </tbody>
         </table>
-        <p className="qms-muted">المحطة لها اسم ومراقب افتراضي فقط. لا يوجد رمز محطة ولا ربط إلزامي بخط أو منتج في المصدر. الإيقاف يخفيها من السحب الجديد.</p>
+        <p className="qms-muted">المحطات مرتبة حسب تاريخ إضافتها، ويظهر فنيها تلقائيًا عند اختيار المحطة في سحب العينات. الإيقاف يخفي المحطة من السحب الجديد.</p>
       </section>
-      <section className="qms-card" style={{ marginBottom: 12 }}>
+      <section className="qms-card" id="quality-slots" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">فترات السحب</h2>
         <p className="qms-muted">الفترات الظاهرة بلا معرف محفوظ هي الجدول القياسي 08:00–16:00. حفظ فترة ينشئ جدولاً خاصاً بالشركة.</p>
         <div className="qms-row">
@@ -228,8 +307,106 @@ export const QualitySettings: React.FC = () => {
           ))}
         </ul>
       </section>
+      <section className="qms-card" id="quality-production-tags" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">وسم خطوط الإنتاج</h2>
+        <p className="qms-muted">كل وسم يربط اسم الخط بمنتجه وقطاعه. في تسجيل العينات تختار الوسم مرة واحدة فيظهر الخط والمنتج المرتبطان به فقط.</p>
+        <div className="qms-row">
+          <label className="qms-row">
+            <input type="checkbox" checked={productionTagCustomLine} onChange={(event) => {
+              setProductionTagCustomLine(event.target.checked);
+              setProductionTagLineId('');
+              setProductionTagLineName('');
+            }} />
+            <span>الخط غير موجود في القائمة، سأكتب اسمه</span>
+          </label>
+          {productionTagCustomLine ? (
+            <label>
+              <span className="qms-label">اسم الخط</span>
+              <input className="qms-input" value={productionTagLineName} onChange={(event) => setProductionTagLineName(event.target.value)} />
+            </label>
+          ) : (
+            <MasterSelect
+              label="خط الإنتاج"
+              value={productionTagLineId}
+              onChange={(value) => setProductionTagLineId(value)}
+              placeholder="اختر الخط"
+              options={masters.lines.map((line) => ({
+                value: line.id || '',
+                label: line.code ? `${line.name} (${line.code})` : line.name,
+              }))}
+            />
+          )}
+          <MasterSelect
+            label="المنتج"
+            value={productionTagProductId}
+            onChange={setProductionTagProductId}
+            placeholder="اختر المنتج"
+            options={masters.products.map((product) => ({
+              value: product.id || '',
+              label: product.code ? `${product.name} (${product.code})` : product.name,
+            }))}
+          />
+          <label><span className="qms-label">القسم</span>
+            <select className="qms-input" value={productionTagSector} onChange={(event) => setProductionTagSector(event.target.value as QualitySector)}>
+              <option value="home">الأجهزة المنزلية</option>
+              <option value="seria">السريا</option>
+            </select>
+          </label>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage || !productionTagProductId || (productionTagCustomLine ? !productionTagLineName.trim() : !productionTagLineId)} onClick={() => void save(async () => {
+            const line = masters.lines.find((item) => item.id === productionTagLineId);
+            const product = masters.products.find((item) => item.id === productionTagProductId);
+            if (!product || (!productionTagCustomLine && !line)) throw new Error('اختر خطًا ومنتجًا صحيحين.');
+            await qualitySettingsService.saveProductionTag({
+              id: productionTagId || undefined,
+              lineId: productionTagCustomLine ? undefined : line?.id,
+              lineName: productionTagCustomLine ? productionTagLineName : line?.name || '',
+              productId: product.id || '',
+              productName: product.name,
+              sector: productionTagSector,
+            });
+            setProductionTagId('');
+            setProductionTagLineId('');
+            setProductionTagCustomLine(false);
+            setProductionTagLineName('');
+            setProductionTagProductId('');
+          }, 'تم حفظ الوسم')}>{productionTagId ? 'حفظ تعديل الوسم' : 'إضافة الوسم'}</button>
+          {productionTagId ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
+            setProductionTagId('');
+            setProductionTagLineId('');
+            setProductionTagCustomLine(false);
+            setProductionTagLineName('');
+            setProductionTagProductId('');
+          }}>إلغاء التعديل</button> : null}
+        </div>
+        <table className="qms-table">
+          <thead><tr><th>الوسم</th><th>القسم</th><th>الحالة</th><th></th></tr></thead>
+          <tbody>
+            {productionTags.map((tag) => (
+              <tr key={tag.id}>
+                <td>{tag.lineName} — {tag.productName}</td>
+                <td>{tag.sector === 'seria' ? 'السريا' : 'الأجهزة المنزلية'}</td>
+                <td>{tag.isActive === false ? 'موقوف' : 'نشط'}</td>
+                <td>{canManage ? (
+                  <>
+                    <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
+                      setProductionTagId(tag.id);
+                      setProductionTagLineId(tag.lineId || '');
+                      setProductionTagCustomLine(!tag.lineId);
+                      setProductionTagLineName(tag.lineName);
+                      setProductionTagProductId(tag.productId);
+                      setProductionTagSector(tag.sector);
+                    }}>تعديل</button>
+                    {tag.isActive !== false ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void save(() => qualitySettingsService.hideProductionTag(tag.id), 'تم إيقاف الوسم')}>إيقاف</button> : null}
+                  </>
+                ) : null}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {productionTags.length === 0 ? <p className="qms-muted">لم تتم إضافة أوسمة خطوط إنتاج بعد.</p> : null}
+      </section>
       <section className="qms-card">
-        <h2 className="qms-title">وسم قطاع الجودة</h2>
+        <h2 className="qms-title">وسم المنتج أو الخط في إعدادات القطاع</h2>
         <p className="qms-muted">الوسم يفلتر قوائم الجودة فقط. لا يغيّر قسم الموظف ولا فئة المنتج.</p>
         <div className="qms-row">
           <label><span className="qms-label">النوع</span>

@@ -8,6 +8,7 @@ const links = [
   ['/quality/hourly-samples', 'عينات بالساعة'],
   ['/quality/line-samples', 'سحب عينات الخطوط'],
   ['/quality/summaries', 'ملخصات الجودة'],
+  ['/quality/dashboard', 'لوحة تحليلات الجودة'],
   ['/quality/flowchart', 'مخطط الجودة'],
   ['/quality/reports', 'تقارير الجودة'],
   ['/quality/scrap', 'الهالك'],

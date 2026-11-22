@@ -2086,6 +2086,36 @@
         || pl_qualityOptionalInspectorOk();
     }
 
+    function pl_qualityLineStationInspectorOk(employeeId) {
+      let stationId = request.resource.data.stationId;
+      let station = get(/databases/$(database)/documents/quality_inspection_stations/$(stationId)).data;
+      return employeeId is string
+        && stationId is string
+        && employeeId == stationId
+        && exists(/databases/$(database)/documents/quality_inspection_stations/$(stationId))
+        && station.tenantId == request.resource.data.tenantId
+        && station.defaultInspectorEmployeeId == employeeId
+        && station.defaultInspectorName is string
+        && station.defaultInspectorName == request.resource.data.inspectorName
+        && station.isActive == true;
+    }
+
+    function pl_qualityLinePullAssignedInspector(employeeId) {
+      return pl_qualityAssignedInspector(employeeId)
+        || pl_qualityLineStationInspectorOk(employeeId);
+    }
+
+    function pl_qualityLinePullInspectorUnchangedOrAssigned() {
+      return (
+          'inspectorEmployeeId' in resource.data
+          && request.resource.data.inspectorEmployeeId == resource.data.inspectorEmployeeId
+          && request.resource.data.inspectorName == resource.data.inspectorName
+          && request.resource.data.stationId == resource.data.stationId
+          && request.resource.data.lineId == resource.data.lineId
+        )
+        || pl_qualityLinePullAssignedInspector(request.resource.data.inspectorEmployeeId);
+    }
+
     function pl_qualityExtraInspectorOk() {
       return !('additionalInspectorEmployeeId' in request.resource.data)
         || request.resource.data.additionalInspectorEmployeeId == null
@@ -2355,12 +2385,12 @@
 
     match /quality_line_sample_pulls/{docId} {
       allow read: if pl_qualityRead();
-      allow create: if pl_qualityCreate() && pl_qualityCanInspect()
+      allow create: if pl_qualityCreate() && (pl_qualityCanInspect() || pl_qualityCanManage())
         && request.resource.data.status == 'pending'
-        && pl_qualityAssignedInspector(request.resource.data.inspectorEmployeeId)
+        && pl_qualityLinePullAssignedInspector(request.resource.data.inspectorEmployeeId)
         && pl_qualityExtraInspectorOk();
       allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && (
-        (resource.data.status != 'completed' && pl_qualityCanInspect() && pl_qualityInspectorUnchangedOrAssigned() && (
+        (resource.data.status != 'completed' && pl_qualityCanInspect() && pl_qualityLinePullInspectorUnchangedOrAssigned() && (
           ('additionalInspectorEmployeeId' in resource.data
             && request.resource.data.additionalInspectorEmployeeId == resource.data.additionalInspectorEmployeeId)
           || pl_qualityExtraInspectorOk()

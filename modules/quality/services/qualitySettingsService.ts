@@ -1,8 +1,15 @@
-import { getDoc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { getDoc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, doc, runTransaction } from 'firebase/firestore';
 import { assertAqlPlanRange, STANDARD_AQL_LEVEL_II, type AqlPlanRange } from '../domain/aql';
 import { assertSlotWindow, STANDARD_SAMPLE_SLOTS } from '../domain/time';
-import type { QualityReason, QualitySampleSlot, QualitySectorTag, QualityShiftOption, QualityStation } from '../model';
-import { qualityStaffService } from './qualityStaffService';
+import type {
+  QualityProductionTag,
+  QualityReason,
+  QualitySampleSlot,
+  QualitySectorTag,
+  QualityShiftOption,
+  QualityStation,
+  QualityTechnician,
+} from '../model';
 import type { QualitySector } from '../domain/sector';
 import {
   QMS_COLLECTIONS,
@@ -23,13 +30,45 @@ import { db } from '@/services/firebase';
 
 export interface QualityPolicySettings {
   closeRequiresQualityApproval: boolean;
+  lineSampleRejectLimit: number;
 }
 
-const DEFAULT_POLICIES: QualityPolicySettings = { closeRequiresQualityApproval: false };
+const DEFAULT_POLICIES: QualityPolicySettings = {
+  closeRequiresQualityApproval: false,
+  lineSampleRejectLimit: 1,
+};
+
+function createdAtOrder(row: { createdAt?: { toMillis?: () => number } | string }): number {
+  if (typeof row.createdAt === 'string') return Date.parse(row.createdAt) || 0;
+  return typeof row.createdAt?.toMillis === 'function' ? row.createdAt.toMillis() : 0;
+}
 
 async function settingsRef() {
   requireQualityDb();
   return qmsDoc(QMS_COLLECTIONS.SETTINGS, activeTenantId());
+}
+
+async function readSettingsArray<T>(field: string): Promise<T[]> {
+  const snap = await getDoc(await settingsRef());
+  if (!snap.exists()) return [];
+  const value = snap.data()[field];
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+async function updateSettingsArray<T>(field: string, update: (rows: T[]) => T[]): Promise<void> {
+  const ref = await settingsRef();
+  const actor = currentQualityActor();
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    const value = snap.exists() ? snap.data()[field] : undefined;
+    const rows = Array.isArray(value) ? value as T[] : [];
+    transaction.set(ref, stampTenant({
+      [field]: update(rows),
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    }), { merge: true });
+  });
 }
 
 export const qualitySettingsService = {
@@ -37,20 +76,38 @@ export const qualitySettingsService = {
     requireQualityDb();
     const snap = await getDoc(await settingsRef());
     if (!snap.exists()) return DEFAULT_POLICIES;
-    return { closeRequiresQualityApproval: snap.data().closeRequiresQualityApproval === true };
+    const data = snap.data();
+    return {
+      closeRequiresQualityApproval: data.closeRequiresQualityApproval === true,
+      lineSampleRejectLimit: Number.isInteger(data.lineSampleRejectLimit) && data.lineSampleRejectLimit >= 0
+        ? data.lineSampleRejectLimit
+        : DEFAULT_POLICIES.lineSampleRejectLimit,
+    };
   },
 
-  async setPolicies(policies: QualityPolicySettings): Promise<void> {
+  async setPolicies(policies: Partial<QualityPolicySettings>): Promise<void> {
     assertQualityPermission('quality.settings.manage');
+    if (policies.lineSampleRejectLimit != null
+      && (!Number.isInteger(policies.lineSampleRejectLimit) || policies.lineSampleRejectLimit < 0)) {
+      throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
+    }
     const actor = currentQualityActor();
+    const policyPatch = {
+      ...(policies.closeRequiresQualityApproval == null
+        ? {}
+        : { closeRequiresQualityApproval: policies.closeRequiresQualityApproval === true }),
+      ...(policies.lineSampleRejectLimit == null
+        ? {}
+        : { lineSampleRejectLimit: policies.lineSampleRejectLimit }),
+    };
     await setDoc(await settingsRef(), stampTenant({
-      closeRequiresQualityApproval: policies.closeRequiresQualityApproval === true,
+      ...policyPatch,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,
       updatedByName: actor.name,
     }), { merge: true });
-    await auditQuality('QUALITY_SET_POLICIES', 'تحديث سياسة إغلاق أمر الشغل من الجودة', {
-      closeRequiresQualityApproval: policies.closeRequiresQualityApproval,
+    await auditQuality('QUALITY_SET_POLICIES', 'تحديث سياسة إعدادات الجودة', {
+      ...policyPatch,
     });
   },
 
@@ -148,6 +205,21 @@ export const qualitySettingsService = {
     }));
   },
 
+  async listManagedSlots(kind: 'hourly' | 'line'): Promise<QualitySampleSlot[]> {
+    const stored = await listByTenant<QualitySampleSlot>(QMS_COLLECTIONS.SLOTS, activeTenantId());
+    const custom = stored
+      .filter((slot) => slot.kind === kind)
+      .sort((a, b) => a.displayOrder - b.displayOrder || a.startTime.localeCompare(b.startTime));
+    if (custom.length > 0) return custom;
+    return STANDARD_SAMPLE_SLOTS.map((slot) => ({
+      ...slot,
+      id: slot.slotKey,
+      tenantId: activeTenantId(),
+      kind,
+      isActive: true,
+    }));
+  },
+
   async saveSlot(input: Omit<QualitySampleSlot, 'tenantId' | 'id'> & { id?: string }): Promise<void> {
     assertQualityPermission('quality.settings.manage');
     const stored = await listByTenant<QualitySampleSlot>(QMS_COLLECTIONS.SLOTS, activeTenantId());
@@ -179,36 +251,107 @@ export const qualitySettingsService = {
     await auditQuality('QUALITY_SET_POLICIES', 'حفظ فترة سحب عينات', { slotName: payload.slotName });
   },
 
-  async listStations(options?: { includeInactive?: boolean }): Promise<QualityStation[]> {
-    const rows = await listByTenant<QualityStation>(QMS_COLLECTIONS.STATIONS, activeTenantId());
-    return options?.includeInactive ? rows : rows.filter((station) => station.isActive !== false);
+  async hideSlot(id: string): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const slot = (await listByTenant<QualitySampleSlot>(QMS_COLLECTIONS.SLOTS, activeTenantId()))
+      .find((item) => item.id === id);
+    if (!slot) throw new Error('فترة السحب غير موجودة.');
+    const actor = currentQualityActor();
+    await updateDoc(qmsDoc(QMS_COLLECTIONS.SLOTS, id), {
+      isActive: false,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    await auditQuality('QUALITY_SET_POLICIES', 'إيقاف فترة سحب مع الإبقاء على السحبات السابقة', {
+      slotId: id,
+      slotName: slot.slotName,
+    });
   },
 
-  async saveStation(input: { id?: string; name: string; defaultInspectorEmployeeId?: string }): Promise<void> {
+  async listStations(options?: { includeInactive?: boolean }): Promise<QualityStation[]> {
+    const rows = await listByTenant<QualityStation>(QMS_COLLECTIONS.STATIONS, activeTenantId());
+    return rows
+      .filter((station) => options?.includeInactive || station.isActive !== false)
+      .sort((a, b) => createdAtOrder(a) - createdAtOrder(b)
+        || (a.displayOrder || 0) - (b.displayOrder || 0)
+        || a.name.localeCompare(b.name));
+  },
+
+  async listTechnicians(options?: { includeInactive?: boolean }): Promise<QualityTechnician[]> {
+    const rows = await readSettingsArray<QualityTechnician>('qualityTechnicians');
+    return rows
+      .filter((technician) => options?.includeInactive || technician.isActive !== false)
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || a.name.localeCompare(b.name));
+  },
+
+  async saveTechnician(input: { id?: string; name: string; code: string }): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const name = input.name.trim();
+    const code = input.code.trim();
+    if (!name || !code) throw new Error('اسم فني الجودة والكود مطلوبان.');
+    const actor = currentQualityActor();
+    const id = input.id || doc(qmsCollection(QMS_COLLECTIONS.SETTINGS)).id;
+    await updateSettingsArray<QualityTechnician>('qualityTechnicians', (technicians) => {
+      if (technicians.some((technician) => technician.code.toLocaleLowerCase() === code.toLocaleLowerCase()
+        && technician.id !== id)) {
+        throw new Error('كود فني الجودة مسجل بالفعل.');
+      }
+      const existing = technicians.find((technician) => technician.id === id);
+      const technician: QualityTechnician = {
+        id,
+        tenantId: activeTenantId(),
+        name,
+        code,
+        displayOrder: existing?.displayOrder ?? Math.max(0, ...technicians.map((item) => item.displayOrder || 0)) + 1,
+        isActive: true,
+      };
+      return [...technicians.filter((item) => item.id !== id), technician];
+    });
+    await auditQuality('QUALITY_SET_POLICIES', `حفظ فني جودة: ${name}`, { code });
+  },
+
+  async hideTechnician(id: string): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const stations = await this.listStations();
+    if (stations.some((station) => station.defaultInspectorTechnicianId === id)) {
+      throw new Error('أعد تعيين فني المحطات النشطة قبل إيقاف هذا الفني.');
+    }
+    await updateSettingsArray<QualityTechnician>('qualityTechnicians', (technicians) => {
+      if (!technicians.some((technician) => technician.id === id)) throw new Error('فني الجودة غير موجود.');
+      return technicians.map((technician) => technician.id === id ? { ...technician, isActive: false } : technician);
+    });
+    await auditQuality('QUALITY_SET_POLICIES', 'إيقاف فني جودة مع الإبقاء على المحطات والسحبات السابقة', {
+      technicianId: id,
+    });
+  },
+
+  async saveStation(input: { id?: string; name: string; defaultInspectorTechnicianId: string }): Promise<void> {
     assertQualityPermission('quality.settings.manage');
     const name = input.name.trim();
     if (!name) throw new Error('اسم محطة الفحص مطلوب.');
-    if (!input.defaultInspectorEmployeeId) throw new Error('اختر المراقب المسؤول عن محطة الفحص.');
-    await qualityStaffService.requireSelectableInspector({
-      employeeId: input.defaultInspectorEmployeeId,
-      stationId: input.id,
-      stationIsNew: !input.id,
-    });
-    const stations = await this.listStations();
+    const technician = (await this.listTechnicians()).find((item) => item.id === input.defaultInspectorTechnicianId);
+    if (!technician) throw new Error('اختر فني جودة نشطًا من الدليل.');
+    const stations = await this.listStations({ includeInactive: true });
     if (stations.some((station) => station.name === name && station.id !== input.id)) {
       throw new Error('اسم محطة الفحص مسجل بالفعل.');
     }
     const actor = currentQualityActor();
+    const stationRef = input.id ? qmsDoc(QMS_COLLECTIONS.STATIONS, input.id) : doc(qmsCollection(QMS_COLLECTIONS.STATIONS));
+    const existing = stations.find((station) => station.id === input.id);
     const payload = stampTenant({
       name,
-      defaultInspectorEmployeeId: input.defaultInspectorEmployeeId || null,
+      defaultInspectorName: technician.name,
+      defaultInspectorEmployeeId: stationRef.id,
+      defaultInspectorTechnicianId: technician.id,
+      displayOrder: existing?.displayOrder ?? Math.max(0, ...stations.map((item) => item.displayOrder || 0)) + 1,
       isActive: true,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,
       updatedByName: actor.name,
     });
-    if (input.id) await updateDoc(qmsDoc(QMS_COLLECTIONS.STATIONS, input.id), payload);
-    else await addDoc(qmsCollection(QMS_COLLECTIONS.STATIONS), { ...payload, createdAt: serverTimestamp() });
+    if (input.id) await updateDoc(stationRef, payload);
+    else await setDoc(stationRef, { ...payload, createdAt: serverTimestamp() });
     await auditQuality('QUALITY_SET_POLICIES', `حفظ محطة فحص: ${name}`, { name });
   },
 
@@ -216,6 +359,67 @@ export const qualitySettingsService = {
     assertQualityPermission('quality.settings.manage');
     await updateDoc(qmsDoc(QMS_COLLECTIONS.STATIONS, id), { isActive: false, updatedAt: serverTimestamp() });
     await auditQuality('QUALITY_SET_POLICIES', 'إخفاء محطة فحص مع الإبقاء على السحبات السابقة', { stationId: id });
+  },
+
+  async listProductionTags(options?: { includeInactive?: boolean }): Promise<QualityProductionTag[]> {
+    const rows = await readSettingsArray<QualityProductionTag>('qualityProductionTags');
+    return rows
+      .filter((tag) => options?.includeInactive || tag.isActive !== false)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  },
+
+  async saveProductionTag(input: {
+    id?: string;
+    lineId?: string;
+    lineName: string;
+    productId: string;
+    productName: string;
+    sector: QualitySector;
+  }): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const lineName = input.lineName.trim();
+    const productId = input.productId.trim();
+    const productName = input.productName.trim();
+    if (!lineName || !productId || !productName) {
+      throw new Error('اسم الخط والمنتج مطلوبان لإضافة الوسم.');
+    }
+    const actor = currentQualityActor();
+    const id = input.id || doc(qmsCollection(QMS_COLLECTIONS.SETTINGS)).id;
+    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (existingTags) => {
+      const duplicate = existingTags.find((tag) => tag.id !== id
+        && tag.productId === productId
+        && (input.lineId
+          ? tag.lineId === input.lineId
+          : !tag.lineId && tag.lineName.trim().toLocaleLowerCase() === lineName.toLocaleLowerCase()));
+      if (duplicate) throw new Error('وسم الخط والمنتج مسجل بالفعل.');
+      const existing = existingTags.find((tag) => tag.id === id);
+      const tag: QualityProductionTag = {
+        id,
+        tenantId: activeTenantId(),
+        lineId: input.lineId || '',
+        lineName,
+        productId,
+        productName,
+        sector: input.sector,
+        displayOrder: existing?.displayOrder ?? Math.max(0, ...existingTags.map((item) => item.displayOrder || 0)) + 1,
+        isActive: true,
+      };
+      return [...existingTags.filter((item) => item.id !== id), tag];
+    });
+    await auditQuality('QUALITY_SET_POLICIES', `حفظ وسم خط إنتاج: ${lineName} — ${productName}`, {
+      lineId: input.lineId || '',
+      productId,
+      sector: input.sector,
+    });
+  },
+
+  async hideProductionTag(id: string): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
+      if (!tags.some((tag) => tag.id === id)) throw new Error('وسم خط الإنتاج غير موجود.');
+      return tags.map((tag) => tag.id === id ? { ...tag, isActive: false } : tag);
+    });
+    await auditQuality('QUALITY_SET_POLICIES', 'إيقاف وسم خط إنتاج مع الإبقاء على السحبات السابقة', { tagId: id });
   },
 
   async listSectorTags(): Promise<QualitySectorTag[]> {

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { localDateIso } from '../domain/time';
+import { totalLinePullSampleCount } from '../domain/samples';
 import { reportedProductionQuantity } from '../domain/productionQuantity';
 import { qualityUserMessage } from '../services/qualityGateway';
 import { qualityPalletService } from '../services/qualityPalletService';
@@ -102,7 +103,7 @@ export const QualitySummaries: React.FC = () => {
             <tbody>
               {pulls.map((row) => (
                 <tr key={row.id} className={row.palletRejected ? 'qms-rejected' : undefined}>
-                  <td>{row.startTime}–{row.endTime}</td><td>{row.lineName}</td><td>{row.productName}</td><td>{row.sampleCount}</td><td>{row.defectCount}</td><td>{row.status === 'completed' ? (row.palletRejected ? 'مرفوضة' : 'مقبولة') : 'قيد الفحص'}</td>
+                  <td>{row.startTime}–{row.endTime}</td><td>{row.lineName}</td><td>{row.productName}</td><td>{totalLinePullSampleCount(row)}</td><td>{row.defectCount}</td><td>{row.status === 'completed' ? (row.palletRejected ? 'مرفوضة' : 'مقبولة') : 'قيد الفحص'}</td>
                 </tr>
               ))}
             </tbody>

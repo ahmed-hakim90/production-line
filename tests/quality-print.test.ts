@@ -5,6 +5,7 @@ import {
   filterQualityPallets,
   formatQualityShare,
   hourlyPrintRows,
+  linePullPrintRows,
   linePullResultLabel,
   periodStatusPrintRows,
   qualityRecordPrintAllowed,
@@ -14,7 +15,7 @@ import {
   scrapReasonCode,
   secondSortPageStyle,
 } from '../modules/quality/print/qualityPrintModel.ts';
-import type { QualityHourlySample, QualityPallet } from '../modules/quality/model.ts';
+import type { QualityHourlySample, QualityLinePull, QualityPallet } from '../modules/quality/model.ts';
 
 const hourly = (slotName: string): QualityHourlySample => ({
   id: slotName,
@@ -48,6 +49,35 @@ assert.equal(hourlyPrintRows([]).length, 0);
 
 assert.equal(linePullResultLabel({ status: 'pending' }), 'قيد الفحص');
 assert.equal(linePullResultLabel({ status: 'completed', palletRejected: true }), 'مرفوضة');
+const printedPull = linePullPrintRows([{
+  id: 'pull',
+  tenantId: 'tenant-a',
+  moduleSource: 'qms',
+  date: '2026-10-28',
+  slotKey: '08:00',
+  startTime: '08:00',
+  endTime: '09:00',
+  lineId: 'line-1',
+  lineName: 'خط 1',
+  productId: 'product-1',
+  productName: 'منتج',
+  stationId: 'station-1',
+  stationName: 'محطة',
+  inspectorEmployeeId: 'emp-1',
+  inspectorName: 'مراقب',
+  additionalInspectorName: 'مراقب إضافي',
+  sampleCount: 5,
+  additionalSampleCount: 3,
+  sampleCountSemantics: 'base_plus_additional',
+  status: 'completed',
+  defectCount: 1,
+  palletRejected: false,
+  sector: 'home',
+  createdByUid: 'u',
+  createdByName: 'u',
+} as QualityLinePull])[0];
+assert.equal(printedPull.sampleCount, 8);
+assert.equal(printedPull.primarySampleCount, 5);
 
 const periods = periodStatusPrintRows([
   {

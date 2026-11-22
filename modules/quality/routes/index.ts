@@ -10,6 +10,7 @@ const QualityFlowchart = lazyNamed(() => import('../pages/QualityFlowchart'), 'Q
 const QualityScrap = lazyNamed(() => import('../pages/QualityScrap'), 'QualityScrap');
 const QualitySecondSort = lazyNamed(() => import('../pages/QualitySecondSort'), 'QualitySecondSort');
 const QualityReports = lazyNamed(() => import('../pages/QualityReports'), 'QualityReports');
+const QualityDashboard = lazyNamed(() => import('../pages/QualityDashboard'), 'QualityDashboard');
 const QualitySettings = lazyNamed(() => import('../pages/QualitySettings'), 'QualitySettings');
 const QualityStaff = lazyNamed(() => import('../pages/QualityStaff'), 'QualityStaff');
 
@@ -25,6 +26,7 @@ export const QUALITY_ROUTES: AppRouteDef[] = [
   { path: '/quality/scrap', permission: 'quality.scrap.view', component: QualityScrap },
   { path: '/quality/second-sort', permission: 'quality.secondSort.view', component: QualitySecondSort },
   { path: '/quality/reports', permission: 'quality.reports.view', component: QualityReports },
+  { path: '/quality/dashboard', permission: 'quality.reports.view', component: QualityDashboard },
   { path: '/quality/settings', permission: 'quality.settings.view', component: QualitySettings },
   { path: '/quality/staff', permission: 'quality.workers.view', component: QualityStaff },
   { path: '/quality/final-inspection', redirectTo: '/quality/pallets' },

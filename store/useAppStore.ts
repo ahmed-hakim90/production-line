@@ -2088,13 +2088,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         return;
       }
 
-      // Role templates / grants run only from Roles Management button (or company Setup).
-      // Do not auto-migrate or re-grant on every admin login.
-      const roles = await roleService.getAll();
-      const role = roles.find((r) => r.id === userDoc.roleId);
+      let roles = await roleService.getAll();
+      let role = roles.find((r) => r.id === userDoc.roleId);
 
       set({ roles });
       if (!role) throw new Error('دور المستخدم غير موجود. تواصل مع مدير النظام.');
+
+      if (role.roleKey === 'admin' || role.name.trim() === 'مدير النظام') {
+        await roleService.ensureAdminRoleCatalogPermissions();
+        roles = await roleService.getAll();
+        role = roles.find((r) => r.id === userDoc.roleId);
+        if (!role) throw new Error('تعذر تحميل دور مدير النظام بعد تحديث صلاحياته.');
+        set({ roles });
+      }
 
       set({
         isAuthenticated: true,

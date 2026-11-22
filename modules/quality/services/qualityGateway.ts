@@ -85,7 +85,7 @@ export function qualityUserMessage(error: unknown, fallback = 'تعذر تنفي
   const code = String((error as { code?: string }).code || '');
   const message = error instanceof Error ? error.message : '';
   if (code.includes('permission-denied') || message === 'Missing or insufficient permissions.') {
-    return 'لا يمكن الوصول إلى بيانات الجودة. راجع الصلاحية، ثم انشر قواعد Firestore وفهرس الجودة بعد مراجعتها.';
+    return 'لا يمكن الوصول إلى بيانات الجودة. راجع صلاحيات دورك وقواعد Firestore المنشورة لهذه الشركة.';
   }
   return message || fallback;
 }

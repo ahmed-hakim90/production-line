@@ -3,7 +3,7 @@ import { DEFAULT_PRINT_TEMPLATE } from '@/utils/dashboardConfig';
 import { checkPermission, type Permission } from '@/utils/permissions';
 import { buildGlobalPrintPageStyle } from '@/utils/print/printPageStyle';
 import { scrapCauseShares, type ScrapCauseShare } from '../domain/scrap';
-import { primaryInspectorSampleCount } from '../domain/samples';
+import { primaryInspectorSampleCount, totalLinePullSampleCount } from '../domain/samples';
 import type {
   QualityDefectLine,
   QualityHourlySample,
@@ -108,9 +108,13 @@ export function linePullPrintRows(rows: QualityLinePull[]) {
     stationName: row.stationName,
     inspectorName: row.inspectorName,
     additionalInspectorName: (row.additionalInspectorName || '').trim(),
-    sampleCount: row.sampleCount,
+    sampleCount: totalLinePullSampleCount(row),
     additionalSampleCount: row.additionalSampleCount,
-    primarySampleCount: primaryInspectorSampleCount(row.sampleCount, row.additionalSampleCount),
+    primarySampleCount: primaryInspectorSampleCount(
+      row.sampleCount,
+      row.additionalSampleCount,
+      row.sampleCountSemantics,
+    ),
     defectCount: row.defectCount,
     result: linePullResultLabel(row),
     notes: (row.notes || '').trim(),
