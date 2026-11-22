@@ -1,4 +1,5 @@
 import { addDoc, deleteDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { hourlyScrapQuantity, normalizeHourlyScrapPeriods } from '../domain/hourlyScrap';
 import { assertIsoDate } from '../domain/samples';
 import type { QualityScrapReport, QualitySecondSortReport } from '../model';
 import { storageService } from '@/services/storageService';
@@ -33,10 +34,20 @@ export const qualityScrapService = {
   async save(input: Omit<QualityScrapReport, 'id' | 'tenantId' | 'moduleSource' | 'createdByUid' | 'createdByName'> & { id?: string }): Promise<void> {
     assertQualityPermission('quality.scrap.manage');
     assertIsoDate(input.reportDate);
-    if (!input.lineId || !input.productId || !input.reasonId || !input.reasonLabel.trim()) {
-      throw new Error('الخط والمنتج وسبب الهالك من قائمة العيوب مطلوبة.');
+    const periods = input.reportType === 'hourly' ? normalizeHourlyScrapPeriods(input.periods) : [];
+    const quantity = input.reportType === 'hourly' ? hourlyScrapQuantity(periods) : input.quantity;
+    if (!input.lineId || !input.productId) throw new Error('الخط والمنتج مطلوبان.');
+    if (input.reportType === 'hourly') {
+      if (!input.productName.trim()) throw new Error('منتج تقرير الهالك الساعي مطلوب.');
+    } else if (!input.reasonId || !input.reasonLabel.trim()) {
+      throw new Error('الخط والمنتج وسبب الهالك مطلوبة.');
     }
-    if (!Number.isInteger(input.quantity) || input.quantity < 0) throw new Error('كمية الهالك غير صالحة.');
+    if (!Number.isInteger(quantity) || quantity < 0) throw new Error('كمية الهالك غير صالحة.');
+    const productionSupervisorName = input.productionSupervisorName.trim();
+    const qualitySupervisorName = input.qualitySupervisorName.trim();
+    const recommendation = input.recommendation.trim();
+    if (productionSupervisorName.length > 150 || qualitySupervisorName.length > 150) throw new Error('اسم المشرف أطول من المسموح.');
+    if (recommendation.length > 1000) throw new Error('التوصية أطول من المسموح.');
     const actor = currentQualityActor();
     const payload = stampTenant({
       moduleSource: 'qms',
@@ -47,14 +58,15 @@ export const qualityScrapService = {
       productId: input.productId || null,
       productName: input.productName,
       sector: input.sector,
-      quantity: input.quantity,
-      reasonId: input.reasonId || null,
-      reasonLabel: input.reasonLabel,
+      quantity,
+      reasonId: input.reportType === 'hourly' ? null : (input.reasonId || null),
+      reasonLabel: input.reportType === 'hourly' ? 'جدول ساعي' : input.reasonLabel,
+      periods: input.reportType === 'hourly' ? periods : [],
       slotKey: input.slotKey || null,
       slotName: input.slotName || null,
-      productionSupervisorName: input.productionSupervisorName,
-      qualitySupervisorName: input.qualitySupervisorName,
-      recommendation: input.recommendation,
+      productionSupervisorName,
+      qualitySupervisorName,
+      recommendation,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,
       updatedByName: actor.name,
@@ -70,7 +82,7 @@ export const qualityScrapService = {
         createdByName: actor.name,
       });
     }
-    await auditQuality('QUALITY_RECORD_SCRAP', 'حفظ تقرير هالك', { reportType: input.reportType, quantity: input.quantity });
+    await auditQuality('QUALITY_RECORD_SCRAP', 'حفظ تقرير هالك', { reportType: input.reportType, quantity });
   },
 
   async remove(id: string): Promise<void> {
@@ -87,6 +99,14 @@ export const qualitySecondSortService = {
     return listByTenantDate<QualitySecondSortReport>(QMS_COLLECTIONS.SECOND_SORT, activeTenantId(), 'reportDate', date);
   },
 
+  async listRange(from: string, to: string): Promise<QualitySecondSortReport[]> {
+    assertQualityPermission('quality.secondSort.view');
+    assertIsoDate(from);
+    assertIsoDate(to);
+    if (to < from) throw new Error('نطاق التاريخ غير صالح.');
+    return listByTenantDateRange<QualitySecondSortReport>(QMS_COLLECTIONS.SECOND_SORT, activeTenantId(), 'reportDate', from, to);
+  },
+
   async save(input: {
     id?: string;
     reportDate: string;
@@ -94,6 +114,8 @@ export const qualitySecondSortService = {
     productName: string;
     productCode: string;
     problem: string;
+    reasonId?: string;
+    reasonName?: string;
     discountPercent: number;
     quantity: number;
     approval: string;
@@ -131,6 +153,8 @@ export const qualitySecondSortService = {
       productName: input.productName,
       productCode: input.productCode,
       problem: input.problem.trim(),
+      reasonId: input.reasonId || null,
+      reasonName: input.reasonName?.trim() || null,
       discountPercent: input.discountPercent,
       quantity: input.quantity,
       approval: input.approval.trim(),

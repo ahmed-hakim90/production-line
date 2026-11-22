@@ -150,19 +150,30 @@ export const productionAttendanceService = {
     }
   },
 
-  async deleteForReport(reportId: string): Promise<number> {
+  async deleteForReport(reportId: string, reportDate?: string): Promise<number> {
     if (!isConfigured || !reportId) return 0;
     try {
-      const existing = await getDocs(
-        tenantQuery(db, COLLECTION, where('reportId', '==', reportId)),
-      );
-      if (existing.empty) return 0;
+      const date = cleanText(reportDate);
+      // tenantId + date is the index the attendance screen already uses.
+      // tenantId + reportId is not published, so delete must not ask for it.
+      const existing = date
+        ? await getDocs(tenantQuery(
+          db,
+          COLLECTION,
+          where('date', '==', date),
+          limit(MAX_PAGE_SIZE),
+        ))
+        : await getDocs(tenantQuery(db, COLLECTION, where('reportId', '==', reportId)));
+      const docs = date
+        ? existing.docs.filter((item) => cleanText(item.data().reportId) === reportId)
+        : existing.docs;
+      if (docs.length === 0) return 0;
       const batch = writeBatch(db);
-      existing.docs.forEach((item) => batch.delete(item.ref));
+      docs.forEach((item) => batch.delete(item.ref));
       await batch.commit();
-      return existing.size;
+      return docs.length;
     } catch (error) {
-      if (isPermissionDenied(error)) return 0;
+      if (isPermissionDenied(error) || isMissingIndexError(error)) return 0;
       throw error;
     }
   },

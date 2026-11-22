@@ -10,6 +10,7 @@ import {
 } from '../modules/dashboards/lib/supervisorReportingAccess.ts';
 import {
   buildProductionReportFastUniqueKey,
+  shouldEnforceProductionReportUniqueness,
   validateProductionReportAssignment,
 } from '../functions/src/productionReportFastCore.ts';
 
@@ -163,16 +164,28 @@ const wo1Key = buildProductionReportFastUniqueKey({ ...duplicateBasis, workOrder
 const wo2Key = buildProductionReportFastUniqueKey({ ...duplicateBasis, workOrderId: 'wo-2' });
 assert.notEqual(wo1Key, wo2Key, 'Similar reports for different work orders must be allowed.');
 assert.equal(wo1Key, buildProductionReportFastUniqueKey({ ...duplicateBasis, workOrderId: 'wo-1' }));
+assert.equal(shouldEnforceProductionReportUniqueness(undefined), true);
+assert.equal(shouldEnforceProductionReportUniqueness({ planSettings: {} }), true);
+assert.equal(
+  shouldEnforceProductionReportUniqueness({
+    planSettings: { reportBehavior: { preventDuplicateReports: false } },
+  }),
+  false,
+  'Tenants that disable duplicate prevention must be able to save two reports on the same day.',
+);
 
 const reportServiceSource = readFileSync(new URL('../modules/production/services/reportService.ts', import.meta.url), 'utf8');
 assert.match(reportServiceSource, /parts\.push\(`wo_\$\{normalizeKeyPart\(workOrderId\)\}`\)/);
 assert.match(reportServiceSource, /workOrderId: String\(data\.workOrderId \|\| ''\)\.trim\(\)/);
+assert.match(reportServiceSource, /options\?\.enforceUnique === false/);
 
 const fastFunctionSource = readFileSync(new URL('../functions/src/productionReportFast.ts', import.meta.url), 'utf8');
 assert.match(fastFunctionSource, /reports\.createForAnySupervisor/);
 assert.match(fastFunctionSource, /validateProductionReportAssignment/);
 assert.match(fastFunctionSource, /processingState: 'pending'/);
 assert.match(fastFunctionSource, /createdByUid: actor\.uid/);
+assert.match(fastFunctionSource, /shouldEnforceProductionReportUniqueness/);
+assert.match(fastFunctionSource, /system_settings/);
 
 const backgroundSource = readFileSync(new URL('../functions/src/productionReportBackground.ts', import.meta.url), 'utf8');
 assert.match(backgroundSource, /processingState: 'processing'/);

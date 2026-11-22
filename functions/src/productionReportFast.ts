@@ -4,6 +4,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import {
   buildProductionReportFastUniqueKey,
+  shouldEnforceProductionReportUniqueness,
   validateProductionReportAssignment,
 } from './productionReportFastCore.js';
 
@@ -14,6 +15,7 @@ const EMPLOYEES = 'employees';
 const REPORTS = 'production_reports';
 const UNIQUES = 'production_report_uniques';
 const WORK_ORDERS = 'work_orders';
+const SETTINGS = 'system_settings';
 
 type Actor = {
   uid: string;
@@ -157,14 +159,19 @@ export async function createProductionReportFastHandler(request: CallableRequest
     throw new HttpsError('failed-precondition', 'الوردية مطلوبة لتقرير الحقن.');
   }
 
-  const [actorEmployeeSnap, targetEmployeeSnap] = await Promise.all([
+  const [actorEmployeeSnap, targetEmployeeSnap, settingsSnap] = await Promise.all([
     db.collection(EMPLOYEES)
       .where('tenantId', '==', actor.tenantId)
       .where('userId', '==', actor.uid)
       .limit(1)
       .get(),
     db.collection(EMPLOYEES).doc(clean(input.employeeId)).get(),
+    db.collection(SETTINGS).doc(actor.tenantId).get(),
   ]);
+  const enforceUnique = !skipsUnique(reportType)
+    && shouldEnforceProductionReportUniqueness(
+      settingsSnap.data() as { planSettings?: { reportBehavior?: { preventDuplicateReports?: unknown } } } | undefined,
+    );
   const actorEmployee = actorEmployeeSnap.docs[0]?.data() as { level?: number } | undefined;
   const actorEmployeeId = actorEmployeeSnap.docs[0]?.id || '';
   const targetEmployee = targetEmployeeSnap.data() as { tenantId?: string; isActive?: boolean } | undefined;
@@ -233,7 +240,7 @@ export async function createProductionReportFastHandler(request: CallableRequest
   }
 
   await db.runTransaction(async (transaction) => {
-    if (!skipsUnique(reportType)) {
+    if (enforceUnique) {
       for (const key of uniqueKeysToCheck) {
         const snap = await transaction.get(db.collection(UNIQUES).doc(key));
         if (snap.exists) throw new HttpsError('already-exists', 'يوجد تقرير مسجل بالفعل لنفس أمر الشغل.');
@@ -261,7 +268,7 @@ export async function createProductionReportFastHandler(request: CallableRequest
       manufacturingCostPostingError: '',
       createdAt: FieldValue.serverTimestamp(),
     }) as FirebaseFirestore.DocumentData);
-    if (!skipsUnique(reportType)) {
+    if (enforceUnique) {
       transaction.set(db.collection(UNIQUES).doc(uniqueKey), {
         tenantId: actor.tenantId,
         reportId: reportRef.id,

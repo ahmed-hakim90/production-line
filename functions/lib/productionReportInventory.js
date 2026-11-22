@@ -181,11 +181,21 @@ function attachLegacyMovementMatches(plan, existingMovements) {
     });
 }
 async function loadSourceMovements(tenantId, sourceId) {
+    // sourceId is the report id (or `${reportId}:reverse`) and is unique.
+    // A single-field query uses the automatic index, so delete/reverse does not
+    // wait on a tenantId+sourceId composite that was never published.
     const snap = await db.collection(STOCK_TX)
-        .where('tenantId', '==', tenantId)
         .where('sourceId', '==', sourceId)
         .get();
-    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    return snap.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter((row) => String(row.tenantId || '') === tenantId);
+}
+async function loadTransferRequestsForReport(tenantId, reportId) {
+    const snap = await db.collection(REQUESTS)
+        .where('sourceReportId', '==', reportId)
+        .get();
+    return snap.docs.filter((doc) => String(doc.data().tenantId || '') === tenantId);
 }
 async function claimApplyOperation(params) {
     const reportRef = db.collection(REPORTS).doc(params.reportId);
@@ -1012,11 +1022,8 @@ export async function applyProductionReportInventoryInternal(uid, reportId) {
     const existingMovements = await loadSourceMovements(actor.tenantId, reportId);
     const applyPlan = attachLegacyMovementMatches(buildDeterministicMovementPlan(reportId, 'apply', movementIntents), existingMovements);
     if (handover) {
-        const existingRequests = await db.collection(REQUESTS)
-            .where('tenantId', '==', actor.tenantId)
-            .where('sourceReportId', '==', reportId)
-            .get();
-        const legacyRequest = existingRequests.docs.find((doc) => {
+        const existingRequests = await loadTransferRequestsForReport(actor.tenantId, reportId);
+        const legacyRequest = existingRequests.find((doc) => {
             const data = doc.data();
             return data.requestType === 'production_handover'
                 && data.status !== 'rejected'
@@ -1093,11 +1100,12 @@ export const reverseProductionReportInventory = onCall({
     if (claim === 'missing' || claim === 'done') {
         return { ok: true, idempotent: true, reportId };
     }
-    const linkedRequests = await db.collection(REQUESTS)
-        .where('tenantId', '==', actor.tenantId)
-        .where('sourceReportId', '==', reportId)
-        .get();
-    for (const doc of linkedRequests.docs) {
+    const linkedRequests = await loadTransferRequestsForReport(actor.tenantId, reportId);
+    const approvedRequest = linkedRequests.find((doc) => String(doc.data().status || '') === 'approved');
+    if (approvedRequest) {
+        throw new HttpsError('failed-precondition', 'لا يمكن حذف التقرير بعد اعتماد دخول مخزن تم الصنع. قم بإلغاء الحركة أولاً من شاشة اعتماد التحويلات.');
+    }
+    for (const doc of linkedRequests) {
         await rejectPendingHandoverRequest({
             actor,
             reportId,

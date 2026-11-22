@@ -65,6 +65,78 @@
       ]
     },
     {
+      "collectionGroup": "quality_scrap_reasons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "nameKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_second_sort_reasons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "nameKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_second_sort_returns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "reportDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_carton_receipts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "receivedDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_plastic_receipts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "receivedDate", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_carton_suppliers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "nameKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_plastic_suppliers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "nameKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_plastic_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "nameKey", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "quality_plastic_rejection_reasons",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "nameKey", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "production_gate_sessions",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1747,6 +1819,14 @@
       ]
     },
     {
+      "collectionGroup": "production_attendance_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "reportId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "production_reports",
       "queryScope": "COLLECTION",
       "fields": [
@@ -2510,6 +2590,24 @@
           "fieldPath": "createdAt",
           "order": "DESCENDING"
         }
+      ]
+    },
+    {
+      "collectionGroup": "inventory_transfer_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "sourceReportId", "order": "ASCENDING" },
+        { "fieldPath": "fromWarehouseId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "inventory_transfer_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "sourceReportId", "order": "ASCENDING" },
+        { "fieldPath": "toWarehouseId", "order": "ASCENDING" }
       ]
     },
     {
@@ -5404,6 +5502,14 @@
           "fieldPath": "order",
           "order": "ASCENDING"
         }
+      ]
+    },
+    {
+      "collectionGroup": "stock_transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "sourceId", "order": "ASCENDING" }
       ]
     },
     {

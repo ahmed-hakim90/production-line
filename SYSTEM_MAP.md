@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP **Maghraby Group** — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-10-28 (quality module replaced with factory AQL, samples, scrap, and second-sort)
+**Last updated:** 2026-10-31 (quality analytics, hourly scrap, carton and plastic incoming)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -45,7 +45,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | MOD / 06 | Customers | Customer master + repair links |
 | MOD / 07 | HR | Employees, attendance, payroll, approvals |
 | MOD / 08 | Accounting / Costs | Journals, valuation, monthly production cost |
-| MOD / 09 | Quality | AQL pallet inspection, hourly and line samples, scrap, second-sort handover, pallet saved filters, defect-rate flowchart |
+| MOD / 09 | Quality | AQL pallet inspection, sample analytics dashboard, hourly and line samples, scrap with hourly periods and analysis, second-sort handover and return, carton and plastic incoming |
 | MOD / 10 | System | Users, roles, settings, import/export |
 
 ## Primary path
@@ -132,5 +132,5 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Customer portal (public chrome, PIN) | `/portal/:tenantSlug` (`?code=` prefills customer code) |
 | Public repair track | `/track/:tenantSlug` |
 | Public estimate approval | `/track/:tenantSlug/approve` |
-| Quality reports board (ModuleOpsPageShell) | `/quality/reports` |
+| Quality analytics, reports, cartons, plastic | `/quality/dashboard`, `/quality/line-analytics`, `/quality/reports`, `/quality/incoming/cartons`, `/quality/incoming/plastic` |
 | Shared ops list chrome | `ModuleOpsPageShell` / `DomainHomeShell` in `modules/dashboards/components` |

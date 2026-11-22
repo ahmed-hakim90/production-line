@@ -89,6 +89,7 @@ export type Permission =
   | 'quality.records.reopen' | 'quality.records.delete'
   | 'quality.scrap.view' | 'quality.scrap.manage'
   | 'quality.secondSort.view' | 'quality.secondSort.manage'
+  | 'quality.incoming.view' | 'quality.incoming.manage'
   | 'quality.photos.view' | 'quality.photos.manage'
   | 'employeeDashboard.view'
   | 'selfService.view'
@@ -305,6 +306,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'quality.scrap.manage', label: 'تسجيل الهالك' },
       { key: 'quality.secondSort.view', label: 'عرض تسليم الفرز الثاني' },
       { key: 'quality.secondSort.manage', label: 'إدارة تسليم الفرز الثاني' },
+      { key: 'quality.incoming.view', label: 'عرض وارد الكراتين والبلاستيك' },
+      { key: 'quality.incoming.manage', label: 'تسجيل وارد الكراتين والبلاستيك' },
       { key: 'quality.photos.view', label: 'عرض صور الجودة' },
       { key: 'quality.photos.manage', label: 'رفع صور الجودة' },
       { key: 'quality.reports.view', label: 'عرض تقارير الجودة' },
@@ -556,6 +559,7 @@ export function checkPermission(
     || permission === 'quality.samples.view'
     || permission === 'quality.scrap.view'
     || permission === 'quality.secondSort.view'
+    || permission === 'quality.incoming.view'
     || permission === 'quality.reports.view'
     || permission === 'quality.photos.view'
     || permission === 'quality.finalInspection.view'
@@ -570,6 +574,7 @@ export function checkPermission(
     || permission === 'quality.samples.inspect'
     || permission === 'quality.defects.record'
     || permission === 'quality.scrap.manage'
+    || permission === 'quality.incoming.manage'
     || permission === 'quality.finalInspection.inspect'
     || permission === 'quality.ipqc.inspect'
   ) {

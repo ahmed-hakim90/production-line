@@ -56,6 +56,9 @@ export const QualityPallets: React.FC = () => {
   const [filterLineId, setFilterLineId] = useState('');
   const [filterProductId, setFilterProductId] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterDecision, setFilterDecision] = useState('');
+  const [filterShiftId, setFilterShiftId] = useState('');
+  const [filterPalletNumber, setFilterPalletNumber] = useState('');
   const [savedFilters, setSavedFilters] = useState<PalletSavedFilter[]>([]);
   const [filterName, setFilterName] = useState('');
 
@@ -70,11 +73,15 @@ export const QualityPallets: React.FC = () => {
       const list = filterFrom === filterTo
         ? await qualityPalletService.listByDate(filterFrom)
         : await qualityPalletService.listByDateRange(filterFrom, filterTo);
+      const palletNumber = Number(filterPalletNumber);
       const narrowed = list.filter((row) =>
         (sector === 'all' || row.sector === sector)
         && (!filterLineId || row.lineId === filterLineId)
         && (!filterProductId || row.productId === filterProductId)
-        && (!filterStatus || row.inspectionStatus === filterStatus),
+        && (!filterStatus || row.inspectionStatus === filterStatus)
+        && (!filterDecision || row.palletDecision === filterDecision)
+        && (!filterShiftId || row.shiftId === filterShiftId)
+        && (!filterPalletNumber.trim() || row.palletNumber === palletNumber),
       );
       setRows(await qualityPalletService.withDefects(narrowed));
       if (can('quality.pallets.view')) {
@@ -87,7 +94,7 @@ export const QualityPallets: React.FC = () => {
     }
   };
 
-  useEffect(() => { void load(); }, [filterFrom, filterTo, filterLineId, filterProductId, filterStatus, sector]);
+  useEffect(() => { void load(); }, [filterFrom, filterTo, filterLineId, filterProductId, filterStatus, filterDecision, filterShiftId, filterPalletNumber, sector]);
 
   const receive = async () => {
     const line = lines.find((item) => item.id === lineId);
@@ -176,14 +183,24 @@ export const QualityPallets: React.FC = () => {
           <MasterSelect label="خط البحث" value={filterLineId} onChange={setFilterLineId} placeholder="كل الخطوط" options={lines.map((line) => ({ value: line.id || '', label: line.name }))} />
           <MasterSelect label="منتج البحث" value={filterProductId} onChange={setFilterProductId} placeholder="كل المنتجات" options={products.map((product) => ({ value: product.id || '', label: product.name }))} />
           <label><span className="qms-label">الحالة</span>
-            <select value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
+            <select className="qms-input" value={filterStatus} onChange={(event) => setFilterStatus(event.target.value)}>
               <option value="">الكل</option>
               <option value="في انتظار الفحص">في انتظار الفحص</option>
               <option value="جاري الفحص">جاري الفحص</option>
               <option value="تم الفحص">تم الفحص</option>
             </select>
           </label>
-          <label><span className="qms-label">اسم الفلتر</span><input className="qms-input" value={filterName} onChange={(event) => setFilterName(event.target.value)} /></label>
+          <label><span className="qms-label">القرار</span>
+            <select className="qms-input" value={filterDecision} onChange={(event) => setFilterDecision(event.target.value)}>
+              <option value="">الكل</option>
+              <option value="مقبول">مقبول</option>
+              <option value="مرفوض">مرفوض</option>
+              <option value="قيد الفحص">قيد الفحص</option>
+            </select>
+          </label>
+          <MasterSelect label="الوردية" value={filterShiftId} onChange={setFilterShiftId} placeholder="كل الورديات" options={[{ value: '', label: 'كل الورديات' }, ...masters.shifts.map((shift) => ({ value: shift.id, label: shift.name }))]} />
+          <label><span className="qms-label">رقم البالتة</span><input className="qms-input" inputMode="numeric" value={filterPalletNumber} onChange={(event) => setFilterPalletNumber(event.target.value.replace(/[^\d]/g, ''))} placeholder="الكل" /></label>
+          <label><span className="qms-label">اسم الفلتر</span><input className="qms-input" maxLength={80} value={filterName} onChange={(event) => setFilterName(event.target.value)} /></label>
           <button type="button" className="qms-btn" disabled={!can('quality.pallets.view')} onClick={() => void run(async () => {
             await qualityFilterService.save(filterName, {
               dateFrom: filterFrom,
@@ -191,7 +208,9 @@ export const QualityPallets: React.FC = () => {
               lineId: filterLineId,
               productId: filterProductId,
               inspectionStatus: filterStatus,
-              palletDecision: '',
+              palletDecision: filterDecision,
+              shiftId: filterShiftId,
+              palletNumber: filterPalletNumber.trim(),
             });
             setFilterName('');
           }, 'تم حفظ الفلتر')}>حفظ الفلتر</button>
@@ -206,13 +225,16 @@ export const QualityPallets: React.FC = () => {
                   setFilterLineId(filter.criteria.lineId || '');
                   setFilterProductId(filter.criteria.productId || '');
                   setFilterStatus(filter.criteria.inspectionStatus || '');
+                  setFilterDecision(filter.criteria.palletDecision || '');
+                  setFilterShiftId(filter.criteria.shiftId || '');
+                  setFilterPalletNumber(filter.criteria.palletNumber || '');
                 }}>{filter.name}</button>
                 <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void run(() => qualityFilterService.remove(filter.id), 'تم حذف الفلتر')}>حذف</button>
               </span>
             ))}
           </div>
         ) : null}
-        <p className="qms-muted">الفلتر يحفظ التاريخ والخط والمنتج وحالة الفحص داخل الشركة. رقم البالتة والوردية وقرار القبول لا تُحفظ، كما في البحث الأصلي.</p>
+        <p className="qms-muted">{rows.length} نتيجة. الفلتر يحفظ التاريخ والخط والمنتج والحالة والقرار والوردية ورقم البالتة داخل الشركة.</p>
       </section>
       <section className="qms-card" style={{ marginBottom: 12 }}>
         <div className="qms-row">
@@ -234,19 +256,22 @@ export const QualityPallets: React.FC = () => {
           <table className="qms-table">
             <thead>
               <tr>
-                <th>البالتة</th><th>الخط</th><th>المنتج</th><th>الكمية</th><th>العينة</th><th>الحالة</th><th>القرار</th><th></th>
+                <th>التاريخ</th><th>البالتة</th><th>الخط</th><th>المنتج</th><th>الكمية</th><th>المفحوص</th><th>المرفوض</th><th>الحالة</th><th>القرار</th><th>المراقب</th><th></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className={row.palletDecision === 'مرفوض' ? 'qms-rejected' : undefined}>
+                  <td>{row.date}</td>
                   <td>{row.palletNumber}</td>
                   <td>{row.lineName}</td>
                   <td>{row.productCode ? `${row.productName} (${row.productCode})` : row.productName}</td>
                   <td>{row.quantityOnPallet}</td>
-                  <td>{row.sampleSizeRequired} / قبول {row.maxAllowedDefects} / رفض {row.rejectLimit}</td>
+                  <td>{row.inspectedQuantity}</td>
+                  <td>{row.rejectedQuantity}</td>
                   <td>{row.inspectionStatus}<div className="qms-muted">{row.receivedTime} {row.inspectionStartedAt ? `· بدء ${row.inspectionStartedAt}` : ''} {row.inspectionCompletedAt ? `· إنهاء ${row.inspectionCompletedAt}` : ''}</div></td>
                   <td>{row.palletDecision}</td>
+                  <td>{row.inspectorName || '—'}</td>
                   <td>
                     <button type="button" className="qms-btn qms-btn-ghost" onClick={() => setActiveId(row.id)}>فتح</button>
                     {canPrintPallet ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => printRow(row)}>طباعة</button> : null}

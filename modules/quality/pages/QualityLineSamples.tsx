@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useAppStore } from '@/store/useAppStore';
@@ -7,7 +7,7 @@ import { usePrintEngine } from '@/utils/printManager';
 import { QualityLinePullPrint } from '../components/QualityPrintDocuments';
 import { qualityRecordPrintAllowed, rowsMatchingTenant } from '../print/qualityPrintModel';
 import { activeTenantId, qualityUserMessage } from '../services/qualityGateway';
-import { totalLinePullSampleCount } from '../domain/samples';
+import { linePullDailySummary, palletStatusText, totalLinePullSampleCount, type LinePullDailyGroup } from '../domain/samples';
 import { localDateIso } from '../domain/time';
 import type {
   QualityDefectLine,
@@ -66,6 +66,7 @@ export const QualityLineSamples: React.FC = () => {
   const [managedSlots, setManagedSlots] = useState<QualitySampleSlot[]>([]);
   const [productionTags, setProductionTags] = useState<QualityProductionTag[]>([]);
   const [rows, setRows] = useState<QualityLinePull[]>([]);
+  const [detailedRows, setDetailedRows] = useState<QualityLinePull[] | null>(null);
   const [policies, setPolicies] = useState<QualityPolicySettings>({ closeRequiresQualityApproval: false, lineSampleRejectLimit: 1 });
   const [slotKey, setSlotKey] = useState('');
   const [sector, setSector] = useState<QualitySector | 'all'>('all');
@@ -132,6 +133,22 @@ export const QualityLineSamples: React.FC = () => {
   }, [date]);
 
   useEffect(() => {
+    if (rows.length === 0) {
+      setDetailedRows(rows);
+      return;
+    }
+    let cancelled = false;
+    void qualitySampleService.withPullDefects(rows).then((detailed) => {
+      if (!cancelled) setDetailedRows(detailed);
+    }).catch((error: unknown) => {
+      if (cancelled) return;
+      toast.error(qualityUserMessage(error, 'تعذر تحميل عيوب السحبات'));
+      setDetailedRows(rows);
+    });
+    return () => { cancelled = true; };
+  }, [rows]);
+
+  useEffect(() => {
     setDefects([]);
     setReasonId('');
     setDefectCount(1);
@@ -156,6 +173,7 @@ export const QualityLineSamples: React.FC = () => {
     && (sector === 'all' || row.sector === sector)
   ));
   const lineFilterOptions = [...new Map(rows.map((row) => [row.lineId, { id: row.lineId, name: row.lineName }])).values()];
+  const daySummary = useMemo(() => linePullDailySummary(detailedRows ?? rows), [detailedRows, rows]);
 
   const saveRejectLimit = async () => {
     setSaving(true);
@@ -1103,6 +1121,78 @@ export const QualityLineSamples: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <section className="qms-card" style={{ marginTop: 12 }}>
+        <h2 className="qms-title">إجماليات اليوم</h2>
+        <p className="qms-muted">حسب كل سحبات اليوم، مستقلة عن تصفية السجل. العينة الإضافية تُحسب فوق عينة المراقب الأساسي.</p>
+        {rows.length === 0 ? <p>لا توجد سحبات في هذا اليوم.</p> : null}
+        {daySummary.periods.map((period) => (
+          <div key={period.key} style={{ marginTop: 12 }}>
+            <strong>{period.label}</strong>
+            <span className="qms-muted"> · العينات {period.samples} · العيوب {period.defects} · {period.palletStatus}</span>
+            <table className="qms-table">
+              <thead><tr><th>المراقب</th><th>الخط / المحطة</th><th>العينات</th><th>حالة البالتة</th><th>العيوب المسجلة</th></tr></thead>
+              <tbody>
+                {period.inspectors.map((inspector) => (
+                  <tr key={inspector.name}>
+                    <td>{inspector.name}</td>
+                    <td>{inspector.context}</td>
+                    <td>{inspector.samples}</td>
+                    <td>{inspector.palletStatus}</td>
+                    <td>{inspector.reasons}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </section>
+      {rows.length > 0 ? (
+        <>
+          <PullGroupTable title="إجمالي العينات حسب المراقب" itemLabel="المراقب" rows={daySummary.inspectors} />
+          <PullGroupTable title="إجمالي العينات حسب المحطة" itemLabel="المحطة" rows={daySummary.stations} />
+          <PullGroupTable title="إجمالي العينات حسب الخط" itemLabel="الخط" rows={daySummary.lines} />
+        </>
+      ) : null}
     </QmsPage>
   );
 };
+
+function PullGroupTable(props: { title: string; itemLabel: string; rows: LinePullDailyGroup[] }) {
+  const totals = props.rows.reduce((sum, row) => ({
+    pulls: sum.pulls + row.pulls,
+    samples: sum.samples + row.samples,
+    defects: sum.defects + row.defects,
+    accepted: sum.accepted + row.accepted,
+    rejected: sum.rejected + row.rejected,
+    pending: sum.pending + row.pending,
+    undecided: sum.undecided + row.undecided,
+  }), { pulls: 0, samples: 0, defects: 0, accepted: 0, rejected: 0, pending: 0, undecided: 0 });
+  return (
+    <section className="qms-card" style={{ marginTop: 12 }}>
+      <h2 className="qms-title">{props.title}</h2>
+      <table className="qms-table">
+        <thead><tr><th>{props.itemLabel}</th><th>السحبات</th><th>العينات</th><th>حالة البالتة</th><th>العيوب</th></tr></thead>
+        <tbody>
+          {props.rows.map((row) => (
+            <tr key={row.name}>
+              <td>{row.name}</td>
+              <td>{row.pulls}</td>
+              <td>{row.samples}</td>
+              <td>{row.palletStatus}</td>
+              <td>{row.defects}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>الإجمالي</td>
+            <td>{totals.pulls}</td>
+            <td>{totals.samples}</td>
+            <td>{palletStatusText(totals)}</td>
+            <td>{totals.defects}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
+  );
+}

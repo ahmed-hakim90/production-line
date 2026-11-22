@@ -1,6 +1,6 @@
 # Quality system feature parity
 
-Compared on 2026-10-28. Source evidence is `sokany-quality/Quality-System` (`db/schema.js`, `db/index.js`, `server.js`, `public/index.html`, `public/js/app.js`). Hakim evidence is `modules/quality`.
+Compared on 2026-10-28 against source commit `8b2d7ed`. The 2026-10-31 source commit `ebdd0cad` is compared in `docs/audits/quality-system-feature-parity-2026-10-31.md`. Source evidence is `sokany-quality/Quality-System` (`db/schema.js`, `db/index.js`, `server.js`, `public/index.html`, `public/js/app.js`). Hakim evidence is `modules/quality`.
 
 The isolated copy was started again on port 3010 after a seed-order fix. `runMigrations` had inserted seria lines at numbers 1–3 before `seedInitialData` inserted home lines 1–4, which violated `production_lines.line_number`. Seria seeding now runs after the home seed. A fresh disposable database contains home lines 1–4 and seria lines 5–7. The unique constraint was kept. That database was not imported into Hakim.
 
@@ -26,7 +26,7 @@ Statuses used below: Implemented and locally tested; Deployed and live-verified;
 | Flowchart analytics | `getFlowchartMetrics`, flowchart tab | `/quality/flowchart` | Implemented and verified for 2026-10-28. Pallet lot 70, inspected 13, defects 1, one accepted pallet. Reported production stays separate from the pallet lot. |
 | Products, lines, shifts, employees | source CRUD and seed | existing Hakim masters | Intentionally excluded. |
 | Source users, roles, and header auth | `x-user-role`, default admin | Hakim Auth and permission keys | Intentionally excluded as a second login system. Quality operation keys stay on the existing role screen. |
-| Incoming quality | empty dashboard | none | Intentionally excluded. |
+| Incoming quality | carton and plastic receipt boards as of 2026-10-31 | none | Not yet implemented. The 2026-10-28 note that the incoming board was empty is outdated. See the 2026-10-31 parity report. |
 | Demo seed rows | `seedInitialData` | none | Intentionally excluded. |
 | Work-order close gate | not in the source | `closeWorkOrder` and the client close restriction | Deployed to `sokany-production` on 2026-10-28: callable, both production-report handlers, Firestore rules, and Hosting bundle `index-hZFYG3Ga.js`. Policy stayed off. `WO-2026-0001` was not closed. A live authenticated denial of a direct status write was not performed. |
 | Live persistence of new collections | deployed Firestore rules | `sokany-production` rules, indexes, and Storage rules | Implemented and verified for the pallet, its defect, the saved filter, settings policy, and one photo. |

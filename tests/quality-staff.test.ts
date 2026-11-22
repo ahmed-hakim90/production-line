@@ -53,6 +53,8 @@ const qualityKeys = [
   'quality.scrap.manage',
   'quality.secondSort.view',
   'quality.secondSort.manage',
+  'quality.incoming.view',
+  'quality.incoming.manage',
   'quality.photos.view',
   'quality.photos.manage',
   'quality.reports.view',

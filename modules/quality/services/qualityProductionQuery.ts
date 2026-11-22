@@ -19,6 +19,8 @@ export const qualityProductionQuery = {
         date: String(data.date || ''),
         lineId: String(data.lineId || ''),
         productId: String(data.productId || ''),
+        productName: String(data.productNameSnapshot || ''),
+        productCode: String(data.productCodeSnapshot || ''),
         quantityProduced: Number(data.quantityProduced || 0),
       };
     });

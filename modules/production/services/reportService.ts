@@ -343,7 +343,10 @@ export const reportService = {
     });
   },
 
-  async create(data: Omit<ProductionReport, 'id' | 'createdAt'>): Promise<string | null> {
+  async create(
+    data: Omit<ProductionReport, 'id' | 'createdAt'>,
+    options?: { enforceUnique?: boolean },
+  ): Promise<string | null> {
     if (!isConfigured) return null;
 
     const required: (keyof typeof data)[] = [
@@ -397,7 +400,7 @@ export const reportService = {
         : [uniqueKey];
 
       await runTransaction(db, async (tx) => {
-        const skipUnique = skipsReportUniqueConstraint(data.reportType);
+        const skipUnique = skipsReportUniqueConstraint(data.reportType) || options?.enforceUnique === false;
         if (!skipUnique) {
           for (const key of injectionKeysToCheck) {
             const keyRef = key === uniqueKey ? uniqueRef : doc(db, UNIQUE_COLLECTION, key);
@@ -642,10 +645,12 @@ export const reportService = {
     if (!isConfigured) return;
     try {
       const reportRef = doc(db, COLLECTION, id);
+      let reportDate = '';
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(reportRef);
         if (!snap.exists()) return;
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
+        reportDate = String(current.date || '').trim();
         const uniqueKeys = getReportUniqueKeysForCleanup(current);
 
         // Firestore: all tx.get() calls must run before any writes.
@@ -683,7 +688,7 @@ export const reportService = {
           }
         }
       });
-      await productionAttendanceService.deleteForReport(id);
+      await productionAttendanceService.deleteForReport(id, reportDate);
     } catch (error) {
       console.error('reportService.delete error:', error);
       throw error;

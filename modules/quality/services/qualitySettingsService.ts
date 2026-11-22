@@ -170,6 +170,8 @@ export const qualitySettingsService = {
   async saveAqlPlan(input: AqlPlanRange): Promise<void> {
     assertQualityPermission('quality.settings.manage');
     assertAqlPlanRange(input);
+    const notes = (input.notes || '').trim();
+    if (notes.length > 200) throw new Error('ملاحظات النطاق أطول من المسموح.');
     const actor = currentQualityActor();
     const payload = stampTenant({
       batchMin: input.batchMin,
@@ -178,7 +180,7 @@ export const qualitySettingsService = {
       acceptLimit: input.acceptLimit,
       rejectLimit: input.rejectLimit,
       aqlLevel: input.aqlLevel || 'المستوى العام الثاني (Level II)',
-      notes: input.notes || '',
+      notes,
       isActive: input.isActive !== false,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,

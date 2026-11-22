@@ -173,6 +173,7 @@ export interface QualityReportFilters {
   productId?: string;
   workOrderId?: string;
   inspectionStatus?: string;
+  palletDecision?: string;
   reasonId?: string;
 }
 
@@ -182,6 +183,7 @@ export function filterQualityPallets(rows: QualityPallet[], filters: QualityRepo
     if (filters.productId && row.productId !== filters.productId) return false;
     if (filters.workOrderId && row.workOrderId !== filters.workOrderId && row.workOrderNumber !== filters.workOrderId) return false;
     if (filters.inspectionStatus && row.inspectionStatus !== filters.inspectionStatus) return false;
+    if (filters.palletDecision && row.palletDecision !== filters.palletDecision) return false;
     if (filters.reasonId) {
       const matched = (row.defects || []).some((defect) => defect.reasonId === filters.reasonId);
       if (!matched) return false;
