@@ -137,6 +137,7 @@ export const QualityHourlyPrint = forwardRef<HTMLDivElement, {
               { key: 'label', header: 'الوصف' },
               { key: 'count', header: 'العدد' },
               { key: 'notes', header: 'ملاحظة' },
+              { key: 'inspector', header: 'اكتشفه المراقب' },
             ]}
             rows={defects.map((defect, index) => ({
               key: `${defect.slotName}-${index}`,
@@ -147,6 +148,7 @@ export const QualityHourlyPrint = forwardRef<HTMLDivElement, {
                 label: defect.label || '—',
                 count: formatQualityCount(defect.count),
                 notes: defect.notes || '—',
+                inspector: defect.inspectorName || '—',
               },
             }))}
           />
@@ -224,6 +226,7 @@ export const QualityLinePullPrint = forwardRef<HTMLDivElement, {
             { key: 'code', header: 'الكود' },
             { key: 'label', header: 'الوصف' },
             { key: 'count', header: 'العدد' },
+            { key: 'inspector', header: 'اكتشفه المراقب' },
           ]}
           rows={defects.map((defect, index) => ({
             key: `${defect.period}-${index}`,
@@ -233,6 +236,7 @@ export const QualityLinePullPrint = forwardRef<HTMLDivElement, {
               code: defect.code || '—',
               label: defect.label || '—',
               count: formatQualityCount(defect.count),
+              inspector: defect.inspectorName || '—',
             },
           }))}
         />

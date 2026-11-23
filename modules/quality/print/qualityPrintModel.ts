@@ -76,6 +76,7 @@ const defectRows = (defects: QualityDefectLine[] | undefined) =>
       label: defect.reasonLabel.trim(),
       count: Number(defect.count || 0),
       notes: (defect.notes || '').trim(),
+      inspectorName: (defect.inspectorName || '').trim(),
     }));
 
 export function hourlyPrintRows(rows: QualityHourlySample[]) {

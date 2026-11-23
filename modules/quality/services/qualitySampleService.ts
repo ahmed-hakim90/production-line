@@ -63,6 +63,8 @@ async function replaceChildDefects(
       reasonLabel: defect.reasonLabel,
       count: defect.count,
       notes: defect.notes || '',
+      inspectorEmployeeId: defect.inspectorEmployeeId || '',
+      inspectorName: defect.inspectorName || '',
     });
   });
   if (parentPatch) batch.update(qmsDoc(parentCollection, parentId), parentPatch);

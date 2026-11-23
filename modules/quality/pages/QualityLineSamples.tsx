@@ -88,6 +88,7 @@ export const QualityLineSamples: React.FC = () => {
   const [reasonId, setReasonId] = useState('');
   const [defectCount, setDefectCount] = useState(1);
   const [defectNotes, setDefectNotes] = useState('');
+  const [defectInspectorId, setDefectInspectorId] = useState('');
   const [defects, setDefects] = useState<QualityDefectLine[]>([]);
   const [activeId, setActiveId] = useState('');
   const [completionRejectLimit, setCompletionRejectLimit] = useState(1);
@@ -104,6 +105,7 @@ export const QualityLineSamples: React.FC = () => {
   const [editReasonId, setEditReasonId] = useState('');
   const [editDefectCount, setEditDefectCount] = useState(1);
   const [editDefectNotes, setEditDefectNotes] = useState('');
+  const [editDefectInspectorId, setEditDefectInspectorId] = useState('');
   const [newReasonDraft, setNewReasonDraft] = useState<Pick<QualityReason, 'labelAr' | 'category'>>({
     labelAr: '',
     category: '',
@@ -279,6 +281,12 @@ export const QualityLineSamples: React.FC = () => {
       toast.error('اختر سبب العيب وأدخل عددًا صحيحًا موجبًا.');
       return;
     }
+    const defectInspector = defectInspectorId
+      ? [
+        { id: active?.inspectorEmployeeId || '', name: active?.inspectorName || '' },
+        ...(active?.additionalInspectors || []).map((item) => ({ id: item.employeeId, name: item.employeeName })),
+      ].find((item) => item.id === defectInspectorId)
+      : null;
     setDefects((current) => [...current, {
       tenantId: '',
       reasonId: reason.id,
@@ -286,10 +294,13 @@ export const QualityLineSamples: React.FC = () => {
       reasonLabel: reason.labelAr,
       count: defectCount,
       notes: defectNotes.trim(),
+      inspectorEmployeeId: defectInspector?.id,
+      inspectorName: defectInspector?.name,
     }]);
     setReasonId('');
     setDefectCount(1);
     setDefectNotes('');
+    setDefectInspectorId('');
   };
 
   const updateDefectCount = (index: number, count: number) => {
@@ -493,6 +504,13 @@ export const QualityLineSamples: React.FC = () => {
       toast.error('اختر سبب العيب وأدخل عددًا صحيحًا موجبًا.');
       return;
     }
+    const inspector = editDraft?.additionalInspectors.find((item) => item.employeeId === editDefectInspectorId);
+    const defectInspector = editDefectInspectorId
+      ? {
+        id: inspector?.employeeId || editDraft?.inspectorEmployeeId || '',
+        name: inspector?.employeeName || editDraft?.inspectorName || '',
+      }
+      : null;
     setEditDraft((current) => current ? {
       ...current,
       defects: [...current.defects, {
@@ -502,11 +520,14 @@ export const QualityLineSamples: React.FC = () => {
         reasonLabel: reason.labelAr,
         count: editDefectCount,
         notes: editDefectNotes.trim(),
+        inspectorEmployeeId: defectInspector?.id,
+        inspectorName: defectInspector?.name,
       }],
     } : current);
     setEditReasonId('');
     setEditDefectCount(1);
     setEditDefectNotes('');
+    setEditDefectInspectorId('');
   };
 
   const saveNewReason = async () => {
@@ -1038,12 +1059,32 @@ export const QualityLineSamples: React.FC = () => {
                         placeholder="ابحث عن سبب العيب..."
                         options={masters.reasons.map((reason) => ({
                           value: reason.id,
-                          label: `${reason.labelAr} (${reason.code})`,
+                          label: reason.labelAr,
                           keywords: reason.category,
                         }))}
                       />
                       <label><span className="qms-label">عدد مرات الظهور</span><input className="qms-input" type="number" min={1} step={1} value={defectCount} onChange={(event) => setDefectCount(Number(event.target.value))} /></label>
                       <label><span className="qms-label">ملاحظة فنية</span><input className="qms-input" value={defectNotes} onChange={(event) => setDefectNotes(event.target.value)} /></label>
+                      {active.additionalInspectors?.length || active.additionalInspectorEmployeeId ? (
+                        <MasterSelect
+                          label="المراقب الذي اكتشف العيب"
+                          value={defectInspectorId}
+                          onChange={setDefectInspectorId}
+                          placeholder="اختر المراقب..."
+                          options={[
+                            { value: active.inspectorEmployeeId, label: active.inspectorName },
+                            ...(active.additionalInspectors?.length
+                              ? active.additionalInspectors
+                              : [{
+                                employeeId: active.additionalInspectorEmployeeId || '',
+                                employeeName: active.additionalInspectorName || '',
+                              }]),
+                          ].filter((item) => item.employeeId || item.value).map((item) => ({
+                            value: 'employeeId' in item ? item.employeeId : item.value,
+                            label: 'employeeName' in item ? item.employeeName : item.label,
+                          }))}
+                        />
+                      ) : null}
                       <button type="button" className="qms-btn qms-btn-ghost" disabled={saving} onClick={addDefect}>إضافة العيب</button>
                     </div>
                   ) : <p className="qms-muted">ليست لديك صلاحية تسجيل العيوب.</p>}
@@ -1068,6 +1109,7 @@ export const QualityLineSamples: React.FC = () => {
                     <span className="qms-defect-edit-row">
                       <strong>{defect.reasonLabel}</strong>
                       {defect.notes ? <small>{defect.notes}</small> : null}
+                      {defect.inspectorName ? <small>اكتشفه: {defect.inspectorName}</small> : null}
                       {active.status === 'pending' && can('quality.defects.record') ? (
                         <label>
                           <span>العدد</span>
@@ -1079,7 +1121,12 @@ export const QualityLineSamples: React.FC = () => {
                       <button type="button" className="qms-btn qms-btn-ghost" disabled={saving} onClick={() => setDefects((current) => current.filter((_, itemIndex) => itemIndex !== index))}>حذف</button>
                     ) : null}
                   </div>
-                )) : <p className="qms-muted">لم تُسجل عيوب لهذه السحبة.</p>}
+                )                ) : (
+                  <p className="qms-no-defects">
+                    <CheckCircle2 size={18} aria-hidden="true" />
+                    لا توجد عيوب مسجلة لهذه السحبة
+                  </p>
+                )}
               </div>
 
               {active.status === 'pending' && can('quality.samples.inspect') ? (
@@ -1283,6 +1330,18 @@ export const QualityLineSamples: React.FC = () => {
                   <MasterSelect label="سبب العيب" value={editReasonId} onChange={setEditReasonId} placeholder="ابحث عن سبب العيب..." options={masters.reasons.map((reason) => ({ value: reason.id, label: `${reason.labelAr} (${reason.code})`, keywords: reason.category }))} />
                   <label><span className="qms-label">العدد</span><input className="qms-input" type="number" min={1} step={1} value={editDefectCount} onChange={(event) => setEditDefectCount(Number(event.target.value))} /></label>
                   <label><span className="qms-label">ملاحظات</span><input className="qms-input" value={editDefectNotes} onChange={(event) => setEditDefectNotes(event.target.value)} /></label>
+                  {editDraft.additionalInspectors.length > 0 ? (
+                    <MasterSelect
+                      label="المراقب الذي اكتشف العيب"
+                      value={editDefectInspectorId}
+                      onChange={setEditDefectInspectorId}
+                      placeholder="اختر المراقب..."
+                      options={[
+                        { value: editDraft.inspectorEmployeeId, label: editDraft.inspectorName },
+                        ...editDraft.additionalInspectors.map((item) => ({ value: item.employeeId, label: item.employeeName })),
+                      ].filter((item) => item.value).map((item) => ({ value: item.value, label: item.label }))}
+                    />
+                  ) : null}
                   <button type="button" className="qms-btn qms-btn-ghost" onClick={addEditDefect}>إضافة</button>
                 </div>
               ) : null}

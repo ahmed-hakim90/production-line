@@ -18,6 +18,8 @@ export interface QualityDefectLine {
   reasonLabel: string;
   count: number;
   notes?: string;
+  inspectorEmployeeId?: string;
+  inspectorName?: string;
 }
 
 export interface QualityPallet {

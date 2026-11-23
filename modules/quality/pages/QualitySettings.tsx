@@ -74,7 +74,9 @@ export const QualitySettings: React.FC = () => {
     setStations(nextStations);
     setSlots([...hourlySlots, ...lineSlots]);
     setTags(nextTags);
-    setTechnicians(nextTechnicians);
+    setTechnicians([...nextTechnicians].sort((a, b) =>
+      a.code.localeCompare(b.code, 'ar', { numeric: true })
+      || a.name.localeCompare(b.name, 'ar')));
     setProductionTags(nextProductionTags);
     const active = saved.filter((plan) => plan.isActive);
     setUsingStandard(active.length === 0);
