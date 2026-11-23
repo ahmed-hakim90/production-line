@@ -1,17 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { CheckCircle2, ClipboardList, Clock3, PackageCheck, XCircle } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { usePrintEngine } from '@/utils/printManager';
 import { QualityLinePullPrint } from '../components/QualityPrintDocuments';
 import { qualityRecordPrintAllowed, rowsMatchingTenant } from '../print/qualityPrintModel';
 import { activeTenantId, qualityUserMessage } from '../services/qualityGateway';
-import { totalLinePullSampleCount } from '../domain/samples';
+import { totalLinePullSampleCount, validateAdditionalInspectorAssignments } from '../domain/samples';
 import { localDateIso } from '../domain/time';
 import type {
   QualityDefectLine,
   QualityLinePull,
+  QualityAdditionalInspector,
   QualityProductionTag,
   QualityReason,
   QualitySampleSlot,
@@ -41,6 +43,7 @@ interface PullEditDraft {
   inspectorEmployeeId: string;
   inspectorName: string;
   additionalInspectorEmployeeId: string;
+  additionalInspectors: QualityAdditionalInspector[];
   sampleCount: number;
   additionalSampleCount: number;
   rejectLimit: number;
@@ -73,10 +76,8 @@ export const QualityLineSamples: React.FC = () => {
   const [lineId, setLineId] = useState('');
   const [stationId, setStationId] = useState('');
   const [inspectorId, setInspectorId] = useState('');
-  const [additionalInspectorEnabled, setAdditionalInspectorEnabled] = useState(false);
-  const [extraInspectorId, setExtraInspectorId] = useState('');
+  const [additionalInspectors, setAdditionalInspectors] = useState<QualityAdditionalInspector[]>([]);
   const [sampleCount, setSampleCount] = useState(10);
-  const [extraCount, setExtraCount] = useState(0);
   const [rejectLimit, setRejectLimit] = useState(1);
   const [reasonId, setReasonId] = useState('');
   const [defectCount, setDefectCount] = useState(1);
@@ -148,7 +149,9 @@ export const QualityLineSamples: React.FC = () => {
   const visibleProductionTags = productionTags
     .filter((tag) => tag.isActive !== false)
     .filter((tag) => matchesSector(sector, tag.sector));
-  const totalSampleCount = sampleCount + (additionalInspectorEnabled ? extraCount : 0);
+  const additionalAssignedCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
+  const primarySampleCount = Math.max(0, sampleCount - additionalAssignedCount);
+  const totalSampleCount = sampleCount;
   const visibleRows = rows.filter((row) => (
     (!lineFilter || row.lineId === lineFilter)
     && (!slotFilter || row.slotKey === slotFilter)
@@ -170,6 +173,28 @@ export const QualityLineSamples: React.FC = () => {
     }
   };
 
+  const addAdditionalInspector = (employeeId: string) => {
+    if (!employeeId) return;
+    if (employeeId === inspectorId) {
+      toast.error('المراقب الإضافي يجب أن يكون مختلفًا عن المراقب الأساسي.');
+      return;
+    }
+    if (additionalInspectors.some((item) => item.employeeId === employeeId)) {
+      toast.error('تمت إضافة هذا المراقب بالفعل.');
+      return;
+    }
+    const employee = masters.employees.find((item) => item.id === employeeId);
+    const assignment = staff.assignments.find((item) => item.employeeId === employeeId);
+    const name = employee?.name || (assignment && 'employeeName' in assignment ? assignment.employeeName : '') || 'مراقب إضافي';
+    setAdditionalInspectors((current) => [...current, { employeeId, employeeName: name, sampleCount: 1 }]);
+  };
+
+  const updateAdditionalInspectorCount = (employeeId: string, count: number) => {
+    setAdditionalInspectors((current) => current.map((item) => item.employeeId === employeeId
+      ? { ...item, sampleCount: Math.max(0, Math.floor(count)) }
+      : item));
+  };
+
   const create = async () => {
     const slot = slots.find((item) => item.slotKey === slotKey);
     const tag = visibleProductionTags.find((item) => item.id === productionTagId);
@@ -182,8 +207,6 @@ export const QualityLineSamples: React.FC = () => {
     const station = stations.find((item) => item.id === stationId);
     const inspectorRecord = masters.employees.find((item) => item.id === inspectorId)
       || staff.assignments.find((item) => item.employeeId === inspectorId);
-    const additionalInspectorRecord = masters.employees.find((item) => item.id === extraInspectorId)
-      || staff.assignments.find((item) => item.employeeId === extraInspectorId);
     const inspector = station
       ? {
         id: station.defaultInspectorEmployeeId || inspectorId || station.id,
@@ -193,17 +216,14 @@ export const QualityLineSamples: React.FC = () => {
             : ''),
       }
       : null;
-    const additionalInspector = additionalInspectorRecord
-      ? 'employeeId' in additionalInspectorRecord
-        ? { id: additionalInspectorRecord.employeeId, name: additionalInspectorRecord.employeeName }
-        : { id: additionalInspectorRecord.id || '', name: additionalInspectorRecord.name }
-      : null;
     if (!slot || !tag || !line || !product || !station || !inspector) {
       toast.error('أكمل التاريخ والفترة ووسم الخط والمنتج ومحطة الفحص.');
       return;
     }
-    if (additionalInspectorEnabled && (!additionalInspector || extraCount < 1)) {
-      toast.error('اختر المراقب الإضافي وأدخل عدد عيناته.');
+    try {
+      validateAdditionalInspectorAssignments(additionalInspectors, inspector.id || '', sampleCount);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'تحقق من توزيع عينات المراقبين.');
       return;
     }
 
@@ -223,17 +243,16 @@ export const QualityLineSamples: React.FC = () => {
         stationName: station.name,
         inspectorEmployeeId: inspector.id || '',
         inspectorName: inspector.name,
-        additionalInspectorEmployeeId: additionalInspectorEnabled ? additionalInspector?.id : undefined,
-        additionalInspectorName: additionalInspectorEnabled ? additionalInspector?.name : undefined,
-        additionalSampleCount: additionalInspectorEnabled ? extraCount : 0,
+        additionalInspectors,
+        additionalInspectorEmployeeId: additionalInspectors[0]?.employeeId,
+        additionalInspectorName: additionalInspectors[0]?.employeeName,
+        additionalSampleCount: additionalInspectors[0]?.sampleCount || 0,
         sampleCount,
         rejectLimit,
         sector: tag.sector,
       });
       toast.success('تم تسجيل السحبة وبدء الفحص.');
-      setAdditionalInspectorEnabled(false);
-      setExtraInspectorId('');
-      setExtraCount(0);
+      setAdditionalInspectors([]);
       await load();
     } catch (error) {
       toast.error(qualityUserMessage(error, 'تعذر تسجيل السحبة.'));
@@ -259,6 +278,12 @@ export const QualityLineSamples: React.FC = () => {
     setReasonId('');
     setDefectCount(1);
     setDefectNotes('');
+  };
+
+  const updateDefectCount = (index: number, count: number) => {
+    setDefects((current) => current.map((defect, itemIndex) => itemIndex === index
+      ? { ...defect, count: Math.max(1, Math.floor(count)) }
+      : defect));
   };
 
   const complete = async () => {
@@ -316,6 +341,14 @@ export const QualityLineSamples: React.FC = () => {
         inspectorEmployeeId: row.inspectorEmployeeId,
         inspectorName: row.inspectorName,
         additionalInspectorEmployeeId: row.additionalInspectorEmployeeId || '',
+        additionalInspectors: row.additionalInspectors?.map((item) => ({ ...item }))
+          || (row.additionalInspectorEmployeeId
+            ? [{
+              employeeId: row.additionalInspectorEmployeeId,
+              employeeName: row.additionalInspectorName || '',
+              sampleCount: row.additionalSampleCount || 0,
+            }]
+            : []),
         sampleCount: row.sampleCount,
         additionalSampleCount: row.additionalSampleCount || 0,
         rejectLimit: row.rejectLimit ?? policies.lineSampleRejectLimit,
@@ -343,8 +376,6 @@ export const QualityLineSamples: React.FC = () => {
     const station = [...stations, ...managedStations].find((item) => item.id === editDraft.stationId);
     const inspectorRecord = masters.employees.find((item) => item.id === editDraft.inspectorEmployeeId)
       || staff.assignments.find((item) => item.employeeId === editDraft.inspectorEmployeeId);
-    const additionalInspectorRecord = masters.employees.find((item) => item.id === editDraft.additionalInspectorEmployeeId)
-      || staff.assignments.find((item) => item.employeeId === editDraft.additionalInspectorEmployeeId);
     const inspector = station
       ? {
         id: station.defaultInspectorEmployeeId || editDraft.inspectorEmployeeId || station.id,
@@ -354,11 +385,6 @@ export const QualityLineSamples: React.FC = () => {
             : editDraft.inspectorName),
       }
       : null;
-    const additionalInspector = additionalInspectorRecord
-      ? 'employeeId' in additionalInspectorRecord
-        ? { id: additionalInspectorRecord.employeeId, name: additionalInspectorRecord.employeeName }
-        : { id: additionalInspectorRecord.id || '', name: additionalInspectorRecord.name }
-      : null;
     const slot = [...slots, ...managedSlots].find((item) => item.slotKey === editDraft.slotKey);
     if (!line.id || !product.id || !station || !inspector || !slot) {
       toast.error('تحقق من اختيار الفترة ووسم الخط والمنتج والمحطة.');
@@ -366,6 +392,12 @@ export const QualityLineSamples: React.FC = () => {
     }
     if (editDraft.originalStatus === 'completed' && !editDraft.reopenReason.trim()) {
       toast.error('سبب إعادة الفتح مطلوب لتعديل سحبة مكتملة.');
+      return;
+    }
+    try {
+      validateAdditionalInspectorAssignments(editDraft.additionalInspectors, inspector?.id || '', editDraft.sampleCount);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'تحقق من توزيع عينات المراقبين.');
       return;
     }
     setSaving(true);
@@ -389,9 +421,10 @@ export const QualityLineSamples: React.FC = () => {
         stationName: station.name,
         inspectorEmployeeId: inspector.id || '',
         inspectorName: inspector.name,
-        additionalInspectorEmployeeId: editDraft.additionalInspectorEmployeeId || undefined,
-        additionalInspectorName: additionalInspector?.name,
-        additionalSampleCount: editDraft.additionalInspectorEmployeeId ? editDraft.additionalSampleCount : 0,
+        additionalInspectors: editDraft.additionalInspectors,
+        additionalInspectorEmployeeId: editDraft.additionalInspectors[0]?.employeeId,
+        additionalInspectorName: editDraft.additionalInspectors[0]?.employeeName,
+        additionalSampleCount: editDraft.additionalInspectors[0]?.sampleCount || 0,
         sampleCount: editDraft.sampleCount,
         rejectLimit: editDraft.rejectLimit,
         sector,
@@ -607,9 +640,7 @@ export const QualityLineSamples: React.FC = () => {
     || staff.assignments.find((assignment) => assignment.employeeId === editStation?.defaultInspectorEmployeeId)?.employeeName
     || editDraft?.inspectorName
     || '';
-  const editTotalSamples = editDraft
-    ? editDraft.sampleCount + (editDraft.additionalInspectorEmployeeId ? editDraft.additionalSampleCount : 0)
-    : 0;
+  const editTotalSamples = editDraft?.sampleCount || 0;
   const editDefectTotal = editDraft?.defects.reduce((sum, defect) => sum + defect.count, 0) || 0;
   const pullSlotOptions = [...slots, ...managedSlots, ...rows.map((row) => ({
     id: row.slotKey,
@@ -622,6 +653,20 @@ export const QualityLineSamples: React.FC = () => {
     kind: 'line' as const,
     isActive: false,
   }))].filter((slot, index, all) => all.findIndex((candidate) => candidate.slotKey === slot.slotKey) === index);
+  const selectedProductionTag = visibleProductionTags.find((tag) => tag.id === productionTagId);
+  const selectedStation = stations.find((station) => station.id === stationId);
+  const selectedSlot = slots.find((slot) => slot.slotKey === slotKey);
+  const summaryCounts = {
+    pending: visibleRows.filter((row) => row.status !== 'completed').length,
+    accepted: visibleRows.filter((row) => row.status === 'completed' && !row.palletRejected).length,
+    rejected: visibleRows.filter((row) => row.status === 'completed' && row.palletRejected).length,
+    samples: visibleRows.reduce((sum, row) => sum + totalLinePullSampleCount(row), 0),
+  };
+  const pullSetupSteps = [
+    { label: 'الخط والمنتج', value: selectedProductionTag?.lineName || 'لم يتم الاختيار', complete: Boolean(selectedProductionTag) },
+    { label: 'محطة الفحص', value: selectedStation?.name || 'لم يتم الاختيار', complete: Boolean(selectedStation) },
+    { label: 'فترة السحب', value: selectedSlot ? `${selectedSlot.startTime}–${selectedSlot.endTime}` : 'لم يتم الاختيار', complete: Boolean(selectedSlot) },
+  ];
 
   return (
     <QmsPage
@@ -642,6 +687,29 @@ export const QualityLineSamples: React.FC = () => {
         </>
       }
     >
+      <section className="qms-line-pull-overview" aria-label="ملخص سحبات العينات المعروضة">
+        <div className="qms-line-stat qms-line-stat--total">
+          <span className="qms-line-stat-icon" aria-hidden="true"><ClipboardList size={20} /></span>
+          <span className="qms-line-stat-copy"><span>السحبات المعروضة</span><strong>{visibleRows.length}</strong></span>
+        </div>
+        <div className="qms-line-stat qms-line-stat--pending">
+          <span className="qms-line-stat-icon" aria-hidden="true"><Clock3 size={20} /></span>
+          <span className="qms-line-stat-copy"><span>قيد الفحص</span><strong>{summaryCounts.pending}</strong></span>
+        </div>
+        <div className="qms-line-stat qms-line-stat--accepted">
+          <span className="qms-line-stat-icon" aria-hidden="true"><CheckCircle2 size={20} /></span>
+          <span className="qms-line-stat-copy"><span>مقبولة</span><strong>{summaryCounts.accepted}</strong></span>
+        </div>
+        <div className="qms-line-stat qms-line-stat--rejected">
+          <span className="qms-line-stat-icon" aria-hidden="true"><XCircle size={20} /></span>
+          <span className="qms-line-stat-copy"><span>مرفوضة</span><strong>{summaryCounts.rejected}</strong></span>
+        </div>
+        <div className="qms-line-stat qms-line-stat--samples">
+          <span className="qms-line-stat-icon" aria-hidden="true"><PackageCheck size={20} /></span>
+          <span className="qms-line-stat-copy"><span>إجمالي العينات</span><strong>{summaryCounts.samples}</strong></span>
+        </div>
+      </section>
+
       <section className="qms-card" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">القسم</h2>
         <SectorSwitch value={sector} onChange={(value) => {
@@ -678,58 +746,124 @@ export const QualityLineSamples: React.FC = () => {
       </section>
 
       <section className="qms-card qms-pull-form">
-        <h2 className="qms-title">⊕ تسجيل سحبة عينات جديدة</h2>
+        <div className="qms-pull-form-heading">
+          <span className="qms-pull-form-mark" aria-hidden="true">＋</span>
+          <div>
+            <h2 className="qms-title">تسجيل سحبة عينات جديدة</h2>
+            <p className="qms-muted">اختَر بيانات التشغيل أولًا، ثم حدّد حجم العينة وسجّل السحبة.</p>
+          </div>
+        </div>
+        <div className="qms-pull-setup" aria-label="اكتمال بيانات السحبة">
+          {pullSetupSteps.map((step, index) => (
+            <div className={`qms-pull-setup-step${step.complete ? ' is-complete' : ''}`} key={step.label}>
+              <span className="qms-pull-setup-number">{step.complete ? <CheckCircle2 size={17} aria-hidden="true" /> : index + 1}</span>
+              <span><strong>{step.label}</strong><small>{step.value}</small></span>
+            </div>
+          ))}
+        </div>
+        <div className="qms-pull-selection-box">
+          <div className="qms-pull-selection-column">
+            <span className="qms-pull-selection-title">وسم الخط والمنتج</span>
+            <div className="qms-pull-card-list">
+              {visibleProductionTags.map((tag) => (
+                <button
+                  type="button"
+                  key={tag.id}
+                  className={`qms-pull-option-card${productionTagId === tag.id ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    setProductionTagId(tag.id);
+                    setLineId(tag.lineId || `quality-tag:${tag.id}`);
+                    const station = stations.find((item) => item.id === stationId);
+                    setInspectorId(station?.defaultInspectorEmployeeId || '');
+                  }}
+                >
+                  <span className="qms-pull-option-mark">خط</span>
+                  <span><strong>{tag.lineName}</strong><small>{tag.productName}</small></span>
+                  {productionTagId === tag.id ? <CheckCircle2 size={18} aria-hidden="true" /> : null}
+                </button>
+              ))}
+              {visibleProductionTags.length === 0 ? <p className="qms-muted">لا توجد أوسمة نشطة لهذا القسم.</p> : null}
+            </div>
+          </div>
+          <div className="qms-pull-selection-column">
+            <span className="qms-pull-selection-title">محطة الفحص والمراقب</span>
+            <div className="qms-pull-card-list">
+              {stations.map((station) => (
+                <button
+                  type="button"
+                  key={station.id}
+                  className={`qms-pull-option-card${stationId === station.id ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    setStationId(station.id);
+                    setInspectorId(station.defaultInspectorEmployeeId || '');
+                  }}
+                >
+                  <span className="qms-pull-option-mark is-station">محطة</span>
+                  <span><strong>{station.name}</strong><small>{station.defaultInspectorName || 'المراقب غير محدد'}</small></span>
+                  {stationId === station.id ? <CheckCircle2 size={18} aria-hidden="true" /> : null}
+                </button>
+              ))}
+              {stations.length === 0 ? <p className="qms-muted">لا توجد محطات نشطة.</p> : null}
+            </div>
+          </div>
+        </div>
         <div className="qms-pull-form-grid">
           <label>
             <span className="qms-label">تاريخ السحب</span>
             <input className="qms-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </label>
-          <MasterSelect label="وسم الخط والمنتج" value={productionTagId} onChange={(value) => {
-            setProductionTagId(value);
-            const tag = visibleProductionTags.find((item) => item.id === value);
-            setLineId(tag?.lineId || (tag ? `quality-tag:${tag.id}` : ''));
-            const station = stations.find((item) => item.id === stationId);
-            setInspectorId(station?.defaultInspectorEmployeeId || '');
-          }} placeholder="اختر الوسم..." options={visibleProductionTags.map((tag) => ({
-            value: tag.id,
-            label: `${tag.lineName} — ${tag.productName}`,
-            keywords: tag.sector === 'seria' ? 'السريا' : 'الأجهزة المنزلية',
-          }))} />
-          <MasterSelect label="محطة الفحص" value={stationId} onChange={(value) => {
-            setStationId(value);
-            const station = stations.find((item) => item.id === value);
-            setInspectorId(station?.defaultInspectorEmployeeId || '');
-          }} placeholder="اختر محطة الفحص..." options={stations.map((station) => ({ value: station.id, label: station.name }))} />
           <MasterSelect label="فترة السحب" value={slotKey} onChange={setSlotKey} placeholder="اختر فترة السحب..." options={slots.map((slot) => ({ value: slot.slotKey, label: `${slot.startTime}–${slot.endTime}` }))} />
           <label>
-            <span className="qms-label">عدد العينات الأساسية</span>
+            <span className="qms-label">إجمالي عينات السحبة</span>
             <input className="qms-input" type="number" min={1} step={1} value={sampleCount} onChange={(event) => setSampleCount(Number(event.target.value))} />
           </label>
-          <label><span className="qms-label">مراقب المحطة</span><input className="qms-input" value={stations.find((item) => item.id === stationId)?.defaultInspectorName || (masters.employees.find((item) => item.id === inspectorId)?.name) || (staff.assignments.find((item) => item.employeeId === inspectorId)?.employeeName) || ''} readOnly placeholder="اختر محطة الفحص أولاً" /></label>
-          <label className="qms-additional-toggle">
-            <input type="checkbox" checked={additionalInspectorEnabled} onChange={(event) => {
-              setAdditionalInspectorEnabled(event.target.checked);
-              if (!event.target.checked) {
-                setExtraInspectorId('');
-                setExtraCount(0);
-              }
-            }} />
-            <span>
-              <strong>هل شارك مراقب إضافي في السحبة؟</strong>
-              <small>العينة الإضافية تُضاف إلى الإجمالي وتُسجل على اسم المراقب الإضافي.</small>
-            </span>
-          </label>
-          {additionalInspectorEnabled ? (
-            <div className="qms-additional-fields">
-              <MasterSelect label="المراقب الإضافي" value={extraInspectorId} onChange={setExtraInspectorId} placeholder="اختر المراقب الإضافي..." options={inspectorChoices.filter((option) => option.value !== inspectorId)} />
-              <label>
-                <span className="qms-label">عدد العينات الإضافية</span>
-                <input className="qms-input" type="number" min={1} step={1} value={extraCount} onChange={(event) => setExtraCount(Number(event.target.value))} />
-              </label>
+        </div>
+        <div className="qms-inspector-distribution">
+          <div className="qms-inspector-distribution-header">
+            <div>
+              <strong>توزيع العينات على المراقبين</strong>
+              <small>إجمالي السحبة {totalSampleCount} عينة؛ المراقب الأساسي يأخذ المتبقي تلقائيًا.</small>
             </div>
+          </div>
+          <div className="qms-inspector-split">
+            <div className="qms-inspector-primary">
+              <span className="qms-pull-option-mark is-primary">أساسي</span>
+              <span><strong>{selectedStation?.defaultInspectorName || 'المراقب الأساسي للمحطة'}</strong><small>العدد التلقائي: {primarySampleCount} عينة</small></span>
+            </div>
+            {additionalInspectors.map((item) => (
+              <div className="qms-inspector-additional" key={item.employeeId}>
+                <span className="qms-pull-option-mark is-additional">إضافي</span>
+                <span className="qms-inspector-additional-name"><strong>{item.employeeName}</strong><small>مراقب إضافي</small></span>
+                <label>
+                  <span>العدد</span>
+                  <input
+                    className="qms-input"
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={item.sampleCount}
+                    onChange={(event) => updateAdditionalInspectorCount(item.employeeId, Number(event.target.value))}
+                  />
+                </label>
+                <button type="button" className="qms-btn qms-btn-ghost qms-btn-danger" onClick={() => setAdditionalInspectors((current) => current.filter((entry) => entry.employeeId !== item.employeeId))}>إزالة</button>
+              </div>
+            ))}
+          </div>
+          <div className="qms-add-inspector">
+            <MasterSelect
+              label="إضافة مراقب إضافي"
+              value=""
+              onChange={addAdditionalInspector}
+              placeholder="اختر مراقبًا إضافيًا..."
+              options={inspectorChoices
+                .filter((option) => option.value !== inspectorId && !additionalInspectors.some((item) => item.employeeId === option.value))
+                .map((option) => ({ value: option.value, label: option.label }))}
+            />
+          </div>
+          {additionalAssignedCount >= sampleCount ? (
+            <p className="qms-error qms-inline-error">توزيع المراقبين الإضافيين يستهلك كامل السحبة؛ يجب ترك عينة للمراقب الأساسي.</p>
           ) : null}
         </div>
-        <p className="qms-muted qms-total-samples">إجمالي العينات المسجلة: <strong>{totalSampleCount}</strong></p>
         <div className="qms-form-actions">
           <button type="button" className="qms-btn qms-btn-primary" disabled={saving || !canCreatePull} onClick={() => void create()}>
             ▣ تسجيل السحبة
@@ -800,21 +934,33 @@ export const QualityLineSamples: React.FC = () => {
             setStatusFilter('all');
           }}>إعادة ضبط الفلاتر</button>
         </div>
+        <div className="qms-line-status-legend" aria-label="دليل ألوان حالات الفحص">
+          <span><i className="qms-line-status-dot is-pending" />قيد الفحص</span>
+          <span><i className="qms-line-status-dot is-accepted" />مقبولة</span>
+          <span><i className="qms-line-status-dot is-rejected" />مرفوضة</span>
+        </div>
         <div className="qms-table-wrap">
-          <table className="qms-table">
+          <table className="qms-table qms-line-pull-table">
             <thead><tr><th>التاريخ</th><th>الفترة</th><th>خط الإنتاج</th><th>المنتج</th><th>محطة الفحص</th><th>المراقب</th><th>العينات</th><th>العيوب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody>
               {visibleRows.map((row) => (
-                <tr key={row.id} className={row.palletRejected ? 'qms-rejected' : undefined}>
+                <tr key={row.id} className={`qms-line-pull-row ${row.status !== 'completed' ? 'is-pending' : row.palletRejected ? 'is-rejected' : 'is-accepted'}`}>
                   <td>{row.date}</td>
                   <td>{row.startTime}–{row.endTime}</td>
                   <td>{row.lineName}</td>
                   <td>{row.productName}</td>
                   <td>{row.stationName}</td>
-                  <td>{row.inspectorName}{row.additionalInspectorName ? ` + ${row.additionalInspectorName} (${row.additionalSampleCount} عينة)` : ''}</td>
-                  <td>{totalLinePullSampleCount(row)}</td>
-                  <td>{row.defectCount}</td>
-                  <td>{row.status === 'completed' ? (row.palletRejected ? 'مرفوضة' : 'مقبولة') : 'قيد الفحص'}</td>
+                  <td>{row.inspectorName}{row.additionalInspectors?.length
+                    ? ` + ${row.additionalInspectors.map((item) => `${item.employeeName} (${item.sampleCount})`).join(' + ')}`
+                    : row.additionalInspectorName ? ` + ${row.additionalInspectorName} (${row.additionalSampleCount} عينة)` : ''}</td>
+                  <td><span className="qms-line-count qms-line-count--samples">{totalLinePullSampleCount(row)}</span></td>
+                  <td><span className={`qms-line-count${row.defectCount > 0 ? ' qms-line-count--defects' : ''}`}>{row.defectCount}</span></td>
+                  <td>
+                    <span className={`qms-line-status${row.status !== 'completed' ? ' is-pending' : row.palletRejected ? ' is-rejected' : ' is-accepted'}`}>
+                      <i className={`qms-line-status-dot${row.status !== 'completed' ? ' is-pending' : row.palletRejected ? ' is-rejected' : ' is-accepted'}`} />
+                      {row.status !== 'completed' ? 'قيد الفحص' : row.palletRejected ? 'مرفوضة' : 'مقبولة'}
+                    </span>
+                  </td>
                   <td className="qms-line-pull-actions">
                     <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void openInspection(row)}>
                       {row.status === 'completed' ? 'عرض الفحص' : 'فتح الفحص'}
@@ -890,7 +1036,16 @@ export const QualityLineSamples: React.FC = () => {
               <div className="qms-line-defect-list">
                 {defects.length > 0 ? defects.map((defect, index) => (
                   <div className="qms-row qms-defect-entry" key={`${defect.reasonId}-${index}`}>
-                    <span>{defect.reasonLabel} × {defect.count}{defect.notes ? ` — ${defect.notes}` : ''}</span>
+                    <span className="qms-defect-edit-row">
+                      <strong>{defect.reasonLabel}</strong>
+                      {defect.notes ? <small>{defect.notes}</small> : null}
+                      {active.status === 'pending' && can('quality.defects.record') ? (
+                        <label>
+                          <span>العدد</span>
+                          <input className="qms-input" type="number" min={1} step={1} value={defect.count} onChange={(event) => updateDefectCount(index, Number(event.target.value))} />
+                        </label>
+                      ) : <b>× {defect.count}</b>}
+                    </span>
                     {active.status === 'pending' && can('quality.defects.record') ? (
                       <button type="button" className="qms-btn qms-btn-ghost" disabled={saving} onClick={() => setDefects((current) => current.filter((_, itemIndex) => itemIndex !== index))}>حذف</button>
                     ) : null}
@@ -1043,22 +1198,47 @@ export const QualityLineSamples: React.FC = () => {
                 }} placeholder="اختر المحطة..." options={editStations.map((station) => ({ value: station.id, label: station.isActive === false ? `${station.name} (متوقفة)` : station.name }))} />
                 <MasterSelect label="الفترة" value={editDraft.slotKey} onChange={(value) => updateEditDraft('slotKey', value)} placeholder="اختر الفترة..." options={editSlotOptions.map((slot) => ({ value: slot.slotKey, label: `${slot.startTime}–${slot.endTime}${slot.isActive ? '' : ' (متوقفة)'}` }))} />
                 <label><span className="qms-label">مراقب المحطة</span><input className="qms-input" value={editStationInspectorName} readOnly placeholder="اختر محطة الفحص أولاً" /></label>
-                <label><span className="qms-label">عدد العينات الأساسية</span><input className="qms-input" type="number" min={1} step={1} value={editDraft.sampleCount} onChange={(event) => updateEditDraft('sampleCount', Number(event.target.value))} /></label>
+                <label><span className="qms-label">إجمالي عينات السحبة</span><input className="qms-input" type="number" min={1} step={1} value={editDraft.sampleCount} onChange={(event) => updateEditDraft('sampleCount', Number(event.target.value))} /></label>
                 <label><span className="qms-label">حد الرفض</span><input className="qms-input" type="number" min={0} step={1} value={editDraft.rejectLimit} onChange={(event) => updateEditDraft('rejectLimit', Math.max(0, Number(event.target.value)))} /></label>
-                <label>
-                  <span className="qms-label">المراقب الإضافي (اختياري)</span>
-                  <select className="qms-input" value={editDraft.additionalInspectorEmployeeId} onChange={(event) => updateEditDraft('additionalInspectorEmployeeId', event.target.value)}>
-                    <option value="">بدون مراقب إضافي</option>
-                    {editInspectorOptions.filter((option) => option.value !== editDraft.inspectorEmployeeId).map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-                {editDraft.additionalInspectorEmployeeId ? (
-                  <label><span className="qms-label">عدد العينات الإضافية</span><input className="qms-input" type="number" min={1} step={1} value={editDraft.additionalSampleCount} onChange={(event) => updateEditDraft('additionalSampleCount', Number(event.target.value))} /></label>
-                ) : null}
               </div>
-              <p className="qms-muted">إجمالي العينات: {editTotalSamples}</p>
+              <div className="qms-inspector-distribution">
+                <div className="qms-inspector-distribution-header"><strong>توزيع العينات على المراقبين</strong></div>
+                <div className="qms-inspector-split">
+                  <div className="qms-inspector-primary">
+                    <span className="qms-pull-option-mark is-primary">أساسي</span>
+                    <span><strong>{editStationInspectorName || 'المراقب الأساسي'}</strong><small>المتبقي: {editDraft.sampleCount - editDraft.additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0)} عينة</small></span>
+                  </div>
+                  {editDraft.additionalInspectors.map((item) => (
+                    <div className="qms-inspector-additional" key={item.employeeId}>
+                      <span className="qms-pull-option-mark is-additional">إضافي</span>
+                      <span className="qms-inspector-additional-name"><strong>{item.employeeName}</strong></span>
+                      <label><span>العدد</span><input className="qms-input" type="number" min={1} step={1} value={item.sampleCount} onChange={(event) => updateEditDraft('additionalInspectors', editDraft.additionalInspectors.map((entry) => entry.employeeId === item.employeeId
+                        ? { ...entry, sampleCount: Math.max(0, Math.floor(Number(event.target.value))) }
+                        : entry))} /></label>
+                      <button type="button" className="qms-btn qms-btn-ghost qms-btn-danger" onClick={() => updateEditDraft('additionalInspectors', editDraft.additionalInspectors.filter((entry) => entry.employeeId !== item.employeeId))}>إزالة</button>
+                    </div>
+                  ))}
+                </div>
+                <div className="qms-add-inspector">
+                  <MasterSelect
+                    label="إضافة مراقب إضافي"
+                    value=""
+                    onChange={(employeeId) => {
+                      const option = editInspectorOptions.find((item) => item.value === employeeId);
+                      if (!option || editDraft.additionalInspectors.some((item) => item.employeeId === employeeId)) return;
+                      updateEditDraft('additionalInspectors', [...editDraft.additionalInspectors, {
+                        employeeId,
+                        employeeName: option.label,
+                        sampleCount: 1,
+                      }]);
+                    }}
+                    placeholder="اختر مراقبًا إضافيًا..."
+                    options={editInspectorOptions
+                      .filter((option) => option.value !== editDraft.inspectorEmployeeId && !editDraft.additionalInspectors.some((item) => item.employeeId === option.value))
+                      .map((option) => ({ value: option.value, label: option.label }))}
+                  />
+                </div>
+              </div>
               {editDraft.originalStatus === 'completed' ? (
                 <label><span className="qms-label">سبب إعادة الفتح</span><input className="qms-input" value={editDraft.reopenReason} onChange={(event) => updateEditDraft('reopenReason', event.target.value)} /></label>
               ) : null}
@@ -1074,7 +1254,21 @@ export const QualityLineSamples: React.FC = () => {
               <div className="qms-line-defect-list">
                 {editDraft.defects.map((defect, index) => (
                   <div className="qms-row qms-defect-entry" key={`${defect.reasonId}-${index}`}>
-                    <span>{defect.reasonLabel} × {defect.count}{defect.notes ? ` — ${defect.notes}` : ''}</span>
+                    <span className="qms-defect-edit-row">
+                      <strong>{defect.reasonLabel}</strong>
+                      {defect.notes ? <small>{defect.notes}</small> : null}
+                      {can('quality.defects.record') ? (
+                        <label>
+                          <span>العدد</span>
+                          <input className="qms-input" type="number" min={1} step={1} value={defect.count} onChange={(event) => {
+                            const count = Math.max(1, Math.floor(Number(event.target.value)));
+                            updateEditDraft('defects', editDraft.defects.map((item, itemIndex) => itemIndex === index
+                              ? { ...item, count }
+                              : item));
+                          }} />
+                        </label>
+                      ) : <b>× {defect.count}</b>}
+                    </span>
                     {can('quality.defects.record') ? (
                       <button type="button" className="qms-btn qms-btn-ghost" onClick={() => updateEditDraft('defects', editDraft.defects.filter((_, itemIndex) => itemIndex !== index))}>حذف</button>
                     ) : null}

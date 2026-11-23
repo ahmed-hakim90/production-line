@@ -1,9 +1,9 @@
 import { addDoc, deleteDoc, getDocs, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/services/firebase';
-import { assertIsoDate, assertRequiredText, assertSampleCount, resolveLinePullDecision, totalLinePullSampleCount, validateAdditionalInspector } from '../domain/samples';
+import { assertIsoDate, assertRequiredText, assertSampleCount, resolveLinePullDecision, totalLinePullSampleCount, validateAdditionalInspectorAssignments } from '../domain/samples';
 import { assertSectorMatch, type QualitySector } from '../domain/sector';
 import { localTimeHm } from '../domain/time';
-import type { QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus } from '../model';
+import type { QualityAdditionalInspector, QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus } from '../model';
 import { qualityStaffService } from './qualityStaffService';
 import {
   QMS_COLLECTIONS,
@@ -167,6 +167,7 @@ export const qualitySampleService = {
     additionalInspectorEmployeeId?: string;
     additionalInspectorName?: string;
     additionalSampleCount?: number;
+    additionalInspectors?: QualityAdditionalInspector[];
     sampleCount: number;
     rejectLimit?: number;
     sector: QualitySector;
@@ -186,20 +187,28 @@ export const qualitySampleService = {
       lineId: input.lineId,
       stationId: input.stationId,
     });
-    const extraInspector = input.additionalInspectorEmployeeId
-      ? await qualityStaffService.requireSelectableInspector({
-        employeeId: input.additionalInspectorEmployeeId,
+    const additionalInspectorInput = input.additionalInspectors?.length
+      ? input.additionalInspectors
+      : input.additionalInspectorEmployeeId
+        ? [{
+          employeeId: input.additionalInspectorEmployeeId,
+          employeeName: input.additionalInspectorName || '',
+          sampleCount: input.additionalSampleCount || 0,
+        }]
+        : [];
+    const additionalInspectors = validateAdditionalInspectorAssignments(
+      additionalInspectorInput,
+      inspector.id,
+      input.sampleCount,
+    );
+    for (const assignment of additionalInspectors) {
+      await qualityStaffService.requireSelectableInspector({
+        employeeId: assignment.employeeId,
         lineId: input.lineId,
         stationId: input.stationId,
-      })
-      : null;
-    const additional = validateAdditionalInspector({
-      additionalInspectorId: input.additionalInspectorEmployeeId,
-      additionalSampleCount: input.additionalSampleCount,
-      primaryInspectorId: input.inspectorEmployeeId,
-      sampleCount: input.sampleCount,
-    });
-    assertSampleCount(input.sampleCount + additional.additionalSampleCount);
+      });
+    }
+    const additional = additionalInspectors[0];
     const rejectLimit = input.rejectLimit ?? 1;
     if (!Number.isInteger(rejectLimit) || rejectLimit < 0) {
       throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
@@ -220,10 +229,11 @@ export const qualitySampleService = {
       stationName: input.stationName,
       inspectorEmployeeId: inspector.id,
       inspectorName: inspector.name,
-      additionalInspectorEmployeeId: additional.additionalInspectorId,
-      additionalInspectorName: extraInspector?.name || '',
+      additionalInspectors,
+      additionalInspectorEmployeeId: additional?.employeeId || '',
+      additionalInspectorName: additional?.employeeName || '',
       sampleCount: input.sampleCount,
-      additionalSampleCount: additional.additionalSampleCount,
+      additionalSampleCount: 0,
       sampleCountSemantics: 'base_plus_additional',
       rejectLimit,
       status: 'pending',
@@ -261,6 +271,7 @@ export const qualitySampleService = {
     additionalInspectorEmployeeId?: string;
     additionalInspectorName?: string;
     additionalSampleCount?: number;
+    additionalInspectors?: QualityAdditionalInspector[];
     sampleCount: number;
     rejectLimit: number;
     sector: QualitySector;
@@ -272,7 +283,6 @@ export const qualitySampleService = {
     if (pull.status !== 'pending') throw new Error('يجب إعادة فتح السحبة المكتملة قبل تعديل بياناتها.');
     assertIsoDate(input.date);
     assertSampleCount(input.sampleCount);
-    assertSampleCount(input.sampleCount + Number(input.additionalSampleCount || 0));
     assertSectorMatch(input.lineSector, input.productSector);
     if (!input.slotKey || !input.lineId || !input.productId || !input.stationId || !input.inspectorEmployeeId) {
       throw new Error('الفترة والخط والمنتج ومحطة الفحص والمراقب مطلوبة.');
@@ -285,19 +295,28 @@ export const qualitySampleService = {
       lineId: input.lineId,
       stationId: input.stationId,
     });
-    const additional = validateAdditionalInspector({
-      additionalInspectorId: input.additionalInspectorEmployeeId,
-      additionalSampleCount: input.additionalSampleCount,
-      primaryInspectorId: input.inspectorEmployeeId,
-      sampleCount: input.sampleCount,
-    });
-    const extraInspector = additional.additionalInspectorId
-      ? await qualityStaffService.requireSelectableInspector({
-        employeeId: additional.additionalInspectorId,
+    const additionalInspectorInput = input.additionalInspectors?.length
+      ? input.additionalInspectors
+      : input.additionalInspectorEmployeeId
+        ? [{
+          employeeId: input.additionalInspectorEmployeeId,
+          employeeName: input.additionalInspectorName || '',
+          sampleCount: input.additionalSampleCount || 0,
+        }]
+        : [];
+    const additionalInspectors = validateAdditionalInspectorAssignments(
+      additionalInspectorInput,
+      inspector.id,
+      input.sampleCount,
+    );
+    for (const assignment of additionalInspectors) {
+      await qualityStaffService.requireSelectableInspector({
+        employeeId: assignment.employeeId,
         lineId: input.lineId,
         stationId: input.stationId,
-      })
-      : null;
+      });
+    }
+    const additional = additionalInspectors[0];
     const actor = currentQualityActor();
     await updateDoc(qmsDoc(QMS_COLLECTIONS.LINE_PULLS, id), {
       date: input.date,
@@ -313,10 +332,11 @@ export const qualitySampleService = {
       stationName: input.stationName,
       inspectorEmployeeId: inspector.id,
       inspectorName: inspector.name,
-      additionalInspectorEmployeeId: additional.additionalInspectorId,
-      additionalInspectorName: extraInspector?.name || '',
+      additionalInspectors,
+      additionalInspectorEmployeeId: additional?.employeeId || '',
+      additionalInspectorName: additional?.employeeName || '',
       sampleCount: input.sampleCount,
-      additionalSampleCount: additional.additionalSampleCount,
+      additionalSampleCount: 0,
       sampleCountSemantics: 'base_plus_additional',
       rejectLimit: input.rejectLimit,
       sector: input.sector,

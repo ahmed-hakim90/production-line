@@ -152,6 +152,12 @@ export interface QualityHourlySample {
   createdByName: string;
 }
 
+export interface QualityAdditionalInspector {
+  employeeId: string;
+  employeeName: string;
+  sampleCount: number;
+}
+
 export interface QualityLinePull {
   id: string;
   tenantId: string;
@@ -171,6 +177,7 @@ export interface QualityLinePull {
   inspectorName: string;
   additionalInspectorEmployeeId?: string;
   additionalInspectorName?: string;
+  additionalInspectors?: QualityAdditionalInspector[];
   sampleCount: number;
   additionalSampleCount: number;
   sampleCountSemantics?: 'base_plus_additional';
