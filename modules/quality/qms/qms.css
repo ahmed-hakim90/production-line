@@ -122,6 +122,10 @@
 .qms-line-stat--samples { color: #6b21a8; border-color: #e9d5ff; background: #faf5ff; }
 .qms-line-stat--samples .qms-line-stat-icon { background: #f3e8ff; }
 .qms-pull-form-heading { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.qms-pull-form-heading { flex-wrap: wrap; }
+.qms-pull-save-top { margin-inline-start: auto; min-height: 44px; }
+.qms-pull-save-near-selection { display: flex; justify-content: flex-end; margin: -4px 0 14px; }
+.qms-pull-save-near-selection .qms-btn { min-height: 44px; }
 .qms-pull-form-heading .qms-title, .qms-pull-form-heading .qms-muted { margin: 0; }
 .qms-pull-form-heading .qms-muted { margin-top: 3px; }
 .qms-pull-form-mark { display: grid; place-items: center; width: 42px; height: 42px; flex: 0 0 auto; border-radius: 13px; background: #fee2e2; color: #b91c1c; font-size: 1.5rem; font-weight: 700; }

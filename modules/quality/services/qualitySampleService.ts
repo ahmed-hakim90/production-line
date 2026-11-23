@@ -176,6 +176,8 @@ export const qualitySampleService = {
     sector: QualitySector;
     lineSector?: QualitySector | null;
     productSector?: QualitySector | null;
+    defects?: QualityDefectLine[];
+    decisionMode?: 'auto' | 'manual_accept' | 'manual_reject';
     notes?: string;
   }): Promise<void> {
     assertAnyQualityPermission(['quality.samples.inspect', 'quality.settings.manage']);
@@ -284,7 +286,6 @@ export const qualitySampleService = {
   }): Promise<void> {
     assertQualityPermission('quality.samples.inspect');
     const pull = await readQualityDoc<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, id);
-    if (pull.status !== 'pending') throw new Error('يجب إعادة فتح السحبة المكتملة قبل تعديل بياناتها.');
     assertIsoDate(input.date);
     assertSampleCount(input.sampleCount);
     assertSectorMatch(input.lineSector, input.productSector);
@@ -322,6 +323,22 @@ export const qualitySampleService = {
     }
     const additional = additionalInspectors[0];
     const actor = currentQualityActor();
+    const completedPatch: Record<string, unknown> = {};
+    if (pull.status === 'completed') {
+      const defects = input.defects || [];
+      const defectCount = defects.reduce((sum, defect) => sum + Number(defect.count || 0), 0);
+      if (defects.some((defect) => !Number.isInteger(defect.count) || defect.count < 1)) {
+        throw new Error('كل عيب يجب أن يكون له عدد صحيح موجب.');
+      }
+      if (defectCount > input.sampleCount) throw new Error('عدد العيوب لا يمكن أن يتجاوز إجمالي العينات المفحوصة.');
+      completedPatch.defectCount = defectCount;
+      completedPatch.palletRejected = resolveLinePullDecision(
+        defectCount,
+        input.rejectLimit,
+        input.decisionMode || pull.decisionMode || 'auto',
+      );
+      completedPatch.decisionMode = input.decisionMode || pull.decisionMode || 'auto';
+    }
     await updateDoc(qmsDoc(QMS_COLLECTIONS.LINE_PULLS, id), {
       date: input.date,
       slotKey: input.slotKey,
@@ -344,6 +361,7 @@ export const qualitySampleService = {
       sampleCountSemantics: 'base_plus_additional',
       rejectLimit: input.rejectLimit,
       sector: input.sector,
+      ...completedPatch,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,
       updatedByName: actor.name,
@@ -409,6 +427,41 @@ export const qualitySampleService = {
     });
     await auditQuality('QUALITY_RECORD_SAMPLE', 'حفظ عيوب سحبة قيد الفحص', { pullId: id, defectCount });
     return defectCount;
+  },
+
+  async savePullEdit(
+    id: string,
+    defects: QualityDefectLine[],
+    rejectLimit: number,
+    decisionMode: 'auto' | 'manual_accept' | 'manual_reject' = 'auto',
+  ): Promise<void> {
+    assertQualityPermission('quality.samples.inspect');
+    const pull = await readQualityDoc<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, id);
+    if (defects.some((defect) => !Number.isInteger(defect.count) || defect.count < 1)) {
+      throw new Error('كل عيب يجب أن يكون له عدد صحيح موجب.');
+    }
+    const defectCount = defects.reduce((sum, defect) => sum + Number(defect.count || 0), 0);
+    const inspectedCount = totalLinePullSampleCount(pull);
+    if (defectCount > inspectedCount) throw new Error('عدد العيوب لا يمكن أن يتجاوز إجمالي العينات المفحوصة.');
+    if (!Number.isInteger(rejectLimit) || rejectLimit < 0) {
+      throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
+    }
+    const palletRejected = resolveLinePullDecision(defectCount, rejectLimit, decisionMode);
+    await replaceChildDefects(QMS_COLLECTIONS.LINE_PULLS, id, pull.tenantId, defects, {
+      defectCount,
+      rejectLimit,
+      palletRejected,
+      decisionMode,
+      updatedAt: serverTimestamp(),
+      updatedByUid: currentQualityActor().uid,
+      updatedByName: currentQualityActor().name,
+    });
+    await auditQuality('QUALITY_RECORD_SAMPLE', 'تعديل عيوب سحبة عينات خط', {
+      pullId: id,
+      defectCount,
+      palletRejected,
+      decisionMode,
+    });
   },
 
   async reopenPull(id: string, reason: string): Promise<void> {

@@ -49,7 +49,6 @@ interface PullEditDraft {
   rejectLimit: number;
   defects: QualityDefectLine[];
   decisionMode: 'auto' | 'manual_accept' | 'manual_reject';
-  reopenReason: string;
 }
 
 export const QualityLineSamples: React.FC = () => {
@@ -260,7 +259,6 @@ export const QualityLineSamples: React.FC = () => {
         additionalInspectors,
         additionalInspectorEmployeeId: additionalInspectors[0]?.employeeId,
         additionalInspectorName: additionalInspectors[0]?.employeeName,
-        additionalSampleCount: additionalInspectors[0]?.sampleCount || 0,
         sampleCount,
         rejectLimit,
         sector: tag.sector,
@@ -343,7 +341,7 @@ export const QualityLineSamples: React.FC = () => {
   };
 
   const openEdit = async (row: QualityLinePull) => {
-    if (!can('quality.samples.inspect') || (row.status === 'completed' && !can('quality.records.reopen'))) return;
+    if (!can('quality.samples.inspect')) return;
     setSaving(true);
     try {
       const [detailed] = await qualitySampleService.withPullDefects([row]);
@@ -377,7 +375,6 @@ export const QualityLineSamples: React.FC = () => {
         rejectLimit: row.rejectLimit ?? policies.lineSampleRejectLimit,
         defects: detailed.defects || [],
         decisionMode: row.decisionMode || 'auto',
-        reopenReason: '',
       });
     } catch (error) {
       toast.error(qualityUserMessage(error, 'تعذر تحميل بيانات السحبة للتعديل.'));
@@ -413,10 +410,6 @@ export const QualityLineSamples: React.FC = () => {
       toast.error('تحقق من اختيار الفترة ووسم الخط والمنتج والمحطة.');
       return;
     }
-    if (editDraft.originalStatus === 'completed' && !editDraft.reopenReason.trim()) {
-      toast.error('سبب إعادة الفتح مطلوب لتعديل سحبة مكتملة.');
-      return;
-    }
     try {
       validateAdditionalInspectorAssignments(editDraft.additionalInspectors, inspector?.id || '', editDraft.sampleCount);
     } catch (error) {
@@ -424,12 +417,7 @@ export const QualityLineSamples: React.FC = () => {
       return;
     }
     setSaving(true);
-    let reopened = false;
     try {
-      if (editDraft.originalStatus === 'completed') {
-        await qualitySampleService.reopenPull(editDraft.id, editDraft.reopenReason);
-        reopened = true;
-      }
       await qualitySampleService.updatePendingPull(editDraft.id, {
         date: editDraft.date,
         slotKey: slot.slotKey,
@@ -447,30 +435,26 @@ export const QualityLineSamples: React.FC = () => {
         additionalInspectors: editDraft.additionalInspectors,
         additionalInspectorEmployeeId: editDraft.additionalInspectors[0]?.employeeId,
         additionalInspectorName: editDraft.additionalInspectors[0]?.employeeName,
-        additionalSampleCount: editDraft.additionalInspectors[0]?.sampleCount || 0,
         sampleCount: editDraft.sampleCount,
         rejectLimit: editDraft.rejectLimit,
         sector,
+        defects: editDraft.defects,
+        decisionMode: editDraft.decisionMode,
       });
-      await qualitySampleService.savePendingPullDefects(editDraft.id, editDraft.defects);
-      if (editDraft.originalStatus === 'completed') {
-        await qualitySampleService.completePull(editDraft.id, {
-          defects: editDraft.defects,
-          rejectLimit: editDraft.rejectLimit,
-          decisionMode: editDraft.decisionMode,
-        });
-      }
-      toast.success(editDraft.originalStatus === 'completed' ? 'تم تعديل السحبة وإعادة اعتمادها.' : 'تم حفظ تعديلات السحبة.');
+      await qualitySampleService.savePullEdit(
+        editDraft.id,
+        editDraft.defects,
+        editDraft.rejectLimit,
+        editDraft.decisionMode,
+      );
+      toast.success('تم حفظ تعديلات السحبة بنجاح.');
       const dateChanged = date !== editDraft.date;
       setDate(editDraft.date);
       setEditDraft(null);
       if (!dateChanged) await load();
     } catch (error) {
       const message = qualityUserMessage(error, 'تعذر حفظ تعديلات السحبة.');
-      toast.error(reopened
-        ? `تمت إعادة فتح السحبة، لكن تعذر إكمال التعديل: ${message} يمكنك إعادة المحاولة من السحبات قيد الفحص.`
-        : message);
-      if (reopened) await load();
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -778,13 +762,29 @@ export const QualityLineSamples: React.FC = () => {
         ) : null}
       </section>
 
-      <section className="qms-card qms-pull-form">
+      <section
+        className="qms-card qms-pull-form"
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && event.target instanceof HTMLInputElement) {
+            event.preventDefault();
+            if (!saving && canCreatePull) void create();
+          }
+        }}
+      >
         <div className="qms-pull-form-heading">
           <span className="qms-pull-form-mark" aria-hidden="true">＋</span>
           <div>
             <h2 className="qms-title">تسجيل سحبة عينات جديدة</h2>
             <p className="qms-muted">اختَر بيانات التشغيل أولًا، ثم حدّد حجم العينة وسجّل السحبة.</p>
           </div>
+          <button
+            type="button"
+            className="qms-btn qms-btn-primary qms-pull-save-top"
+            disabled={saving || !canCreatePull}
+            onClick={() => void create()}
+          >
+            ▣ تسجيل السحبة
+          </button>
         </div>
         <div className="qms-pull-setup" aria-label="اكتمال بيانات السحبة">
           {pullSetupSteps.map((step, index) => (
@@ -839,6 +839,11 @@ export const QualityLineSamples: React.FC = () => {
               {stations.length === 0 ? <p className="qms-muted">لا توجد محطات نشطة.</p> : null}
             </div>
           </div>
+        </div>
+        <div className="qms-pull-save-near-selection">
+          <button type="button" className="qms-btn qms-btn-primary" disabled={saving || !canCreatePull} onClick={() => void create()}>
+            ▣ تسجيل السحبة
+          </button>
         </div>
         <div className="qms-pull-form-grid">
           <label>
@@ -1321,9 +1326,6 @@ export const QualityLineSamples: React.FC = () => {
                   />
                 </div>
               </div>
-              {editDraft.originalStatus === 'completed' ? (
-                <label><span className="qms-label">سبب إعادة الفتح</span><input className="qms-input" value={editDraft.reopenReason} onChange={(event) => updateEditDraft('reopenReason', event.target.value)} /></label>
-              ) : null}
               <h3 className="qms-subtitle">العيوب المسجلة</h3>
               {can('quality.defects.record') ? (
                 <div className="qms-line-defect-form">
@@ -1386,7 +1388,7 @@ export const QualityLineSamples: React.FC = () => {
           <DialogFooter>
             <button type="button" className="qms-btn qms-btn-ghost" disabled={saving} onClick={() => setEditDraft(null)}>إلغاء</button>
             <button type="button" className="qms-btn qms-btn-primary" disabled={saving || !can('quality.samples.inspect')} onClick={() => void saveEdit()}>
-              {editDraft?.originalStatus === 'completed' ? 'حفظ وإعادة الاعتماد' : 'حفظ التعديلات'}
+              حفظ التعديلات
             </button>
           </DialogFooter>
         </DialogContent>
