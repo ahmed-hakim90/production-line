@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { CheckCircle2, ClipboardList, Clock3, PackageCheck, XCircle } from 'lucide-react';
+import { CheckCircle2, ClipboardList, Clock3, Download, PackageCheck, XCircle } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { usePrintEngine } from '@/utils/printManager';
+import { exportAsImage } from '@/utils/reportExport';
 import { QualityLinePullPrint } from '../components/QualityPrintDocuments';
 import { qualityRecordPrintAllowed, rowsMatchingTenant } from '../print/qualityPrintModel';
 import { activeTenantId, qualityUserMessage } from '../services/qualityGateway';
@@ -111,6 +112,7 @@ export const QualityLineSamples: React.FC = () => {
   });
   const [newReasonOpen, setNewReasonOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const hourlySummaryRefs = useRef(new Map<string, HTMLElement>());
 
   const load = async () => {
     const [nextSlots, nextStations, nextManagedStations, nextManagedSlots, nextRows, nextPolicies, nextProductionTags, nextTechnicians] = await Promise.all([
@@ -694,6 +696,41 @@ export const QualityLineSamples: React.FC = () => {
   };
   const hourlySummaries = [...new Set(visibleRows.map((row) => row.slotKey))].map((slotKey) => {
     const slotRows = visibleRows.filter((row) => row.slotKey === slotKey);
+    const lineSummaries = [...new Set(slotRows.map((row) => row.lineId))].map((lineId) => {
+      const lineRows = slotRows.filter((row) => row.lineId === lineId);
+      const defectTotals = new Map<string, { label: string; count: number; inspectors: string[] }>();
+      lineRows.forEach((row) => {
+        (row.defects || []).forEach((defect) => {
+          const current = defectTotals.get(defect.reasonId) || { label: defect.reasonLabel, count: 0, inspectors: [] };
+          current.count += Number(defect.count || 0);
+          if (defect.inspectorName && !current.inspectors.includes(defect.inspectorName)) {
+            current.inspectors.push(defect.inspectorName);
+          }
+          defectTotals.set(defect.reasonId, current);
+        });
+      });
+      const productNames = [...new Set(lineRows.map((row) => row.productName).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, 'ar', { numeric: true }));
+      const inspectorNames = [...new Set(lineRows.flatMap((row) => [
+        row.inspectorName,
+        ...(row.additionalInspectors?.map((item) => item.employeeName) || []),
+        ...(row.additionalInspectorName ? [row.additionalInspectorName] : []),
+      ].filter((name): name is string => Boolean(name))))]
+        .sort((a, b) => a.localeCompare(b, 'ar', { numeric: true }));
+      return {
+        lineId,
+        lineName: lineRows[0]?.lineName || 'خط غير محدد',
+        productNames,
+        inspectorNames,
+        pulls: lineRows.length,
+        samples: lineRows.reduce((sum, row) => sum + totalLinePullSampleCount(row), 0),
+        defects: lineRows.reduce((sum, row) => sum + row.defectCount, 0),
+        accepted: lineRows.filter((row) => row.status === 'completed' && !row.palletRejected).length,
+        rejected: lineRows.filter((row) => row.status === 'completed' && row.palletRejected).length,
+        pending: lineRows.filter((row) => row.status !== 'completed').length,
+        defectDetails: [...defectTotals.values()].sort((a, b) => b.count - a.count),
+      };
+    }).sort((a, b) => a.lineName.localeCompare(b.lineName, 'ar', { numeric: true }));
     return {
       slotKey,
       period: slotRows[0] ? `${slotRows[0].startTime}–${slotRows[0].endTime}` : '',
@@ -702,6 +739,7 @@ export const QualityLineSamples: React.FC = () => {
       defects: slotRows.reduce((sum, row) => sum + row.defectCount, 0),
       rejected: slotRows.filter((row) => row.status === 'completed' && row.palletRejected).length,
       accepted: slotRows.filter((row) => row.status === 'completed' && !row.palletRejected).length,
+      lineSummaries,
     };
   }).sort((a, b) => b.period.localeCompare(a.period, 'ar', { numeric: true }));
   const pullSetupSteps = [
@@ -1055,7 +1093,7 @@ export const QualityLineSamples: React.FC = () => {
                     {row.status !== 'completed' ? (
                       <span className="qms-line-defect-empty">الفحص لم يكتمل</span>
                     ) : row.defects?.length ? (
-                      <ul className="qms-line-defect-list">
+                      <ul className="qms-line-defect-details">
                         {row.defects.map((defect, defectIndex) => (
                           <li key={`${defect.reasonId}-${defectIndex}`}>
                             <strong>{defect.reasonLabel}</strong>
@@ -1116,19 +1154,89 @@ export const QualityLineSamples: React.FC = () => {
         </div>
         {hourlySummaries.length > 0 ? (
           <section className="qms-hourly-pull-summary-section" aria-labelledby="hourly-line-summary-title">
-            <h3 id="hourly-line-summary-title" className="qms-subtitle">ملخص كل ساعة</h3>
+            <h3 id="hourly-line-summary-title" className="qms-subtitle">ملخص الخطوط بكل ساعة</h3>
             <div className="qms-hourly-pull-summary" dir="rtl" aria-label="ملخص السحبات حسب الساعة">
               {hourlySummaries.map((summary) => (
-                <article className="qms-hourly-pull-summary-card" key={summary.slotKey}>
+                <article
+                  className="qms-hourly-pull-summary-card"
+                  key={summary.slotKey}
+                  ref={(node) => {
+                    if (node) hourlySummaryRefs.current.set(summary.slotKey, node);
+                    else hourlySummaryRefs.current.delete(summary.slotKey);
+                  }}
+                >
                   <div className="qms-hourly-pull-summary-head">
                     <strong>{summary.period}</strong>
                     <span>{summary.pulls} سحبات</span>
+                    <button
+                      type="button"
+                      className="qms-btn qms-btn-ghost qms-hour-download"
+                      onClick={async () => {
+                        const node = hourlySummaryRefs.current.get(summary.slotKey);
+                        if (!node) return;
+                        node.classList.add('is-exporting-hour');
+                        try {
+                          await exportAsImage(node, `ملخص-الخطوط-${date}-${summary.period.replace(/[–:-]/g, '-')}`, {
+                            backgroundColor: '#ffffff',
+                            captureWidth: 1080,
+                            windowHeight: 1200,
+                          });
+                          toast.success('تم تنزيل صورة ملخص الساعة.');
+                        } catch (error) {
+                          toast.error(error instanceof Error ? error.message : 'تعذر تنزيل صورة ملخص الساعة.');
+                        } finally {
+                          node.classList.remove('is-exporting-hour');
+                        }
+                      }}
+                    >
+                      <Download size={15} aria-hidden="true" />
+                      تنزيل صورة الساعة
+                    </button>
                   </div>
                   <div className="qms-hourly-pull-summary-metrics">
                     <span><small>عينات</small><strong>{summary.samples}</strong></span>
                     <span><small>عيوب</small><strong>{summary.defects}</strong></span>
                     <span className="is-accepted"><small>مقبولة</small><strong>{summary.accepted}</strong></span>
                     <span className="is-rejected"><small>مرفوضة</small><strong>{summary.rejected}</strong></span>
+                  </div>
+                  <div className="qms-hourly-line-summaries" aria-label={`ملخص خطوط الفترة ${summary.period}`}>
+                    {summary.lineSummaries.map((line) => (
+                      <div
+                        className={`qms-hourly-line-summary${line.rejected > 0 ? ' is-rejected' : ''}${line.accepted > 0 && line.rejected === 0 ? ' is-accepted' : ''}`}
+                        key={line.lineId}
+                      >
+                        <div className="qms-hourly-line-summary-head">
+                          <strong>{line.lineName}</strong>
+                          <span>{line.pulls} {line.pulls > 1 ? 'سحبات' : 'سحبة'}</span>
+                        </div>
+                        <div className="qms-hourly-line-summary-details">
+                          <span><small>المنتج</small><strong>{line.productNames.join('، ') || 'غير محدد'}</strong></span>
+                          <span><small>قام بالفحص</small><strong>{line.inspectorNames.join('، ') || 'غير محدد'}</strong></span>
+                        </div>
+                        <div className="qms-hourly-line-summary-metrics">
+                          <span><small>العينات</small><strong>{line.samples}</strong></span>
+                          <span><small>العيوب</small><strong>{line.defects}</strong></span>
+                          <span className="is-accepted"><small>مقبولة</small><strong>{line.accepted}</strong></span>
+                          <span className="is-rejected"><small>مرفوضة</small><strong>{line.rejected}</strong></span>
+                        </div>
+                        {line.defectDetails.length > 0 ? (
+                          <div className="qms-hourly-line-defects">
+                            {line.defectDetails.map((defect) => (
+                              <span className="qms-hourly-line-defect" key={defect.label}>
+                                <strong>{defect.label}</strong>
+                                <b>× {defect.count}</b>
+                                {defect.inspectors.length > 0 ? (
+                                  <small>المراقب: {defect.inspectors.join('، ')}</small>
+                                ) : null}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="qms-hourly-line-no-defects">لا توجد عيوب مسجلة</span>
+                        )}
+                        {line.pending > 0 ? <small className="qms-hourly-line-pending">قيد الفحص: {line.pending}</small> : null}
+                      </div>
+                    ))}
                   </div>
                 </article>
               ))}
@@ -1176,15 +1284,17 @@ export const QualityLineSamples: React.FC = () => {
                           options={[
                             { value: active.inspectorEmployeeId, label: active.inspectorName },
                             ...(active.additionalInspectors?.length
-                              ? active.additionalInspectors
-                              : [{
-                                employeeId: active.additionalInspectorEmployeeId || '',
-                                employeeName: active.additionalInspectorName || '',
-                              }]),
-                          ].filter((item) => item.employeeId || item.value).map((item) => ({
-                            value: 'employeeId' in item ? item.employeeId : item.value,
-                            label: 'employeeName' in item ? item.employeeName : item.label,
-                          }))}
+                              ? active.additionalInspectors.map((item) => ({
+                                value: item.employeeId,
+                                label: item.employeeName,
+                              }))
+                              : active.additionalInspectorEmployeeId
+                                ? [{
+                                  value: active.additionalInspectorEmployeeId,
+                                  label: active.additionalInspectorName || '',
+                                }]
+                                : []),
+                          ].filter((item) => Boolean(item.value))}
                         />
                       ) : null}
                       <button type="button" className="qms-btn qms-btn-ghost" disabled={saving} onClick={addDefect}>إضافة العيب</button>

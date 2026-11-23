@@ -168,6 +168,21 @@ export const QualityLinePullPrint = forwardRef<HTMLDivElement, {
   const printable = linePullPrintRows(rows);
   const periodRows = periodStatusPrintRows(periods, lineNames);
   const defects = printable.flatMap((row) => row.defects.map((defect) => ({ ...defect, period: row.period, lineName: row.lineName })));
+  const lineSummaries = [...new Set(printable.map((row) => `${row.period}|${row.lineName}`))].map((key) => {
+    const matching = printable.filter((row) => `${row.period}|${row.lineName}` === key);
+    return {
+      id: key,
+      period: matching[0]?.period || '',
+      lineName: matching[0]?.lineName || '',
+      pulls: matching.length,
+      samples: matching.reduce((sum, row) => sum + row.sampleCount, 0),
+      defects: matching.reduce((sum, row) => sum + row.defectCount, 0),
+      accepted: matching.filter((row) => row.result === 'مقبولة').length,
+      rejected: matching.filter((row) => row.result === 'مرفوضة').length,
+      pending: matching.filter((row) => row.result === 'قيد الفحص').length,
+    };
+  }).sort((a, b) => b.period.localeCompare(a.period, 'ar', { numeric: true })
+    || a.lineName.localeCompare(b.lineName, 'ar', { numeric: true }));
   return (
     <QualityPrintFrame
       ref={ref}
@@ -209,6 +224,38 @@ export const QualityLinePullPrint = forwardRef<HTMLDivElement, {
           }))}
         />
       )}
+      {lineSummaries.length > 0 ? (
+        <>
+          <p>ملخص الخطوط بكل فترة</p>
+          <FactoryPrintTable
+            printSettings={printSettings}
+            tableLayout="auto"
+            columns={[
+              { key: 'period', header: 'الفترة' },
+              { key: 'line', header: 'الخط' },
+              { key: 'pulls', header: 'السحبات' },
+              { key: 'samples', header: 'العينات' },
+              { key: 'defects', header: 'العيوب' },
+              { key: 'accepted', header: 'مقبولة' },
+              { key: 'rejected', header: 'مرفوضة' },
+              { key: 'pending', header: 'قيد الفحص' },
+            ]}
+            rows={lineSummaries.map((summary) => ({
+              key: summary.id,
+              cells: {
+                period: summary.period,
+                line: summary.lineName,
+                pulls: formatQualityCount(summary.pulls),
+                samples: formatQualityCount(summary.samples),
+                defects: formatQualityCount(summary.defects),
+                accepted: formatQualityCount(summary.accepted),
+                rejected: formatQualityCount(summary.rejected),
+                pending: formatQualityCount(summary.pending),
+              },
+            }))}
+          />
+        </>
+      ) : null}
       {printable.some((row) => row.notes || row.reopenReason) ? (
         <p>
           {printable.filter((row) => row.notes || row.reopenReason).map((row) => (

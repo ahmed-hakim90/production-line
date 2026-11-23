@@ -280,6 +280,8 @@ export const qualitySampleService = {
     additionalInspectors?: QualityAdditionalInspector[];
     sampleCount: number;
     rejectLimit: number;
+    defects?: QualityDefectLine[];
+    decisionMode?: 'auto' | 'manual_accept' | 'manual_reject';
     sector: QualitySector;
     lineSector?: QualitySector | null;
     productSector?: QualitySector | null;
