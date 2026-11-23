@@ -232,7 +232,16 @@
 .qms-hourly-pull-summary-metrics strong { color: #334155; font-size: 0.86rem; }
 .qms-hourly-pull-summary-metrics .is-accepted strong { color: #166534; }
 .qms-hourly-pull-summary-metrics .is-rejected strong { color: #991b1b; }
-.qms-defect-view-link { display: block; margin-top: 4px; border: 0; background: transparent; color: #1d4ed8; padding: 0; font-size: 0.66rem; font-weight: 800; cursor: pointer; }
+.qms-hourly-pull-summary-section { display: grid; gap: 10px; margin-top: 18px; }
+.qms-line-defects-cell { min-width: 180px; }
+.qms-line-defect-details { display: grid; gap: 4px; margin: 5px 0 0; padding: 0; list-style: none; }
+.qms-line-defect-details li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; border-bottom: 1px solid #e2e8f0; padding: 3px 0; font-size: 0.7rem; }
+.qms-line-defect-details li:last-child { border-bottom: 0; }
+.qms-line-defect-details small { width: 100%; color: #64748b; font-size: 0.66rem; }
+.qms-line-defect-empty { display: block; margin-top: 4px; color: #64748b; font-size: 0.68rem; }
+.qms-line-defect-empty.is-clear { color: #15803d; }
+.qms-hourly-total-row { background: #f1f5f9; color: #334155; font-weight: 800; }
+.qms-hourly-total-row td { border-top: 2px solid #cbd5e1; }
 @media (prefers-reduced-motion: reduce) {
   .qms-line-stat, .qms-line-pull-row { transition: none; }
   .qms-line-stat:hover { transform: none; }

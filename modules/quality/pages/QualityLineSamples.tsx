@@ -127,7 +127,15 @@ export const QualityLineSamples: React.FC = () => {
     setStations(nextStations);
     setManagedStations(nextManagedStations);
     setManagedSlots(nextManagedSlots);
-    setRows(nextRows);
+    const completedRows = nextRows.filter((row) => row.status === 'completed');
+    const detailedRows = completedRows.length > 0
+      ? await qualitySampleService.withPullDefects(completedRows)
+      : [];
+    const detailedRowsById = new Map(detailedRows.map((row) => [row.id, row]));
+    setRows(nextRows.map((row) => ({
+      ...row,
+      defects: detailedRowsById.get(row.id)?.defects || [],
+    })));
     setPolicies(nextPolicies);
     setProductionTags(nextProductionTags);
     setTechnicians(nextTechnicians);
@@ -165,8 +173,8 @@ export const QualityLineSamples: React.FC = () => {
     && (statusFilter === 'all' || row.status === statusFilter)
     && (sector === 'all' || row.sector === sector)
   )).sort((a, b) =>
-    (a.startTime || '').localeCompare(b.startTime || '', 'ar', { numeric: true })
-    || (a.endTime || '').localeCompare(b.endTime || '', 'ar', { numeric: true })
+    (b.startTime || '').localeCompare(a.startTime || '', 'ar', { numeric: true })
+    || (b.endTime || '').localeCompare(a.endTime || '', 'ar', { numeric: true })
     || (typeof a.createdAt === 'string' ? Date.parse(a.createdAt) : a.createdAt?.toMillis?.() || 0)
       - (typeof b.createdAt === 'string' ? Date.parse(b.createdAt) : b.createdAt?.toMillis?.() || 0)
     || a.lineName.localeCompare(b.lineName, 'ar', { numeric: true }));
@@ -695,7 +703,7 @@ export const QualityLineSamples: React.FC = () => {
       rejected: slotRows.filter((row) => row.status === 'completed' && row.palletRejected).length,
       accepted: slotRows.filter((row) => row.status === 'completed' && !row.palletRejected).length,
     };
-  }).sort((a, b) => a.period.localeCompare(b.period, 'ar', { numeric: true }));
+  }).sort((a, b) => b.period.localeCompare(a.period, 'ar', { numeric: true }));
   const pullSetupSteps = [
     { label: 'الخط والمنتج', value: selectedProductionTag?.lineName || 'لم يتم الاختيار', complete: Boolean(selectedProductionTag) },
     { label: 'محطة الفحص', value: selectedStation?.name || 'لم يتم الاختيار', complete: Boolean(selectedStation) },
@@ -946,7 +954,7 @@ export const QualityLineSamples: React.FC = () => {
 
       <section className="qms-card qms-pull-records">
         <div className="qms-row qms-record-heading">
-          <h2 className="qms-title">سجل سحبات العينات</h2>
+          <h2 className="qms-title">ملخص الخطوط</h2>
           {canPrintSamples ? (
             <button type="button" className="qms-btn qms-btn-ghost" disabled={rows.length === 0} onClick={() => {
               const scoped = rowsMatchingTenant(rows, activeTenantId());
@@ -1012,24 +1020,6 @@ export const QualityLineSamples: React.FC = () => {
           <span><i className="qms-line-status-dot is-accepted" />مقبولة</span>
           <span><i className="qms-line-status-dot is-rejected" />مرفوضة</span>
         </div>
-        {hourlySummaries.length > 0 ? (
-          <div className="qms-hourly-pull-summary" dir="rtl" aria-label="ملخص السحبات حسب الساعة">
-            {hourlySummaries.map((summary) => (
-              <article className="qms-hourly-pull-summary-card" key={summary.slotKey}>
-                <div className="qms-hourly-pull-summary-head">
-                  <strong>{summary.period}</strong>
-                  <span>{summary.pulls} سحبات</span>
-                </div>
-                <div className="qms-hourly-pull-summary-metrics">
-                  <span><small>عينات</small><strong>{summary.samples}</strong></span>
-                  <span><small>عيوب</small><strong>{summary.defects}</strong></span>
-                  <span className="is-accepted"><small>مقبولة</small><strong>{summary.accepted}</strong></span>
-                  <span className="is-rejected"><small>مرفوضة</small><strong>{summary.rejected}</strong></span>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : null}
         <div className="qms-table-wrap">
           <table className="qms-table qms-line-pull-table">
             <thead><tr><th>التاريخ</th><th>الفترة</th><th>خط الإنتاج</th><th>المنتج</th><th>محطة الفحص</th><th>المراقب</th><th>العينات</th><th>العيوب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
@@ -1038,19 +1028,19 @@ export const QualityLineSamples: React.FC = () => {
                 const previous = visibleRows[index - 1];
                 const startsHourGroup = !previous || previous.slotKey !== row.slotKey;
                 return (
-                <>
+                <React.Fragment key={row.id}>
                   {startsHourGroup ? (
                     <tr className="qms-hour-separator" key={`hour-${row.slotKey}`}>
                       <td colSpan={10}>
                         <div>
                           <span className="qms-hour-separator-dot" />
                           <strong>{row.startTime}–{row.endTime}</strong>
-                          <small>ملخص الفترة: يظهر أدناه سحبات ومراقبو هذه الساعة.</small>
+                          <small>السحبات المسجلة في هذه الساعة</small>
                         </div>
                       </td>
                     </tr>
                   ) : null}
-                  <tr key={row.id} className={`qms-line-pull-row ${row.status !== 'completed' ? 'is-pending' : row.palletRejected ? 'is-rejected' : 'is-accepted'}`}>
+                  <tr className={`qms-line-pull-row ${row.status !== 'completed' ? 'is-pending' : row.palletRejected ? 'is-rejected' : 'is-accepted'}`}>
                   <td>{row.date}</td>
                   <td>{row.startTime}–{row.endTime}</td>
                   <td>{row.lineName}</td>
@@ -1060,13 +1050,26 @@ export const QualityLineSamples: React.FC = () => {
                     ? ` + ${row.additionalInspectors.map((item) => `${item.employeeName} (${item.sampleCount})`).join(' + ')}`
                     : row.additionalInspectorName ? ` + ${row.additionalInspectorName} (${row.additionalSampleCount} عينة)` : ''}</td>
                   <td><span className="qms-line-count qms-line-count--samples">{totalLinePullSampleCount(row)}</span></td>
-                  <td>
+                  <td className="qms-line-defects-cell">
                     <span className={`qms-line-count${row.defectCount > 0 ? ' qms-line-count--defects' : ''}`}>{row.defectCount}</span>
-                    {row.status === 'completed' ? (
-                      <button type="button" className="qms-defect-view-link" onClick={() => void openInspection(row)}>
-                        {row.defectCount > 0 ? 'عرض العيوب' : 'لا توجد عيوب'}
-                      </button>
-                    ) : null}
+                    {row.status !== 'completed' ? (
+                      <span className="qms-line-defect-empty">الفحص لم يكتمل</span>
+                    ) : row.defects?.length ? (
+                      <ul className="qms-line-defect-list">
+                        {row.defects.map((defect, defectIndex) => (
+                          <li key={`${defect.reasonId}-${defectIndex}`}>
+                            <strong>{defect.reasonLabel}</strong>
+                            <span>× {defect.count}</span>
+                            {defect.inspectorName ? <small>المراقب: {defect.inspectorName}</small> : null}
+                            {defect.notes ? <small>{defect.notes}</small> : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : row.defectCount > 0 ? (
+                      <span className="qms-line-defect-empty">تفاصيل العيوب غير متاحة</span>
+                    ) : (
+                      <span className="qms-line-defect-empty is-clear">لا توجد عيوب مسجلة</span>
+                    )}
                   </td>
                   <td>
                     <span className={`qms-line-status${row.status !== 'completed' ? ' is-pending' : row.palletRejected ? ' is-rejected' : ' is-accepted'}`}>
@@ -1090,13 +1093,48 @@ export const QualityLineSamples: React.FC = () => {
                     ) : null}
                   </td>
                   </tr>
-                </>
+                </React.Fragment>
                 );
               })}
             </tbody>
+            {visibleRows.length > 0 ? (
+              <tfoot>
+                <tr className="qms-hourly-total-row">
+                  <td colSpan={6}>إجمالي السحبات المعروضة</td>
+                  <td>{summaryCounts.samples}</td>
+                  <td>{visibleRows.reduce((sum, row) => sum + row.defectCount, 0)}</td>
+                  <td>
+                    مقبولة: {summaryCounts.accepted} · مرفوضة: {summaryCounts.rejected}
+                    {summaryCounts.pending > 0 ? ` · قيد الفحص: ${summaryCounts.pending}` : ''}
+                  </td>
+                  <td>{visibleRows.length} سحبة</td>
+                </tr>
+              </tfoot>
+            ) : null}
           </table>
           {visibleRows.length === 0 ? <p className="qms-muted">لا توجد سحبات تطابق الفلاتر المحددة.</p> : null}
         </div>
+        {hourlySummaries.length > 0 ? (
+          <section className="qms-hourly-pull-summary-section" aria-labelledby="hourly-line-summary-title">
+            <h3 id="hourly-line-summary-title" className="qms-subtitle">ملخص كل ساعة</h3>
+            <div className="qms-hourly-pull-summary" dir="rtl" aria-label="ملخص السحبات حسب الساعة">
+              {hourlySummaries.map((summary) => (
+                <article className="qms-hourly-pull-summary-card" key={summary.slotKey}>
+                  <div className="qms-hourly-pull-summary-head">
+                    <strong>{summary.period}</strong>
+                    <span>{summary.pulls} سحبات</span>
+                  </div>
+                  <div className="qms-hourly-pull-summary-metrics">
+                    <span><small>عينات</small><strong>{summary.samples}</strong></span>
+                    <span><small>عيوب</small><strong>{summary.defects}</strong></span>
+                    <span className="is-accepted"><small>مقبولة</small><strong>{summary.accepted}</strong></span>
+                    <span className="is-rejected"><small>مرفوضة</small><strong>{summary.rejected}</strong></span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </section>
 
       <Dialog open={inspectionOpen} onOpenChange={setInspectionOpen}>
