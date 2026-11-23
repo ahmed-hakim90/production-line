@@ -5,6 +5,7 @@ import { assertSectorMatch, type QualitySector } from '../domain/sector';
 import { localTimeHm } from '../domain/time';
 import type { QualityAdditionalInspector, QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus } from '../model';
 import { qualityStaffService } from './qualityStaffService';
+import { qualitySettingsService } from './qualitySettingsService';
 import {
   QMS_COLLECTIONS,
   activeTenantId,
@@ -201,14 +202,15 @@ export const qualitySampleService = {
       inspector.id,
       input.sampleCount,
     );
+    const technicians = await qualitySettingsService.listTechnicians();
+    const technicianIds = new Set(technicians.map((technician) => technician.id));
     for (const assignment of additionalInspectors) {
-      await qualityStaffService.requireSelectableInspector({
-        employeeId: assignment.employeeId,
-        lineId: input.lineId,
-        stationId: input.stationId,
-      });
+      if (!technicianIds.has(assignment.employeeId)) {
+        throw new Error(`فني الجودة «${assignment.employeeName}» غير نشط أو غير مسجل في الدليل.`);
+      }
     }
     const additional = additionalInspectors[0];
+    const additionalSampleCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
     const rejectLimit = input.rejectLimit ?? 1;
     if (!Number.isInteger(rejectLimit) || rejectLimit < 0) {
       throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
@@ -233,7 +235,7 @@ export const qualitySampleService = {
       additionalInspectorEmployeeId: additional?.employeeId || '',
       additionalInspectorName: additional?.employeeName || '',
       sampleCount: input.sampleCount,
-      additionalSampleCount: 0,
+      additionalSampleCount,
       sampleCountSemantics: 'base_plus_additional',
       rejectLimit,
       status: 'pending',
@@ -309,12 +311,12 @@ export const qualitySampleService = {
       inspector.id,
       input.sampleCount,
     );
+    const technicians = await qualitySettingsService.listTechnicians();
+    const technicianIds = new Set(technicians.map((technician) => technician.id));
     for (const assignment of additionalInspectors) {
-      await qualityStaffService.requireSelectableInspector({
-        employeeId: assignment.employeeId,
-        lineId: input.lineId,
-        stationId: input.stationId,
-      });
+      if (!technicianIds.has(assignment.employeeId)) {
+        throw new Error(`فني الجودة «${assignment.employeeName}» غير نشط أو غير مسجل في الدليل.`);
+      }
     }
     const additional = additionalInspectors[0];
     const actor = currentQualityActor();
@@ -336,7 +338,7 @@ export const qualitySampleService = {
       additionalInspectorEmployeeId: additional?.employeeId || '',
       additionalInspectorName: additional?.employeeName || '',
       sampleCount: input.sampleCount,
-      additionalSampleCount: 0,
+      additionalSampleCount,
       sampleCountSemantics: 'base_plus_additional',
       rejectLimit: input.rejectLimit,
       sector: input.sector,
