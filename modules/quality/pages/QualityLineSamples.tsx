@@ -153,7 +153,8 @@ export const QualityLineSamples: React.FC = () => {
   const inspectorChoices = inspectorOptions(masters.employees, staff.assignments, { lineId, stationId });
   const visibleProductionTags = productionTags
     .filter((tag) => tag.isActive !== false)
-    .filter((tag) => matchesSector(sector, tag.sector));
+    .filter((tag) => matchesSector(sector, tag.sector))
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
   const additionalAssignedCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
   const primarySampleCount = Math.max(0, sampleCount - additionalAssignedCount);
   const totalSampleCount = sampleCount;

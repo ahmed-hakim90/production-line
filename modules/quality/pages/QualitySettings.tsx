@@ -46,6 +46,7 @@ export const QualitySettings: React.FC = () => {
   const [productionTagLineName, setProductionTagLineName] = useState('');
   const [productionTagProductId, setProductionTagProductId] = useState('');
   const [productionTagSector, setProductionTagSector] = useState<QualitySector>('home');
+  const [productionTagFilter, setProductionTagFilter] = useState<QualitySector | 'all'>('all');
   const [stations, setStations] = useState<QualityStation[]>([]);
   const [slots, setSlots] = useState<QualitySampleSlot[]>([]);
   const [tags, setTags] = useState<QualitySectorTag[]>([]);
@@ -376,7 +377,7 @@ export const QualitySettings: React.FC = () => {
       </section>
       <section className="qms-card" id="quality-production-tags" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">وسم خطوط الإنتاج</h2>
-        <p className="qms-muted">كل وسم يربط اسم الخط بمنتجه وقطاعه. في تسجيل العينات تختار الوسم مرة واحدة فيظهر الخط والمنتج المرتبطان به فقط.</p>
+        <p className="qms-muted">كل وسم يربط اسم الخط بمنتجه وقطاعه. استخدم فلتر القطاع لترتيب أوسمة المنزلية والسريا منفصلة؛ زر ↑ أو ↓ يحفظ الترتيب فورًا.</p>
         <div className="qms-row">
           <label className="qms-row">
             <input type="checkbox" checked={productionTagCustomLine} onChange={(event) => {
@@ -445,16 +446,35 @@ export const QualitySettings: React.FC = () => {
             setProductionTagProductId('');
           }}>إلغاء التعديل</button> : null}
         </div>
+        <div className="qms-row" style={{ marginBottom: 10 }}>
+          {([
+            ['all', 'كل الأوسمة'],
+            ['home', 'الأجهزة المنزلية'],
+            ['seria', 'السريا'],
+          ] as Array<[QualitySector | 'all', string]>).map(([value, label]) => (
+            <button
+              type="button"
+              key={value}
+              className={`qms-btn${productionTagFilter === value ? ' qms-btn-primary' : ' qms-btn-ghost'}`}
+              onClick={() => setProductionTagFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <table className="qms-table">
-          <thead><tr><th>الوسم</th><th>القسم</th><th>الحالة</th><th></th></tr></thead>
+          <thead><tr><th>الترتيب</th><th>الوسم</th><th>القسم</th><th>الحالة</th><th>الترتيب والحذف</th></tr></thead>
           <tbody>
-            {productionTags.map((tag) => (
+            {productionTags
+              .filter((tag) => productionTagFilter === 'all' || tag.sector === productionTagFilter)
+              .map((tag, index, filteredTags) => (
               <tr key={tag.id}>
+                <td>{index + 1}</td>
                 <td>{tag.lineName} — {tag.productName}</td>
                 <td>{tag.sector === 'seria' ? 'السريا' : 'الأجهزة المنزلية'}</td>
                 <td>{tag.isActive === false ? 'موقوف' : 'نشط'}</td>
                 <td>{canManage ? (
-                  <>
+                  <div className="qms-row">
                     <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
                       setProductionTagId(tag.id);
                       setProductionTagLineId(tag.lineId || '');
@@ -463,8 +483,38 @@ export const QualitySettings: React.FC = () => {
                       setProductionTagProductId(tag.productId);
                       setProductionTagSector(tag.sector);
                     }}>تعديل</button>
+                    <button
+                      type="button"
+                      className="qms-btn qms-btn-ghost"
+                      disabled={index === 0}
+                      onClick={() => void save(async () => {
+                        const previous = filteredTags[index - 1];
+                        if (!previous) return;
+                        const ids = filteredTags.map((item) => item.id);
+                        const from = ids.indexOf(tag.id);
+                        const [moved] = ids.splice(from, 1);
+                        ids.splice(from - 1, 0, moved);
+                        await qualitySettingsService.reorderProductionTags(productionTagFilter, ids);
+                      }, 'تم تغيير ترتيب الأوسمة')}
+                    >↑ أعلى</button>
+                    <button
+                      type="button"
+                      className="qms-btn qms-btn-ghost"
+                      disabled={index === filteredTags.length - 1}
+                      onClick={() => void save(async () => {
+                        const ids = filteredTags.map((item) => item.id);
+                        const from = ids.indexOf(tag.id);
+                        const [moved] = ids.splice(from, 1);
+                        ids.splice(from + 1, 0, moved);
+                        await qualitySettingsService.reorderProductionTags(productionTagFilter, ids);
+                      }, 'تم تغيير ترتيب الأوسمة')}
+                    >↓ أسفل</button>
                     {tag.isActive !== false ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void save(() => qualitySettingsService.hideProductionTag(tag.id), 'تم إيقاف الوسم')}>إيقاف</button> : null}
-                  </>
+                    <button type="button" className="qms-btn qms-btn-ghost qms-btn-danger" onClick={() => {
+                      if (!window.confirm(`حذف الوسم «${tag.lineName} — ${tag.productName}»؟`)) return;
+                      void save(() => qualitySettingsService.deleteProductionTag(tag.id), 'تم حذف الوسم');
+                    }}>حذف</button>
+                  </div>
                 ) : null}</td>
               </tr>
             ))}

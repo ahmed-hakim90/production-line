@@ -423,6 +423,44 @@ export const qualitySettingsService = {
     await auditQuality('QUALITY_SET_POLICIES', 'إيقاف وسم خط إنتاج مع الإبقاء على السحبات السابقة', { tagId: id });
   },
 
+  async deleteProductionTag(id: string): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    const pulls = await listByTenant(QMS_COLLECTIONS.LINE_PULLS, activeTenantId());
+    if (pulls.some((pull) => String(pull.productionTagId || '') === id)) {
+      throw new Error('هذا الوسم مرتبط بسحبات مسجلة؛ استخدم الإيقاف بدل الحذف للاحتفاظ بالسجلات السابقة.');
+    }
+    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
+      if (!tags.some((tag) => tag.id === id)) throw new Error('وسم خط الإنتاج غير موجود.');
+      return tags
+        .filter((tag) => tag.id !== id)
+        .map((tag, index) => ({ ...tag, displayOrder: index + 1 }));
+    });
+    await auditQuality('QUALITY_SET_POLICIES', 'حذف وسم خط إنتاج غير مستخدم', { tagId: id });
+  },
+
+  async reorderProductionTags(sector: QualitySector | 'all', orderedIds: string[]): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
+      const byId = new Map(tags.map((tag) => [tag.id, tag]));
+      const reorderedVisible = orderedIds
+        .map((id) => byId.get(id))
+        .filter((tag): tag is QualityProductionTag => Boolean(tag));
+      const remaining = tags.filter((tag) =>
+        (sector === 'all' || tag.sector === sector)
+        && !reorderedVisible.some((item) => item.id === tag.id));
+      const visible = [...reorderedVisible, ...remaining];
+      const combined = sector === 'all'
+        ? visible
+        : [
+          ...visible,
+          ...tags.filter((tag) => tag.sector !== sector),
+        ];
+      const orderMap = new Map(combined.map((tag, index) => [tag.id, index + 1]));
+      return tags.map((tag) => ({ ...tag, displayOrder: orderMap.get(tag.id) || tag.displayOrder || 1 }));
+    });
+    await auditQuality('QUALITY_SET_POLICIES', 'تغيير ترتيب أوسمة خطوط الإنتاج', { sector, orderedIds });
+  },
+
   async listSectorTags(): Promise<QualitySectorTag[]> {
     return listByTenant<QualitySectorTag>(QMS_COLLECTIONS.SECTOR_TAGS, activeTenantId());
   },
