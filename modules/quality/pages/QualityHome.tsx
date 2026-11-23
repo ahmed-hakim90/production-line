@@ -7,7 +7,7 @@ const links = [
   ['/quality/pallets', 'استلام وفحص البالتات'],
   ['/quality/hourly-samples', 'عينات بالساعة'],
   ['/quality/line-samples', 'سحب عينات الخطوط'],
-  ['/quality/summaries', 'ملخصات الجودة'],
+  ['/quality/summaries', 'إجمال فحص اليوم'],
   ['/quality/dashboard', 'لوحة تحليلات الجودة'],
   ['/quality/flowchart', 'مخطط الجودة'],
   ['/quality/reports', 'تقارير الجودة'],

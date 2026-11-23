@@ -401,6 +401,7 @@ export const qualitySettingsService = {
         lineName,
         productId,
         productName,
+        defaultSampleCount: existing?.defaultSampleCount ?? 10,
         sector: input.sector,
         displayOrder: existing?.displayOrder ?? Math.max(0, ...existingTags.map((item) => item.displayOrder || 0)) + 1,
         isActive: true,
@@ -411,6 +412,21 @@ export const qualitySettingsService = {
       lineId: input.lineId || '',
       productId,
       sector: input.sector,
+    });
+  },
+
+  async updateProductionTagSampleCount(id: string, sampleCount: number): Promise<void> {
+    assertQualityPermission('quality.settings.manage');
+    if (!Number.isInteger(sampleCount) || sampleCount < 1) {
+      throw new Error('عدد العينات يجب أن يكون عددًا صحيحًا أكبر من صفر.');
+    }
+    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
+      if (!tags.some((tag) => tag.id === id)) throw new Error('وسم خط الإنتاج غير موجود.');
+      return tags.map((tag) => tag.id === id ? { ...tag, defaultSampleCount: sampleCount } : tag);
+    });
+    await auditQuality('QUALITY_SET_POLICIES', 'تغيير عدد العينات الافتراضي لوسم خط إنتاج', {
+      tagId: id,
+      sampleCount,
     });
   },
 

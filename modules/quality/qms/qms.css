@@ -134,6 +134,13 @@
 .qms-pull-selection-column { min-width: 0; }
 .qms-pull-selection-title { display: block; margin-bottom: 8px; color: #334155; font-size: 0.78rem; font-weight: 800; }
 .qms-pull-card-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.qms-pull-tag-card { display: grid; gap: 5px; min-width: 0; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; padding: 6px; }
+.qms-pull-tag-card.is-selected { border: 2px solid #2563eb; background: #eff6ff; }
+.qms-pull-tag-card .qms-pull-option-card { min-height: 54px; border: 0; padding: 5px; box-shadow: none; }
+.qms-pull-tag-card .qms-pull-option-card.is-selected { border: 0; background: transparent; }
+.qms-pull-tag-sample-count { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid #e2e8f0; padding: 5px 2px 0; color: #64748b; font-size: 0.68rem; font-weight: 700; }
+.qms-pull-tag-sample-count .qms-input { width: 76px; min-height: 32px; border-radius: 8px; padding: 4px 7px; text-align: center; }
+.qms-pull-tag-sample-count .qms-input:disabled { opacity: 0.8; color: #334155; }
 .qms-pull-option-card { position: relative; display: flex; align-items: center; gap: 9px; min-height: 68px; width: 100%; border: 1px solid #cbd5e1; border-radius: 12px; padding: 9px; background: #fff; color: #334155; text-align: start; cursor: pointer; }
 .qms-pull-option-card:hover { border-color: #93c5fd; background: #eff6ff; }
 .qms-pull-option-card.is-selected { border: 2px solid #2563eb; background: #eff6ff; color: #1e3a8a; box-shadow: 0 3px 10px rgba(37, 99, 235, 0.12); }
@@ -195,6 +202,10 @@
 .qms-total-samples-final strong { color: #1d4ed8; }
 .qms-line-status-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: -2px 0 10px; }
 .qms-line-status-legend > span { display: inline-flex; align-items: center; gap: 6px; color: #475569; font-size: 0.72rem; font-weight: 700; }
+.qms-bulk-pull-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; border: 1px solid #dbe3ef; border-radius: 12px; background: #f8fafc; padding: 8px 10px; margin-bottom: 10px; }
+.qms-bulk-pull-actions label { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; font-size: 0.76rem; font-weight: 800; }
+.qms-bulk-pull-actions input[type="checkbox"], .qms-line-pull-table input[type="checkbox"] { width: 18px; height: 18px; accent-color: #2563eb; }
+.qms-bulk-pull-actions span { color: #64748b; font-size: 0.72rem; }
 .qms-line-status-dot { display: inline-block; width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #94a3b8; }
 .qms-line-status-dot.is-pending { background: #d97706; }
 .qms-line-status-dot.is-accepted { background: #16a34a; }
@@ -268,6 +279,30 @@
 .qms-line-defect-empty.is-clear { color: #15803d; }
 .qms-hourly-total-row { background: #f1f5f9; color: #334155; font-weight: 800; }
 .qms-hourly-total-row td { border-top: 2px solid #cbd5e1; }
+.qms-daily-inspection { display: grid; gap: 12px; }
+.qms-daily-inspection-kpis { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.qms-daily-inspection-kpis .qms-card { padding: 12px; }
+.qms-daily-inspection-kpis .qms-kpi strong { font-size: 1.2rem; }
+.qms-daily-inspection-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.qms-daily-inspection-panel { min-width: 0; padding: 12px; }
+.qms-daily-inspection-panel > .qms-subtitle { min-height: 28px; margin: 0 0 8px; }
+.qms-daily-inspection-table { font-size: 0.72rem; }
+.qms-daily-inspection-table th, .qms-daily-inspection-table td { padding: 7px 5px; }
+.qms-daily-inspection-table tbody tr.qms-rejected { background: #fff1f2; }
+.qms-daily-inspection-table tbody tr.qms-rejected td { color: #7f1d1d; }
+.qms-daily-inspection-table tfoot { background: #f1f5f9; font-weight: 800; }
+.qms-daily-status { display: block; width: fit-content; margin: 1px 0; border-radius: 999px; padding: 2px 6px; font-size: 0.62rem; font-weight: 800; white-space: nowrap; }
+.qms-daily-status.is-accepted { background: #dcfce7; color: #166534; }
+.qms-daily-status.is-rejected { background: #fee2e2; color: #991b1b; }
+.qms-daily-status.is-pending { background: #fef3c7; color: #92400e; }
+.qms-daily-defect-count { display: inline-block; min-width: 24px; color: #166534; text-align: center; }
+.qms-daily-defect-count.has-defects { color: #b91c1c; }
+.qms-daily-defect-toggle { display: block; margin-top: 3px; border: 0; border-radius: 6px; background: #eff6ff; color: #1d4ed8; padding: 3px 7px; font-size: 0.62rem; font-weight: 800; cursor: pointer; }
+.qms-daily-defect-toggle:hover { background: #dbeafe; }
+.qms-daily-defect-details { display: grid; gap: 2px; margin-top: 3px; color: #991b1b; font-size: 0.62rem; }
+@media (max-width: 1100px) {
+  .qms-daily-inspection-grid { grid-template-columns: 1fr; }
+}
 @media (prefers-reduced-motion: reduce) {
   .qms-line-stat, .qms-line-pull-row { transition: none; }
   .qms-line-stat:hover { transform: none; }

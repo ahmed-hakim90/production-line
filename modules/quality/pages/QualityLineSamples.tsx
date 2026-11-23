@@ -68,6 +68,7 @@ export const QualityLineSamples: React.FC = () => {
   const [technicians, setTechnicians] = useState<QualityTechnician[]>([]);
   const [managedSlots, setManagedSlots] = useState<QualitySampleSlot[]>([]);
   const [productionTags, setProductionTags] = useState<QualityProductionTag[]>([]);
+  const [tagSampleCountDrafts, setTagSampleCountDrafts] = useState<Record<string, number>>({});
   const [rows, setRows] = useState<QualityLinePull[]>([]);
   const [policies, setPolicies] = useState<QualityPolicySettings>({ closeRequiresQualityApproval: false, lineSampleRejectLimit: 1 });
   const [slotKey, setSlotKey] = useState(() => {
@@ -113,6 +114,7 @@ export const QualityLineSamples: React.FC = () => {
   const [newReasonOpen, setNewReasonOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const hourlySummaryRefs = useRef(new Map<string, HTMLElement>());
+  const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
 
   const load = async () => {
     const [nextSlots, nextStations, nextManagedStations, nextManagedSlots, nextRows, nextPolicies, nextProductionTags, nextTechnicians] = await Promise.all([
@@ -160,6 +162,10 @@ export const QualityLineSamples: React.FC = () => {
     }
   }, [activeId]);
 
+  useEffect(() => {
+    setSelectedPendingIds([]);
+  }, [date, lineFilter, slotFilter, statusFilter, sector]);
+
   const active = rows.find((row) => row.id === activeId);
   const inspectorChoices = inspectorOptions(masters.employees, staff.assignments, { lineId, stationId });
   const visibleProductionTags = productionTags
@@ -177,8 +183,8 @@ export const QualityLineSamples: React.FC = () => {
   )).sort((a, b) =>
     (b.startTime || '').localeCompare(a.startTime || '', 'ar', { numeric: true })
     || (b.endTime || '').localeCompare(a.endTime || '', 'ar', { numeric: true })
-    || (typeof a.createdAt === 'string' ? Date.parse(a.createdAt) : a.createdAt?.toMillis?.() || 0)
-      - (typeof b.createdAt === 'string' ? Date.parse(b.createdAt) : b.createdAt?.toMillis?.() || 0)
+    || (typeof b.createdAt === 'string' ? Date.parse(b.createdAt) : b.createdAt?.toMillis?.() || 0)
+      - (typeof a.createdAt === 'string' ? Date.parse(a.createdAt) : a.createdAt?.toMillis?.() || 0)
     || a.lineName.localeCompare(b.lineName, 'ar', { numeric: true }));
   const lineFilterOptions = [...new Map(rows.map((row) => [row.lineId, { id: row.lineId, name: row.lineName }])).values()];
 
@@ -190,6 +196,28 @@ export const QualityLineSamples: React.FC = () => {
       toast.success('تم حفظ حد الرفض التلقائي.');
     } catch (error) {
       toast.error(qualityUserMessage(error, 'تعذر حفظ حد الرفض.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveTagSampleCount = async (tag: QualityProductionTag) => {
+    if (!can('quality.settings.manage')) return;
+    const nextCount = tagSampleCountDrafts[tag.id] ?? tag.defaultSampleCount ?? 10;
+    if (!Number.isInteger(nextCount) || nextCount < 1) {
+      toast.error('عدد العينات يجب أن يكون عددًا صحيحًا أكبر من صفر.');
+      return;
+    }
+    if (nextCount === (tag.defaultSampleCount || 10)) return;
+    setSaving(true);
+    try {
+      await qualitySettingsService.updateProductionTagSampleCount(tag.id, nextCount);
+      setProductionTags((current) => current.map((item) => item.id === tag.id
+        ? { ...item, defaultSampleCount: nextCount }
+        : item));
+      toast.success(`تم حفظ عدد العينات الافتراضي لوسم ${tag.lineName}.`);
+    } catch (error) {
+      toast.error(qualityUserMessage(error, 'تعذر حفظ عدد العينات الافتراضي.'));
     } finally {
       setSaving(false);
     }
@@ -338,6 +366,32 @@ export const QualityLineSamples: React.FC = () => {
       await load();
     } catch (error) {
       toast.error(qualityUserMessage(error, 'تعذر إنهاء الفحص.'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const completeSelectedWithoutDefects = async () => {
+    if (!can('quality.samples.inspect') || selectedPendingIds.length === 0) return;
+    setSaving(true);
+    let completedCount = 0;
+    try {
+      for (const id of selectedPendingIds) {
+        const row = visibleRows.find((item) => item.id === id);
+        if (!row || row.status !== 'pending') continue;
+        await qualitySampleService.completePull(id, {
+          defects: [],
+          rejectLimit: row.rejectLimit ?? policies.lineSampleRejectLimit,
+          decisionMode: 'manual_accept',
+        });
+        completedCount += 1;
+      }
+      setSelectedPendingIds([]);
+      await load();
+      toast.success(`تم إنهاء ${completedCount} سحبة بلا عيوب.`);
+    } catch (error) {
+      await load();
+      toast.error(qualityUserMessage(error, 'تعذر إنهاء السحبات المحددة.'));
     } finally {
       setSaving(false);
     }
@@ -862,21 +916,50 @@ export const QualityLineSamples: React.FC = () => {
             <span className="qms-pull-selection-title">وسم الخط والمنتج</span>
             <div className="qms-pull-card-list">
               {visibleProductionTags.map((tag) => (
-                <button
-                  type="button"
-                  key={tag.id}
-                  className={`qms-pull-option-card${productionTagId === tag.id ? ' is-selected' : ''}`}
-                  onClick={() => {
-                    setProductionTagId(tag.id);
-                    setLineId(tag.lineId || `quality-tag:${tag.id}`);
-                    const station = stations.find((item) => item.id === stationId);
-                    setInspectorId(station?.defaultInspectorEmployeeId || '');
-                  }}
-                >
-                  <span className="qms-pull-option-mark">خط</span>
-                  <span><strong>{tag.lineName}</strong><small>{tag.productName}</small></span>
-                  {productionTagId === tag.id ? <CheckCircle2 size={18} aria-hidden="true" /> : null}
-                </button>
+                <div className={`qms-pull-tag-card${productionTagId === tag.id ? ' is-selected' : ''}`} key={tag.id}>
+                  <button
+                    type="button"
+                    className={`qms-pull-option-card${productionTagId === tag.id ? ' is-selected' : ''}`}
+                    onClick={() => {
+                      if (productionTagId !== tag.id) {
+                        setSampleCount(tagSampleCountDrafts[tag.id] ?? tag.defaultSampleCount ?? 10);
+                      }
+                      setProductionTagId(tag.id);
+                      setLineId(tag.lineId || `quality-tag:${tag.id}`);
+                      const station = stations.find((item) => item.id === stationId);
+                      setInspectorId(station?.defaultInspectorEmployeeId || '');
+                    }}
+                  >
+                    <span className="qms-pull-option-mark">خط</span>
+                    <span><strong>{tag.lineName}</strong><small>{tag.productName}</small></span>
+                    {productionTagId === tag.id ? <CheckCircle2 size={18} aria-hidden="true" /> : null}
+                  </button>
+                  <label className="qms-pull-tag-sample-count">
+                    <span>عدد العينات</span>
+                    <input
+                      className="qms-input"
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={tagSampleCountDrafts[tag.id] ?? tag.defaultSampleCount ?? 10}
+                      disabled={!can('quality.settings.manage') || saving}
+                      aria-label={`عدد العينات الافتراضي ل${tag.lineName} - ${tag.productName}`}
+                      onChange={(event) => {
+                        const nextCount = Number(event.target.value);
+                        setTagSampleCountDrafts((current) => ({ ...current, [tag.id]: nextCount }));
+                        if (productionTagId === tag.id) setSampleCount(nextCount);
+                      }}
+                      onBlur={() => void saveTagSampleCount(tag)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          void saveTagSampleCount(tag);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               ))}
               {visibleProductionTags.length === 0 ? <p className="qms-muted">لا توجد أوسمة نشطة لهذا القسم.</p> : null}
             </div>
@@ -1058,9 +1141,34 @@ export const QualityLineSamples: React.FC = () => {
           <span><i className="qms-line-status-dot is-accepted" />مقبولة</span>
           <span><i className="qms-line-status-dot is-rejected" />مرفوضة</span>
         </div>
+        {can('quality.samples.inspect') ? (
+          <div className="qms-bulk-pull-actions">
+            <label>
+              <input
+                type="checkbox"
+                checked={visibleRows.filter((row) => row.status === 'pending').length > 0
+                  && visibleRows.filter((row) => row.status === 'pending').every((row) => selectedPendingIds.includes(row.id))}
+                onChange={(event) => {
+                  const pendingIds = visibleRows.filter((row) => row.status === 'pending').map((row) => row.id);
+                  setSelectedPendingIds(event.target.checked ? pendingIds : []);
+                }}
+              />
+              تحديد الكل
+            </label>
+            <span>المحدد: {selectedPendingIds.length}</span>
+            <button
+              type="button"
+              className="qms-btn qms-btn-primary"
+              disabled={saving || selectedPendingIds.length === 0}
+              onClick={() => void completeSelectedWithoutDefects()}
+            >
+              إنهاء المحدد بلا عيوب
+            </button>
+          </div>
+        ) : null}
         <div className="qms-table-wrap">
           <table className="qms-table qms-line-pull-table">
-            <thead><tr><th>التاريخ</th><th>الفترة</th><th>خط الإنتاج</th><th>المنتج</th><th>محطة الفحص</th><th>المراقب</th><th>العينات</th><th>العيوب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
+            <thead><tr><th>تحديد</th><th>التاريخ</th><th>الفترة</th><th>خط الإنتاج</th><th>المنتج</th><th>محطة الفحص</th><th>المراقب</th><th>العينات</th><th>العيوب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody>
               {visibleRows.map((row, index) => {
                 const previous = visibleRows[index - 1];
@@ -1069,7 +1177,7 @@ export const QualityLineSamples: React.FC = () => {
                 <React.Fragment key={row.id}>
                   {startsHourGroup ? (
                     <tr className="qms-hour-separator" key={`hour-${row.slotKey}`}>
-                      <td colSpan={10}>
+                      <td colSpan={11}>
                         <div>
                           <span className="qms-hour-separator-dot" />
                           <strong>{row.startTime}–{row.endTime}</strong>
@@ -1079,6 +1187,18 @@ export const QualityLineSamples: React.FC = () => {
                     </tr>
                   ) : null}
                   <tr className={`qms-line-pull-row ${row.status !== 'completed' ? 'is-pending' : row.palletRejected ? 'is-rejected' : 'is-accepted'}`}>
+                  <td>
+                    {row.status === 'pending' ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedPendingIds.includes(row.id)}
+                        onChange={(event) => setSelectedPendingIds((current) => event.target.checked
+                          ? [...current, row.id]
+                          : current.filter((id) => id !== row.id))}
+                        aria-label={`تحديد سحبة ${row.lineName} ${row.startTime}-${row.endTime}`}
+                      />
+                    ) : <span className="qms-muted">—</span>}
+                  </td>
                   <td>{row.date}</td>
                   <td>{row.startTime}–{row.endTime}</td>
                   <td>{row.lineName}</td>
@@ -1138,7 +1258,7 @@ export const QualityLineSamples: React.FC = () => {
             {visibleRows.length > 0 ? (
               <tfoot>
                 <tr className="qms-hourly-total-row">
-                  <td colSpan={6}>إجمالي السحبات المعروضة</td>
+                  <td colSpan={7}>إجمالي السحبات المعروضة</td>
                   <td>{summaryCounts.samples}</td>
                   <td>{visibleRows.reduce((sum, row) => sum + row.defectCount, 0)}</td>
                   <td>

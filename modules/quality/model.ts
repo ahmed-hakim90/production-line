@@ -115,6 +115,7 @@ export interface QualityProductionTag {
   lineName: string;
   productId: string;
   productName: string;
+  defaultSampleCount?: number;
   sector: QualitySector;
   isActive: boolean;
   displayOrder: number;
