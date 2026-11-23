@@ -194,6 +194,7 @@ export interface QualityLinePull {
   defects?: QualityDefectLine[];
   createdByUid: string;
   createdByName: string;
+  createdAt?: { toMillis?: () => number } | string;
   completedAt?: string;
 }
 

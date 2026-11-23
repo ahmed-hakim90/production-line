@@ -164,7 +164,12 @@ export const QualityLineSamples: React.FC = () => {
     && (!slotFilter || row.slotKey === slotFilter)
     && (statusFilter === 'all' || row.status === statusFilter)
     && (sector === 'all' || row.sector === sector)
-  ));
+  )).sort((a, b) =>
+    (a.startTime || '').localeCompare(b.startTime || '', 'ar', { numeric: true })
+    || (a.endTime || '').localeCompare(b.endTime || '', 'ar', { numeric: true })
+    || (typeof a.createdAt === 'string' ? Date.parse(a.createdAt) : a.createdAt?.toMillis?.() || 0)
+      - (typeof b.createdAt === 'string' ? Date.parse(b.createdAt) : b.createdAt?.toMillis?.() || 0)
+    || a.lineName.localeCompare(b.lineName, 'ar', { numeric: true }));
   const lineFilterOptions = [...new Map(rows.map((row) => [row.lineId, { id: row.lineId, name: row.lineName }])).values()];
 
   const saveRejectLimit = async () => {
@@ -679,6 +684,18 @@ export const QualityLineSamples: React.FC = () => {
     rejected: visibleRows.filter((row) => row.status === 'completed' && row.palletRejected).length,
     samples: visibleRows.reduce((sum, row) => sum + totalLinePullSampleCount(row), 0),
   };
+  const hourlySummaries = [...new Set(visibleRows.map((row) => row.slotKey))].map((slotKey) => {
+    const slotRows = visibleRows.filter((row) => row.slotKey === slotKey);
+    return {
+      slotKey,
+      period: slotRows[0] ? `${slotRows[0].startTime}–${slotRows[0].endTime}` : '',
+      pulls: slotRows.length,
+      samples: slotRows.reduce((sum, row) => sum + totalLinePullSampleCount(row), 0),
+      defects: slotRows.reduce((sum, row) => sum + row.defectCount, 0),
+      rejected: slotRows.filter((row) => row.status === 'completed' && row.palletRejected).length,
+      accepted: slotRows.filter((row) => row.status === 'completed' && !row.palletRejected).length,
+    };
+  }).sort((a, b) => a.period.localeCompare(b.period, 'ar', { numeric: true }));
   const pullSetupSteps = [
     { label: 'الخط والمنتج', value: selectedProductionTag?.lineName || 'لم يتم الاختيار', complete: Boolean(selectedProductionTag) },
     { label: 'محطة الفحص', value: selectedStation?.name || 'لم يتم الاختيار', complete: Boolean(selectedStation) },
@@ -995,12 +1012,45 @@ export const QualityLineSamples: React.FC = () => {
           <span><i className="qms-line-status-dot is-accepted" />مقبولة</span>
           <span><i className="qms-line-status-dot is-rejected" />مرفوضة</span>
         </div>
+        {hourlySummaries.length > 0 ? (
+          <div className="qms-hourly-pull-summary" dir="rtl" aria-label="ملخص السحبات حسب الساعة">
+            {hourlySummaries.map((summary) => (
+              <article className="qms-hourly-pull-summary-card" key={summary.slotKey}>
+                <div className="qms-hourly-pull-summary-head">
+                  <strong>{summary.period}</strong>
+                  <span>{summary.pulls} سحبات</span>
+                </div>
+                <div className="qms-hourly-pull-summary-metrics">
+                  <span><small>عينات</small><strong>{summary.samples}</strong></span>
+                  <span><small>عيوب</small><strong>{summary.defects}</strong></span>
+                  <span className="is-accepted"><small>مقبولة</small><strong>{summary.accepted}</strong></span>
+                  <span className="is-rejected"><small>مرفوضة</small><strong>{summary.rejected}</strong></span>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : null}
         <div className="qms-table-wrap">
           <table className="qms-table qms-line-pull-table">
             <thead><tr><th>التاريخ</th><th>الفترة</th><th>خط الإنتاج</th><th>المنتج</th><th>محطة الفحص</th><th>المراقب</th><th>العينات</th><th>العيوب</th><th>الحالة</th><th>الإجراءات</th></tr></thead>
             <tbody>
-              {visibleRows.map((row) => (
-                <tr key={row.id} className={`qms-line-pull-row ${row.status !== 'completed' ? 'is-pending' : row.palletRejected ? 'is-rejected' : 'is-accepted'}`}>
+              {visibleRows.map((row, index) => {
+                const previous = visibleRows[index - 1];
+                const startsHourGroup = !previous || previous.slotKey !== row.slotKey;
+                return (
+                <>
+                  {startsHourGroup ? (
+                    <tr className="qms-hour-separator" key={`hour-${row.slotKey}`}>
+                      <td colSpan={10}>
+                        <div>
+                          <span className="qms-hour-separator-dot" />
+                          <strong>{row.startTime}–{row.endTime}</strong>
+                          <small>ملخص الفترة: يظهر أدناه سحبات ومراقبو هذه الساعة.</small>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null}
+                  <tr key={row.id} className={`qms-line-pull-row ${row.status !== 'completed' ? 'is-pending' : row.palletRejected ? 'is-rejected' : 'is-accepted'}`}>
                   <td>{row.date}</td>
                   <td>{row.startTime}–{row.endTime}</td>
                   <td>{row.lineName}</td>
@@ -1010,7 +1060,14 @@ export const QualityLineSamples: React.FC = () => {
                     ? ` + ${row.additionalInspectors.map((item) => `${item.employeeName} (${item.sampleCount})`).join(' + ')}`
                     : row.additionalInspectorName ? ` + ${row.additionalInspectorName} (${row.additionalSampleCount} عينة)` : ''}</td>
                   <td><span className="qms-line-count qms-line-count--samples">{totalLinePullSampleCount(row)}</span></td>
-                  <td><span className={`qms-line-count${row.defectCount > 0 ? ' qms-line-count--defects' : ''}`}>{row.defectCount}</span></td>
+                  <td>
+                    <span className={`qms-line-count${row.defectCount > 0 ? ' qms-line-count--defects' : ''}`}>{row.defectCount}</span>
+                    {row.status === 'completed' ? (
+                      <button type="button" className="qms-defect-view-link" onClick={() => void openInspection(row)}>
+                        {row.defectCount > 0 ? 'عرض العيوب' : 'لا توجد عيوب'}
+                      </button>
+                    ) : null}
+                  </td>
                   <td>
                     <span className={`qms-line-status${row.status !== 'completed' ? ' is-pending' : row.palletRejected ? ' is-rejected' : ' is-accepted'}`}>
                       <i className={`qms-line-status-dot${row.status !== 'completed' ? ' is-pending' : row.palletRejected ? ' is-rejected' : ' is-accepted'}`} />
@@ -1018,22 +1075,24 @@ export const QualityLineSamples: React.FC = () => {
                     </span>
                   </td>
                   <td className="qms-line-pull-actions">
-                    <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void openInspection(row)}>
+                    <button type="button" className="qms-btn qms-btn-ghost qms-btn-compact" onClick={() => void openInspection(row)}>
                       {row.status === 'completed' ? 'عرض الفحص' : 'فتح الفحص'}
                     </button>
                     {can('quality.samples.inspect')
                       && (row.status !== 'completed' || can('quality.records.reopen'))
                       && (row.defectCount === 0 || can('quality.defects.record')) ? (
-                        <button type="button" className="qms-btn qms-btn-ghost" disabled={saving} onClick={() => void openEdit(row)}>تعديل</button>
+                        <button type="button" className="qms-btn qms-btn-ghost qms-btn-compact" disabled={saving} onClick={() => void openEdit(row)}>تعديل</button>
                       ) : null}
                     {can('quality.records.delete') ? (
-                      <button type="button" className="qms-btn qms-btn-ghost qms-btn-danger" disabled={saving} onClick={() => void deletePull(row)}>
+                      <button type="button" className="qms-btn qms-btn-ghost qms-btn-danger qms-btn-compact" disabled={saving} onClick={() => void deletePull(row)}>
                         {row.status === 'pending' ? 'إلغاء الفحص' : 'حذف'}
                       </button>
                     ) : null}
                   </td>
-                </tr>
-              ))}
+                  </tr>
+                </>
+                );
+              })}
             </tbody>
           </table>
           {visibleRows.length === 0 ? <p className="qms-muted">لا توجد سحبات تطابق الفلاتر المحددة.</p> : null}
