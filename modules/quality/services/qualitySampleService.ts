@@ -322,6 +322,7 @@ export const qualitySampleService = {
       }
     }
     const additional = additionalInspectors[0];
+    const additionalSampleCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
     const actor = currentQualityActor();
     const completedPatch: Record<string, unknown> = {};
     if (pull.status === 'completed') {
