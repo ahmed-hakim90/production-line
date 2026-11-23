@@ -115,14 +115,15 @@ export const qualitySettingsService = {
     return listByTenant<QualityReason>(QMS_COLLECTIONS.REASONS, activeTenantId());
   },
 
-  async saveReason(input: Omit<QualityReason, 'id' | 'tenantId'> & { id?: string }): Promise<void> {
+  async saveReason(input: Omit<QualityReason, 'id' | 'tenantId' | 'code'> & { id?: string; code?: string }): Promise<void> {
     assertQualityPermission('quality.settings.manage');
-    const code = input.code.trim();
     const labelAr = input.labelAr.trim();
-    if (!code || !labelAr) throw new Error('رمز السبب والاسم مطلوبان.');
+    if (!labelAr) throw new Error('اسم العيب مطلوب.');
     const actor = currentQualityActor();
     const tenantId = activeTenantId();
     const existing = await this.listReasons();
+    const editing = existing.find((reason) => reason.id === input.id);
+    const code = input.code?.trim() || editing?.code || `DEF-Q-${doc(qmsCollection(QMS_COLLECTIONS.REASONS)).id.slice(0, 8).toUpperCase()}`;
     const duplicate = existing.find((reason) => reason.code === code && reason.id !== input.id);
     if (duplicate) throw new Error('رمز سبب العيب مستخدم بالفعل.');
     const duplicateName = existing.find((reason) => reason.isActive !== false && reason.labelAr === labelAr && reason.id !== input.id);

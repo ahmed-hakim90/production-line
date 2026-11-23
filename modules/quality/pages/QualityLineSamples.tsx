@@ -70,7 +70,13 @@ export const QualityLineSamples: React.FC = () => {
   const [productionTags, setProductionTags] = useState<QualityProductionTag[]>([]);
   const [rows, setRows] = useState<QualityLinePull[]>([]);
   const [policies, setPolicies] = useState<QualityPolicySettings>({ closeRequiresQualityApproval: false, lineSampleRejectLimit: 1 });
-  const [slotKey, setSlotKey] = useState('');
+  const [slotKey, setSlotKey] = useState(() => {
+    try {
+      return localStorage.getItem(`quality:line-sample-slot:${activeTenantId()}`) || '';
+    } catch {
+      return '';
+    }
+  });
   const [sector, setSector] = useState<QualitySector | 'all'>('all');
   const [productionTagId, setProductionTagId] = useState('');
   const [lineId, setLineId] = useState('');
@@ -98,8 +104,7 @@ export const QualityLineSamples: React.FC = () => {
   const [editReasonId, setEditReasonId] = useState('');
   const [editDefectCount, setEditDefectCount] = useState(1);
   const [editDefectNotes, setEditDefectNotes] = useState('');
-  const [newReasonDraft, setNewReasonDraft] = useState<Pick<QualityReason, 'code' | 'labelAr' | 'category'>>({
-    code: '',
+  const [newReasonDraft, setNewReasonDraft] = useState<Pick<QualityReason, 'labelAr' | 'category'>>({
     labelAr: '',
     category: '',
   });
@@ -513,13 +518,13 @@ export const QualityLineSamples: React.FC = () => {
         isActive: true,
       });
       await masters.reloadAux();
-      const saved = (await qualitySettingsService.listReasons()).find((reason) => reason.code === newReasonDraft.code.trim());
+      const saved = (await qualitySettingsService.listReasons()).find((reason) => reason.labelAr === newReasonDraft.labelAr.trim());
       if (saved) {
         if (editDraft) setEditReasonId(saved.id);
         else setReasonId(saved.id);
       }
       toast.success('تمت إضافة سبب العيب.');
-      setNewReasonDraft({ code: '', labelAr: '', category: '' });
+      setNewReasonDraft({ labelAr: '', category: '' });
     } catch (error) {
       toast.error(qualityUserMessage(error, 'تعذر إضافة سبب العيب.'));
     } finally {
@@ -818,7 +823,20 @@ export const QualityLineSamples: React.FC = () => {
             <span className="qms-label">تاريخ السحب</span>
             <input className="qms-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </label>
-          <MasterSelect label="فترة السحب" value={slotKey} onChange={setSlotKey} placeholder="اختر فترة السحب..." options={slots.map((slot) => ({ value: slot.slotKey, label: `${slot.startTime}–${slot.endTime}` }))} />
+          <MasterSelect
+            label="فترة السحب"
+            value={slotKey}
+            onChange={(value) => {
+              setSlotKey(value);
+              try {
+                localStorage.setItem(`quality:line-sample-slot:${activeTenantId()}`, value);
+              } catch {
+                // localStorage can be unavailable in restricted browser sessions.
+              }
+            }}
+            placeholder="اختر فترة السحب..."
+            options={slots.map((slot) => ({ value: slot.slotKey, label: `${slot.startTime}–${slot.endTime}` }))}
+          />
           <label>
             <span className="qms-label">إجمالي عينات السحبة</span>
             <input className="qms-input" type="number" min={1} step={1} value={sampleCount} onChange={(event) => setSampleCount(Number(event.target.value))} />
@@ -1035,7 +1053,6 @@ export const QualityLineSamples: React.FC = () => {
                   ) : null}
                   {newReasonOpen ? (
                     <div className="qms-new-reason-form">
-                      <label><span className="qms-label">رمز السبب</span><input className="qms-input" value={newReasonDraft.code} onChange={(event) => setNewReasonDraft((current) => ({ ...current, code: event.target.value }))} /></label>
                       <label><span className="qms-label">اسم العيب</span><input className="qms-input" value={newReasonDraft.labelAr} onChange={(event) => setNewReasonDraft((current) => ({ ...current, labelAr: event.target.value }))} /></label>
                       <label><span className="qms-label">التصنيف</span><input className="qms-input" value={newReasonDraft.category} onChange={(event) => setNewReasonDraft((current) => ({ ...current, category: event.target.value }))} /></label>
                       <button type="button" className="qms-btn qms-btn-primary" disabled={saving} onClick={() => void saveNewReason()}>حفظ السبب</button>

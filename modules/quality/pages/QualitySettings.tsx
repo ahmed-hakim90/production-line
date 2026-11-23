@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { usePermission } from '@/utils/permissions';
 import { STANDARD_AQL_LEVEL_II, type AqlPlanRange } from '../domain/aql';
@@ -22,10 +23,10 @@ export const QualitySettings: React.FC = () => {
   const [plans, setPlans] = useState<AqlPlanRange[]>([]);
   const [usingStandard, setUsingStandard] = useState(true);
   const [closeRequired, setCloseRequired] = useState(false);
-  const [reasonCode, setReasonCode] = useState('');
   const [reasonLabel, setReasonLabel] = useState('');
   const [reasonCategory, setReasonCategory] = useState('عام');
   const [reasonSector, setReasonSector] = useState<'' | QualitySector>('');
+  const [reasonImporting, setReasonImporting] = useState(false);
   const [editingReasonId, setEditingReasonId] = useState('');
   const [catalogReasons, setCatalogReasons] = useState<QualityReason[]>([]);
   const [stationName, setStationName] = useState('');
@@ -82,6 +83,56 @@ export const QualitySettings: React.FC = () => {
 
   useEffect(() => { void load().catch((error: unknown) => toast.error(qualityUserMessage(error, 'تعذر التحميل'))); }, []);
 
+  const importReasons = async (file: File) => {
+    if (!canManage) return;
+    setReasonImporting(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array' });
+      const firstSheet = workbook.SheetNames[0];
+      if (!firstSheet) throw new Error('ملف Excel لا يحتوي على أوراق عمل.');
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[firstSheet], {
+        defval: '',
+        raw: false,
+      });
+      const existing = await qualitySettingsService.listReasons();
+      const knownNames = new Set(existing
+        .filter((reason) => reason.isActive !== false)
+        .map((reason) => reason.labelAr.trim()));
+      let imported = 0;
+      let duplicates = 0;
+      for (const row of rows) {
+        const normalized = Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [key.trim().toLocaleLowerCase(), String(value ?? '').trim()]),
+        );
+        const name = normalized['اسم العيب'] || normalized['العيب'] || normalized['name'] || normalized['defect'];
+        if (!name) continue;
+        if (knownNames.has(name)) {
+          duplicates += 1;
+          continue;
+        }
+        const category = normalized['التصنيف'] || normalized['category'] || 'عام';
+        const sectorValue = normalized['القطاع'] || normalized['sector'] || '';
+        const sector = sectorValue.includes('سريا') ? 'seria' : sectorValue.includes('منزل') ? 'home' : undefined;
+        await qualitySettingsService.saveReason({
+          labelAr: name,
+          category,
+          sector,
+          isActive: true,
+        });
+        knownNames.add(name);
+        imported += 1;
+      }
+      await load();
+      masters.reloadAux();
+      toast.success(`تم استيراد ${imported} عيبًا${duplicates ? `، وتجاهل ${duplicates} مكررًا` : ''}.`);
+    } catch (error) {
+      toast.error(qualityUserMessage(error, 'تعذر استيراد عيوب الجودة.'));
+    } finally {
+      setReasonImporting(false);
+    }
+  };
+
   const save = async (work: () => Promise<void>, message: string) => {
     try {
       await work();
@@ -125,16 +176,16 @@ export const QualitySettings: React.FC = () => {
       </section>
       <section className="qms-card" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">أسباب العيوب</h2>
-        <label><span className="qms-label">بحث</span><input className="qms-input" value={reasonQuery} onChange={(event) => setReasonQuery(event.target.value)} placeholder="الرمز أو الاسم أو التصنيف" /></label>
+        <label><span className="qms-label">بحث</span><input className="qms-input" value={reasonQuery} onChange={(event) => setReasonQuery(event.target.value)} placeholder="الاسم أو التصنيف" /></label>
         <table className="qms-table">
-          <thead><tr><th>الرمز</th><th>الاسم</th><th>التصنيف</th><th>القطاع</th><th></th></tr></thead>
+          <thead><tr><th>#</th><th>اسم العيب</th><th>التصنيف</th><th>القطاع</th><th></th></tr></thead>
           <tbody>
             {catalogReasons.filter((reason) => {
               const query = reasonQuery.trim();
-              return !query || `${reason.code} ${reason.labelAr} ${reason.category}`.includes(query);
-            }).map((reason) => (
+                  return !query || `${reason.labelAr} ${reason.category}`.includes(query);
+            }).map((reason, index) => (
               <tr key={reason.id}>
-                <td>{reason.code}</td>
+                <td>{index + 1}</td>
                 <td>{reason.labelAr}{reason.isActive === false ? ' — موقوف' : ''}</td>
                 <td>{reason.category}</td>
                 <td>{reason.sector === 'seria' ? 'السريا' : reason.sector === 'home' ? 'الأجهزة المنزلية' : 'مشترك'}</td>
@@ -142,7 +193,6 @@ export const QualitySettings: React.FC = () => {
                   <>
                     <button type="button" className="qms-btn qms-btn-ghost" onClick={() => {
                       setEditingReasonId(reason.id);
-                      setReasonCode(reason.code);
                       setReasonLabel(reason.labelAr);
                       setReasonCategory(reason.category);
                       setReasonSector(reason.sector || '');
@@ -156,7 +206,6 @@ export const QualitySettings: React.FC = () => {
         </table>
         <p className="qms-muted">الإيقاف يخفي السبب من التسجيل الجديد ويبقي العيوب المسجلة سابقاً. المصدر كان يحذف السجل؛ الحذف هنا غير مستخدم حتى لا تنقطع مراجع الفحص.</p>
         <div className="qms-row">
-          <label><span className="qms-label">الرمز</span><input className="qms-input" value={reasonCode} onChange={(event) => setReasonCode(event.target.value)} /></label>
           <label><span className="qms-label">الاسم</span><input className="qms-input" value={reasonLabel} onChange={(event) => setReasonLabel(event.target.value)} /></label>
           <label><span className="qms-label">التصنيف</span><input className="qms-input" value={reasonCategory} onChange={(event) => setReasonCategory(event.target.value)} /></label>
           <label><span className="qms-label">القطاع</span>
@@ -169,16 +218,34 @@ export const QualitySettings: React.FC = () => {
           <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage} onClick={() => void save(async () => {
             await qualitySettingsService.saveReason({
               id: editingReasonId || undefined,
-              code: reasonCode,
               labelAr: reasonLabel,
               category: reasonCategory,
               sector: reasonSector || undefined,
               isActive: true,
             });
             setEditingReasonId('');
-            setReasonCode('');
             setReasonLabel('');
           }, 'تم حفظ السبب')}>{editingReasonId ? 'حفظ التعديل' : 'إضافة سبب'}</button>
+        </div>
+      </section>
+      <section className="qms-card" style={{ marginBottom: 12 }}>
+        <h2 className="qms-title">استيراد أسماء العيوب من Excel</h2>
+        <p className="qms-muted">يدعم الملف عمود «اسم العيب» أو «العيب»، ويقبل اختياريًا «التصنيف» و«القطاع». لا يلزم إدخال كود للعيب؛ سيتم توليده تلقائيًا.</p>
+        <div className="qms-row">
+          <label>
+            <span className="qms-label">ملف Excel</span>
+            <input
+              className="qms-input"
+              type="file"
+              accept=".xlsx,.xls"
+              disabled={!canManage || reasonImporting}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) void importReasons(file);
+              }}
+            />
+          </label>
         </div>
       </section>
       <section className="qms-card" id="quality-technicians" style={{ marginBottom: 12 }}>
