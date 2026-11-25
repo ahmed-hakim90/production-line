@@ -16,7 +16,6 @@ import {
   secondSortPageStyle,
 } from '../modules/quality/print/qualityPrintModel.ts';
 import type { QualityHourlySample, QualityLinePull, QualityPallet } from '../modules/quality/model.ts';
-import { validateAdditionalInspectorAssignments } from '../modules/quality/domain/samples.ts';
 
 const hourly = (slotName: string): QualityHourlySample => ({
   id: slotName,
@@ -79,13 +78,6 @@ const printedPull = linePullPrintRows([{
 } as QualityLinePull])[0];
 assert.equal(printedPull.sampleCount, 8);
 assert.equal(printedPull.primarySampleCount, 5);
-
-const additionalAssignments = validateAdditionalInspectorAssignments([
-  { employeeId: 'emp-2', employeeName: 'مراقب إضافي 1', sampleCount: 5 },
-  { employeeId: 'emp-3', employeeName: 'مراقب إضافي 2', sampleCount: 3 },
-], 'emp-1', 15);
-assert.equal(additionalAssignments.length, 2);
-assert.equal(additionalAssignments.reduce((sum, item) => sum + item.sampleCount, 0), 8);
 
 const periods = periodStatusPrintRows([
   {

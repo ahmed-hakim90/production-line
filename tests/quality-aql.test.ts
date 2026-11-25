@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { calculateAqlDecision, lookupAqlPlan } from '../modules/quality/domain/aql.ts';
-import { validateAdditionalInspector, validateAdditionalInspectorAssignments } from '../modules/quality/domain/samples.ts';
+import { validateAdditionalInspector } from '../modules/quality/domain/samples.ts';
 import { workOrderMayCloseFromQuality } from '../modules/quality/domain/release.ts';
 import { scrapCauseShares } from '../modules/quality/domain/scrap.ts';
 import { buildFlowchartMetrics } from '../modules/quality/domain/flowchart.ts';
@@ -33,12 +33,6 @@ assert.throws(() => validateAdditionalInspector({
   primaryInspectorId: 'inspector-1',
   sampleCount: 12,
 }));
-
-const inspectorAssignments = validateAdditionalInspectorAssignments([
-  { employeeId: 'inspector-2', employeeName: 'مراقب 2', sampleCount: 3 },
-  { employeeId: 'inspector-3', employeeName: 'مراقب 3', sampleCount: 2 },
-], 'inspector-1', 15);
-assert.equal(inspectorAssignments.reduce((sum, item) => sum + item.sampleCount, 0), 5);
 
 assert.equal(workOrderMayCloseFromQuality({
   legacyStatus: 'approved',

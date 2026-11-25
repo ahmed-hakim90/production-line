@@ -76,7 +76,6 @@ const defectRows = (defects: QualityDefectLine[] | undefined) =>
       label: defect.reasonLabel.trim(),
       count: Number(defect.count || 0),
       notes: (defect.notes || '').trim(),
-      inspectorName: (defect.inspectorName || '').trim(),
     }));
 
 export function hourlyPrintRows(rows: QualityHourlySample[]) {
@@ -108,18 +107,14 @@ export function linePullPrintRows(rows: QualityLinePull[]) {
     productName: row.productName,
     stationName: row.stationName,
     inspectorName: row.inspectorName,
-    additionalInspectorName: row.additionalInspectors?.length
-      ? row.additionalInspectors.map((item) => `${item.employeeName} (${item.sampleCount})`).join(' + ')
-      : (row.additionalInspectorName || '').trim(),
+    additionalInspectorName: (row.additionalInspectorName || '').trim(),
     sampleCount: totalLinePullSampleCount(row),
     additionalSampleCount: row.additionalSampleCount,
-    primarySampleCount: row.additionalInspectors?.length
-      ? row.sampleCount - row.additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0)
-      : primaryInspectorSampleCount(
-        row.sampleCount,
-        row.additionalSampleCount,
-        row.sampleCountSemantics,
-      ),
+    primarySampleCount: primaryInspectorSampleCount(
+      row.sampleCount,
+      row.additionalSampleCount,
+      row.sampleCountSemantics,
+    ),
     defectCount: row.defectCount,
     result: linePullResultLabel(row),
     notes: (row.notes || '').trim(),

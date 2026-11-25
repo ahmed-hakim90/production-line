@@ -5,40 +5,6 @@ export interface AdditionalInspectorInput {
   sampleCount: number;
 }
 
-export interface AdditionalInspectorAssignmentInput {
-  employeeId: string;
-  employeeName: string;
-  sampleCount: number;
-}
-
-export function validateAdditionalInspectorAssignments(
-  assignments: AdditionalInspectorAssignmentInput[],
-  primaryInspectorId: string,
-  totalSampleCount: number,
-): AdditionalInspectorAssignmentInput[] {
-  assertSampleCount(totalSampleCount);
-  const ids = new Set<string>();
-  let assignedCount = 0;
-  const validated: AdditionalInspectorAssignmentInput[] = [];
-  for (const assignment of assignments) {
-    const employeeId = String(assignment.employeeId || '').trim();
-    const employeeName = String(assignment.employeeName || '').trim();
-    if (!employeeId || !employeeName) throw new Error('اختر المراقب الإضافي وأدخل اسمه.');
-    if (employeeId === primaryInspectorId) throw new Error('يجب أن يكون المراقب الإضافي مختلفًا عن المراقب الأساسي.');
-    if (ids.has(employeeId)) throw new Error('لا يمكن اختيار المراقب الإضافي أكثر من مرة.');
-    if (!Number.isInteger(assignment.sampleCount) || assignment.sampleCount < 1) {
-      throw new Error('عدد عينات المراقب الإضافي يجب أن يكون عددًا صحيحًا موجبًا.');
-    }
-    ids.add(employeeId);
-    assignedCount += assignment.sampleCount;
-    validated.push({ employeeId, employeeName, sampleCount: assignment.sampleCount });
-  }
-  if (assignedCount >= totalSampleCount) {
-    throw new Error('يجب ترك عينة واحدة على الأقل للمراقب الأساسي.');
-  }
-  return validated;
-}
-
 export function validateAdditionalInspector(input: AdditionalInspectorInput): {
   additionalInspectorId: string | null;
   additionalSampleCount: number;
@@ -72,11 +38,9 @@ export function primaryInspectorSampleCount(
 export function totalLinePullSampleCount(input: {
   sampleCount: number;
   additionalSampleCount?: number;
-  additionalInspectors?: AdditionalInspectorAssignmentInput[];
   sampleCountSemantics?: 'base_plus_additional';
 }): number {
   const sampleCount = Math.max(0, Number(input.sampleCount) || 0);
-  if (input.additionalInspectors?.length) return sampleCount;
   if (input.sampleCountSemantics === 'base_plus_additional') {
     return sampleCount + Math.max(0, Number(input.additionalSampleCount) || 0);
   }

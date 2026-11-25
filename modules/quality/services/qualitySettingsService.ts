@@ -115,15 +115,14 @@ export const qualitySettingsService = {
     return listByTenant<QualityReason>(QMS_COLLECTIONS.REASONS, activeTenantId());
   },
 
-  async saveReason(input: Omit<QualityReason, 'id' | 'tenantId' | 'code'> & { id?: string; code?: string }): Promise<void> {
+  async saveReason(input: Omit<QualityReason, 'id' | 'tenantId'> & { id?: string }): Promise<void> {
     assertQualityPermission('quality.settings.manage');
+    const code = input.code.trim();
     const labelAr = input.labelAr.trim();
-    if (!labelAr) throw new Error('اسم العيب مطلوب.');
+    if (!code || !labelAr) throw new Error('رمز السبب والاسم مطلوبان.');
     const actor = currentQualityActor();
     const tenantId = activeTenantId();
     const existing = await this.listReasons();
-    const editing = existing.find((reason) => reason.id === input.id);
-    const code = input.code?.trim() || editing?.code || `DEF-Q-${doc(qmsCollection(QMS_COLLECTIONS.REASONS)).id.slice(0, 8).toUpperCase()}`;
     const duplicate = existing.find((reason) => reason.code === code && reason.id !== input.id);
     if (duplicate) throw new Error('رمز سبب العيب مستخدم بالفعل.');
     const duplicateName = existing.find((reason) => reason.isActive !== false && reason.labelAr === labelAr && reason.id !== input.id);
@@ -401,7 +400,6 @@ export const qualitySettingsService = {
         lineName,
         productId,
         productName,
-        defaultSampleCount: existing?.defaultSampleCount ?? 10,
         sector: input.sector,
         displayOrder: existing?.displayOrder ?? Math.max(0, ...existingTags.map((item) => item.displayOrder || 0)) + 1,
         isActive: true,
@@ -415,21 +413,6 @@ export const qualitySettingsService = {
     });
   },
 
-  async updateProductionTagSampleCount(id: string, sampleCount: number): Promise<void> {
-    assertQualityPermission('quality.settings.manage');
-    if (!Number.isInteger(sampleCount) || sampleCount < 1) {
-      throw new Error('عدد العينات يجب أن يكون عددًا صحيحًا أكبر من صفر.');
-    }
-    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
-      if (!tags.some((tag) => tag.id === id)) throw new Error('وسم خط الإنتاج غير موجود.');
-      return tags.map((tag) => tag.id === id ? { ...tag, defaultSampleCount: sampleCount } : tag);
-    });
-    await auditQuality('QUALITY_SET_POLICIES', 'تغيير عدد العينات الافتراضي لوسم خط إنتاج', {
-      tagId: id,
-      sampleCount,
-    });
-  },
-
   async hideProductionTag(id: string): Promise<void> {
     assertQualityPermission('quality.settings.manage');
     await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
@@ -437,44 +420,6 @@ export const qualitySettingsService = {
       return tags.map((tag) => tag.id === id ? { ...tag, isActive: false } : tag);
     });
     await auditQuality('QUALITY_SET_POLICIES', 'إيقاف وسم خط إنتاج مع الإبقاء على السحبات السابقة', { tagId: id });
-  },
-
-  async deleteProductionTag(id: string): Promise<void> {
-    assertQualityPermission('quality.settings.manage');
-    const pulls = await listByTenant(QMS_COLLECTIONS.LINE_PULLS, activeTenantId());
-    if (pulls.some((pull) => String(pull.productionTagId || '') === id)) {
-      throw new Error('هذا الوسم مرتبط بسحبات مسجلة؛ استخدم الإيقاف بدل الحذف للاحتفاظ بالسجلات السابقة.');
-    }
-    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
-      if (!tags.some((tag) => tag.id === id)) throw new Error('وسم خط الإنتاج غير موجود.');
-      return tags
-        .filter((tag) => tag.id !== id)
-        .map((tag, index) => ({ ...tag, displayOrder: index + 1 }));
-    });
-    await auditQuality('QUALITY_SET_POLICIES', 'حذف وسم خط إنتاج غير مستخدم', { tagId: id });
-  },
-
-  async reorderProductionTags(sector: QualitySector | 'all', orderedIds: string[]): Promise<void> {
-    assertQualityPermission('quality.settings.manage');
-    await updateSettingsArray<QualityProductionTag>('qualityProductionTags', (tags) => {
-      const byId = new Map(tags.map((tag) => [tag.id, tag]));
-      const reorderedVisible = orderedIds
-        .map((id) => byId.get(id))
-        .filter((tag): tag is QualityProductionTag => Boolean(tag));
-      const remaining = tags.filter((tag) =>
-        (sector === 'all' || tag.sector === sector)
-        && !reorderedVisible.some((item) => item.id === tag.id));
-      const visible = [...reorderedVisible, ...remaining];
-      const combined = sector === 'all'
-        ? visible
-        : [
-          ...visible,
-          ...tags.filter((tag) => tag.sector !== sector),
-        ];
-      const orderMap = new Map(combined.map((tag, index) => [tag.id, index + 1]));
-      return tags.map((tag) => ({ ...tag, displayOrder: orderMap.get(tag.id) || tag.displayOrder || 1 }));
-    });
-    await auditQuality('QUALITY_SET_POLICIES', 'تغيير ترتيب أوسمة خطوط الإنتاج', { sector, orderedIds });
   },
 
   async listSectorTags(): Promise<QualitySectorTag[]> {

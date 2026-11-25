@@ -18,8 +18,6 @@ export interface QualityDefectLine {
   reasonLabel: string;
   count: number;
   notes?: string;
-  inspectorEmployeeId?: string;
-  inspectorName?: string;
 }
 
 export interface QualityPallet {
@@ -115,7 +113,6 @@ export interface QualityProductionTag {
   lineName: string;
   productId: string;
   productName: string;
-  defaultSampleCount?: number;
   sector: QualitySector;
   isActive: boolean;
   displayOrder: number;
@@ -155,12 +152,6 @@ export interface QualityHourlySample {
   createdByName: string;
 }
 
-export interface QualityAdditionalInspector {
-  employeeId: string;
-  employeeName: string;
-  sampleCount: number;
-}
-
 export interface QualityLinePull {
   id: string;
   tenantId: string;
@@ -180,7 +171,6 @@ export interface QualityLinePull {
   inspectorName: string;
   additionalInspectorEmployeeId?: string;
   additionalInspectorName?: string;
-  additionalInspectors?: QualityAdditionalInspector[];
   sampleCount: number;
   additionalSampleCount: number;
   sampleCountSemantics?: 'base_plus_additional';
@@ -195,7 +185,6 @@ export interface QualityLinePull {
   defects?: QualityDefectLine[];
   createdByUid: string;
   createdByName: string;
-  createdAt?: { toMillis?: () => number } | string;
   completedAt?: string;
 }
 

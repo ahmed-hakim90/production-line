@@ -62,13 +62,15 @@ Hosting (`firebase.json`):
 
 ## Firestore rules and indexes only
 
-After confirming the active Firebase project with `firebase use`, deploy only the Firestore rules and index definitions with:
+Deploy to an explicitly named Firebase project:
 
 ```bash
-npm run deploy:firestore
+npm run deploy:firestore -- --project <firebase-project-id>
 ```
 
-This composes `firestore.rules` first, then deploys only `firestore:rules` and `firestore:indexes`. It does not deploy or modify Firestore documents, Hosting, Functions, or Storage. Rules deployment replaces the live ruleset, and the index file is the desired index configuration; check that it contains every index you need before deploying.
+This composes `firestore.rules` and deploys only Firestore rules and indexes. It does not deploy or modify Firestore documents, Hosting, Functions, or Storage. The command does not use `--force`; indexes and field overrides that exist in the project but are absent from local configuration are not deleted.
+
+Firestore rules are deployed as a complete ruleset, replacing the project's current rules. Review the composed `firestore.rules` against the live rules in Firebase Console before deploying; rules deployment does not delete documents, but can change access to them.
 
 ## Full deploy recipe
 
