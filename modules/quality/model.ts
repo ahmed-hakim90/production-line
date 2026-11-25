@@ -211,6 +211,37 @@ export interface QualityPeriodStatus {
   updatedByName: string;
 }
 
+export interface QualityNamedReason {
+  id: string;
+  tenantId: string;
+  name: string;
+  nameKey: string;
+  isActive?: boolean;
+}
+
+export interface QualitySecondSortReturn {
+  id: string;
+  tenantId: string;
+  moduleSource: 'qms';
+  reportDate: string;
+  productId: string;
+  productName: string;
+  productCode: string;
+  sector: QualitySector;
+  quantity: number;
+  notes: string;
+  signatures: Array<{ title: string; name: string }>;
+  createdByUid: string;
+  createdByName: string;
+}
+
+export interface QualityScrapPeriod {
+  slotName: string;
+  reasonId: string;
+  reasonLabel: string;
+  quantity: number;
+}
+
 export interface QualityScrapReport {
   id: string;
   tenantId: string;
@@ -225,6 +256,8 @@ export interface QualityScrapReport {
   quantity: number;
   reasonId?: string;
   reasonLabel: string;
+  /** Hourly scrap stores one product for every period. Manual rows leave this empty. */
+  periods?: QualityScrapPeriod[];
   slotKey?: string;
   slotName?: string;
   productionSupervisorName: string;
@@ -249,6 +282,8 @@ export interface QualitySecondSortReport {
   productName: string;
   productCode: string;
   problem: string;
+  reasonId?: string;
+  reasonName?: string;
   discountPercent: number;
   quantity: number;
   approval: string;
@@ -283,4 +318,43 @@ export interface QualityShiftOption {
   name: string;
   startTime: string;
   endTime: string;
+}
+
+export interface QualityCartonReceipt {
+  id: string;
+  tenantId: string;
+  moduleSource: 'qms';
+  supplier: string;
+  receivedDate: string;
+  shipmentNumber: string;
+  shipmentCount: 0 | 1;
+  totalQuantity: number;
+  deliveryNoteNumber: string;
+  totalItems: number;
+  acceptedItems: number;
+  rejectedItems: number;
+  rejectedItemCode: string;
+  notes: string;
+  createdByUid: string;
+  createdByName: string;
+}
+
+export interface QualityPlasticReceipt {
+  id: string;
+  tenantId: string;
+  moduleSource: 'qms';
+  supplier: string;
+  receivedDate: string;
+  productName: string;
+  partName: string;
+  quantity: number;
+  inspectedSamples: number;
+  rejectedSamples: number;
+  reasonIds: string[];
+  reasonLabels: string[];
+  notes: string;
+  finalDecision: 'مقبول' | 'مرفوض' | 'في انتظار فحص المورد' | 'مقبول بنسبة';
+  acceptedPercentage: number | null;
+  createdByUid: string;
+  createdByName: string;
 }

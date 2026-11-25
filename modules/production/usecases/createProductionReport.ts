@@ -17,11 +17,13 @@ export type CreateProductionReportOutput = {
  */
 export async function createProductionReport(
   data: CreateProductionReportInput,
-  actor?: { userId?: string; userName?: string },
+  actor?: { userId?: string; userName?: string; enforceUnique?: boolean },
 ): Promise<UseCaseResult<CreateProductionReportOutput>> {
   return runUseCase(async () => {
     const tenantId = requireTenantIdOrThrow();
-    const reportId = await reportService.create(data);
+    const reportId = await reportService.create(data, {
+      enforceUnique: actor?.enforceUnique,
+    });
     if (!reportId) {
       throw new Error('تعذر حفظ التقرير');
     }

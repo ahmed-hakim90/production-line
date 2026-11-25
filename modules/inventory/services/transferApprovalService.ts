@@ -389,16 +389,27 @@ export const transferApprovalService = {
     const sourceId = sourceReportId.trim();
     const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
     if (boundWarehouseId) {
+      // Warehouse-scoped reads already have tenantId + warehouse + createdAt.
+      // Filtering sourceReportId in memory avoids a third composite that Firestore
+      // would refuse until a new index is published.
       const loadSide = async (field: 'fromWarehouseId' | 'toWarehouseId') => {
-        const scoped = tenantQuery(
-          db,
-          COLLECTION,
-          where('sourceReportId', '==', sourceId),
-          where(field, '==', boundWarehouseId),
-          limit(500),
-        );
-        const snap = await getDocs(scoped);
-        return snap.docs;
+        const matched: QueryDocumentSnapshot[] = [];
+        let cursor: QueryDocumentSnapshot | null = null;
+        const pageSize = 500;
+        for (let page = 0; page < 20; page += 1) {
+          const constraints: QueryConstraint[] = [
+            where(field, '==', boundWarehouseId),
+            orderBy('createdAt', 'desc'),
+            limit(pageSize),
+          ];
+          if (cursor) constraints.push(startAfter(cursor));
+          const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints));
+          matched.push(...snap.docs.filter((row) => String(row.data().sourceReportId || '') === sourceId));
+          if (snap.size < pageSize) return matched;
+          cursor = snap.docs[snap.docs.length - 1] ?? null;
+          if (!cursor) return matched;
+        }
+        throw new Error('طلبات المخزون لهذا المخزن أكثر من أن يُتحقق منها مع حذف التقرير. راجع اعتمادات التحويل أولاً.');
       };
       const [sourceDocs, destinationDocs] = await Promise.all([
         loadSide('fromWarehouseId'),
@@ -426,15 +437,21 @@ export const transferApprovalService = {
       const requiresIndex = code === 'failed-precondition' || message.includes('requires an index');
       if (!requiresIndex) throw error;
 
-      // Fallback for environments where sourceReportId+createdAt index is not deployed yet.
-      const fallbackQ = tenantQuery(
-        db,
-        COLLECTION,
-        where('sourceReportId', '==', sourceId),
-        limit(500),
-      );
-      const fallbackSnap = await getDocs(fallbackQ);
-      const rows = fallbackSnap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+      // Same index the transfer list already uses: tenantId + createdAt.
+      const rows: InventoryTransferRequest[] = [];
+      let cursor: QueryDocumentSnapshot | null = null;
+      const pageSize = 500;
+      for (let page = 0; page < 20; page += 1) {
+        const constraints: QueryConstraint[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
+        if (cursor) constraints.push(startAfter(cursor));
+        const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints));
+        rows.push(...snap.docs
+          .filter((row) => String(row.data().sourceReportId || '') === sourceId)
+          .map((row) => ({ id: row.id, ...row.data() } as InventoryTransferRequest)));
+        if (snap.size < pageSize) break;
+        cursor = snap.docs[snap.docs.length - 1] ?? null;
+        if (!cursor) break;
+      }
       rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
       return rows;
     }

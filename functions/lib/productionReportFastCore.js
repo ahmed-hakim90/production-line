@@ -30,6 +30,10 @@ export function validateProductionReportAssignment(input) {
     return null;
 }
 const keyPart = (value) => encodeURIComponent(String(value ?? '').trim().toLowerCase());
+/** Matches client `resolveReportBehaviorSettings`: uniqueness is on unless explicitly disabled. */
+export function shouldEnforceProductionReportUniqueness(settings) {
+    return settings?.planSettings?.reportBehavior?.preventDuplicateReports !== false;
+}
 export function buildProductionReportFastUniqueKey(input, includeShift = true) {
     const reportType = String(input.reportType || 'finished_product').trim() || 'finished_product';
     const parts = [input.date, input.lineId, input.employeeId, input.productId, reportType].map(keyPart);

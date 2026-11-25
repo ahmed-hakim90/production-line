@@ -2019,14 +2019,28 @@ service cloud.firestore {
         && (pl_hasErpPermission('inventory.view')
           || pl_hasErpPermission('inventory.transactions.create')
           || pl_hasErpPermission('inventory.transfers.approve')
+          || pl_hasErpPermission('reports.delete')
+          || pl_hasErpPermission('reports.edit')
           || pl_isSuperAdmin())
         && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
       allow create: if pl_isActiveUser()
         && (pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
         && (pl_canWriteTransferWarehouses() || pl_superAdminTenantScopedCreateOk());
       allow update: if pl_isActiveUser()
-        && (pl_hasErpPermission('inventory.transfers.approve') || pl_isSuperAdmin())
-        && (pl_canUpdateTransferWarehouses() || pl_superAdminTenantScopedUpdateOk());
+        && (
+          (
+            (pl_hasErpPermission('inventory.transfers.approve') || pl_isSuperAdmin())
+            && (pl_canUpdateTransferWarehouses() || pl_superAdminTenantScopedUpdateOk())
+          )
+          || (
+            pl_hasErpPermission('reports.delete')
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'rejected'
+            && request.resource.data.tenantId == resource.data.tenantId
+            && request.resource.data.sourceReportId == resource.data.sourceReportId
+            && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
+          )
+        );
       allow delete: if pl_isActiveUser()
         && (pl_hasErpPermission('inventory.transactions.delete') || pl_isSuperAdmin())
         && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
@@ -2157,23 +2171,31 @@ service cloud.firestore {
         || pl_qualityOptionalInspectorOk();
     }
 
-    function pl_qualityLineStationInspectorOk(employeeId) {
-      let stationId = request.resource.data.stationId;
-      let station = get(/databases/$(database)/documents/quality_inspection_stations/$(stationId)).data;
-      return employeeId is string
-        && stationId is string
-        && employeeId == stationId
-        && exists(/databases/$(database)/documents/quality_inspection_stations/$(stationId))
-        && station.tenantId == request.resource.data.tenantId
+    function pl_qualityCanOpenLinePull() {
+      return pl_isSuperAdmin()
+        || pl_hasErpPermission('quality.samples.inspect')
+        || pl_hasErpPermission('quality.settings.manage');
+    }
+
+    function pl_qualityActiveStationMatches(employeeId) {
+      let station = get(/databases/$(database)/documents/quality_inspection_stations/$(employeeId)).data;
+      return station.tenantId == request.resource.data.tenantId
         && station.defaultInspectorEmployeeId == employeeId
-        && station.defaultInspectorName is string
         && station.defaultInspectorName == request.resource.data.inspectorName
         && station.isActive == true;
     }
 
+    function pl_qualityLineStationInspectorOk(employeeId) {
+      return employeeId is string
+        && request.resource.data.stationId == employeeId
+        && exists(/databases/$(database)/documents/quality_inspection_stations/$(employeeId))
+        && pl_qualityActiveStationMatches(employeeId);
+    }
+
     function pl_qualityLinePullAssignedInspector(employeeId) {
-      return pl_qualityAssignedInspector(employeeId)
-        || pl_qualityLineStationInspectorOk(employeeId);
+      return request.resource.data.stationId == employeeId
+        ? pl_qualityLineStationInspectorOk(employeeId)
+        : pl_qualityAssignedInspector(employeeId);
     }
 
     function pl_qualityLinePullInspectorUnchangedOrAssigned() {
@@ -2249,6 +2271,12 @@ service cloud.firestore {
       return pl_isSuperAdmin()
         || pl_hasErpPermission('quality.secondSort.manage')
         || pl_hasErpPermission('quality.approve');
+    }
+
+    function pl_qualityCanIncoming() {
+      return pl_isSuperAdmin()
+        || pl_hasErpPermission('quality.incoming.manage')
+        || pl_hasErpPermission('quality.inspect');
     }
 
     function pl_qualityCanDelete() {
@@ -2456,9 +2484,13 @@ service cloud.firestore {
 
     match /quality_line_sample_pulls/{docId} {
       allow read: if pl_qualityRead();
-      allow create: if pl_qualityCreate() && (pl_qualityCanInspect() || pl_qualityCanManage())
+      allow create: if pl_qualityCreate() && pl_qualityCanOpenLinePull()
         && request.resource.data.status == 'pending'
-        && pl_qualityLinePullAssignedInspector(request.resource.data.inspectorEmployeeId)
+        && pl_qualityAssignedInspector(request.resource.data.inspectorEmployeeId)
+        && pl_qualityExtraInspectorOk();
+      allow create: if pl_qualityCreate() && pl_qualityCanOpenLinePull()
+        && request.resource.data.status == 'pending'
+        && pl_qualityLineStationInspectorOk(request.resource.data.inspectorEmployeeId)
         && pl_qualityExtraInspectorOk();
       allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && (
         (resource.data.status != 'completed' && pl_qualityCanInspect() && pl_qualityLinePullInspectorUnchangedOrAssigned() && (
@@ -2507,10 +2539,197 @@ service cloud.firestore {
       allow delete: if pl_qualityRead() && pl_qualityCanDelete();
     }
 
+    match /quality_scrap_reasons/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanScrap()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 120;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanScrap()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 120
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanScrap();
+    }
+
     match /quality_second_sort_reports/{docId} {
       allow read: if pl_qualityRead();
       allow create: if pl_qualityCreate() && pl_qualityCanSecondSort();
       allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanSecondSort();
+      allow delete: if pl_qualityRead() && pl_qualityCanDelete();
+    }
+
+    match /quality_second_sort_reasons/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanSecondSort()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 120;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanSecondSort()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 120
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanSecondSort();
+    }
+
+    match /quality_second_sort_returns/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanSecondSort()
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanSecondSort()
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanDelete();
+    }
+
+    match /quality_carton_suppliers/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 150;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 150
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanIncoming();
+    }
+
+    match /quality_carton_receipts/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.supplier is string
+        && request.resource.data.supplier.size() > 0
+        && request.resource.data.supplier.size() <= 150
+        && request.resource.data.receivedDate is string
+        && request.resource.data.totalQuantity is int
+        && request.resource.data.totalQuantity >= 0
+        && request.resource.data.totalItems is int
+        && request.resource.data.acceptedItems is int
+        && request.resource.data.rejectedItems is int
+        && request.resource.data.acceptedItems + request.resource.data.rejectedItems == request.resource.data.totalItems
+        && request.resource.data.shipmentCount is int
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanIncoming()
+        && request.resource.data.supplier is string
+        && request.resource.data.supplier.size() > 0
+        && request.resource.data.supplier.size() <= 150
+        && request.resource.data.totalQuantity is int
+        && request.resource.data.totalItems is int
+        && request.resource.data.acceptedItems is int
+        && request.resource.data.rejectedItems is int
+        && request.resource.data.acceptedItems + request.resource.data.rejectedItems == request.resource.data.totalItems
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanDelete();
+    }
+
+    match /quality_plastic_suppliers/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 150;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanIncoming();
+    }
+
+    match /quality_plastic_items/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.nameKey is string
+        && request.resource.data.isActive is bool;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.isActive is bool
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanIncoming();
+    }
+
+    match /quality_plastic_rejection_reasons/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 250
+        && request.resource.data.nameKey is string
+        && request.resource.data.isActive is bool;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 250
+        && request.resource.data.isActive is bool
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanIncoming();
+    }
+
+    match /quality_plastic_receipts/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.supplier is string
+        && request.resource.data.supplier.size() > 0
+        && request.resource.data.supplier.size() <= 150
+        && request.resource.data.productName is string
+        && request.resource.data.productName.size() > 0
+        && request.resource.data.productName.size() <= 150
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.inspectedSamples is int
+        && request.resource.data.rejectedSamples is int
+        && request.resource.data.rejectedSamples >= 0
+        && request.resource.data.rejectedSamples <= request.resource.data.inspectedSamples
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000
+        && request.resource.data.finalDecision in ['مقبول', 'مرفوض', 'في انتظار فحص المورد', 'مقبول بنسبة'];
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()) && pl_qualityCanIncoming()
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.rejectedSamples is int
+        && request.resource.data.rejectedSamples >= 0
+        && request.resource.data.rejectedSamples <= request.resource.data.inspectedSamples
+        && request.resource.data.notes is string
+        && request.resource.data.notes.size() <= 1000
+        && request.resource.data.finalDecision in ['مقبول', 'مرفوض', 'في انتظار فحص المورد', 'مقبول بنسبة']
+        && request.resource.data.tenantId == resource.data.tenantId;
       allow delete: if pl_qualityRead() && pl_qualityCanDelete();
     }
 

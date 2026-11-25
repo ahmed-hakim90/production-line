@@ -10,6 +10,9 @@ import { localDateIso } from '../domain/time';
 import type { QualitySector } from '../domain/sector';
 import type { QualityPhotoRef, QualitySecondSortReport } from '../model';
 import { qualityUserMessage } from '../services/qualityGateway';
+import { QualityNameCatalog } from '../components/QualityNameCatalog';
+import type { QualityNamedReason } from '../model';
+import { qualitySecondSortReasonService } from '../services/qualityCatalogService';
 import { qualitySecondSortService } from '../services/qualitySecondSortService';
 import { MasterSelect, QmsPage, SectorSwitch, useQualityMasters } from '../qms/QmsChrome';
 
@@ -29,6 +32,8 @@ export const QualitySecondSort: React.FC = () => {
   const [date, setDate] = useState(localDateIso());
   const [sector, setSector] = useState<QualitySector | ''>('');
   const [rows, setRows] = useState<QualitySecondSortReport[]>([]);
+  const [reasons, setReasons] = useState<QualityNamedReason[]>([]);
+  const [reasonId, setReasonId] = useState('');
   const [editingId, setEditingId] = useState('');
   const [productId, setProductId] = useState('');
   const [problem, setProblem] = useState('');
@@ -41,7 +46,14 @@ export const QualitySecondSort: React.FC = () => {
   const [existingPhotos, setExistingPhotos] = useState<QualityPhotoRef[]>([]);
   const [saving, setSaving] = useState(false);
 
-  const load = async (reportDate = date) => setRows(await qualitySecondSortService.list(reportDate));
+  const load = async (reportDate = date) => {
+    const [reports, catalog] = await Promise.all([
+      qualitySecondSortService.list(reportDate),
+      qualitySecondSortReasonService.list(),
+    ]);
+    setRows(reports);
+    setReasons(catalog);
+  };
 
   useEffect(() => {
     void load().catch((error: unknown) => toast.error(qualityUserMessage(error, 'تعذر تحميل التسليمات')));
@@ -50,6 +62,7 @@ export const QualitySecondSort: React.FC = () => {
   const reset = () => {
     setEditingId('');
     setProductId('');
+    setReasonId('');
     setProblem('');
     setDiscount(0);
     setQuantity(0);
@@ -65,6 +78,7 @@ export const QualitySecondSort: React.FC = () => {
     setDate(row.reportDate);
     setSector(row.sector);
     setProductId(row.productId);
+    setReasonId(row.reasonId || '');
     setProblem(row.problem);
     setDiscount(row.discountPercent);
     setQuantity(row.quantity);
@@ -94,6 +108,8 @@ export const QualitySecondSort: React.FC = () => {
         productName: product.name,
         productCode: product.code || '',
         problem,
+        reasonId,
+        reasonName: reasons.find((reason) => reason.id === reasonId)?.name || '',
         discountPercent: discount,
         quantity,
         approval,
@@ -141,7 +157,12 @@ export const QualitySecondSort: React.FC = () => {
           <label><span className="qms-label">نسبة الخصم</span><input className="qms-input" type="number" min={0} max={100} value={discount} onChange={(event) => setDiscount(Number(event.target.value))} /></label>
           <label><span className="qms-label">حجم الخط {fontScale}٪</span><input className="qms-input" type="range" min={80} max={150} step={10} value={fontScale} onChange={(event) => setFontScale(Number(event.target.value))} /></label>
         </div>
-        <label><span className="qms-label">المشكلة</span><textarea className="qms-input" value={problem} onChange={(event) => setProblem(event.target.value)} /></label>
+          <MasterSelect label="سبب ثابت" value={reasonId} onChange={(value) => {
+            setReasonId(value);
+            const reason = reasons.find((item) => item.id === value);
+            if (reason && !problem.trim()) setProblem(reason.name);
+          }} placeholder="اختياري" options={reasons.map((reason) => ({ value: reason.id, label: reason.name }))} />
+          <label><span className="qms-label">المشكلة</span><textarea className="qms-input" value={problem} onChange={(event) => setProblem(event.target.value)} /></label>
         <label><span className="qms-label">الاعتماد</span><input className="qms-input" value={approval} onChange={(event) => setApproval(event.target.value)} /></label>
         <div className="qms-grid" style={{ marginTop: 8 }}>
           {signatures.map((signature, index) => (
@@ -185,6 +206,15 @@ export const QualitySecondSort: React.FC = () => {
         </table>
         {rows.length === 0 ? <p>لا توجد تسليمات في هذا التاريخ.</p> : null}
       </section>
+      <QualityNameCatalog
+        title="أسباب تسليم الفرز الثاني"
+        placeholder="اكتب سبب الفرز الثاني"
+        names={reasons}
+        canManage={can('quality.secondSort.manage')}
+        onCreate={(name) => qualitySecondSortReasonService.create(name).then(() => load())}
+        onRename={(id, name) => qualitySecondSortReasonService.rename(id, name).then(() => load())}
+        onRemove={(id) => qualitySecondSortReasonService.remove(id).then(() => load())}
+      />
     </QmsPage>
   );
 };

@@ -215,6 +215,17 @@ export const purgeRepairOperationalData = onCall(
       db.collection('repair_counters').where('tenantId', '==', tenantId),
     );
 
+    // Ticket numbers live in `_counters/repair_jobs_{tenantId}`. Leaving that
+    // document after a wipe keeps issuing REP-0100 after the jobs are gone.
+    const jobCounterRef = db.collection('_counters').doc(`repair_jobs_${tenantId}`);
+    const jobCounterSnap = await jobCounterRef.get();
+    if (jobCounterSnap.exists) {
+      await jobCounterRef.delete();
+      deletedCounts.repair_job_ticket_counter = 1;
+    } else {
+      deletedCounts.repair_job_ticket_counter = 0;
+    }
+
     const deletedFirestoreDocs = Object.values(deletedCounts).reduce(
       (sum, value) => sum + Number(value || 0),
       0,

@@ -1297,8 +1297,7 @@ export const QualityLineSamples: React.FC = () => {
                         node.classList.add('is-exporting-hour');
                         try {
                           await exportAsImage(node, `ملخص-الخطوط-${date}-${summary.period.replace(/[–:-]/g, '-')}`, {
-                            backgroundColor: '#ffffff',
-                            captureWidth: 1080,
+                            width: 1080,
                             windowHeight: 1200,
                           });
                           toast.success('تم تنزيل صورة ملخص الساعة.');

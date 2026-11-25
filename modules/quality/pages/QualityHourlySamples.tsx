@@ -38,7 +38,7 @@ export const QualityHourlySamples: React.FC = () => {
   const [reasonId, setReasonId] = useState('');
   const [defectCount, setDefectCount] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [hourlyReportRef, setHourlyReportRef] = useState<HTMLDivElement | null>(null);
+  const [hourlyReportRef, setHourlyReportRef] = useState<HTMLElement | null>(null);
   const [exportingImage, setExportingImage] = useState(false);
 
   const load = async () => {
@@ -154,8 +154,7 @@ export const QualityHourlySamples: React.FC = () => {
               setExportingImage(true);
               try {
                 await exportAsImage(hourlyReportRef, `تحليل-العيوب-الساعة-${date}`, {
-                  backgroundColor: '#ffffff',
-                  captureWidth: 1080,
+                  width: 1080,
                   windowHeight: 1200,
                 });
                 toast.success('تم تنزيل تقرير الصورة.');

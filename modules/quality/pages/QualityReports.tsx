@@ -7,6 +7,13 @@ import { useAppStore } from '@/store/useAppStore';
 import { usePrintEngine } from '@/utils/printManager';
 import { usePermission } from '@/utils/permissions';
 import { QualityPalletInspectionPrint, QualityPalletReportPrint } from '../components/QualityPrintDocuments';
+import { csvCell } from '../domain/qualityAnalytics';
+import {
+  QUALITY_REPORT_COLUMNS,
+  qualityReportRecords,
+  reportColumnsFor,
+  type QualityReportKind,
+} from '../domain/qualityReportColumns';
 import { localDateIso } from '../domain/time';
 import type { QualityPallet } from '../model';
 import {
@@ -43,6 +50,9 @@ export const QualityReports: React.FC = () => {
   const [productId, setProductId] = useState('');
   const [workOrderId, setWorkOrderId] = useState(linkedWorkOrderId);
   const [inspectionStatus, setInspectionStatus] = useState('');
+  const [palletDecision, setPalletDecision] = useState('');
+  const [reportKind, setReportKind] = useState<QualityReportKind>('all');
+  const [selectedColumns, setSelectedColumns] = useState(QUALITY_REPORT_COLUMNS.all.map((column) => column.id));
   const [reasonId, setReasonId] = useState('');
   const [rows, setRows] = useState<QualityPallet[]>([]);
   const [productionRows, setProductionRows] = useState<Awaited<ReturnType<typeof qualityProductionQuery.quantitiesForRange>> | null>(null);
@@ -82,8 +92,9 @@ export const QualityReports: React.FC = () => {
     productId,
     workOrderId,
     inspectionStatus,
+    palletDecision,
     reasonId,
-  }), [rows, lineId, productId, workOrderId, inspectionStatus, reasonId]);
+  }), [rows, lineId, productId, workOrderId, inspectionStatus, palletDecision, reasonId]);
 
   const inspectionFilters = Boolean(workOrderId || inspectionStatus || reasonId);
   const matchingProduction = (productionRows || []).filter((row) => (!lineId || row.lineId === lineId) && (!productId || row.productId === productId));
@@ -94,6 +105,20 @@ export const QualityReports: React.FC = () => {
   const scrapQuantity = inspectionFilters || scrapDenied || !scrapRows || matchingScrap.length === 0
     ? null
     : matchingScrap.reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+  const labeledProduction = inspectionFilters || !productionRows ? [] : matchingProduction.map((row) => ({
+    lineId: row.lineId,
+    productId: row.productId,
+    lineName: masters.lines.find((line) => line.id === row.lineId)?.name || 'خط غير معروف',
+    productName: row.productName || masters.products.find((product) => product.id === row.productId)?.name || 'منتج غير معروف',
+    productCode: row.productCode || masters.products.find((product) => product.id === row.productId)?.code || '',
+    quantityProduced: Number(row.quantityProduced || 0),
+  }));
+  const records = qualityReportRecords({
+    kind: reportKind,
+    pallets: filtered,
+    production: reportKind === 'daily' || reportKind === 'product' ? labeledProduction : [],
+  });
+  const visibleColumns = reportColumnsFor(reportKind, selectedColumns);
   const totals = qualityReportTotals({
     pallets: filtered,
     reportedProduction,
@@ -105,6 +130,7 @@ export const QualityReports: React.FC = () => {
     productId ? masters.products.find((product) => product.id === productId)?.name : '',
     workOrderId ? `أمر ${filtered[0]?.workOrderNumber || workOrderId}` : '',
     inspectionStatus,
+    palletDecision,
     reasonId ? masters.reasons.find((reason) => reason.id === reasonId)?.labelAr : '',
   ].filter((label): label is string => Boolean(label));
 
@@ -141,6 +167,24 @@ export const QualityReports: React.FC = () => {
     <QmsPage title="تقارير الجودة" subtitle={workOrderId ? `النطاق ${formatQualityRange(from, to)}` : 'بالتات النطاق المحدد'}>
       <div className="qms-card" style={{ marginBottom: 12 }}>
         <div className="qms-row">
+          <label><span className="qms-label">نوع التقرير</span>
+            <select className="qms-input" value={reportKind} onChange={(event) => {
+              const next = event.target.value as QualityReportKind;
+              setReportKind(next);
+              setSelectedColumns(QUALITY_REPORT_COLUMNS[next].map((column) => column.id));
+              if (next === 'waiting') { setInspectionStatus('في انتظار الفحص'); setPalletDecision(''); }
+              else if (next === 'rejected') { setInspectionStatus(''); setPalletDecision('مرفوض'); }
+              else { setInspectionStatus(''); setPalletDecision(''); }
+            }}>
+              <option value="all">كل البالتات</option>
+              <option value="daily">جودة وإنتاج الخطوط</option>
+              <option value="product">الأجهزة: إنتاج ومفحوص وانتظار</option>
+              <option value="waiting">بانتظار الفحص</option>
+              <option value="rejected">المرفوضة</option>
+              <option value="reasons">أسباب الرفض</option>
+              <option value="inspectors">أداء المراقبين</option>
+            </select>
+          </label>
           <label><span className="qms-label">من</span><input className="qms-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
           <label><span className="qms-label">إلى</span><input className="qms-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
           <MasterSelect label="الخط" value={lineId} onChange={setLineId} placeholder="كل الخطوط" options={masters.lines.map((line) => ({ value: line.id || '', label: line.name }))} />
@@ -154,31 +198,57 @@ export const QualityReports: React.FC = () => {
               <option value="تم الفحص">تم الفحص</option>
             </select>
           </label>
+          <label><span className="qms-label">القرار</span>
+            <select className="qms-input" value={palletDecision} onChange={(event) => setPalletDecision(event.target.value)}>
+              <option value="">الكل</option>
+              <option value="مقبول">مقبول</option>
+              <option value="مرفوض">مرفوض</option>
+              <option value="قيد الفحص">قيد الفحص</option>
+            </select>
+          </label>
           <MasterSelect label="سبب العيب" value={reasonId} onChange={setReasonId} placeholder="كل الأسباب" options={masters.reasons.map((reason) => ({ value: reason.id, label: `${reason.labelAr} (${reason.code})` }))} />
         </div>
+        <div className="qms-row" style={{ marginTop: 8 }}>
+          <span className="qms-label">أعمدة التقرير</span>
+          {QUALITY_REPORT_COLUMNS[reportKind].map((column) => (
+            <label key={column.id}>
+              <input
+                type="checkbox"
+                checked={visibleColumns.some((item) => item.id === column.id)}
+                onChange={(event) => {
+                  const next = event.target.checked
+                    ? [...selectedColumns, column.id]
+                    : selectedColumns.filter((id) => id !== column.id);
+                  if (QUALITY_REPORT_COLUMNS[reportKind].every((item) => !next.includes(item.id))) return;
+                  setSelectedColumns(next);
+                }}
+              />
+              {' '}{column.label}
+            </label>
+          ))}
+          <button type="button" className="qms-btn qms-btn-ghost" onClick={() => setSelectedColumns(QUALITY_REPORT_COLUMNS[reportKind].map((column) => column.id))}>تحديد الكل</button>
+        </div>
         <div className="qms-row">
-          {canPrintReport ? (
+          {canPrintReport && (reportKind === 'all' || reportKind === 'waiting' || reportKind === 'rejected') ? (
             <button type="button" className="qms-btn qms-btn-ghost" disabled={filtered.length === 0 || Boolean(error)} onClick={printReport}>طباعة التقرير</button>
           ) : null}
           {can('quality.reports.export') ? (
-            <button type="button" className="qms-btn qms-btn-primary" disabled={filtered.length === 0} onClick={() => {
-              const sheet = XLSX.utils.json_to_sheet(filtered.map((row) => ({
-                البالتة: row.palletNumber,
-                الخط: row.lineName,
-                المنتج: row.productName,
-                الدفعة: row.quantityOnPallet,
-                العينة: row.inspectedQuantity,
-                العيوب: row.rejectedQuantity,
-                الحالة: row.inspectionStatus,
-                القرار: row.palletDecision,
-                'أمر الشغل': row.workOrderNumber || '',
-              })));
+            <button type="button" className="qms-btn qms-btn-primary" disabled={records.length === 0 || Boolean(error)} onClick={() => {
+              const sheet = XLSX.utils.json_to_sheet(records.map((row) => Object.fromEntries(visibleColumns.map((column) => [column.label, row.cells[column.id] ?? '']))));
               const book = XLSX.utils.book_new();
               XLSX.utils.book_append_sheet(book, sheet, 'الجودة');
               saveAs(new Blob([XLSX.write(book, { bookType: 'xlsx', type: 'array' })]), `quality-${from}.xlsx`);
             }}>تصدير Excel</button>
           ) : null}
+          {can('quality.reports.export') ? (
+            <button type="button" className="qms-btn qms-btn-ghost" disabled={records.length === 0 || Boolean(error)} onClick={() => {
+              const header = visibleColumns.map((column) => csvCell(column.label)).join(',');
+              const body = records.map((row) => visibleColumns.map((column) => csvCell(row.cells[column.id] ?? '')).join(','));
+              saveAs(new Blob([`\uFEFF${[header, ...body].join('\n')}`], { type: 'text/csv;charset=utf-8' }), `quality-${from}.csv`);
+            }}>تصدير CSV</button>
+          ) : null}
         </div>
+        <p className="qms-muted">{records.length} سجل. الكمية المنتجة من تقارير الإنتاج، وكمية البالتة تبقى كمية الدفعة.</p>
         <p className="qms-muted">
           إنتاج التقارير: {inspectionFilters ? 'غير مرتبط بهذه التصفية' : totals.reportedProduction == null ? 'لا توجد تقارير' : totals.reportedProduction}
           . حجم الدفعات: {totals.lotUnits}
@@ -191,26 +261,31 @@ export const QualityReports: React.FC = () => {
       </div>
       <div className="qms-card" style={{ overflowX: 'auto' }}>
         <table className="qms-table">
-          <thead><tr><th>البالتة</th><th>الخط</th><th>المنتج</th><th>الحالة</th><th>القرار</th><th>أمر الشغل</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              {visibleColumns.map((column) => <th key={column.id}>{column.label}</th>)}
+              {records.some((row) => row.palletId) ? <th></th> : null}
+            </tr>
+          </thead>
           <tbody>
-            {filtered.map((row) => (
-              <tr key={row.id} className={row.palletDecision === 'مرفوض' ? 'qms-rejected' : undefined}>
-                <td>{row.palletNumber}</td>
-                <td>{row.lineName}</td>
-                <td>{row.productCode ? `${row.productName} (${row.productCode})` : row.productName}</td>
-                <td>{row.inspectionStatus}</td>
-                <td>{row.palletDecision}</td>
-                <td>{row.workOrderNumber || '—'}</td>
-                <td>
-                  {canPrintPallet ? (
-                    <button type="button" className="qms-btn qms-btn-ghost" onClick={() => printPallet(row)}>طباعة</button>
+            {records.map((row, index) => {
+              const pallet = row.palletId ? filtered.find((item) => item.id === row.palletId) : undefined;
+              return (
+                <tr key={row.palletId || `${reportKind}-${index}`} className={pallet?.palletDecision === 'مرفوض' ? 'qms-rejected' : undefined}>
+                  {visibleColumns.map((column) => <td key={column.id}>{row.cells[column.id] ?? '—'}</td>)}
+                  {records.some((item) => item.palletId) ? (
+                    <td>
+                      {canPrintPallet && pallet ? (
+                        <button type="button" className="qms-btn qms-btn-ghost" onClick={() => printPallet(pallet)}>طباعة</button>
+                      ) : null}
+                    </td>
                   ) : null}
-                </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-        {filtered.length === 0 ? <p>لا توجد بالتات في هذا النطاق.</p> : null}
+        {records.length === 0 ? <p>لا توجد بيانات مطابقة.</p> : null}
       </div>
     </QmsPage>
   );

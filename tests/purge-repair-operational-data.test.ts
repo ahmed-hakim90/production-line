@@ -13,6 +13,8 @@ assert.match(source, /repair_spare_issues/);
 assert.match(source, /customer_service_requests/);
 assert.match(source, /repair_replacement_requests/);
 assert.match(source, /repair\.settings\.manage/);
+assert.match(source, /repair_jobs_\$\{tenantId\}/, 'must reset the ticket sequence counter');
+assert.match(source, /collection\('_counters'\)/);
 assert.match(source, /stock_items/, 'kept masters must be documented');
 assert.doesNotMatch(
   source,

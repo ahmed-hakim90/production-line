@@ -161,20 +161,33 @@ export const QualitySettings: React.FC = () => {
       <section className="qms-card" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">خطط AQL {usingStandard ? '(الجدول القياسي، لم يُحفظ بعد)' : ''}</h2>
         <table className="qms-table">
-          <thead><tr><th>من</th><th>إلى</th><th>العينة</th><th>قبول</th><th>رفض</th></tr></thead>
+          <thead><tr><th>من</th><th>إلى</th><th>العينة</th><th>قبول</th><th>رفض</th><th>المستوى</th><th>ملاحظات</th><th></th></tr></thead>
           <tbody>
             {plans.map((plan) => (
-              <tr key={`${plan.batchMin}-${plan.batchMax}`}><td>{plan.batchMin}</td><td>{plan.batchMax}</td><td>{plan.sampleSize}</td><td>{plan.acceptLimit}</td><td>{plan.rejectLimit}</td></tr>
+              <tr key={plan.id || `${plan.batchMin}-${plan.batchMax}`}>
+                <td>{plan.batchMin}</td><td>{plan.batchMax}</td><td>{plan.sampleSize}</td><td>{plan.acceptLimit}</td><td>{plan.rejectLimit}</td><td>{plan.aqlLevel}</td><td>{plan.notes || '—'}</td>
+                <td>{canManage && plan.id ? (
+                  <>
+                    <button type="button" className="qms-btn qms-btn-ghost" onClick={() => setPlanForm(plan)}>تعديل</button>
+                    {plan.isActive ? <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void save(() => qualitySettingsService.saveAqlPlan({ ...plan, isActive: false }), 'تم إيقاف النطاق')}>إيقاف</button> : null}
+                  </>
+                ) : null}</td>
+              </tr>
             ))}
           </tbody>
         </table>
+        <p className="qms-muted">حفظ نطاق يستبدل الجدول القياسي بالنطاقات المحفوظة النشطة. إيقاف آخر نطاق يعيد الجدول القياسي.</p>
         <div className="qms-row" style={{ marginTop: 8 }}>
           <label><span className="qms-label">من</span><input className="qms-input" type="number" value={planForm.batchMin} onChange={(event) => setPlanForm({ ...planForm, batchMin: Number(event.target.value) })} /></label>
           <label><span className="qms-label">إلى</span><input className="qms-input" type="number" value={planForm.batchMax} onChange={(event) => setPlanForm({ ...planForm, batchMax: Number(event.target.value) })} /></label>
           <label><span className="qms-label">العينة</span><input className="qms-input" type="number" value={planForm.sampleSize} onChange={(event) => setPlanForm({ ...planForm, sampleSize: Number(event.target.value) })} /></label>
           <label><span className="qms-label">قبول</span><input className="qms-input" type="number" value={planForm.acceptLimit} onChange={(event) => setPlanForm({ ...planForm, acceptLimit: Number(event.target.value) })} /></label>
           <label><span className="qms-label">رفض</span><input className="qms-input" type="number" value={planForm.rejectLimit} onChange={(event) => setPlanForm({ ...planForm, rejectLimit: Number(event.target.value) })} /></label>
-          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage} onClick={() => void save(() => qualitySettingsService.saveAqlPlan(planForm), 'تم حفظ النطاق')}>حفظ النطاق</button>
+          <label><span className="qms-label">ملاحظات</span><input className="qms-input" maxLength={200} value={planForm.notes || ''} onChange={(event) => setPlanForm({ ...planForm, notes: event.target.value })} /></label>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={!canManage} onClick={() => void save(async () => {
+            await qualitySettingsService.saveAqlPlan(planForm);
+            setPlanForm({ ...planForm, id: undefined });
+          }, 'تم حفظ النطاق')}>{planForm.id ? 'حفظ التعديل' : 'حفظ النطاق'}</button>
         </div>
       </section>
       <section className="qms-card" style={{ marginBottom: 12 }}>

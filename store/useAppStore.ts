@@ -5482,7 +5482,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
       }
       const actorName = get().userDisplayName || get().userEmail || 'System';
-      const linkedEntryRequests = await transferApprovalService.getBySourceReportId(id);
+      let linkedEntryRequests: Awaited<ReturnType<typeof transferApprovalService.getBySourceReportId>> = [];
+      try {
+        linkedEntryRequests = await transferApprovalService.getBySourceReportId(id);
+      } catch (lookupError: unknown) {
+        const code = String((lookupError as { code?: string })?.code || '').toLowerCase();
+        const message = lookupError instanceof Error ? lookupError.message : '';
+        const lookupDenied = code.includes('permission-denied')
+          || message === 'Missing or insufficient permissions.';
+        if (!lookupDenied) throw lookupError;
+      }
       for (const request of linkedEntryRequests) {
         if (!request.id) continue;
         if (request.status === 'approved') {

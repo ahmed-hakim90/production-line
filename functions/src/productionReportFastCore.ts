@@ -71,6 +71,13 @@ export function validateProductionReportAssignment(
 
 const keyPart = (value: unknown): string => encodeURIComponent(String(value ?? '').trim().toLowerCase());
 
+/** Matches client `resolveReportBehaviorSettings`: uniqueness is on unless explicitly disabled. */
+export function shouldEnforceProductionReportUniqueness(
+  settings: { planSettings?: { reportBehavior?: { preventDuplicateReports?: unknown } } } | null | undefined,
+): boolean {
+  return settings?.planSettings?.reportBehavior?.preventDuplicateReports !== false;
+}
+
 export function buildProductionReportFastUniqueKey(input: {
   date?: unknown;
   lineId?: unknown;

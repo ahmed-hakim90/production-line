@@ -5,12 +5,19 @@ import { usePrintEngine } from '@/utils/printManager';
 import { QualityFlowchartPrint } from '../components/QualityPrintDocuments';
 import { qualityRecordPrintAllowed } from '../print/qualityPrintModel';
 import { buildFlowchartMetrics } from '../domain/flowchart';
+import { monthBounds } from '../domain/qualityAnalytics';
 import { localDateIso } from '../domain/time';
+import type { QualitySector } from '../domain/sector';
 import { qualityUserMessage } from '../services/qualityGateway';
 import { qualityPalletService } from '../services/qualityPalletService';
 import { qualityProductionQuery } from '../services/qualityProductionQuery';
 import { qualitySampleService } from '../services/qualitySampleService';
-import { QmsPage, useQualityMasters } from '../qms/QmsChrome';
+import { MasterSelect, QmsPage, matchesSector, useQualityMasters } from '../qms/QmsChrome';
+
+function shiftIso(iso: string, days: number): string {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
 
 export const QualityFlowchart: React.FC = () => {
   const masters = useQualityMasters();
@@ -20,18 +27,33 @@ export const QualityFlowchart: React.FC = () => {
   const canPrintChart = qualityRecordPrintAllowed(permissions, 'quality.reports.view');
   const [from, setFrom] = useState(localDateIso());
   const [to, setTo] = useState(localDateIso());
+  const [preset, setPreset] = useState('today');
+  const [sector, setSector] = useState<QualitySector | 'all'>('all');
+  const [lineId, setLineId] = useState('');
+  const [productId, setProductId] = useState('');
   const [loading, setLoading] = useState(false);
   const [metrics, setMetrics] = useState<ReturnType<typeof buildFlowchartMetrics> | null>(null);
 
-  const load = async () => {
+  const load = async (rangeFrom = from, rangeTo = to) => {
     setLoading(true);
     try {
       const [pallets, hourly, production] = await Promise.all([
-        qualityPalletService.listByDateRange(from, to),
-        qualitySampleService.listHourlyRange(from, to),
-        qualityProductionQuery.quantitiesForRange(from, to),
+        qualityPalletService.listByDateRange(rangeFrom, rangeTo),
+        qualitySampleService.listHourlyRange(rangeFrom, rangeTo),
+        qualityProductionQuery.quantitiesForRange(rangeFrom, rangeTo),
       ]);
-      const withDefects = await qualityPalletService.withDefects(pallets);
+      const allowed = (row: { lineId: string; productId: string; sector?: QualitySector }) => {
+        if (lineId && row.lineId !== lineId) return false;
+        if (productId && row.productId !== productId) return false;
+        if (sector !== 'all' && row.sector && row.sector !== sector) return false;
+        if (sector !== 'all' && !matchesSector(sector, masters.sectorOf('line', row.lineId))) return false;
+        return true;
+      };
+      const scopedPallets = pallets.filter(allowed);
+      const scopedHourly = hourly.filter(allowed);
+      const scopedProduction = production.filter((row) => allowed({ ...row, sector: masters.sectorOf('line', row.lineId) || undefined }));
+      const withDefects = await qualityPalletService.withDefects(scopedPallets);
+      const lines = masters.lines.filter((line) => (!lineId || line.id === lineId) && matchesSector(sector, masters.sectorOf('line', line.id || '')));
       setMetrics(buildFlowchartMetrics({
         pallets: withDefects.map((row) => ({
           lineId: row.lineId,
@@ -45,7 +67,7 @@ export const QualityFlowchart: React.FC = () => {
           palletDecision: row.palletDecision,
           defects: row.defects,
         })),
-        hourly: hourly.map((row) => ({
+        hourly: scopedHourly.map((row) => ({
           lineId: row.lineId,
           lineName: row.lineName,
           productName: row.productName,
@@ -54,8 +76,8 @@ export const QualityFlowchart: React.FC = () => {
           sampleCount: row.sampleCount,
           defectCount: row.defectCount,
         })),
-        reportedProductionUnits: production.reduce((sum, row) => sum + row.quantityProduced, 0),
-        lines: masters.lines.map((line) => ({ id: line.id || '', name: line.name })),
+        reportedProductionUnits: scopedProduction.reduce((sum, row) => sum + row.quantityProduced, 0),
+        lines: lines.map((line) => ({ id: line.id || '', name: line.name })),
       }));
     } catch (error) {
       toast.error(qualityUserMessage(error, 'تعذر تحميل مخطط الجودة'));
@@ -68,8 +90,36 @@ export const QualityFlowchart: React.FC = () => {
     <QmsPage title="مخطط الجودة" subtitle="ترتيب الخطوط حسب معدل العيب من فحص البالتات وعينات الساعة. كمية البالتة لا تُجمع مع كمية الإنتاج المسجلة.">
       <section className="qms-card" style={{ marginBottom: 12 }}>
         <div className="qms-row">
-          <label><span className="qms-label">من</span><input className="qms-input" type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
-          <label><span className="qms-label">إلى</span><input className="qms-input" type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
+          <label><span className="qms-label">الفترة</span>
+            <select className="qms-input" value={preset} onChange={(event) => {
+              const next = event.target.value;
+              const today = localDateIso();
+              setPreset(next);
+              if (next === 'custom') return;
+              const bounds = next === 'month' ? monthBounds(today.slice(0, 7)) : null;
+              const nextFrom = next === 'yesterday' ? shiftIso(today, -1) : next === 'last7' ? shiftIso(today, -6) : bounds?.from || today;
+              const nextTo = next === 'yesterday' ? shiftIso(today, -1) : bounds?.to || today;
+              setFrom(nextFrom);
+              setTo(nextTo);
+            }}>
+              <option value="today">اليوم</option>
+              <option value="yesterday">أمس</option>
+              <option value="last7">آخر 7 أيام</option>
+              <option value="month">هذا الشهر</option>
+              <option value="custom">نطاق مخصص</option>
+            </select>
+          </label>
+          <label><span className="qms-label">من</span><input className="qms-input" type="date" value={from} onChange={(event) => { setPreset('custom'); setFrom(event.target.value); }} /></label>
+          <label><span className="qms-label">إلى</span><input className="qms-input" type="date" value={to} onChange={(event) => { setPreset('custom'); setTo(event.target.value); }} /></label>
+          <label><span className="qms-label">القطاع</span>
+            <select className="qms-input" value={sector} onChange={(event) => setSector(event.target.value as QualitySector | 'all')}>
+              <option value="all">كل القطاعات</option>
+              <option value="home">الأجهزة المنزلية</option>
+              <option value="seria">السريا</option>
+            </select>
+          </label>
+          <MasterSelect label="الخط" value={lineId} onChange={setLineId} placeholder="كل الخطوط" options={[{ value: '', label: 'كل الخطوط' }, ...masters.lines.filter((line) => matchesSector(sector, masters.sectorOf('line', line.id || ''))).map((line) => ({ value: line.id || '', label: line.name }))]} />
+          <MasterSelect label="المنتج" value={productId} onChange={setProductId} placeholder="كل المنتجات" options={[{ value: '', label: 'كل المنتجات' }, ...masters.products.filter((product) => matchesSector(sector, masters.sectorOf('product', product.id || ''))).map((product) => ({ value: product.id || '', label: product.name }))]} />
           <button type="button" className="qms-btn qms-btn-primary" disabled={loading} onClick={() => void load()}>عرض المخطط</button>
           {canPrintChart ? (
             <button
@@ -118,9 +168,10 @@ export const QualityFlowchart: React.FC = () => {
             <div className="qms-card qms-kpi"><span>مقبول / مرفوض</span><strong>{metrics.acceptedPallets} / {metrics.rejectedPallets}</strong></div>
           </div>
           <section className="qms-card" style={{ marginBottom: 12 }}>
-            <p>أفضل خط: {metrics.best?.lineName || '—'} — أسوأ خط: {metrics.worst?.lineName || '—'}</p>
+            <p>أفضل خط: {metrics.best ? `${metrics.best.lineName} — ${metrics.best.productName} — عيوب ${metrics.best.defectRate}% — قبول ${metrics.best.acceptRate}%` : '—'}</p>
+            <p>أسوأ خط: {metrics.worst ? `${metrics.worst.lineName} — ${metrics.worst.productName} — عيوب ${metrics.worst.defectRate}% — قبول ${metrics.worst.acceptRate}%` : '—'}</p>
             <table className="qms-table">
-              <thead><tr><th>الخط</th><th>المنتج</th><th>عينات</th><th>عيوب</th><th>المعدل</th><th>أبرز عيب</th></tr></thead>
+              <thead><tr><th>الخط</th><th>المنتج</th><th>عينات</th><th>عيوب</th><th>معدل العيب</th><th>نسبة القبول</th><th>أبرز عيب</th></tr></thead>
               <tbody>
                 {metrics.rankings.map((line) => (
                   <tr key={line.lineId}>
@@ -129,6 +180,7 @@ export const QualityFlowchart: React.FC = () => {
                     <td>{line.inspected}</td>
                     <td>{line.defects}</td>
                     <td>{line.defectRate}%</td>
+                    <td>{line.acceptRate}%</td>
                     <td>{line.topDefect}</td>
                   </tr>
                 ))}

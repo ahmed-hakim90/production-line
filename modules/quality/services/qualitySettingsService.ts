@@ -171,6 +171,8 @@ export const qualitySettingsService = {
   async saveAqlPlan(input: AqlPlanRange): Promise<void> {
     assertQualityPermission('quality.settings.manage');
     assertAqlPlanRange(input);
+    const notes = (input.notes || '').trim();
+    if (notes.length > 200) throw new Error('ملاحظات النطاق أطول من المسموح.');
     const actor = currentQualityActor();
     const payload = stampTenant({
       batchMin: input.batchMin,
@@ -179,7 +181,7 @@ export const qualitySettingsService = {
       acceptLimit: input.acceptLimit,
       rejectLimit: input.rejectLimit,
       aqlLevel: input.aqlLevel || 'المستوى العام الثاني (Level II)',
-      notes: input.notes || '',
+      notes,
       isActive: input.isActive !== false,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,
@@ -441,7 +443,7 @@ export const qualitySettingsService = {
 
   async deleteProductionTag(id: string): Promise<void> {
     assertQualityPermission('quality.settings.manage');
-    const pulls = await listByTenant(QMS_COLLECTIONS.LINE_PULLS, activeTenantId());
+    const pulls = await listByTenant<{ productionTagId?: string }>(QMS_COLLECTIONS.LINE_PULLS, activeTenantId());
     if (pulls.some((pull) => String(pull.productionTagId || '') === id)) {
       throw new Error('هذا الوسم مرتبط بسحبات مسجلة؛ استخدم الإيقاف بدل الحذف للاحتفاظ بالسجلات السابقة.');
     }

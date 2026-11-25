@@ -5,7 +5,7 @@ import type { PrintTemplateSettings } from '@/types';
 import { resolvePrintAccentHex } from '@/utils/printTheme';
 import { resolvePrintDocumentConfig } from '@/utils/print/resolvePrintDocumentConfig';
 import type { FlowLineRank } from '../domain/flowchart';
-import type { QualityPallet, QualitySecondSortReport } from '../model';
+import type { QualityPallet, QualitySecondSortReport, QualitySecondSortReturn } from '../model';
 import {
   QUALITY_PRINT_EMPTY,
   SECOND_SORT_PAPER,
@@ -670,6 +670,34 @@ export const QualitySecondSortPrint = forwardRef<HTMLDivElement, {
         </div>
       ) : null}
       {!includePhotos && row.photos.length > 0 ? <p>الصور محفوظة في التخزين الخاص ولا تُعرض بهذه الصلاحية.</p> : null}
+    </QualityPrintFrame>
+  );
+});
+
+export const QualitySecondSortReturnPrint = forwardRef<HTMLDivElement, {
+  row: QualitySecondSortReturn;
+  printSettings?: PrintTemplateSettings;
+}>(function QualitySecondSortReturnPrint({ row, printSettings }, ref) {
+  return (
+    <QualityPrintFrame
+      ref={ref}
+      title="إرجاع فرز ثاني لفرز أول"
+      scope={formatQualityDate(row.reportDate)}
+      printSettings={printSettings}
+      paperWidth={SECOND_SORT_PAPER.width}
+      minHeight={SECOND_SORT_PAPER.height}
+      dense
+      meta={[
+        { label: 'المنتج', value: row.productCode ? `${row.productName} (${row.productCode})` : row.productName },
+        { label: 'الكمية', value: formatQualityCount(row.quantity) },
+        { label: 'الورق', value: SECOND_SORT_PAPER.labelAr },
+      ]}
+      signatures={(row.signatures || []).map((signature) => ({
+        title: signature.title,
+        detail: signature.name || 'الاسم / التوقيع',
+      }))}
+    >
+      <p>{`الملاحظات: ${row.notes || '—'}`}</p>
     </QualityPrintFrame>
   );
 });

@@ -2,6 +2,8 @@ export interface ProductionQuantityRow {
   date: string;
   lineId: string;
   productId: string;
+  productName?: string;
+  productCode?: string;
   quantityProduced: number;
 }
 

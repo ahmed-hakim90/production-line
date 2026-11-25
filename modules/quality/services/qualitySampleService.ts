@@ -79,6 +79,7 @@ export const qualitySampleService = {
 
   async listHourlyRange(from: string, to: string): Promise<QualityHourlySample[]> {
     assertAnyQualityPermission(['quality.samples.view', 'quality.reports.view']);
+    if (to < from) throw new Error('نطاق التاريخ غير صالح.');
     return listByTenantDateRange<QualityHourlySample>(QMS_COLLECTIONS.HOURLY_SAMPLES, activeTenantId(), 'date', from, to);
   },
 
@@ -150,6 +151,7 @@ export const qualitySampleService = {
 
   async listPullsRange(from: string, to: string): Promise<QualityLinePull[]> {
     assertAnyQualityPermission(['quality.samples.view', 'quality.reports.view']);
+    if (to < from) throw new Error('نطاق التاريخ غير صالح.');
     return listByTenantDateRange<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, activeTenantId(), 'date', from, to);
   },
 

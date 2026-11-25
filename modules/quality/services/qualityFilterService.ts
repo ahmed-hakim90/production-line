@@ -19,6 +19,8 @@ export interface PalletSavedFilterCriteria {
   productId: string;
   inspectionStatus: string;
   palletDecision: string;
+  shiftId: string;
+  palletNumber: string;
 }
 
 export interface PalletSavedFilter {
@@ -41,7 +43,7 @@ export const qualityFilterService = {
   async save(name: string, criteria: PalletSavedFilterCriteria): Promise<void> {
     assertQualityPermission('quality.pallets.view');
     const label = name.trim();
-    if (!label) throw new Error('اكتب اسماً للفلتر.');
+    if (label.length > 80) throw new Error('اسم الفلتر أطول من المسموح.');
     const actor = currentQualityActor();
     await addDoc(qmsCollection(QMS_COLLECTIONS.SAVED_FILTERS), stampTenant({
       name: label,
