@@ -1,10 +1,11 @@
 import { addDoc, deleteDoc, getDocs, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/services/firebase';
-import { assertIsoDate, assertRequiredText, assertSampleCount, resolveLinePullDecision, totalLinePullSampleCount, validateAdditionalInspector } from '../domain/samples';
+import { assertIsoDate, assertRequiredText, assertSampleCount, resolveLinePullDecision, totalLinePullSampleCount, validateAdditionalInspectorAssignments } from '../domain/samples';
 import { assertSectorMatch, type QualitySector } from '../domain/sector';
 import { localTimeHm } from '../domain/time';
-import type { QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus } from '../model';
+import type { QualityAdditionalInspector, QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus } from '../model';
 import { qualityStaffService } from './qualityStaffService';
+import { qualitySettingsService } from './qualitySettingsService';
 import {
   QMS_COLLECTIONS,
   activeTenantId,
@@ -62,6 +63,8 @@ async function replaceChildDefects(
       reasonLabel: defect.reasonLabel,
       count: defect.count,
       notes: defect.notes || '',
+      inspectorEmployeeId: defect.inspectorEmployeeId || '',
+      inspectorName: defect.inspectorName || '',
     });
   });
   if (parentPatch) batch.update(qmsDoc(parentCollection, parentId), parentPatch);
@@ -169,11 +172,14 @@ export const qualitySampleService = {
     additionalInspectorEmployeeId?: string;
     additionalInspectorName?: string;
     additionalSampleCount?: number;
+    additionalInspectors?: QualityAdditionalInspector[];
     sampleCount: number;
     rejectLimit?: number;
     sector: QualitySector;
     lineSector?: QualitySector | null;
     productSector?: QualitySector | null;
+    defects?: QualityDefectLine[];
+    decisionMode?: 'auto' | 'manual_accept' | 'manual_reject';
     notes?: string;
   }): Promise<void> {
     assertAnyQualityPermission(['quality.samples.inspect', 'quality.settings.manage']);
@@ -188,20 +194,29 @@ export const qualitySampleService = {
       lineId: input.lineId,
       stationId: input.stationId,
     });
-    const extraInspector = input.additionalInspectorEmployeeId
-      ? await qualityStaffService.requireSelectableInspector({
-        employeeId: input.additionalInspectorEmployeeId,
-        lineId: input.lineId,
-        stationId: input.stationId,
-      })
-      : null;
-    const additional = validateAdditionalInspector({
-      additionalInspectorId: input.additionalInspectorEmployeeId,
-      additionalSampleCount: input.additionalSampleCount,
-      primaryInspectorId: input.inspectorEmployeeId,
-      sampleCount: input.sampleCount,
-    });
-    assertSampleCount(input.sampleCount + additional.additionalSampleCount);
+    const additionalInspectorInput = input.additionalInspectors?.length
+      ? input.additionalInspectors
+      : input.additionalInspectorEmployeeId
+        ? [{
+          employeeId: input.additionalInspectorEmployeeId,
+          employeeName: input.additionalInspectorName || '',
+          sampleCount: input.additionalSampleCount || 0,
+        }]
+        : [];
+    const additionalInspectors = validateAdditionalInspectorAssignments(
+      additionalInspectorInput,
+      inspector.id,
+      input.sampleCount,
+    );
+    const technicians = await qualitySettingsService.listTechnicians();
+    const technicianIds = new Set(technicians.map((technician) => technician.id));
+    for (const assignment of additionalInspectors) {
+      if (!technicianIds.has(assignment.employeeId)) {
+        throw new Error(`فني الجودة «${assignment.employeeName}» غير نشط أو غير مسجل في الدليل.`);
+      }
+    }
+    const additional = additionalInspectors[0];
+    const additionalSampleCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
     const rejectLimit = input.rejectLimit ?? 1;
     if (!Number.isInteger(rejectLimit) || rejectLimit < 0) {
       throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
@@ -222,10 +237,11 @@ export const qualitySampleService = {
       stationName: input.stationName,
       inspectorEmployeeId: inspector.id,
       inspectorName: inspector.name,
-      additionalInspectorEmployeeId: additional.additionalInspectorId,
-      additionalInspectorName: extraInspector?.name || '',
+      additionalInspectors,
+      additionalInspectorEmployeeId: additional?.employeeId || '',
+      additionalInspectorName: additional?.employeeName || '',
       sampleCount: input.sampleCount,
-      additionalSampleCount: additional.additionalSampleCount,
+      additionalSampleCount,
       sampleCountSemantics: 'base_plus_additional',
       rejectLimit,
       status: 'pending',
@@ -263,18 +279,19 @@ export const qualitySampleService = {
     additionalInspectorEmployeeId?: string;
     additionalInspectorName?: string;
     additionalSampleCount?: number;
+    additionalInspectors?: QualityAdditionalInspector[];
     sampleCount: number;
     rejectLimit: number;
+    defects?: QualityDefectLine[];
+    decisionMode?: 'auto' | 'manual_accept' | 'manual_reject';
     sector: QualitySector;
     lineSector?: QualitySector | null;
     productSector?: QualitySector | null;
   }): Promise<void> {
     assertQualityPermission('quality.samples.inspect');
     const pull = await readQualityDoc<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, id);
-    if (pull.status !== 'pending') throw new Error('يجب إعادة فتح السحبة المكتملة قبل تعديل بياناتها.');
     assertIsoDate(input.date);
     assertSampleCount(input.sampleCount);
-    assertSampleCount(input.sampleCount + Number(input.additionalSampleCount || 0));
     assertSectorMatch(input.lineSector, input.productSector);
     if (!input.slotKey || !input.lineId || !input.productId || !input.stationId || !input.inspectorEmployeeId) {
       throw new Error('الفترة والخط والمنتج ومحطة الفحص والمراقب مطلوبة.');
@@ -287,20 +304,46 @@ export const qualitySampleService = {
       lineId: input.lineId,
       stationId: input.stationId,
     });
-    const additional = validateAdditionalInspector({
-      additionalInspectorId: input.additionalInspectorEmployeeId,
-      additionalSampleCount: input.additionalSampleCount,
-      primaryInspectorId: input.inspectorEmployeeId,
-      sampleCount: input.sampleCount,
-    });
-    const extraInspector = additional.additionalInspectorId
-      ? await qualityStaffService.requireSelectableInspector({
-        employeeId: additional.additionalInspectorId,
-        lineId: input.lineId,
-        stationId: input.stationId,
-      })
-      : null;
+    const additionalInspectorInput = input.additionalInspectors?.length
+      ? input.additionalInspectors
+      : input.additionalInspectorEmployeeId
+        ? [{
+          employeeId: input.additionalInspectorEmployeeId,
+          employeeName: input.additionalInspectorName || '',
+          sampleCount: input.additionalSampleCount || 0,
+        }]
+        : [];
+    const additionalInspectors = validateAdditionalInspectorAssignments(
+      additionalInspectorInput,
+      inspector.id,
+      input.sampleCount,
+    );
+    const technicians = await qualitySettingsService.listTechnicians();
+    const technicianIds = new Set(technicians.map((technician) => technician.id));
+    for (const assignment of additionalInspectors) {
+      if (!technicianIds.has(assignment.employeeId)) {
+        throw new Error(`فني الجودة «${assignment.employeeName}» غير نشط أو غير مسجل في الدليل.`);
+      }
+    }
+    const additional = additionalInspectors[0];
+    const additionalSampleCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
     const actor = currentQualityActor();
+    const completedPatch: Record<string, unknown> = {};
+    if (pull.status === 'completed') {
+      const defects = input.defects || [];
+      const defectCount = defects.reduce((sum, defect) => sum + Number(defect.count || 0), 0);
+      if (defects.some((defect) => !Number.isInteger(defect.count) || defect.count < 1)) {
+        throw new Error('كل عيب يجب أن يكون له عدد صحيح موجب.');
+      }
+      if (defectCount > input.sampleCount) throw new Error('عدد العيوب لا يمكن أن يتجاوز إجمالي العينات المفحوصة.');
+      completedPatch.defectCount = defectCount;
+      completedPatch.palletRejected = resolveLinePullDecision(
+        defectCount,
+        input.rejectLimit,
+        input.decisionMode || pull.decisionMode || 'auto',
+      );
+      completedPatch.decisionMode = input.decisionMode || pull.decisionMode || 'auto';
+    }
     await updateDoc(qmsDoc(QMS_COLLECTIONS.LINE_PULLS, id), {
       date: input.date,
       slotKey: input.slotKey,
@@ -315,13 +358,15 @@ export const qualitySampleService = {
       stationName: input.stationName,
       inspectorEmployeeId: inspector.id,
       inspectorName: inspector.name,
-      additionalInspectorEmployeeId: additional.additionalInspectorId,
-      additionalInspectorName: extraInspector?.name || '',
+      additionalInspectors,
+      additionalInspectorEmployeeId: additional?.employeeId || '',
+      additionalInspectorName: additional?.employeeName || '',
       sampleCount: input.sampleCount,
-      additionalSampleCount: additional.additionalSampleCount,
+      additionalSampleCount,
       sampleCountSemantics: 'base_plus_additional',
       rejectLimit: input.rejectLimit,
       sector: input.sector,
+      ...completedPatch,
       updatedAt: serverTimestamp(),
       updatedByUid: actor.uid,
       updatedByName: actor.name,
@@ -387,6 +432,41 @@ export const qualitySampleService = {
     });
     await auditQuality('QUALITY_RECORD_SAMPLE', 'حفظ عيوب سحبة قيد الفحص', { pullId: id, defectCount });
     return defectCount;
+  },
+
+  async savePullEdit(
+    id: string,
+    defects: QualityDefectLine[],
+    rejectLimit: number,
+    decisionMode: 'auto' | 'manual_accept' | 'manual_reject' = 'auto',
+  ): Promise<void> {
+    assertQualityPermission('quality.samples.inspect');
+    const pull = await readQualityDoc<QualityLinePull>(QMS_COLLECTIONS.LINE_PULLS, id);
+    if (defects.some((defect) => !Number.isInteger(defect.count) || defect.count < 1)) {
+      throw new Error('كل عيب يجب أن يكون له عدد صحيح موجب.');
+    }
+    const defectCount = defects.reduce((sum, defect) => sum + Number(defect.count || 0), 0);
+    const inspectedCount = totalLinePullSampleCount(pull);
+    if (defectCount > inspectedCount) throw new Error('عدد العيوب لا يمكن أن يتجاوز إجمالي العينات المفحوصة.');
+    if (!Number.isInteger(rejectLimit) || rejectLimit < 0) {
+      throw new Error('حد الرفض يجب أن يكون عددًا صحيحًا غير سالب.');
+    }
+    const palletRejected = resolveLinePullDecision(defectCount, rejectLimit, decisionMode);
+    await replaceChildDefects(QMS_COLLECTIONS.LINE_PULLS, id, pull.tenantId, defects, {
+      defectCount,
+      rejectLimit,
+      palletRejected,
+      decisionMode,
+      updatedAt: serverTimestamp(),
+      updatedByUid: currentQualityActor().uid,
+      updatedByName: currentQualityActor().name,
+    });
+    await auditQuality('QUALITY_RECORD_SAMPLE', 'تعديل عيوب سحبة عينات خط', {
+      pullId: id,
+      defectCount,
+      palletRejected,
+      decisionMode,
+    });
   },
 
   async reopenPull(id: string, reason: string): Promise<void> {

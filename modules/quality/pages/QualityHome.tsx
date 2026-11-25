@@ -4,19 +4,15 @@ import { withTenantPath } from '@/lib/tenantPaths';
 import { QmsPage } from '../qms/QmsChrome';
 
 const links = [
-  ['/quality/dashboard', 'لوحة تحليلات الجودة'],
-  ['/quality/line-analytics', 'تحليل سحب الخطوط'],
   ['/quality/pallets', 'استلام وفحص البالتات'],
   ['/quality/hourly-samples', 'عينات بالساعة'],
   ['/quality/line-samples', 'سحب عينات الخطوط'],
-  ['/quality/summaries', 'ملخصات الجودة'],
+  ['/quality/summaries', 'إجمال فحص اليوم'],
+  ['/quality/dashboard', 'لوحة تحليلات الجودة'],
   ['/quality/flowchart', 'مخطط الجودة'],
   ['/quality/reports', 'تقارير الجودة'],
   ['/quality/scrap', 'الهالك'],
   ['/quality/second-sort', 'تسليم الفرز الثاني'],
-  ['/quality/second-sort-returns', 'إرجاع الفرز الثاني'],
-  ['/quality/incoming/cartons', 'وارد الكراتين'],
-  ['/quality/incoming/plastic', 'وارد البلاستيك'],
   ['/quality/settings', 'إعدادات الجودة'],
 ];
 

@@ -1,275 +1,242 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-import { usePermission } from '@/utils/permissions';
-import { csvCell } from '../domain/qualityAnalytics';
+import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { localDateIso } from '../domain/time';
+import { totalLinePullSampleCount } from '../domain/samples';
+import { buildDailyInspectionSummary, type DailyInspectionGroup } from '../domain/dailyInspectionSummary';
 import { reportedProductionQuantity } from '../domain/productionQuantity';
 import { qualityUserMessage } from '../services/qualityGateway';
 import { qualityPalletService } from '../services/qualityPalletService';
 import { qualityProductionQuery } from '../services/qualityProductionQuery';
 import { qualitySampleService } from '../services/qualitySampleService';
-import { QmsPage, useQualityMasters } from '../qms/QmsChrome';
-import { linePullDayTotals, linePullExportRows, linePullLineSummary, linePullPeriodBoards } from '../domain/samples';
-import type { QualityLinePull, QualityPallet, QualityPeriodStatus } from '../model';
-
-function percent(part: number, whole: number): string {
-  if (whole <= 0) return '—';
-  return `${Number(((part / whole) * 100).toFixed(2))}٪`;
-}
-
-function reasonText(rows: QualityPallet[]): string {
-  const counts = new Map<string, number>();
-  rows.forEach((row) => (row.defects || []).forEach((defect) => {
-    const count = Number(defect.count || 0);
-    if (count <= 0) return;
-    const label = defect.reasonLabel.trim() || 'غير مصنف';
-    counts.set(label, (counts.get(label) || 0) + count);
-  }));
-  const text = [...counts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], 'ar'))
-    .map(([label, count]) => `${label} (${count})`)
-    .join('، ');
-  return text || '—';
-}
+import { QmsPage } from '../qms/QmsChrome';
+import type { QualityPallet, QualityLinePull } from '../model';
 
 export const QualitySummaries: React.FC = () => {
-  const { can } = usePermission();
-  const masters = useQualityMasters();
   const [date, setDate] = useState(localDateIso());
-  const [tab, setTab] = useState<'daily' | 'lines' | 'pulls'>('daily');
+  const [tab, setTab] = useState<'inspection' | 'daily' | 'lines' | 'pulls'>('inspection');
   const [pallets, setPallets] = useState<QualityPallet[]>([]);
   const [pulls, setPulls] = useState<QualityLinePull[]>([]);
-  const [periodStatuses, setPeriodStatuses] = useState<QualityPeriodStatus[] | null>(null);
   const [production, setProduction] = useState<Awaited<ReturnType<typeof qualityProductionQuery.quantitiesForDate>>>([]);
+  const [expandedDefectGroups, setExpandedDefectGroups] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     Promise.all([
-      qualityPalletService.listByDate(date).then(async (list) => {
-        try {
-          return await qualityPalletService.withDefects(list);
-        } catch (error: unknown) {
-          toast.error(qualityUserMessage(error, 'تعذر تحميل أسباب الرفض'));
-          return list;
-        }
-      }),
-      qualitySampleService.listPulls(date).then(async (list) => {
-        try {
-          return await qualitySampleService.withPullDefects(list);
-        } catch (error: unknown) {
-          toast.error(qualityUserMessage(error, 'تعذر تحميل أسباب سحب العينات'));
-          return list;
-        }
-      }),
-      qualitySampleService.listPeriodStatuses(date).catch((error: unknown) => {
-        toast.error(qualityUserMessage(error, 'تعذر تحميل حالات التوقف'));
-        return null;
-      }),
+      qualityPalletService.listByDate(date),
+      qualitySampleService.listPulls(date),
       qualityProductionQuery.quantitiesForDate(date),
-    ]).then(([nextPallets, nextPulls, nextPeriods, nextProduction]) => {
+    ]).then(async ([nextPallets, nextPulls, nextProduction]) => {
+      const pullsWithDefects = nextPulls.filter((row) => row.defectCount > 0);
+      const detailedPulls = pullsWithDefects.length > 0
+        ? await qualitySampleService.withPullDefects(pullsWithDefects)
+        : [];
+      const detailsById = new Map(detailedPulls.map((row) => [row.id, row.defects || []]));
       setPallets(nextPallets);
-      setPulls(nextPulls);
-      setPeriodStatuses(nextPeriods);
+      setPulls(nextPulls.map((row) => ({ ...row, defects: detailsById.get(row.id) || [] })));
       setProduction(nextProduction);
     }).catch((error: unknown) => toast.error(qualityUserMessage(error, 'تعذر تحميل الملخص')));
   }, [date]);
 
-  const names = (lineId: string, productId: string) => ({
-    lineName: masters.lines.find((line) => line.id === lineId)?.name || pallets.find((row) => row.lineId === lineId)?.lineName || 'خط غير معروف',
-    productName: masters.products.find((product) => product.id === productId)?.name || pallets.find((row) => row.productId === productId)?.productName || production.find((row) => row.productId === productId)?.productName || 'منتج غير معروف',
-    productCode: masters.products.find((product) => product.id === productId)?.code || pallets.find((row) => row.productId === productId)?.productCode || production.find((row) => row.productId === productId)?.productCode || '',
-  });
+  useEffect(() => {
+    setExpandedDefectGroups(new Set());
+  }, [date]);
 
-  const groups = useMemo(() => {
-    const keys = new Map<string, { lineId: string; productId: string }>();
-    pallets.forEach((row) => keys.set(`${row.lineId}:${row.productId}`, { lineId: row.lineId, productId: row.productId }));
-    production.forEach((row) => keys.set(`${row.lineId}:${row.productId}`, { lineId: row.lineId, productId: row.productId }));
+  const daily = useMemo(() => {
+    const keys = new Map<string, { productName: string; lineId: string; productId: string; lineName: string }>();
+    pallets.forEach((row) => keys.set(`${row.lineId}:${row.productId}`, { productName: row.productName, lineId: row.lineId, productId: row.productId, lineName: row.lineName }));
     return [...keys.values()].map((key) => {
       const related = pallets.filter((row) => row.lineId === key.lineId && row.productId === key.productId);
-      const inspectedSamples = related.reduce((sum, row) => sum + row.inspectedQuantity, 0);
-      const defects = related.reduce((sum, row) => sum + row.rejectedQuantity, 0);
-      const inspectors = [...new Set(related.map((row) => row.inspectorName?.trim()).filter(Boolean))];
+      const produced = reportedProductionQuantity(production, date, key.lineId, key.productId);
       return {
         ...key,
-        ...names(key.lineId, key.productId),
-        produced: reportedProductionQuantity(production, date, key.lineId, key.productId),
-        pallets: related.length,
+        produced,
+        lotQty: related.reduce((sum, row) => sum + row.quantityOnPallet, 0),
         inspectedLots: related.filter((row) => row.inspectionStatus === 'تم الفحص').length,
-        inspectedQuantity: related.filter((row) => row.inspectionStatus === 'تم الفحص').reduce((sum, row) => sum + row.quantityOnPallet, 0),
-        waitingQuantity: related.filter((row) => row.inspectionStatus === 'في انتظار الفحص').reduce((sum, row) => sum + row.quantityOnPallet, 0),
-        samples: inspectedSamples,
-        defects,
-        acceptedQuantity: Math.max(0, inspectedSamples - defects),
-        acceptedPallets: related.filter((row) => row.palletDecision === 'مقبول').length,
-        rejectedPallets: related.filter((row) => row.palletDecision === 'مرفوض').length,
-        inspectors: inspectors.join('، '),
-        reasons: reasonText(related),
+        waitingLots: related.filter((row) => row.inspectionStatus !== 'تم الفحص').length,
+        defects: related.reduce((sum, row) => sum + row.rejectedQuantity, 0),
       };
     });
-  }, [pallets, production, date, masters.lines, masters.products]);
+  }, [pallets, production, date]);
 
-  const pullSummary = useMemo(() => linePullLineSummary(pulls), [pulls]);
-  const pullTotals = useMemo(() => linePullDayTotals(pulls), [pulls]);
-  const visiblePeriods = (periodStatuses || []).filter((row) => row.isStopped || row.noSampleReason.trim());
-  const periodBoards = useMemo(() => linePullPeriodBoards(pulls, visiblePeriods.map((row) => ({
-    slotKey: row.slotKey,
-    lineId: row.lineId,
-    lineName: masters.lines.find((line) => line.id === row.lineId)?.name || pulls.find((pull) => pull.lineId === row.lineId)?.lineName || 'خط غير معروف',
-    isStopped: row.isStopped,
-    noSampleReason: row.noSampleReason,
-  }))), [pulls, visiblePeriods, masters.lines]);
-  const pullExportRows = linePullExportRows(date, periodBoards);
+  const byLine = useMemo(() => {
+    const names = new Map<string, string>();
+    pallets.forEach((row) => names.set(row.lineId, row.lineName));
+    pulls.forEach((row) => names.set(row.lineId, row.lineName));
+    return [...names.entries()].map(([lineId, lineName]) => ({
+      lineName,
+      accepted: pallets.filter((row) => row.lineId === lineId && row.palletDecision === 'مقبول').length,
+      rejected: pallets.filter((row) => row.lineId === lineId && row.palletDecision === 'مرفوض').length
+        + pulls.filter((row) => row.lineId === lineId && row.palletRejected).length,
+    }));
+  }, [pallets, pulls]);
+
+  const inspectionSummary = useMemo(() => buildDailyInspectionSummary(pulls), [pulls]);
+
+  const renderInspectionTable = (title: string, groupKey: string, rows: DailyInspectionGroup[]) => (
+    <section className="qms-card qms-daily-inspection-panel">
+      <h2 className="qms-subtitle">{title}</h2>
+      <div className="qms-table-wrap">
+        <table className="qms-table qms-daily-inspection-table">
+          <thead>
+            <tr><th>{title.replace('إجمالي العينات حسب ', '')}</th><th>السحبات</th><th>العينات</th><th>حالة الفحص</th><th>العيوب</th></tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key} className={row.rejected > 0 ? 'qms-rejected' : undefined}>
+                <td>{row.name}</td>
+                <td>{row.pulls}</td>
+                <td>{row.samples}</td>
+                <td>
+                  {row.accepted > 0 ? <span className="qms-daily-status is-accepted">مقبولة ({row.accepted})</span> : null}
+                  {row.rejected > 0 ? <span className="qms-daily-status is-rejected">مرفوضة ({row.rejected})</span> : null}
+                  {row.pending > 0 ? <span className="qms-daily-status is-pending">قيد الفحص ({row.pending})</span> : null}
+                </td>
+                <td>
+                  <strong className={row.defects > 0 ? 'qms-daily-defect-count has-defects' : 'qms-daily-defect-count'}>{row.defects}</strong>
+                  {row.defectDetails.length > 0 ? (
+                    <>
+                      <button
+                        type="button"
+                        className="qms-daily-defect-toggle"
+                        aria-expanded={expandedDefectGroups.has(`${groupKey}:${row.key}`)}
+                        aria-label={`${expandedDefectGroups.has(`${groupKey}:${row.key}`) ? 'إخفاء' : 'عرض'} عيوب ${row.name}`}
+                        onClick={() => setExpandedDefectGroups((current) => {
+                          const next = new Set(current);
+                          const key = `${groupKey}:${row.key}`;
+                          if (next.has(key)) next.delete(key);
+                          else next.add(key);
+                          return next;
+                        })}
+                      >
+                        {expandedDefectGroups.has(`${groupKey}:${row.key}`) ? 'إخفاء العيوب' : 'عرض العيوب'}
+                      </button>
+                      {expandedDefectGroups.has(`${groupKey}:${row.key}`) ? (
+                        <div className="qms-daily-defect-details">
+                          {row.defectDetails.map((defect) => (
+                            <span key={defect.key}>{defect.label} ({defect.count})</span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : row.defects > 0 ? (
+                    <small className="qms-muted">تفاصيل العيوب غير متاحة</small>
+                  ) : <small className="qms-muted">لا توجد عيوب مسجلة</small>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          {rows.length > 0 ? (
+            <tfoot>
+              <tr>
+                <th>الإجمالي</th>
+                <th>{rows.reduce((sum, row) => sum + row.pulls, 0)}</th>
+                <th>{rows.reduce((sum, row) => sum + row.samples, 0)}</th>
+                <th>
+                  <span className="qms-daily-status is-accepted">مقبولة ({rows.reduce((sum, row) => sum + row.accepted, 0)})</span>
+                  <span className="qms-daily-status is-rejected">مرفوضة ({rows.reduce((sum, row) => sum + row.rejected, 0)})</span>
+                  {rows.some((row) => row.pending > 0) ? (
+                    <span className="qms-daily-status is-pending">قيد الفحص ({rows.reduce((sum, row) => sum + row.pending, 0)})</span>
+                  ) : null}
+                </th>
+                <th>{rows.reduce((sum, row) => sum + row.defects, 0)}</th>
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
+      {rows.length === 0 ? <p className="qms-muted">لا توجد سحبات في هذا اليوم.</p> : null}
+    </section>
+  );
 
   return (
-    <QmsPage title="ملخصات الجودة" subtitle="كمية الإنتاج تُقرأ من تقارير الإنتاج. كمية البالتة هي حجم دفعة الفحص فقط." actions={
+    <QmsPage title={tab === 'inspection' ? 'إجمال فحص اليوم' : 'ملخصات الجودة'} subtitle="ملخص فحوص سحب عينات الخطوط حسب المراقب ومحطة الفحص والخط." actions={
       <input className="qms-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
     }>
       <div className="qms-row" style={{ marginBottom: 12 }}>
-        <button type="button" className="qms-btn qms-btn-ghost" onClick={() => setTab('daily')}>الإنتاج والمفحوص والانتظار</button>
-        <button type="button" className="qms-btn qms-btn-ghost" onClick={() => setTab('lines')}>حسب الخط</button>
-        <button type="button" className="qms-btn qms-btn-ghost" onClick={() => setTab('pulls')}>سحب العينات</button>
+        <button type="button" className={`qms-btn ${tab === 'inspection' ? 'qms-btn-primary' : 'qms-btn-ghost'}`} aria-pressed={tab === 'inspection'} onClick={() => setTab('inspection')}>إجمال فحص اليوم</button>
+        <button type="button" className={`qms-btn ${tab === 'daily' ? 'qms-btn-primary' : 'qms-btn-ghost'}`} aria-pressed={tab === 'daily'} onClick={() => setTab('daily')}>الإنتاج والمفحوص والانتظار</button>
+        <button type="button" className={`qms-btn ${tab === 'lines' ? 'qms-btn-primary' : 'qms-btn-ghost'}`} aria-pressed={tab === 'lines'} onClick={() => setTab('lines')}>حسب الخط</button>
+        <button type="button" className={`qms-btn ${tab === 'pulls' ? 'qms-btn-primary' : 'qms-btn-ghost'}`} aria-pressed={tab === 'pulls'} onClick={() => setTab('pulls')}>سحب العينات</button>
       </div>
+      {tab === 'inspection' ? (
+        <div className="qms-daily-inspection">
+          <section className="qms-kpis qms-daily-inspection-kpis" aria-label="إجمالي فحوص اليوم">
+            <div className="qms-card qms-kpi"><span>إجمالي السحبات</span><strong>{inspectionSummary.totals.pulls}</strong></div>
+            <div className="qms-card qms-kpi"><span>إجمالي العينات</span><strong>{inspectionSummary.totals.samples}</strong></div>
+            <div className="qms-card qms-kpi"><span>مقبولة</span><strong>{inspectionSummary.totals.accepted}</strong></div>
+            <div className="qms-card qms-kpi"><span>مرفوضة</span><strong>{inspectionSummary.totals.rejected}</strong></div>
+            <div className="qms-card qms-kpi"><span>إجمالي العيوب</span><strong>{inspectionSummary.totals.defects}</strong></div>
+          </section>
+          <div className="qms-daily-inspection-grid">
+            {renderInspectionTable('إجمالي العينات حسب المراقب', 'inspector', inspectionSummary.byInspector)}
+            {renderInspectionTable('إجمالي العينات حسب المحطة', 'station', inspectionSummary.byStation)}
+            {renderInspectionTable('إجمالي العينات حسب الخط', 'line', inspectionSummary.byLine)}
+          </div>
+        </div>
+      ) : null}
       {tab === 'daily' ? (
-        <section className="qms-card" style={{ overflowX: 'auto' }}>
+        <section className="qms-card">
           <table className="qms-table">
-            <thead><tr><th>الكود</th><th>المنتج</th><th>الخط</th><th>البالتات</th><th>إنتاج التقارير</th><th>كمية مفحوصة</th><th>كمية بانتظار الفحص</th><th>عينات الفحص</th><th>العيوب</th><th>مقبول</th><th>مرفوض</th><th>نسبة الرفض</th></tr></thead>
+            <thead><tr><th>الخط</th><th>المنتج</th><th>إنتاج التقارير</th><th>كمية البالتات</th><th>بالتات مفحوصة</th><th>بانتظار الفحص</th><th>عيوب</th></tr></thead>
             <tbody>
-              {groups.map((row) => (
+              {daily.map((row) => (
                 <tr key={`${row.lineId}-${row.productId}`}>
-                  <td>{row.productCode || '—'}</td>
-                  <td>{row.productName}</td>
-                  <td>{row.lineName}</td>
-                  <td>{row.pallets}</td>
-                  <td>{row.produced == null ? 'لا يوجد تقرير' : row.produced}</td>
-                  <td>{row.inspectedQuantity}</td>
-                  <td>{row.waitingQuantity}</td>
-                  <td>{row.samples}</td>
-                  <td>{row.defects}</td>
-                  <td>{row.acceptedPallets}</td>
-                  <td>{row.rejectedPallets}</td>
-                  <td>{percent(row.defects, row.samples)}</td>
+                  <td>{row.lineName}</td><td>{row.productName}</td><td>{row.produced == null ? 'لا يوجد تقرير' : row.produced}</td><td>{row.lotQty}</td><td>{row.inspectedLots}</td><td>{row.waitingLots}</td><td>{row.defects}</td>
                 </tr>
               ))}
             </tbody>
-            <tfoot>
-              <tr>
-                <td>الإجمالي</td><td></td><td></td>
-                <td>{groups.reduce((sum, row) => sum + row.pallets, 0)}</td>
-                <td>{groups.some((row) => row.produced != null) ? groups.reduce((sum, row) => sum + (row.produced || 0), 0) : '—'}</td>
-                <td>{groups.reduce((sum, row) => sum + row.inspectedQuantity, 0)}</td>
-                <td>{groups.reduce((sum, row) => sum + row.waitingQuantity, 0)}</td>
-                <td>{groups.reduce((sum, row) => sum + row.samples, 0)}</td>
-                <td>{groups.reduce((sum, row) => sum + row.defects, 0)}</td>
-                <td>{groups.reduce((sum, row) => sum + row.acceptedPallets, 0)}</td>
-                <td>{groups.reduce((sum, row) => sum + row.rejectedPallets, 0)}</td>
-                <td>{percent(groups.reduce((sum, row) => sum + row.defects, 0), groups.reduce((sum, row) => sum + row.samples, 0))}</td>
-              </tr>
-            </tfoot>
           </table>
-          {groups.length === 0 ? <p>لا توجد بالات أو تقارير إنتاج في هذا اليوم.</p> : null}
+          {daily.length === 0 ? <p>لا توجد بالات في هذا اليوم.</p> : null}
         </section>
       ) : null}
       {tab === 'lines' ? (
-        <section className="qms-card" style={{ overflowX: 'auto' }}>
-          <table className="qms-table">
-            <thead><tr><th>الخط</th><th>المنتج</th><th>المراقب</th><th>إنتاج التقارير</th><th>عينات الفحص</th><th>المرفوض</th><th>المقبول</th><th>النسبة</th><th>أسباب الرفض</th><th>بالتات مقبولة</th><th>بالتات مرفوضة</th></tr></thead>
-            <tbody>
-              {groups.map((row) => (
-                <tr key={`${row.lineId}-${row.productId}`}>
-                  <td>{row.lineName}</td>
-                  <td>{row.productName}</td>
-                  <td>{row.inspectors || '—'}</td>
-                  <td>{row.produced == null ? 'لا يوجد تقرير' : row.produced}</td>
-                  <td>{row.samples}</td>
-                  <td>{row.defects}</td>
-                  <td>{row.acceptedQuantity}</td>
-                  <td>{percent(row.defects, row.samples)}</td>
-                  <td>{row.reasons}</td>
-                  <td>{row.acceptedPallets}</td>
-                  <td>{row.rejectedPallets}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {groups.length === 0 ? <p>لا توجد بالات أو تقارير إنتاج في هذا اليوم.</p> : null}
+        <section className="qms-card" style={{ height: 320 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={byLine}>
+              <XAxis dataKey="lineName" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar dataKey="accepted" fill="#15803d" name="مقبول" />
+              <Bar dataKey="rejected" fill="#c8102e" name="مرفوض" />
+            </BarChart>
+          </ResponsiveContainer>
         </section>
       ) : null}
       {tab === 'pulls' ? (
         <section className="qms-card">
-          <div className="qms-kpis" style={{ marginBottom: 12 }}>
-            <div className="qms-card qms-kpi"><span>إجمالي السحبات</span><strong>{pullTotals.pulls}</strong></div>
-            <div className="qms-card qms-kpi"><span>إجمالي العينات</span><strong>{pullTotals.samples}</strong></div>
-            <div className="qms-card qms-kpi"><span>إجمالي المشاكل</span><strong>{pullTotals.defects}</strong></div>
-            <div className="qms-card qms-kpi"><span>حالة البالتة</span><strong>{pullTotals.palletStatus}</strong></div>
-            <div className="qms-card qms-kpi"><span>عدد الخطوط</span><strong>{pullTotals.lines}</strong></div>
-          </div>
-          <h2 className="qms-label">ملخص الخط</h2>
           <table className="qms-table">
-            <thead><tr><th>الخط</th><th>المنتجات</th><th>المحطات</th><th>المراقبون</th><th>السحبات</th><th>العينات</th><th>حالة البالتة</th><th>العيوب</th><th>المشاكل</th></tr></thead>
+            <thead><tr><th>الفترة</th><th>الخط</th><th>المنتج</th><th>العينات</th><th>العيوب</th><th>القرار</th></tr></thead>
             <tbody>
-              {pullSummary.map((row) => (
-                <tr key={row.lineId}><td>{row.lineName}</td><td>{row.products}</td><td>{row.stations}</td><td>{row.inspectors}</td><td>{row.pulls}</td><td>{row.samples}</td><td>{row.palletStatus}</td><td>{row.defects}</td><td>{row.problems}</td></tr>
+              {pulls.map((row) => (
+                <tr key={row.id} className={row.palletRejected ? 'qms-rejected' : undefined}>
+                  <td>{row.startTime}–{row.endTime}</td><td>{row.lineName}</td><td>{row.productName}</td><td>{totalLinePullSampleCount(row)}</td><td>{row.defectCount}</td><td>{row.status === 'completed' ? (row.palletRejected ? 'مرفوضة' : 'مقبولة') : 'قيد الفحص'}</td>
+                </tr>
               ))}
             </tbody>
           </table>
-          {pullSummary.length === 0 ? <p>لا يوجد سحب عينات في هذا اليوم.</p> : null}
-          <h2 className="qms-label" style={{ marginTop: 12 }}>حالات التوقف وعدم السحب</h2>
-          <p className="qms-muted">الحفظ يتم من شاشة سحب العينات. هذا الجدول يعرض الحالات المحفوظة فقط.</p>
-          {periodStatuses == null ? <p>حالات التوقف غير متاحة.</p> : visiblePeriods.length === 0 ? <p>لا توجد حالات توقف أو أسباب عدم سحب محفوظة.</p> : (
-            <table className="qms-table">
-              <thead><tr><th>الفترة</th><th>الخط</th><th>الحالة</th><th>سبب عدم السحب</th></tr></thead>
-              <tbody>
-                {visiblePeriods.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.slotKey}</td>
-                    <td>{masters.lines.find((line) => line.id === row.lineId)?.name || pulls.find((pull) => pull.lineId === row.lineId)?.lineName || 'خط غير معروف'}</td>
-                    <td>{row.isStopped ? 'متوقف' : 'يعمل'}</td>
-                    <td>{row.noSampleReason || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <h2 className="qms-label" style={{ marginTop: 12 }}>الفترات</h2>
-          {can('quality.reports.export') ? (
-            <div className="qms-row">
-              <button type="button" className="qms-btn qms-btn-primary" disabled={pullExportRows.length === 0} onClick={() => {
-                const sheet = XLSX.utils.json_to_sheet(pullExportRows);
-                const book = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(book, sheet, 'السحب');
-                saveAs(new Blob([XLSX.write(book, { bookType: 'xlsx', type: 'array' })]), `line-pulls-${date}.xlsx`);
-              }}>تصدير Excel</button>
-              <button type="button" className="qms-btn qms-btn-ghost" disabled={pullExportRows.length === 0} onClick={() => {
-                const header = Object.keys(pullExportRows[0] || {}).map((key) => csvCell(key)).join(',');
-                const body = pullExportRows.map((row) => Object.values(row).map((value) => csvCell(value)).join(','));
-                saveAs(new Blob([`\uFEFF${[header, ...body].join('\n')}`], { type: 'text/csv;charset=utf-8' }), `line-pulls-${date}.csv`);
-              }}>تصدير CSV</button>
-            </div>
-          ) : null}
-          {periodBoards.length === 0 ? <p>لا توجد فترات سحب في هذا اليوم.</p> : periodBoards.map((period) => (
-            <div key={period.key} style={{ marginTop: 12 }}>
-              <p className="qms-label">{period.label} — عينات {period.samples} · عيوب {period.defects}</p>
-              <table className="qms-table">
-                <thead><tr><th>الخط</th><th>المنتج</th><th>المحطة</th><th>المراقب</th><th>العينات</th><th>السحبات</th><th>حالة البالتة</th><th>حالة السحب</th><th>حالة الخط</th><th>سبب عدم السحب</th><th>المشاكل</th></tr></thead>
-                <tbody>
-                  {period.lines.map((line) => (
-                    <tr key={`${period.key}:${line.lineId}`} className={line.rejected > 0 ? 'qms-rejected' : undefined}>
-                      <td>{line.lineName}</td><td>{line.products}</td><td>{line.stations}</td><td>{line.inspectors}</td><td>{line.samples}</td><td>{line.pulls}</td><td>{line.palletStatus}</td><td>{line.pullStatus}</td><td>{line.lineStatus}</td><td>{line.noSampleReason}</td><td>{line.problems}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td>إجمالي الفترة</td><td></td><td></td><td></td>
-                    <td>{period.samples}</td><td>{period.pulls}</td><td>{period.palletStatus}</td><td></td><td></td><td></td><td>العيوب: {period.defects}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          ))}
         </section>
       ) : null}
+    </QmsPage>
+  );
+};
+
+export const QualityDashboard: React.FC = () => {
+  const [date, setDate] = useState(localDateIso());
+  const [pallets, setPallets] = useState<QualityPallet[]>([]);
+  useEffect(() => {
+    qualityPalletService.listByDate(date).then(setPallets).catch((error: unknown) => toast.error(qualityUserMessage(error, 'تعذر التحميل')));
+  }, [date]);
+  const waiting = pallets.filter((row) => row.inspectionStatus === 'في انتظار الفحص').length;
+  const accepted = pallets.filter((row) => row.palletDecision === 'مقبول').length;
+  const rejected = pallets.filter((row) => row.palletDecision === 'مرفوض').length;
+  return (
+    <QmsPage title="لوحة الجودة" subtitle="مؤشرات بالات اليوم. لا تُعرض بيانات تجريبية." actions={<input className="qms-input" type="date" value={date} onChange={(event) => setDate(event.target.value)} />}>
+      <div className="qms-kpis">
+        <div className="qms-card qms-kpi"><span>بالات</span><strong>{pallets.length}</strong></div>
+        <div className="qms-card qms-kpi"><span>بانتظار الفحص</span><strong>{waiting}</strong></div>
+        <div className="qms-card qms-kpi"><span>مقبول</span><strong>{accepted}</strong></div>
+        <div className="qms-card qms-kpi"><span>مرفوض</span><strong>{rejected}</strong></div>
+      </div>
     </QmsPage>
   );
 };
