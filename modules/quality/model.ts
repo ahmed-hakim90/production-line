@@ -181,6 +181,7 @@ export interface QualityLinePull {
   additionalInspectorEmployeeId?: string;
   additionalInspectorName?: string;
   additionalInspectors?: QualityAdditionalInspector[];
+  additionalInspectorTechnician?: QualityTechnician | null;
   sampleCount: number;
   additionalSampleCount: number;
   sampleCountSemantics?: 'base_plus_additional';

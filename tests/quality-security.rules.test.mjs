@@ -100,6 +100,24 @@ await user('qualityOther', 'tenantB', 'tenantB-quality');
 await set('quality_settings', 'tenantA', {
   tenantId: 'tenantA',
   closeRequiresQualityApproval: true,
+  qualityTechnicians: [
+    {
+      id: 'tech-extra',
+      tenantId: 'tenantA',
+      name: 'مراقب إضافي',
+      code: 'Q-10',
+      displayOrder: 10,
+      isActive: true,
+    },
+    {
+      id: 'tech-inactive',
+      tenantId: 'tenantA',
+      name: 'فني موقوف',
+      code: 'Q-11',
+      displayOrder: 11,
+      isActive: false,
+    },
+  ],
 });
 await set('quality_reason_catalog', 'scratch', {
   tenantId: 'tenantA',
@@ -130,6 +148,7 @@ await set('work_orders', 'open-a', {
   actualWorkHours: 2,
 });
 await set('employees', 'emp-a', { tenantId: 'tenantA', name: 'مراقب', isActive: true });
+await set('employees', 'emp-extra', { tenantId: 'tenantA', name: 'مراقب إضافي', isActive: true });
 await set('employees', 'emp-off', { tenantId: 'tenantA', name: 'موقوف', isActive: false });
 await set('employees', 'emp-b', { tenantId: 'tenantB', name: 'آخر', isActive: true });
 await set('roles', 'tenantA-print', { tenantId: 'tenantA', permissions: { 'quality.print': true } });
@@ -389,6 +408,50 @@ await assertSucceeds(inspector.collection('quality_line_sample_pulls').doc('pull
   inspectorName: 'مراقب المحطة',
   lineId: 'line-1',
   stationId: 'station-monitor',
+}));
+const pullWithAdditionalInspector = {
+  tenantId: 'tenantA',
+  status: 'pending',
+  inspectorEmployeeId: 'station-monitor',
+  inspectorName: 'مراقب المحطة',
+  lineId: 'line-1',
+  stationId: 'station-monitor',
+  additionalInspectorEmployeeId: 'tech-extra',
+  additionalInspectorName: 'مراقب إضافي',
+  additionalInspectorTechnician: {
+    id: 'tech-extra',
+    tenantId: 'tenantA',
+    name: 'مراقب إضافي',
+    code: 'Q-10',
+    displayOrder: 10,
+    isActive: true,
+  },
+  additionalInspectors: [{
+    employeeId: 'tech-extra',
+    employeeName: 'مراقب إضافي',
+    sampleCount: 1,
+  }],
+};
+const pullWithoutTechnicianSnapshot = { ...pullWithAdditionalInspector };
+delete pullWithoutTechnicianSnapshot.additionalInspectorTechnician;
+await assertFails(inspector.collection('quality_line_sample_pulls').doc('pull-extra-no-snapshot').set(pullWithoutTechnicianSnapshot));
+await assertSucceeds(inspector.collection('quality_line_sample_pulls').doc('pull-extra-catalog').set(pullWithAdditionalInspector));
+await assertFails(inspector.collection('quality_line_sample_pulls').doc('pull-extra-wrong-name').set({
+  ...pullWithAdditionalInspector,
+  additionalInspectorName: 'اسم مختلف',
+}));
+await assertFails(inspector.collection('quality_line_sample_pulls').doc('pull-extra-inactive').set({
+  ...pullWithAdditionalInspector,
+  additionalInspectorEmployeeId: 'tech-inactive',
+  additionalInspectorName: 'فني موقوف',
+  additionalInspectorTechnician: {
+    id: 'tech-inactive',
+    tenantId: 'tenantA',
+    name: 'فني موقوف',
+    code: 'Q-11',
+    displayOrder: 11,
+    isActive: false,
+  },
 }));
 await assertFails(inspector.collection('quality_line_sample_pulls').doc('pull-station-monitor-wrong-name').set({
   tenantId: 'tenantA',

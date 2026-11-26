@@ -379,7 +379,7 @@ vercel env pull      # اختياري لمزامنة محلية
 vercel deploy --prod
 ```
 
-> Cloud Functions / Firestore rules تبقى عبر Firebase (`firebase deploy --only functions,...`). Vercel يستضيف الواجهة فقط.
+> Cloud Functions / Firestore rules تبقى عبر Firebase. لنشر قواعد وفهارس Firestore بأمان استخدم `npm run deploy:firestore`؛ النشر المباشر للفهرس قد يحذف فهارس الإنتاج غير الموجودة في الملف. Vercel يستضيف الواجهة فقط.
 
 ---
 
@@ -401,20 +401,23 @@ firebase login
 firebase use sokany-production
 ```
 
-### 3) نشر الواجهة + Functions + قواعد/فهارس Firestore
+### 3) نشر قواعد وفهارس Firestore
+
+الأمر التالي يضيف الفهارس الناقصة فقط ولا يحذف الفهارس الموجودة. قواعد Firestore
+تُستبدل كليًا عند النشر، لذلك سيطلب الأمر تأكيدًا صريحًا قبل نشر القواعد:
+
+```bash
+npm run deploy:firestore
+```
+
+### 4) نشر الواجهة + Functions + Storage
 
 > في PowerShell لازم وضع targets بين quotes:
 
 ```bash
-firebase deploy --only "hosting,functions,firestore:rules,firestore:indexes"
-```
-
-بديل على دفعات:
-
-```bash
-firebase deploy --only hosting
-firebase deploy --only functions
-firebase deploy --only "firestore:rules,firestore:indexes"
+npm run build
+npm --prefix functions run build
+firebase deploy --only "hosting,functions,storage"
 ```
 
 ---

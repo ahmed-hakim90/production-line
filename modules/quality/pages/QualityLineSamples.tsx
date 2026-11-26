@@ -24,7 +24,6 @@ import type {
 import { type QualitySector } from '../domain/sector';
 import { qualitySampleService } from '../services/qualitySampleService';
 import { qualitySettingsService, type QualityPolicySettings } from '../services/qualitySettingsService';
-import { inspectorOptions, useQualityAssignments } from '../hooks/useQualityAssignments';
 import { MasterSelect, QmsPage, SectorSwitch, matchesSector, useQualityMasters } from '../qms/QmsChrome';
 
 interface PullEditDraft {
@@ -60,7 +59,6 @@ export const QualityLineSamples: React.FC = () => {
   const canPrintSamples = qualityRecordPrintAllowed(permissions, 'quality.samples.view');
   const canCreatePull = can('quality.samples.inspect') || can('quality.settings.manage');
   const masters = useQualityMasters();
-  const staff = useQualityAssignments();
   const [date, setDate] = useState(localDateIso());
   const [slots, setSlots] = useState<QualitySampleSlot[]>([]);
   const [stations, setStations] = useState<QualityStation[]>([]);
@@ -113,37 +111,48 @@ export const QualityLineSamples: React.FC = () => {
   });
   const [newReasonOpen, setNewReasonOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const hourlySummaryRefs = useRef(new Map<string, HTMLElement>());
   const [selectedPendingIds, setSelectedPendingIds] = useState<string[]>([]);
 
   const load = async () => {
-    const [nextSlots, nextStations, nextManagedStations, nextManagedSlots, nextRows, nextPolicies, nextProductionTags, nextTechnicians] = await Promise.all([
-      qualitySettingsService.listSlots('line'),
-      qualitySettingsService.listStations(),
-      qualitySettingsService.listStations({ includeInactive: true }),
-      qualitySettingsService.listManagedSlots('line'),
-      qualitySampleService.listPulls(date),
-      qualitySettingsService.getPolicies(),
-      qualitySettingsService.listProductionTags({ includeInactive: true }),
-      qualitySettingsService.listTechnicians(),
-    ]);
-    setSlots(nextSlots);
-    setStations(nextStations);
-    setManagedStations(nextManagedStations);
-    setManagedSlots(nextManagedSlots);
-    const completedRows = nextRows.filter((row) => row.status === 'completed');
-    const detailedRows = completedRows.length > 0
-      ? await qualitySampleService.withPullDefects(completedRows)
-      : [];
-    const detailedRowsById = new Map(detailedRows.map((row) => [row.id, row]));
-    setRows(nextRows.map((row) => ({
-      ...row,
-      defects: detailedRowsById.get(row.id)?.defects || [],
-    })));
-    setPolicies(nextPolicies);
-    setProductionTags(nextProductionTags);
-    setTechnicians(nextTechnicians);
-    setRejectLimit(nextPolicies.lineSampleRejectLimit);
+    setLoadingData(true);
+    setLoadError('');
+    try {
+      const [nextSlots, nextStations, nextManagedStations, nextManagedSlots, nextRows, nextPolicies, nextProductionTags, nextTechnicians] = await Promise.all([
+        qualitySettingsService.listSlots('line'),
+        qualitySettingsService.listStations(),
+        qualitySettingsService.listStations({ includeInactive: true }),
+        qualitySettingsService.listManagedSlots('line'),
+        qualitySampleService.listPulls(date),
+        qualitySettingsService.getPolicies(),
+        qualitySettingsService.listProductionTags({ includeInactive: true }),
+        qualitySettingsService.listTechnicians(),
+      ]);
+      setSlots(nextSlots);
+      setStations(nextStations);
+      setManagedStations(nextManagedStations);
+      setManagedSlots(nextManagedSlots);
+      const completedRows = nextRows.filter((row) => row.status === 'completed');
+      const detailedRows = completedRows.length > 0
+        ? await qualitySampleService.withPullDefects(completedRows)
+        : [];
+      const detailedRowsById = new Map(detailedRows.map((row) => [row.id, row]));
+      setRows(nextRows.map((row) => ({
+        ...row,
+        defects: detailedRowsById.get(row.id)?.defects || [],
+      })));
+      setPolicies(nextPolicies);
+      setProductionTags(nextProductionTags);
+      setTechnicians(nextTechnicians);
+      setRejectLimit(nextPolicies.lineSampleRejectLimit);
+    } catch (error) {
+      setLoadError(qualityUserMessage(error, 'تعذر تحميل بيانات الجودة'));
+      throw error;
+    } finally {
+      setLoadingData(false);
+    }
   };
 
   useEffect(() => {
@@ -167,7 +176,6 @@ export const QualityLineSamples: React.FC = () => {
   }, [date, lineFilter, slotFilter, statusFilter, sector]);
 
   const active = rows.find((row) => row.id === activeId);
-  const inspectorChoices = inspectorOptions(masters.employees, staff.assignments, { lineId, stationId });
   const visibleProductionTags = productionTags
     .filter((tag) => tag.isActive !== false)
     .filter((tag) => matchesSector(sector, tag.sector))
@@ -233,14 +241,14 @@ export const QualityLineSamples: React.FC = () => {
       toast.error('تمت إضافة هذا المراقب بالفعل.');
       return;
     }
-    const technician = technicians.find((item) => item.id === technicianId);
-    if (!technician) {
-      toast.error('اختر فنيًا نشطًا من دليل الفنيين.');
+    const inspector = technicians.find((item) => item.id === technicianId && item.isActive !== false);
+    if (!inspector) {
+      toast.error('اختر فنيًا نشطًا من قائمة فنيي الجودة في الإعدادات.');
       return;
     }
     setAdditionalInspectors((current) => [...current, {
-      employeeId: technician.id,
-      employeeName: technician.name,
+      employeeId: inspector.id,
+      employeeName: inspector.name,
       sampleCount: 1,
     }]);
   };
@@ -261,15 +269,11 @@ export const QualityLineSamples: React.FC = () => {
       ? { id: tag.productId, name: tag.productName }
       : null;
     const station = stations.find((item) => item.id === stationId);
-    const inspectorRecord = masters.employees.find((item) => item.id === inspectorId)
-      || staff.assignments.find((item) => item.employeeId === inspectorId);
+    const inspectorRecord = technicians.find((item) => item.id === station?.defaultInspectorTechnicianId);
     const inspector = station
       ? {
         id: station.defaultInspectorEmployeeId || inspectorId || station.id,
-        name: station.defaultInspectorName
-          || (inspectorRecord
-            ? ('employeeId' in inspectorRecord ? inspectorRecord.employeeName : inspectorRecord.name)
-            : ''),
+        name: station.defaultInspectorName || inspectorRecord?.name || '',
       }
       : null;
     if (!slot || !tag || !line || !product || !station || !inspector) {
@@ -308,7 +312,11 @@ export const QualityLineSamples: React.FC = () => {
       });
       toast.success('تم تسجيل السحبة وبدء الفحص.');
       setAdditionalInspectors([]);
-      await load();
+      try {
+        await load();
+      } catch {
+        toast.error('تم تسجيل السحبة، لكن تعذر تحديث القائمة. حدّث الصفحة وتأكد من ظهورها قبل إعادة التسجيل.');
+      }
     } catch (error) {
       toast.error(qualityUserMessage(error, 'تعذر تسجيل السحبة.'));
     } finally {
@@ -463,15 +471,11 @@ export const QualityLineSamples: React.FC = () => {
       : { id: editDraft.productId, name: editDraft.productName };
     const sector = tag?.sector || editDraft.sector;
     const station = [...stations, ...managedStations].find((item) => item.id === editDraft.stationId);
-    const inspectorRecord = masters.employees.find((item) => item.id === editDraft.inspectorEmployeeId)
-      || staff.assignments.find((item) => item.employeeId === editDraft.inspectorEmployeeId);
+    const inspectorRecord = technicians.find((item) => item.id === station?.defaultInspectorTechnicianId);
     const inspector = station
       ? {
         id: station.defaultInspectorEmployeeId || editDraft.inspectorEmployeeId || station.id,
-        name: station.defaultInspectorName
-          || (inspectorRecord
-            ? ('employeeId' in inspectorRecord ? inspectorRecord.employeeName : inspectorRecord.name)
-            : editDraft.inspectorName),
+        name: station.defaultInspectorName || inspectorRecord?.name || editDraft.inspectorName,
       }
       : null;
     const slot = [...slots, ...managedSlots].find((item) => item.slotKey === editDraft.slotKey);
@@ -680,26 +684,6 @@ export const QualityLineSamples: React.FC = () => {
     }
   };
 
-  const editInspectorChoices = editDraft
-    ? inspectorOptions(masters.employees, staff.assignments, {
-      lineId: editDraft.lineId,
-      stationId: editDraft.stationId,
-    })
-    : [];
-  const editCurrentInspector = editDraft
-    ? masters.employees.find((employee) => employee.id === editDraft.inspectorEmployeeId)
-      || staff.assignments.find((employee) => employee.employeeId === editDraft.inspectorEmployeeId)
-    : undefined;
-  const editInspectorOptions = editCurrentInspector && !editInspectorChoices.some((option) => option.value === editDraft?.inspectorEmployeeId)
-    ? [...editInspectorChoices, {
-      value: editDraft?.inspectorEmployeeId || '',
-      label: 'employeeId' in editCurrentInspector
-        ? editCurrentInspector.employeeName
-        : (editCurrentInspector.code
-          ? `${editCurrentInspector.name} (${editCurrentInspector.code})`
-          : editCurrentInspector.name),
-    }]
-    : editInspectorChoices;
   const editSlotOptions = editDraft
     ? [...slots, ...managedSlots.filter((slot) => slot.slotKey === editDraft.slotKey && !slots.some((activeSlot) => activeSlot.slotKey === slot.slotKey))]
     : slots;
@@ -721,9 +705,16 @@ export const QualityLineSamples: React.FC = () => {
     }]),
   ] : [];
   const editStation = editDraft ? editStations.find((station) => station.id === editDraft.stationId) : undefined;
+  const editAdditionalInspectorChoices = technicians
+    .filter((technician) => technician.isActive !== false
+      && technician.id !== editStation?.defaultInspectorTechnicianId
+      && !editDraft?.additionalInspectors.some((item) => item.employeeId === technician.id))
+    .map((technician) => ({
+      value: technician.id,
+      label: `${technician.name} (${technician.code})`,
+    }));
   const editStationInspectorName = editStation?.defaultInspectorName
-    || masters.employees.find((employee) => employee.id === editStation?.defaultInspectorEmployeeId)?.name
-    || staff.assignments.find((assignment) => assignment.employeeId === editStation?.defaultInspectorEmployeeId)?.employeeName
+    || technicians.find((technician) => technician.id === editStation?.defaultInspectorTechnicianId)?.name
     || editDraft?.inspectorName
     || '';
   const editTotalSamples = editDraft?.sampleCount || 0;
@@ -741,6 +732,25 @@ export const QualityLineSamples: React.FC = () => {
   }))].filter((slot, index, all) => all.findIndex((candidate) => candidate.slotKey === slot.slotKey) === index);
   const selectedProductionTag = visibleProductionTags.find((tag) => tag.id === productionTagId);
   const selectedStation = stations.find((station) => station.id === stationId);
+  const additionalInspectorChoices = technicians
+    .filter((technician) => technician.isActive !== false
+      && technician.id !== selectedStation?.defaultInspectorTechnicianId
+      && !additionalInspectors.some((item) => item.employeeId === technician.id))
+    .map((technician) => ({
+      value: technician.id,
+      label: `${technician.name} (${technician.code})`,
+    }));
+  const additionalInspectorHelp = loadError
+    ? loadError
+    : loadingData
+      ? 'جارٍ تحميل فنيي الجودة...'
+      : !stationId
+        ? 'اختر محطة الفحص أولاً.'
+        : technicians.length === 0
+          ? 'أضف الفنيين من قسم «فنيون الجودة» في إعدادات الجودة أولاً.'
+          : additionalInspectorChoices.length === 0
+            ? 'لا يوجد فني آخر غير فني المحطة؛ اختر فنيًا آخر من قائمة فنيي الجودة.'
+            : 'يظهر هنا الفنيون النشطون المسجلون في قسم «فنيون الجودة» بإعدادات الجودة.';
   const selectedSlot = slots.find((slot) => slot.slotKey === slotKey);
   const summaryCounts = {
     pending: visibleRows.filter((row) => row.status !== 'completed').length,
@@ -1052,15 +1062,14 @@ export const QualityLineSamples: React.FC = () => {
               value=""
               onChange={addAdditionalInspector}
               placeholder="اختر مراقبًا إضافيًا..."
-              options={technicians
-                .filter((technician) => technician.isActive !== false
-                  && technician.id !== selectedStation?.defaultInspectorTechnicianId
-                  && !additionalInspectors.some((item) => item.employeeId === technician.id))
-                .map((technician) => ({
-                  value: technician.id,
-                  label: `${technician.name} (${technician.code})`,
-                }))}
+              emptyMessage={additionalInspectorHelp}
+              options={additionalInspectorChoices}
             />
+            {loadError ? (
+              <p className="qms-error qms-inline-error" role="alert">{additionalInspectorHelp}</p>
+            ) : (
+              <small className="qms-muted">{additionalInspectorHelp}</small>
+            )}
           </div>
           {additionalAssignedCount >= sampleCount ? (
             <p className="qms-error qms-inline-error">توزيع المراقبين الإضافيين يستهلك كامل السحبة؛ يجب ترك عينة للمراقب الأساسي.</p>
@@ -1631,24 +1640,16 @@ export const QualityLineSamples: React.FC = () => {
                     label="إضافة مراقب إضافي"
                     value=""
                     onChange={(employeeId) => {
-                      const technician = technicians.find((item) => item.id === employeeId);
-                      if (!technician || technician.id === editStation?.defaultInspectorTechnicianId
-                        || editDraft.additionalInspectors.some((item) => item.employeeId === technician.id)) return;
+                      const employee = masters.employees.find((item) => item.id === employeeId);
+                      if (!employee || !editAdditionalInspectorChoices.some((option) => option.value === employee.id)) return;
                       updateEditDraft('additionalInspectors', [...editDraft.additionalInspectors, {
-                        employeeId: technician.id,
-                        employeeName: technician.name,
+                        employeeId: employee.id || '',
+                        employeeName: employee.name,
                         sampleCount: 1,
                       }]);
                     }}
                     placeholder="اختر مراقبًا إضافيًا..."
-                    options={technicians
-                      .filter((technician) => technician.isActive !== false
-                        && technician.id !== editStation?.defaultInspectorTechnicianId
-                        && !editDraft.additionalInspectors.some((item) => item.employeeId === technician.id))
-                      .map((technician) => ({
-                        value: technician.id,
-                        label: `${technician.name} (${technician.code})`,
-                      }))}
+                    options={editAdditionalInspectorChoices}
                   />
                 </div>
               </div>

@@ -2215,11 +2215,17 @@ service cloud.firestore {
         || request.resource.data.additionalInspectorEmployeeId == ''
         || (
           request.resource.data.additionalInspectorEmployeeId is string
-          && exists(pl_qualityAssignmentPath(request.resource.data.additionalInspectorEmployeeId))
-          && exists(pl_qualityEmployeePath(request.resource.data.additionalInspectorEmployeeId))
-          && pl_qualityInspectorFacts(
-            request.resource.data.additionalInspectorEmployeeId,
-            request.resource.data.additionalInspectorName
+          && 'additionalInspectorTechnician' in request.resource.data
+          && request.resource.data.additionalInspectorTechnician is map
+          && request.resource.data.additionalInspectorTechnician.get('id', '') == request.resource.data.additionalInspectorEmployeeId
+          && request.resource.data.additionalInspectorTechnician.get('tenantId', request.resource.data.tenantId) == request.resource.data.tenantId
+          && request.resource.data.additionalInspectorTechnician.get('name', '') == request.resource.data.additionalInspectorName
+          && request.resource.data.additionalInspectorTechnician.get('isActive', true) == true
+          && exists(/databases/$(database)/documents/quality_settings/$(request.resource.data.tenantId))
+          && get(/databases/$(database)/documents/quality_settings/$(request.resource.data.tenantId)).data.get('qualityTechnicians', []) is list
+          && get(/databases/$(database)/documents/quality_settings/$(request.resource.data.tenantId)).data.qualityTechnicians.hasAny([
+            request.resource.data.additionalInspectorTechnician
+          ])
           )
         );
     }

@@ -32,11 +32,14 @@ const assignment = (overrides: Partial<QualityStaffAssignment> = {}): QualitySta
   ...overrides,
 });
 
-const screen = readFileSync(new URL('../modules/quality/pages/QualityStaff.tsx', import.meta.url), 'utf8');
+const routes = readFileSync(new URL('../modules/quality/routes/index.ts', import.meta.url), 'utf8');
+const menu = readFileSync(new URL('../config/menu.config.ts', import.meta.url), 'utf8');
 const domain = readFileSync(new URL('../modules/quality/domain/staff.ts', import.meta.url), 'utf8');
 const service = readFileSync(new URL('../modules/quality/services/qualityStaffService.ts', import.meta.url), 'utf8');
-assert.equal(screen.includes('QUALITY_RESPONSIBILITY'), false);
-assert.equal(screen.includes('مفاتيح الدور'), false);
+assert.doesNotMatch(routes, /QualityStaff/);
+assert.match(routes, /path: '\/quality\/staff', redirectTo: '\/quality\/settings'/);
+assert.match(routes, /path: '\/quality\/workers', redirectTo: '\/quality\/settings'/);
+assert.doesNotMatch(menu, /key: 'quality-staff'/);
 assert.equal(domain.includes('responsibility'), false);
 assert.equal(service.includes('responsibility'), false);
 assert.equal(service.includes('roles.permissions'), false);

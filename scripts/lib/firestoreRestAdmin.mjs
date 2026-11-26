@@ -14,6 +14,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 
 const FIRESTORE_HOST = 'https://firestore.googleapis.com/v1';
 const DEFAULT_PAGE_SIZE = 300;
@@ -23,7 +24,7 @@ const MAX_COMMIT_WRITES = 500;
 export const DOCUMENT_ID_FIELD = '__name__';
 
 function configstorePath() {
-  return join(process.env.HOME || '', '.config/configstore/firebase-tools.json');
+  return join(process.env.HOME || homedir(), '.config', 'configstore', 'firebase-tools.json');
 }
 
 function readStoredToken() {

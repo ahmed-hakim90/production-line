@@ -3,7 +3,7 @@ import { db } from '@/services/firebase';
 import { assertIsoDate, assertRequiredText, assertSampleCount, resolveLinePullDecision, totalLinePullSampleCount, validateAdditionalInspectorAssignments } from '../domain/samples';
 import { assertSectorMatch, type QualitySector } from '../domain/sector';
 import { localTimeHm } from '../domain/time';
-import type { QualityAdditionalInspector, QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus } from '../model';
+import type { QualityAdditionalInspector, QualityDefectLine, QualityHourlySample, QualityLinePull, QualityPeriodStatus, QualityTechnician } from '../model';
 import { qualityStaffService } from './qualityStaffService';
 import { qualitySettingsService } from './qualitySettingsService';
 import {
@@ -26,6 +26,31 @@ import {
 async function loadSampleDefects(parentCollection: string, parentId: string): Promise<QualityDefectLine[]> {
   const snap = await getDocs(qmsChildCollection(parentCollection, parentId, 'defects'));
   return snap.docs.map((item) => ({ id: item.id, ...item.data() }) as QualityDefectLine);
+}
+
+async function resolveAdditionalInspectors(
+  input: QualityAdditionalInspector[],
+  primaryInspectorId: string,
+  sampleCount: number,
+  existing: QualityAdditionalInspector[] = [],
+): Promise<{ inspectors: QualityAdditionalInspector[]; firstTechnician?: QualityTechnician }> {
+  const assignments = validateAdditionalInspectorAssignments(input, primaryInspectorId, sampleCount);
+  const technicians = await qualitySettingsService.listTechnicians();
+  let firstTechnician: QualityTechnician | undefined;
+  const resolved = assignments.map((assignment, index) => {
+    const previous = existing.find((item) => item.employeeId === assignment.employeeId);
+    const technician = technicians.find((item) => item.id === assignment.employeeId);
+    if (previous?.employeeName === assignment.employeeName) {
+      if (index === 0) firstTechnician = technician;
+      return assignment;
+    }
+    if (!technician) {
+      throw new Error('المراقب الإضافي يجب أن يكون فنيًا نشطًا مسجلًا في إعدادات الجودة.');
+    }
+    if (index === 0) firstTechnician = technician;
+    return { ...assignment, employeeName: technician.name };
+  });
+  return { inspectors: resolved, firstTechnician };
 }
 
 async function replaceChildDefects(
@@ -203,18 +228,12 @@ export const qualitySampleService = {
           sampleCount: input.additionalSampleCount || 0,
         }]
         : [];
-    const additionalInspectors = validateAdditionalInspectorAssignments(
+    const resolvedAdditionalInspectors = await resolveAdditionalInspectors(
       additionalInspectorInput,
       inspector.id,
       input.sampleCount,
     );
-    const technicians = await qualitySettingsService.listTechnicians();
-    const technicianIds = new Set(technicians.map((technician) => technician.id));
-    for (const assignment of additionalInspectors) {
-      if (!technicianIds.has(assignment.employeeId)) {
-        throw new Error(`فني الجودة «${assignment.employeeName}» غير نشط أو غير مسجل في الدليل.`);
-      }
-    }
+    const additionalInspectors = resolvedAdditionalInspectors.inspectors;
     const additional = additionalInspectors[0];
     const additionalSampleCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
     const rejectLimit = input.rejectLimit ?? 1;
@@ -240,6 +259,7 @@ export const qualitySampleService = {
       additionalInspectors,
       additionalInspectorEmployeeId: additional?.employeeId || '',
       additionalInspectorName: additional?.employeeName || '',
+      additionalInspectorTechnician: resolvedAdditionalInspectors.firstTechnician || null,
       sampleCount: input.sampleCount,
       additionalSampleCount,
       sampleCountSemantics: 'base_plus_additional',
@@ -313,18 +333,19 @@ export const qualitySampleService = {
           sampleCount: input.additionalSampleCount || 0,
         }]
         : [];
-    const additionalInspectors = validateAdditionalInspectorAssignments(
+    const resolvedAdditionalInspectors = await resolveAdditionalInspectors(
       additionalInspectorInput,
       inspector.id,
       input.sampleCount,
+      pull.additionalInspectors || (pull.additionalInspectorEmployeeId
+        ? [{
+          employeeId: pull.additionalInspectorEmployeeId,
+          employeeName: pull.additionalInspectorName || '',
+          sampleCount: pull.additionalSampleCount || 0,
+        }]
+        : []),
     );
-    const technicians = await qualitySettingsService.listTechnicians();
-    const technicianIds = new Set(technicians.map((technician) => technician.id));
-    for (const assignment of additionalInspectors) {
-      if (!technicianIds.has(assignment.employeeId)) {
-        throw new Error(`فني الجودة «${assignment.employeeName}» غير نشط أو غير مسجل في الدليل.`);
-      }
-    }
+    const additionalInspectors = resolvedAdditionalInspectors.inspectors;
     const additional = additionalInspectors[0];
     const additionalSampleCount = additionalInspectors.reduce((sum, item) => sum + item.sampleCount, 0);
     const actor = currentQualityActor();
@@ -361,6 +382,7 @@ export const qualitySampleService = {
       additionalInspectors,
       additionalInspectorEmployeeId: additional?.employeeId || '',
       additionalInspectorName: additional?.employeeName || '',
+      additionalInspectorTechnician: resolvedAdditionalInspectors.firstTechnician || null,
       sampleCount: input.sampleCount,
       additionalSampleCount,
       sampleCountSemantics: 'base_plus_additional',

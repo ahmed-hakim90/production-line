@@ -16,7 +16,6 @@ const QualityDashboard = lazyNamed(() => import('../pages/QualityDashboard'), 'Q
 const QualityCartons = lazyNamed(() => import('../pages/QualityCartons'), 'QualityCartons');
 const QualityPlastic = lazyNamed(() => import('../pages/QualityPlastic'), 'QualityPlastic');
 const QualitySettings = lazyNamed(() => import('../pages/QualitySettings'), 'QualitySettings');
-const QualityStaff = lazyNamed(() => import('../pages/QualityStaff'), 'QualityStaff');
 
 const view: AppRouteDef['permission'] = 'quality.view';
 
@@ -36,10 +35,10 @@ export const QUALITY_ROUTES: AppRouteDef[] = [
   { path: '/quality/incoming/cartons', permission: 'quality.incoming.view', component: QualityCartons },
   { path: '/quality/incoming/plastic', permission: 'quality.incoming.view', component: QualityPlastic },
   { path: '/quality/settings', permission: 'quality.settings.view', component: QualitySettings },
-  { path: '/quality/staff', permission: 'quality.workers.view', component: QualityStaff },
+  { path: '/quality/staff', redirectTo: '/quality/settings' },
+  { path: '/quality/workers', redirectTo: '/quality/settings' },
   { path: '/quality/final-inspection', redirectTo: '/quality/pallets' },
   { path: '/quality/ipqc', redirectTo: '/quality/line-samples' },
   { path: '/quality/rework', redirectTo: '/quality/scrap' },
   { path: '/quality/capa', redirectTo: '/quality/second-sort' },
-  { path: '/quality/workers', redirectTo: '/quality/staff' },
 ];

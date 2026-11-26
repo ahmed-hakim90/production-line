@@ -281,6 +281,7 @@ interface SearchableSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   searchPlaceholder?: string;
+  emptyMessage?: string;
   className?: string;
   disabled?: boolean;
   /** Open the menu when the trigger receives focus (useful for keyboard voucher flows). */
@@ -303,6 +304,7 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
       onChange,
       placeholder,
       searchPlaceholder,
+      emptyMessage,
       className = '',
       disabled = false,
       openOnFocus = false,
@@ -458,7 +460,7 @@ export const SearchableSelect = React.forwardRef<HTMLButtonElement, SearchableSe
           ref={commandListRef}
           className="max-h-[min(var(--radix-popover-content-available-height,42dvh),18rem)] overscroll-contain [overflow-anchor:none]"
         >
-          <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
+          <CommandEmpty>{options.length === 0 && emptyMessage ? emptyMessage : t('shared.noResults')}</CommandEmpty>
           <CommandGroup>
             {filteredOptions.map((opt, idx) => (
               <CommandItem

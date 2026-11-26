@@ -26,19 +26,23 @@ export function inspectorOptions(
   }));
 }
 
-export function useQualityAssignments(): { assignments: QualityStaffAssignment[]; error: string } {
+export function useQualityAssignments(): { assignments: QualityStaffAssignment[]; error: string; loading: boolean } {
   const [assignments, setAssignments] = useState<QualityStaffAssignment[]>([]);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError('');
     qualityStaffService.list()
       .then((rows) => { if (!cancelled) setAssignments(rows); })
       .catch((loadError: unknown) => {
         if (!cancelled) setError(qualityUserMessage(loadError, 'تعذر تحميل تعيينات الجودة'));
-      });
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
-  return { assignments, error };
+  return { assignments, error, loading };
 }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { ChevronDown } from 'lucide-react';
 import { usePermission } from '@/utils/permissions';
 import { STANDARD_AQL_LEVEL_II, type AqlPlanRange } from '../domain/aql';
 import type { QualitySector } from '../domain/sector';
@@ -190,8 +191,12 @@ export const QualitySettings: React.FC = () => {
           }, 'تم حفظ النطاق')}>{planForm.id ? 'حفظ التعديل' : 'حفظ النطاق'}</button>
         </div>
       </section>
-      <section className="qms-card" style={{ marginBottom: 12 }}>
-        <h2 className="qms-title">أسباب العيوب</h2>
+      <details className="qms-card qms-collapsible" style={{ marginBottom: 12 }}>
+        <summary className="qms-collapsible-trigger">
+          <span className="qms-title">أسباب العيوب ({catalogReasons.length})</span>
+          <ChevronDown className="qms-collapsible-chevron" size={18} aria-hidden="true" />
+        </summary>
+        <div className="qms-collapsible-content">
         <label><span className="qms-label">بحث</span><input className="qms-input" value={reasonQuery} onChange={(event) => setReasonQuery(event.target.value)} placeholder="الاسم أو التصنيف" /></label>
         <table className="qms-table">
           <thead><tr><th>#</th><th>اسم العيب</th><th>التصنيف</th><th>القطاع</th><th></th></tr></thead>
@@ -243,7 +248,8 @@ export const QualitySettings: React.FC = () => {
             setReasonLabel('');
           }, 'تم حفظ السبب')}>{editingReasonId ? 'حفظ التعديل' : 'إضافة سبب'}</button>
         </div>
-      </section>
+        </div>
+      </details>
       <section className="qms-card" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">استيراد أسماء العيوب من Excel</h2>
         <p className="qms-muted">يدعم الملف عمود «اسم العيب» أو «العيب»، ويقبل اختياريًا «التصنيف» و«القطاع». لا يلزم إدخال كود للعيب؛ سيتم توليده تلقائيًا.</p>
@@ -264,8 +270,12 @@ export const QualitySettings: React.FC = () => {
           </label>
         </div>
       </section>
-      <section className="qms-card" id="quality-technicians" style={{ marginBottom: 12 }}>
-        <h2 className="qms-title">فنيون الجودة</h2>
+      <details className="qms-card qms-collapsible" id="quality-technicians" style={{ marginBottom: 12 }}>
+        <summary className="qms-collapsible-trigger">
+          <span className="qms-title">فنيون الجودة ({technicians.length})</span>
+          <ChevronDown className="qms-collapsible-chevron" size={18} aria-hidden="true" />
+        </summary>
+        <div className="qms-collapsible-content">
         <p className="qms-muted">أضف الفنيين مرة واحدة، ثم اختر الفني المسجل عند إعداد كل محطة بدل كتابة اسمه يدويًا.</p>
         <div className="qms-row">
           <label><span className="qms-label">اسم الفني</span><input className="qms-input" value={technicianName} onChange={(event) => setTechnicianName(event.target.value)} /></label>
@@ -309,7 +319,8 @@ export const QualitySettings: React.FC = () => {
           </tbody>
         </table>
         {technicians.length === 0 ? <p className="qms-muted">لم تتم إضافة فنيين بعد.</p> : null}
-      </section>
+        </div>
+      </details>
       <section className="qms-card" id="quality-stations" style={{ marginBottom: 12 }}>
         <h2 className="qms-title">محطات الفحص</h2>
         <div className="qms-row">

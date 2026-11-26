@@ -57,29 +57,42 @@ Hosting (`firebase.json`):
 ## Indexes
 
 - File: `firestore.indexes.json`
-- Deploy: `firebase deploy --only firestore:indexes`
+- Add missing indexes with `npm run deploy:firestore` (or `npm run deploy:firestore -- --indexes-only`).
+- Avoid direct `firebase deploy --only firestore:indexes` for production: the Firebase CLI treats the file as the desired complete index set and can remove live indexes missing from it.
 - After new composite queries fail in console, add the suggested index to the JSON and redeploy (do not rely on console-only indexes for durable envs).
 
-## Firestore rules and indexes only
+## Additive Firestore deployment
 
-After confirming the active Firebase project with `firebase use`, deploy only the Firestore rules and index definitions with:
+Use the guarded deploy command to create configured composite indexes that are
+missing from the active project, without deleting any live indexes:
 
 ```bash
 npm run deploy:firestore
 ```
 
-This composes `firestore.rules` first, then deploys only `firestore:rules` and `firestore:indexes`. It does not deploy or modify Firestore documents, Hosting, Functions, or Storage. Rules deployment replaces the live ruleset, and the index file is the desired index configuration; check that it contains every index you need before deploying.
+The project defaults to the `default` project in `.firebaserc`; pass
+`--project <project-id>` to target another project, or `--indexes-only` to leave
+rules untouched. To preview missing indexes without creating them, use
+`--dry-run`.
+
+Firestore rules cannot be appended to an active ruleset. Deploying rules replaces
+the complete active ruleset, so this command asks you to type the target project
+ID before deploying the composed local `firestore.rules`. For non-interactive
+use, pass `--confirm-rules` explicitly. Review and test the complete rules file
+before confirming. The command does not deploy documents, Hosting, Functions,
+Storage, or delete indexes.
 
 ## Full deploy recipe
 
 ```bash
-npm run compose:firestore-rules
 npm run build
 npm --prefix functions run build
-firebase deploy --only "hosting,functions,firestore:rules,firestore:indexes,storage"
+npm run deploy:firestore
+firebase deploy --only "hosting,functions,storage"
 ```
 
-Or split targets for safer rollouts (hosting vs functions vs rules).
+The guarded Firestore command adds missing indexes and requests explicit
+confirmation before replacing rules. Deploy other targets separately as needed.
 
 Storage rules: `storage.rules` (tenant paths — see [security-tenancy.md](./security-tenancy.md)).
 

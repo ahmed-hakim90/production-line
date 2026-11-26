@@ -47,6 +47,8 @@ for (const fn of ['pl_qualityCanRead', 'pl_qualityCanInspect', 'pl_qualityCanOve
 }
 assert.match(rules, /function pl_qualityAssignedInspector\(employeeId\)/);
 assert.match(rules, /function pl_qualityInspectorFacts\(employeeId, inspectorName\)/);
+assert.match(rules, /additionalInspectorTechnician\.get\('isActive', true\) == true/);
+assert.match(rules, /qualityTechnicians\.hasAny\(\[/);
 assert.match(rules, /function pl_qualityPalletDefectOpen\(palletId\)/);
 assert.match(rules, /function pl_qualityDefectIdentityStable\(\)/);
 assert.match(rules, /parent\.inspectionStatus != 'تم الفحص'/);

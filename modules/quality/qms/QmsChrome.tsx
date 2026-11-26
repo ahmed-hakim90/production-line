@@ -110,6 +110,7 @@ export function MasterSelect(props: {
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string; keywords?: string }>;
   placeholder: string;
+  emptyMessage?: string;
 }) {
   return (
     <label style={{ minWidth: 220, flex: 1 }}>
@@ -119,6 +120,7 @@ export function MasterSelect(props: {
         onChange={props.onChange}
         placeholder={props.placeholder}
         searchPlaceholder="بحث بالاسم أو الرمز"
+        emptyMessage={props.emptyMessage}
         options={props.options}
       />
     </label>
