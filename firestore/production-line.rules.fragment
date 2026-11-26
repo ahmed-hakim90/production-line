@@ -2004,24 +2004,36 @@
     }
 
     function pl_qualityCanRead() {
+      let p = pl_currentRoleDoc().data.permissions;
       return pl_isSuperAdmin()
-        || pl_hasErpPermission('quality.view')
-        || pl_hasErpPermission('quality.reports.view')
-        || pl_hasErpPermission('quality.pallets.view')
-        || pl_hasErpPermission('quality.samples.view')
-        || pl_hasErpPermission('quality.scrap.view')
-        || pl_hasErpPermission('quality.secondSort.view')
-        || pl_hasErpPermission('quality.incoming.view')
-        || pl_hasErpPermission('quality.settings.view');
+        || (
+          pl_rolePermMapOk()
+          && (
+            pl_rolePermTrue(p, 'quality.view')
+            || pl_rolePermTrue(p, 'quality.reports.view')
+            || pl_rolePermTrue(p, 'quality.pallets.view')
+            || pl_rolePermTrue(p, 'quality.samples.view')
+            || pl_rolePermTrue(p, 'quality.scrap.view')
+            || pl_rolePermTrue(p, 'quality.secondSort.view')
+            || pl_rolePermTrue(p, 'quality.incoming.view')
+            || pl_rolePermTrue(p, 'quality.settings.view')
+          )
+        );
     }
 
     function pl_qualityCanInspect() {
+      let p = pl_currentRoleDoc().data.permissions;
       return pl_isSuperAdmin()
-        || pl_hasErpPermission('quality.pallets.inspect')
-        || pl_hasErpPermission('quality.samples.inspect')
-        || pl_hasErpPermission('quality.inspect')
-        || pl_hasErpPermission('quality.finalInspection.inspect')
-        || pl_hasErpPermission('quality.ipqc.inspect');
+        || (
+          pl_rolePermMapOk()
+          && (
+            pl_rolePermTrue(p, 'quality.pallets.inspect')
+            || pl_rolePermTrue(p, 'quality.samples.inspect')
+            || pl_rolePermTrue(p, 'quality.inspect')
+            || pl_rolePermTrue(p, 'quality.finalInspection.inspect')
+            || pl_rolePermTrue(p, 'quality.ipqc.inspect')
+          )
+        );
     }
 
     function pl_qualityCanOverride() {
