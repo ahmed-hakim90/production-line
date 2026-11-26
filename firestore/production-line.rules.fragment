@@ -2155,7 +2155,6 @@
           && get(/databases/$(database)/documents/quality_settings/$(request.resource.data.tenantId)).data.qualityTechnicians.hasAny([
             request.resource.data.additionalInspectorTechnician
           ])
-          )
         );
     }
 

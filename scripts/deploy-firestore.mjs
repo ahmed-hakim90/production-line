@@ -128,7 +128,6 @@ async function listIndexes(projectId, collectionGroup) {
   let pageToken = '';
   do {
     const url = new URL(indexPath(projectId, collectionGroup));
-    url.searchParams.set('pageSize', '1000');
     if (pageToken) url.searchParams.set('pageToken', pageToken);
     const page = await requestJson(url);
     indexes.push(...(page.indexes || []));
