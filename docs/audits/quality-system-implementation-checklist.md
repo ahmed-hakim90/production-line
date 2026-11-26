@@ -265,3 +265,7 @@ Prerequisites, all required before another production attempt:
 - Rules rollback is the previous ruleset in the Firebase console for `sokany-production`.
 - The pilot pallet, filter, and second-sort handover carry `tenantId` `MNa4ceoo4E4tdxm8p3xY` and `moduleSource` `qms` where the collection uses that field. Removing them requires a separate approved data operation.
 - Leave `closeRequiresQualityApproval` off until closers who are not quality readers are understood. It is off now.
+
+## Injection quality tracking
+
+`/quality/injection` stores tenant-scoped `quality_injection_records` with machine number, item, date, shift, total, accepted/rejected quantities, and notes. Manual saves, edits, and Excel imports validate that accepted plus rejected equals total; the Firestore rule also enforces that invariant. The accepted/rejected checkmarks are derived from whether each quantity is greater than zero. Excel import accepts the Arabic worksheet headers and date serials or day-first dates, and caps each batch at 400 rows. The manual form uses active machine numbers managed on the page and active HR shifts for the current tenant. Machine entries are deactivated rather than deleted, preserving historical records. Access uses the existing `quality.incoming.view` and `quality.incoming.manage` permissions. No live Firebase rules were deployed as part of this change.

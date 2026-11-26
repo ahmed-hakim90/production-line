@@ -45,6 +45,29 @@ export interface PlasticReceiptInput {
   acceptedPercentage: number | null;
 }
 
+export interface InjectionQualityInput {
+  machineNumber: string;
+  itemName: string;
+  date: string;
+  shift: string;
+  totalQuantity: number;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  notes: string;
+}
+
+export function normalizeInjectionMachineNumber(value: unknown): string {
+  const machineNumber = String(value ?? '').trim().replace(/\s+/g, ' ');
+  if (!machineNumber || machineNumber.length > 80) {
+    throw new Error('رقم الماكينة مطلوب وبحد أقصى 80 حرفًا');
+  }
+  return machineNumber;
+}
+
+export function injectionMachineNumberKey(value: unknown): string {
+  return normalizeInjectionMachineNumber(value).toLocaleLowerCase();
+}
+
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 function requireDate(value: string): string {
@@ -265,6 +288,102 @@ export function plasticRowsFromSheet(
     if (reasonIds.some((id) => !id)) throw new Error(`الصف ${index + 2}: سبب الرفض غير موجود في القائمة النشطة`);
     try {
       return normalizePlasticReceipt({ ...mapped, productName: item.name, reasonIds });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'سجل غير صالح';
+      throw new Error(`الصف ${index + 2}: ${message}`);
+    }
+  });
+}
+
+export function normalizeInjectionQualityRecord(data: {
+  machineNumber?: unknown;
+  itemName?: unknown;
+  date?: unknown;
+  shift?: unknown;
+  totalQuantity?: unknown;
+  acceptedQuantity?: unknown;
+  rejectedQuantity?: unknown;
+  notes?: unknown;
+}): InjectionQualityInput {
+  const machineNumber = String(data.machineNumber ?? '').trim();
+  const itemName = String(data.itemName ?? '').trim();
+  const shift = String(data.shift ?? '').trim();
+  const notes = String(data.notes ?? '').trim();
+  if (!machineNumber || machineNumber.length > 80) throw new Error('رقم الماكينة مطلوب وبحد أقصى 80 حرفًا');
+  if (!itemName || itemName.length > 150) throw new Error('اسم الصنف مطلوب وبحد أقصى 150 حرفًا');
+  if (!shift || shift.length > 80) throw new Error('الوردية مطلوبة وبحد أقصى 80 حرفًا');
+  if (notes.length > 1000) throw new Error('الملاحظات يجب ألا تتجاوز 1000 حرف');
+  const totalQuantity = requireInteger(data.totalQuantity, 'إجمالي الكمية');
+  const acceptedQuantity = requireInteger(data.acceptedQuantity, 'الكمية المقبولة');
+  const rejectedQuantity = requireInteger(data.rejectedQuantity, 'الكمية المرفوضة');
+  if (acceptedQuantity + rejectedQuantity !== totalQuantity) {
+    throw new Error('إجمالي الكمية يجب أن يساوي مجموع الكمية المقبولة والمرفوضة');
+  }
+  return {
+    machineNumber,
+    itemName,
+    date: requireDate(String(data.date ?? '')),
+    shift,
+    totalQuantity,
+    acceptedQuantity,
+    rejectedQuantity,
+    notes,
+  };
+}
+
+const INJECTION_HEADERS: Record<string, keyof InjectionQualityInput> = {
+  'رقم الماكينة': 'machineNumber',
+  'رقم الماكينه': 'machineNumber',
+  'رقم ماكينة': 'machineNumber',
+  'اسم الصنف': 'itemName',
+  'الصنف': 'itemName',
+  'التاريخ': 'date',
+  'تاريخ الإنتاج': 'date',
+  'الوردية': 'shift',
+  'الورديه': 'shift',
+  'الشيفت': 'shift',
+  'الشفت': 'shift',
+  'إجمالي الكمية': 'totalQuantity',
+  'اجمالي الكمية': 'totalQuantity',
+  'إجمالي الكميه': 'totalQuantity',
+  'الكمية الإجمالية': 'totalQuantity',
+  'الكمية المقبولة': 'acceptedQuantity',
+  'الكمية المقبول': 'acceptedQuantity',
+  'كمية المقبول': 'acceptedQuantity',
+  'المقبول كمية': 'acceptedQuantity',
+  'الكمية المرفوضة': 'rejectedQuantity',
+  'الكمية المرفوض': 'rejectedQuantity',
+  'كمية المرفوض': 'rejectedQuantity',
+  'المرفوض كمية': 'rejectedQuantity',
+  'ملاحظات': 'notes',
+  'الملاحظات': 'notes',
+};
+
+function injectionSheetDate(value: unknown): string {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    const dayFirst = /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(text);
+    if (dayFirst) {
+      const [, day, month, year] = dayFirst;
+      return requireDate(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+    }
+  }
+  return requireDate(excelSerialToIsoDate(value));
+}
+
+export function injectionRowsFromSheet(rows: Array<Record<string, unknown>>): InjectionQualityInput[] {
+  if (rows.length === 0) throw new Error('لم يتم العثور على سجلات صالحة للاستيراد');
+  if (rows.length > 400) throw new Error('الحد الأقصى للاستيراد في المرة الواحدة هو 400 سجل');
+  return rows.map((row, index) => {
+    const mapped: Record<string, unknown> = {};
+    Object.entries(row).forEach(([header, value]) => {
+      const key = header.trim().replace(/\s+/g, ' ');
+      const field = INJECTION_HEADERS[key];
+      if (!field) return;
+      mapped[field] = field === 'date' ? injectionSheetDate(value) : value;
+    });
+    try {
+      return normalizeInjectionQualityRecord(mapped);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'سجل غير صالح';
       throw new Error(`الصف ${index + 2}: ${message}`);

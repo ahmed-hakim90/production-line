@@ -314,6 +314,14 @@ export interface QualityStaffAssignment {
   updatedByName: string;
 }
 
+export interface QualityInjectionMachine {
+  id: string;
+  tenantId: string;
+  name: string;
+  nameKey: string;
+  isActive: boolean;
+}
+
 export interface QualityShiftOption {
   id: string;
   name: string;
@@ -358,4 +366,22 @@ export interface QualityPlasticReceipt {
   acceptedPercentage: number | null;
   createdByUid: string;
   createdByName: string;
+}
+
+export interface QualityInjectionRecord {
+  id: string;
+  tenantId: string;
+  moduleSource: 'qms';
+  machineNumber: string;
+  itemName: string;
+  date: string;
+  shift: string;
+  totalQuantity: number;
+  acceptedQuantity: number;
+  rejectedQuantity: number;
+  notes: string;
+  createdByUid: string;
+  createdByName: string;
+  updatedByUid?: string;
+  updatedByName?: string;
 }

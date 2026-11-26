@@ -636,6 +636,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'quality-reports', label: 'تقارير الجودة', icon: 'print', path: '/quality/reports', permission: 'quality.reports.view' },
       { key: 'quality-cartons', label: 'وارد الكراتين', icon: 'inventory', path: '/quality/incoming/cartons', permission: 'quality.incoming.view' },
       { key: 'quality-plastic', label: 'وارد البلاستيك', icon: 'category', path: '/quality/incoming/plastic', permission: 'quality.incoming.view' },
+      { key: 'quality-injection', label: 'متابعة جودة قسم الحقن', icon: 'precision_manufacturing', path: '/quality/injection', permission: 'quality.incoming.view' },
       { key: 'quality-settings', label: 'إعدادات الجودة', icon: 'tune', path: '/quality/settings', permission: 'quality.settings.view' },
     ],
   },

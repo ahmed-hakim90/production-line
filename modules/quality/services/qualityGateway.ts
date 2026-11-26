@@ -36,6 +36,8 @@ export const QMS_COLLECTIONS = {
   SECOND_SORT_RETURNS: 'quality_second_sort_returns',
   CARTON_RECEIPTS: 'quality_carton_receipts',
   CARTON_SUPPLIERS: 'quality_carton_suppliers',
+  INJECTION_RECORDS: 'quality_injection_records',
+  INJECTION_MACHINES: 'quality_injection_machines',
   PLASTIC_RECEIPTS: 'quality_plastic_receipts',
   PLASTIC_SUPPLIERS: 'quality_plastic_suppliers',
   PLASTIC_ITEMS: 'quality_plastic_items',

@@ -105,6 +105,14 @@
       ]
     },
     {
+      "collectionGroup": "quality_injection_records",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tenantId", "order": "ASCENDING" },
+        { "fieldPath": "date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "quality_carton_suppliers",
       "queryScope": "COLLECTION",
       "fields": [

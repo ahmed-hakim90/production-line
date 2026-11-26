@@ -2011,6 +2011,7 @@
         || pl_hasErpPermission('quality.samples.view')
         || pl_hasErpPermission('quality.scrap.view')
         || pl_hasErpPermission('quality.secondSort.view')
+        || pl_hasErpPermission('quality.incoming.view')
         || pl_hasErpPermission('quality.settings.view');
     }
 
@@ -2581,6 +2582,61 @@
         && request.resource.data.acceptedItems is int
         && request.resource.data.rejectedItems is int
         && request.resource.data.acceptedItems + request.resource.data.rejectedItems == request.resource.data.totalItems
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanDelete();
+    }
+
+    function pl_qualityInjectionRecordValid() {
+      let record = request.resource.data;
+      return record.machineNumber is string
+        && record.machineNumber.size() > 0
+        && record.machineNumber.size() <= 80
+        && record.itemName is string
+        && record.itemName.size() > 0
+        && record.itemName.size() <= 150
+        && record.date is string
+        && record.date.size() == 10
+        && record.shift is string
+        && record.shift.size() > 0
+        && record.shift.size() <= 80
+        && record.totalQuantity is int
+        && record.totalQuantity >= 0
+        && record.acceptedQuantity is int
+        && record.acceptedQuantity >= 0
+        && record.rejectedQuantity is int
+        && record.rejectedQuantity >= 0
+        && record.acceptedQuantity + record.rejectedQuantity == record.totalQuantity
+        && record.notes is string
+        && record.notes.size() <= 1000
+        && record.moduleSource == 'qms';
+    }
+
+    match /quality_injection_machines/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 160
+        && request.resource.data.isActive == true;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
+        && pl_qualityCanIncoming()
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.nameKey == resource.data.nameKey
+        && request.resource.data.isActive is bool
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if false;
+    }
+
+    match /quality_injection_records/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && pl_qualityInjectionRecordValid();
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
+        && pl_qualityCanIncoming()
+        && pl_qualityInjectionRecordValid()
         && request.resource.data.tenantId == resource.data.tenantId;
       allow delete: if pl_qualityRead() && pl_qualityCanDelete();
     }

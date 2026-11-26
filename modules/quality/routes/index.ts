@@ -15,6 +15,7 @@ const QualityReports = lazyNamed(() => import('../pages/QualityReports'), 'Quali
 const QualityDashboard = lazyNamed(() => import('../pages/QualityDashboard'), 'QualityDashboard');
 const QualityCartons = lazyNamed(() => import('../pages/QualityCartons'), 'QualityCartons');
 const QualityPlastic = lazyNamed(() => import('../pages/QualityPlastic'), 'QualityPlastic');
+const QualityInjection = lazyNamed(() => import('../pages/QualityInjection'), 'QualityInjection');
 const QualitySettings = lazyNamed(() => import('../pages/QualitySettings'), 'QualitySettings');
 
 const view: AppRouteDef['permission'] = 'quality.view';
@@ -34,6 +35,7 @@ export const QUALITY_ROUTES: AppRouteDef[] = [
   { path: '/quality/reports', permission: 'quality.reports.view', component: QualityReports },
   { path: '/quality/incoming/cartons', permission: 'quality.incoming.view', component: QualityCartons },
   { path: '/quality/incoming/plastic', permission: 'quality.incoming.view', component: QualityPlastic },
+  { path: '/quality/injection', permission: 'quality.incoming.view', component: QualityInjection },
   { path: '/quality/settings', permission: 'quality.settings.view', component: QualitySettings },
   { path: '/quality/staff', redirectTo: '/quality/settings' },
   { path: '/quality/workers', redirectTo: '/quality/settings' },

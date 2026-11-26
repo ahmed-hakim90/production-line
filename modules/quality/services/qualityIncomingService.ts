@@ -1,7 +1,7 @@
-import { addDoc, deleteDoc, doc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, deleteDoc, doc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/services/firebase';
-import { normalizeCartonReceipt, normalizePlasticReceipt, prepareCartonImport, type CartonReceiptInput, type PlasticReceiptInput } from '../domain/incomingReceipt';
-import type { QualityCartonReceipt, QualityNamedReason, QualityPlasticReceipt } from '../model';
+import { injectionMachineNumberKey, normalizeCartonReceipt, normalizeInjectionMachineNumber, normalizeInjectionQualityRecord, normalizePlasticReceipt, prepareCartonImport, type CartonReceiptInput, type InjectionQualityInput, type PlasticReceiptInput } from '../domain/incomingReceipt';
+import type { QualityCartonReceipt, QualityInjectionMachine, QualityInjectionRecord, QualityNamedReason, QualityPlasticReceipt } from '../model';
 import {
   QMS_COLLECTIONS,
   activeTenantId,
@@ -216,5 +216,130 @@ export const qualityPlasticService = {
     await readQualityDoc(QMS_COLLECTIONS.PLASTIC_RECEIPTS, id);
     await deleteDoc(qmsDoc(QMS_COLLECTIONS.PLASTIC_RECEIPTS, id));
     await auditQuality('QUALITY_INCOMING_RECEIPT', 'حذف وارد بلاستيك', { receiptId: id });
+  },
+};
+
+export const qualityInjectionService = {
+  async listMachines(includeInactive = false): Promise<QualityInjectionMachine[]> {
+    assertQualityPermission('quality.incoming.view');
+    const machines = await listByTenant<QualityInjectionMachine>(QMS_COLLECTIONS.INJECTION_MACHINES, activeTenantId());
+    return machines
+      .filter((machine) => includeInactive || machine.isActive !== false)
+      .sort((left, right) => left.name.localeCompare(right.name, 'ar', { numeric: true }));
+  },
+
+  async saveMachineNumber(value: string): Promise<void> {
+    assertQualityPermission('quality.incoming.manage');
+    const name = normalizeInjectionMachineNumber(value);
+    const tenantId = activeTenantId();
+    const nameKey = injectionMachineNumberKey(name);
+    const existing = (await listByTenant<QualityInjectionMachine>(QMS_COLLECTIONS.INJECTION_MACHINES, tenantId))
+      .find((machine) => machine.nameKey === nameKey);
+    const actor = currentQualityActor();
+    if (existing) {
+      if (existing.isActive !== false) throw new Error('رقم الماكينة موجود بالفعل في القائمة.');
+      await updateDoc(qmsDoc(QMS_COLLECTIONS.INJECTION_MACHINES, existing.id), {
+        isActive: true,
+        updatedAt: serverTimestamp(),
+        updatedByUid: actor.uid,
+        updatedByName: actor.name,
+      });
+    } else {
+      const id = `${tenantId}__${encodeURIComponent(nameKey)}`;
+      await setDoc(qmsDoc(QMS_COLLECTIONS.INJECTION_MACHINES, id), stampTenant({
+        name,
+        nameKey,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        createdByUid: actor.uid,
+        createdByName: actor.name,
+        updatedAt: serverTimestamp(),
+        updatedByUid: actor.uid,
+        updatedByName: actor.name,
+      }));
+    }
+    await auditQuality('QUALITY_INCOMING_RECEIPT', 'إضافة رقم ماكينة لمتابعة الحقن', { machineNumber: name });
+  },
+
+  async setMachineActive(machine: QualityInjectionMachine, isActive: boolean): Promise<void> {
+    assertQualityPermission('quality.incoming.manage');
+    const current = (await listByTenant<QualityInjectionMachine>(QMS_COLLECTIONS.INJECTION_MACHINES, activeTenantId()))
+      .find((row) => row.id === machine.id);
+    if (!current) throw new Error('رقم الماكينة غير موجود في الشركة الحالية.');
+    const actor = currentQualityActor();
+    await updateDoc(qmsDoc(QMS_COLLECTIONS.INJECTION_MACHINES, machine.id), {
+      isActive,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    await auditQuality('QUALITY_INCOMING_RECEIPT', isActive ? 'تفعيل رقم ماكينة لمتابعة الحقن' : 'إيقاف رقم ماكينة لمتابعة الحقن', {
+      machineNumber: current.name,
+    });
+  },
+
+  async listRange(from: string, to: string): Promise<QualityInjectionRecord[]> {
+    assertQualityPermission('quality.incoming.view');
+    if (to < from) throw new Error('نطاق التاريخ غير صالح.');
+    return listByTenantDateRange<QualityInjectionRecord>(
+      QMS_COLLECTIONS.INJECTION_RECORDS,
+      activeTenantId(),
+      'date',
+      from,
+      to,
+    );
+  },
+
+  async save(input: InjectionQualityInput & { id?: string }): Promise<void> {
+    assertQualityPermission('quality.incoming.manage');
+    const record = normalizeInjectionQualityRecord(input);
+    if (input.id) await readQualityDoc<QualityInjectionRecord>(QMS_COLLECTIONS.INJECTION_RECORDS, input.id);
+    const actor = currentQualityActor();
+    const payload = stampTenant({
+      moduleSource: 'qms' as const,
+      ...record,
+      updatedAt: serverTimestamp(),
+      updatedByUid: actor.uid,
+      updatedByName: actor.name,
+    });
+    if (input.id) {
+      await updateDoc(qmsDoc(QMS_COLLECTIONS.INJECTION_RECORDS, input.id), payload);
+    } else {
+      await addDoc(qmsCollection(QMS_COLLECTIONS.INJECTION_RECORDS), {
+        ...payload,
+        createdAt: serverTimestamp(),
+        createdByUid: actor.uid,
+        createdByName: actor.name,
+      });
+    }
+    await auditQuality('QUALITY_INCOMING_RECEIPT', 'حفظ متابعة جودة قسم الحقن', {
+      machineNumber: record.machineNumber,
+      date: record.date,
+    });
+  },
+
+  async importRows(rows: InjectionQualityInput[]): Promise<number> {
+    assertQualityPermission('quality.incoming.manage');
+    if (rows.length === 0) return 0;
+    if (rows.length > 400) throw new Error('الحد الأقصى للاستيراد في المرة الواحدة هو 400 سجل');
+    if (!db) throw new Error('خدمة البيانات غير متاحة.');
+    const prepared = rows.map((row) => normalizeInjectionQualityRecord(row));
+    const batch = writeBatch(db);
+    const actor = currentQualityActor();
+    prepared.forEach((record) => {
+      batch.set(doc(qmsCollection(QMS_COLLECTIONS.INJECTION_RECORDS)), stampTenant({
+        moduleSource: 'qms',
+        ...record,
+        createdAt: serverTimestamp(),
+        createdByUid: actor.uid,
+        createdByName: actor.name,
+        updatedAt: serverTimestamp(),
+        updatedByUid: actor.uid,
+        updatedByName: actor.name,
+      }));
+    });
+    await batch.commit();
+    await auditQuality('QUALITY_INCOMING_RECEIPT', 'استيراد متابعة جودة قسم الحقن', { count: prepared.length });
+    return prepared.length;
   },
 };

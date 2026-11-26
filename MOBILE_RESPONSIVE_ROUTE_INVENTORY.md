@@ -72,6 +72,7 @@ Viewport targets: `360x800`, `390x844`, `430x932`, `768x1024`, `1024x1366`
 ## Quality
 
 - `/quality/settings` -> `modules/quality/pages/QualitySettings.tsx`
+- `/quality/injection` -> `modules/quality/pages/QualityInjection.tsx`
 - `/quality/staff`, `/quality/workers` -> redirect to `/quality/settings` (quality guide retired)
 - `/quality/final-inspection` -> `modules/quality/pages/FinalInspection.tsx`
 - `/quality/ipqc` -> `modules/quality/pages/IPQC.tsx`

@@ -46,6 +46,14 @@ await set('roles', 'tenantA-viewer', {
   tenantId: 'tenantA',
   permissions: { 'quality.pallets.view': true },
 });
+await set('roles', 'tenantA-incoming-viewer', {
+  tenantId: 'tenantA',
+  permissions: { 'quality.incoming.view': true },
+});
+await set('roles', 'tenantA-incoming-manager', {
+  tenantId: 'tenantA',
+  permissions: { 'quality.incoming.view': true, 'quality.incoming.manage': true },
+});
 await set('roles', 'tenantA-manager', {
   tenantId: 'tenantA',
   permissions: { 'quality.view': true, 'quality.settings.manage': true },
@@ -89,6 +97,8 @@ await user('qualityInspector', 'tenantA', 'tenantA-inspector');
 await user('qualityLegacy', 'tenantA', 'tenantA-legacy-inspect');
 await user('qualityNoDefects', 'tenantA', 'tenantA-no-defects');
 await user('qualityViewer', 'tenantA', 'tenantA-viewer');
+await user('qualityIncomingViewer', 'tenantA', 'tenantA-incoming-viewer');
+await user('qualityIncomingManager', 'tenantA', 'tenantA-incoming-manager');
 await user('qualityManager', 'tenantA', 'tenantA-manager');
 await user('qualityCloser', 'tenantA', 'tenantA-closer');
 await user('qualityPhoto', 'tenantA', 'tenantA-photo');
@@ -160,6 +170,8 @@ const inspector = db('qualityInspector');
 const legacy = db('qualityLegacy');
 const noDefects = db('qualityNoDefects');
 const viewer = db('qualityViewer');
+const incomingViewer = db('qualityIncomingViewer');
+const incomingManager = db('qualityIncomingManager');
 const manager = db('qualityManager');
 const closer = db('qualityCloser');
 const stranger = db('qualityStranger');
@@ -261,6 +273,54 @@ await assertFails(manager.collection('quality_settings').doc('tenantB').set({
 await assertSucceeds(closer.collection('quality_settings').doc('tenantA').get());
 await assertFails(closer.collection('quality_pallets').doc('historical').get());
 await assertFails(other.collection('quality_settings').doc('tenantA').get());
+
+const injectionRecord = {
+  tenantId: 'tenantA',
+  moduleSource: 'qms',
+  machineNumber: 'ماكينة رقم 1',
+  itemName: 'فانوس 47',
+  date: '2026-11-25',
+  shift: 'شيفت ليلي',
+  totalQuantity: 840,
+  acceptedQuantity: 840,
+  rejectedQuantity: 0,
+  notes: '',
+};
+await assertSucceeds(legacy.collection('quality_injection_records').doc('injection-valid').set(injectionRecord));
+await assertFails(legacy.collection('quality_injection_records').doc('injection-invalid-total').set({
+  ...injectionRecord,
+  acceptedQuantity: 839,
+}));
+await assertFails(legacy.collection('quality_injection_records').doc('injection-other-tenant').set({
+  ...injectionRecord,
+  tenantId: 'tenantB',
+}));
+await assertSucceeds(incomingViewer.collection('quality_injection_records').doc('injection-valid').get());
+await assertFails(incomingViewer.collection('quality_injection_records').doc('injection-valid').update({
+  ...injectionRecord,
+  totalQuantity: 900,
+}));
+await assertFails(stranger.collection('quality_injection_records').doc('injection-valid').get());
+
+const injectionMachine = {
+  tenantId: 'tenantA',
+  name: 'ماكينة 12',
+  nameKey: 'ماكينة 12',
+  isActive: true,
+};
+await assertSucceeds(incomingManager.collection('quality_injection_machines').doc('machine-12').set(injectionMachine));
+await assertSucceeds(incomingViewer.collection('quality_injection_machines').doc('machine-12').get());
+await assertFails(incomingViewer.collection('quality_injection_machines').doc('machine-13').set({
+  ...injectionMachine,
+  name: 'ماكينة 13',
+  nameKey: 'ماكينة 13',
+}));
+await assertFails(incomingManager.collection('quality_injection_machines').doc('machine-other-tenant').set({
+  ...injectionMachine,
+  tenantId: 'tenantB',
+}));
+await assertSucceeds(incomingManager.collection('quality_injection_machines').doc('machine-12').update({ isActive: false }));
+await assertFails(incomingManager.collection('quality_injection_machines').doc('machine-12').delete());
 
 await assertSucceeds(viewer.collection('quality_saved_filters').doc('mine').set({
   tenantId: 'tenantA',
