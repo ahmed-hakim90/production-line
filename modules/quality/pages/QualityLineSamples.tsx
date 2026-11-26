@@ -223,24 +223,24 @@ export const QualityLineSamples: React.FC = () => {
     }
   };
 
-  const addAdditionalInspector = (technicianId: string) => {
-    if (!technicianId) return;
-    if (technicianId === selectedStation?.defaultInspectorTechnicianId) {
+  const addAdditionalInspector = (employeeId: string) => {
+    if (!employeeId) return;
+    if (employeeId === selectedStation?.defaultInspectorEmployeeId) {
       toast.error('المراقب الإضافي يجب أن يكون مختلفًا عن المراقب الأساسي.');
       return;
     }
-    if (additionalInspectors.some((item) => item.employeeId === technicianId)) {
+    if (additionalInspectors.some((item) => item.employeeId === employeeId)) {
       toast.error('تمت إضافة هذا المراقب بالفعل.');
       return;
     }
-    const technician = technicians.find((item) => item.id === technicianId);
-    if (!technician) {
-      toast.error('اختر فنيًا نشطًا من دليل الفنيين.');
+    const employee = masters.employees.find((item) => item.id === employeeId);
+    if (!employee) {
+      toast.error('اختر مراقبًا معيّنًا في الجودة لهذه المحطة أو الخط.');
       return;
     }
     setAdditionalInspectors((current) => [...current, {
-      employeeId: technician.id,
-      employeeName: technician.name,
+      employeeId: employee.id || employeeId,
+      employeeName: employee.name,
       sampleCount: 1,
     }]);
   };
@@ -1052,14 +1052,7 @@ export const QualityLineSamples: React.FC = () => {
               value=""
               onChange={addAdditionalInspector}
               placeholder="اختر مراقبًا إضافيًا..."
-              options={technicians
-                .filter((technician) => technician.isActive !== false
-                  && technician.id !== selectedStation?.defaultInspectorTechnicianId
-                  && !additionalInspectors.some((item) => item.employeeId === technician.id))
-                .map((technician) => ({
-                  value: technician.id,
-                  label: `${technician.name} (${technician.code})`,
-                }))}
+              options={inspectorChoices.filter((choice) => !additionalInspectors.some((item) => item.employeeId === choice.value))}
             />
           </div>
           {additionalAssignedCount >= sampleCount ? (
@@ -1631,24 +1624,20 @@ export const QualityLineSamples: React.FC = () => {
                     label="إضافة مراقب إضافي"
                     value=""
                     onChange={(employeeId) => {
-                      const technician = technicians.find((item) => item.id === employeeId);
-                      if (!technician || technician.id === editStation?.defaultInspectorTechnicianId
-                        || editDraft.additionalInspectors.some((item) => item.employeeId === technician.id)) return;
+                      const employee = masters.employees.find((item) => item.id === employeeId);
+                      if (!employee?.id || employee.id === editDraft.inspectorEmployeeId
+                        || editDraft.additionalInspectors.some((item) => item.employeeId === employee.id)) return;
                       updateEditDraft('additionalInspectors', [...editDraft.additionalInspectors, {
-                        employeeId: technician.id,
-                        employeeName: technician.name,
+                        employeeId: employee.id,
+                        employeeName: employee.name,
                         sampleCount: 1,
                       }]);
                     }}
                     placeholder="اختر مراقبًا إضافيًا..."
-                    options={technicians
-                      .filter((technician) => technician.isActive !== false
-                        && technician.id !== editStation?.defaultInspectorTechnicianId
-                        && !editDraft.additionalInspectors.some((item) => item.employeeId === technician.id))
-                      .map((technician) => ({
-                        value: technician.id,
-                        label: `${technician.name} (${technician.code})`,
-                      }))}
+                    options={editInspectorChoices.filter((choice) => (
+                      choice.value !== editDraft.inspectorEmployeeId
+                      && !editDraft.additionalInspectors.some((item) => item.employeeId === choice.value)
+                    ))}
                   />
                 </div>
               </div>
