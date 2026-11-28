@@ -9,6 +9,7 @@ import type { QualityInjectionMachine, QualityInjectionRecord } from '../model';
 import { QmsPage } from '../qms/QmsChrome';
 import { qualityUserMessage } from '../services/qualityGateway';
 import { qualityInjectionService } from '../services/qualityIncomingService';
+import { filterInjectionRecordsByCriteria, type InjectionQuantityFilter, type InjectionShiftFilter } from '../domain/injectionRange';
 
 const emptyRecord = {
   machineNumber: '',
@@ -23,8 +24,13 @@ const emptyRecord = {
 export const QualityInjection: React.FC = () => {
   const { can } = usePermission();
   const today = localDateIso();
-  const [month, setMonth] = useState(today.slice(0, 7));
+  const initialRange = monthBounds(today.slice(0, 7));
+  const [dateFrom, setDateFrom] = useState(initialRange.from);
+  const [dateTo, setDateTo] = useState(initialRange.to);
+  const [appliedRange, setAppliedRange] = useState(initialRange);
   const [query, setQuery] = useState('');
+  const [shiftFilter, setShiftFilter] = useState<InjectionShiftFilter>('all');
+  const [quantityFilter, setQuantityFilter] = useState<InjectionQuantityFilter>('all');
   const [rows, setRows] = useState<QualityInjectionRecord[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [indexFallback, setIndexFallback] = useState(false);
@@ -42,6 +48,8 @@ export const QualityInjection: React.FC = () => {
   const [loadError, setLoadError] = useState('');
   const canManage = can('quality.incoming.manage');
   const canDelete = can('quality.records.delete');
+  const dateRangeValid = Boolean(dateFrom && dateTo && dateFrom <= dateTo);
+  const dateRangeChanged = dateFrom !== appliedRange.from || dateTo !== appliedRange.to;
   const quantityMismatch = form.totalQuantity !== form.acceptedQuantity + form.rejectedQuantity;
   const activeMachines = machines.filter((machine) => machine.isActive !== false);
   const editingRow = editingId ? rows.find((row) => row.id === editingId) : undefined;
@@ -57,8 +65,7 @@ export const QualityInjection: React.FC = () => {
     setIndexFallback(false);
     setLoading(true);
     try {
-      const range = monthBounds(month);
-      const result = await qualityInjectionService.listRange(range.from, range.to);
+      const result = await qualityInjectionService.listRange(appliedRange.from, appliedRange.to);
       setRows(result.records);
       setIndexFallback(result.usedFallback);
     } catch (error) {
@@ -71,7 +78,7 @@ export const QualityInjection: React.FC = () => {
 
   useEffect(() => {
     void load().catch((error: unknown) => toast.error(qualityUserMessage(error, 'تعذر تحميل سجلات الحقن.')));
-  }, [month]);
+  }, [appliedRange]);
 
   const loadOptions = async () => {
     setOptionsLoading(true);
@@ -100,10 +107,10 @@ export const QualityInjection: React.FC = () => {
 
   const visibleRows = useMemo(() => {
     const text = query.trim().toLocaleLowerCase();
-    return rows
+    return filterInjectionRecordsByCriteria(rows, shiftFilter, quantityFilter)
       .filter((row) => !text || `${row.machineNumber} ${row.itemName} ${row.shift} ${row.notes}`.toLocaleLowerCase().includes(text))
       .sort((left, right) => right.date.localeCompare(left.date) || left.machineNumber.localeCompare(right.machineNumber, 'ar', { numeric: true }));
-  }, [rows, query]);
+  }, [rows, query, shiftFilter, quantityFilter]);
   const summary = visibleRows.reduce((totals, row) => ({
     records: totals.records + 1,
     total: totals.total + row.totalQuantity,
@@ -270,35 +277,90 @@ export const QualityInjection: React.FC = () => {
       title="متابعة جودة قسم الحقن"
       subtitle="سجّل كمية كل ماكينة وصنف حسب التاريخ والوردية، مع توزيع الإجمالي على المقبول والمرفوض."
     >
-      <div className="qms-row" style={{ marginBottom: 12 }}>
-        <label>
-          <span className="qms-label">الشهر</span>
-          <input className="qms-input" type="month" value={month} onChange={(event) => { setSelectedIds([]); setMonth(event.target.value); }} />
-        </label>
-        <label>
-          <span className="qms-label">بحث</span>
-          <input
-            className="qms-input"
-            value={query}
-            onChange={(event) => { setSelectedIds([]); setQuery(event.target.value); }}
-            placeholder="رقم الماكينة أو الصنف أو الوردية"
-          />
-        </label>
-        <label>
-          <span className="qms-label">استيراد Excel</span>
-          <input
-            className="qms-input"
-            type="file"
-            accept=".xlsx,.xls"
-            disabled={!canManage || saving}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              importFile(file);
+      <div className="qms-card" style={{ marginBottom: 12 }}>
+        <div className="qms-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+          <label>
+            <span className="qms-label">من تاريخ</span>
+            <input className="qms-input" type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          </label>
+          <label>
+            <span className="qms-label">إلى تاريخ</span>
+            <input className="qms-input" type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          </label>
+          <label>
+            <span className="qms-label">الوردية</span>
+            <select
+              className="qms-input"
+              value={shiftFilter}
+              onChange={(event) => {
+                setSelectedIds([]);
+                setShiftFilter(event.target.value === 'نهاري' || event.target.value === 'ليلي' ? event.target.value : 'all');
+              }}
+            >
+              <option value="all">كل الورديات</option>
+              <option value="نهاري">نهاري</option>
+              <option value="ليلي">ليلي</option>
+            </select>
+          </label>
+          <label>
+            <span className="qms-label">حالة الكميات</span>
+            <select
+              className="qms-input"
+              value={quantityFilter}
+              onChange={(event) => {
+                setSelectedIds([]);
+                const value = event.target.value;
+                setQuantityFilter(
+                  value === 'accepted' || value === 'rejected' || value === 'both' ? value : 'all',
+                );
+              }}
+            >
+              <option value="all">كل الحالات</option>
+              <option value="accepted">يوجد كمية مقبولة</option>
+              <option value="rejected">يوجد كمية مرفوضة</option>
+              <option value="both">مقبول ومرفوض</option>
+            </select>
+          </label>
+          <label>
+            <span className="qms-label">بحث</span>
+            <input
+              className="qms-input"
+              value={query}
+              onChange={(event) => { setSelectedIds([]); setQuery(event.target.value); }}
+              placeholder="رقم الماكينة أو الصنف أو الوردية"
+            />
+          </label>
+          <label>
+            <span className="qms-label">استيراد Excel</span>
+            <input
+              className="qms-input"
+              type="file"
+              accept=".xlsx,.xls"
+              disabled={!canManage || saving}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                importFile(file);
+              }}
+            />
+          </label>
+        </div>
+        {!dateRangeValid ? <p className="qms-error" role="alert">حدد فترة صحيحة؛ تاريخ البداية يجب ألا يكون بعد تاريخ النهاية.</p> : null}
+        <div className="qms-row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
+          <small className="qms-muted">الفترة المعروضة: {appliedRange.from} — {appliedRange.to}</small>
+          <button
+            type="button"
+            className="qms-btn qms-btn-primary"
+            disabled={!dateRangeValid || !dateRangeChanged || loading}
+            onClick={() => {
+              setSelectedIds([]);
+              setAppliedRange({ from: dateFrom, to: dateTo });
             }}
-          />
-        </label>
-        <small className="qms-muted">الأعمدة المطلوبة: رقم الماكينة، اسم الصنف، التاريخ، الوردية، الإجمالي، المقبول، المرفوض، والملاحظات.</small>
+          >
+            تطبيق الفترة
+          </button>
+        </div>
+        <small className="qms-muted">الأعمدة المطلوبة للاستيراد: رقم الماكينة، اسم الصنف، التاريخ، الوردية، الإجمالي، المقبول، المرفوض، والملاحظات.</small>
       </div>
 
       {canManage ? (
@@ -426,7 +488,7 @@ export const QualityInjection: React.FC = () => {
       <section className="qms-card qms-table-wrap">
         {indexFallback ? (
           <p className="qms-error" role="status">
-            الفهرس الشهري لمتابعة الحقن لم يُنشأ بعد. تُعرض سجلات هذه الشركة لهذا الشهر مؤقتًا بطريقة بديلة.
+            فهرس متابعة الحقن لم يُنشأ بعد. تُعرض سجلات هذه الشركة للفترة المحددة مؤقتًا بطريقة بديلة.
             اطلب من مسؤول Firebase إنشاء فهرس مركب للمجموعة quality_injection_records بالترتيب tenantId ثم date.
           </p>
         ) : null}
@@ -514,7 +576,7 @@ export const QualityInjection: React.FC = () => {
             <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void load().catch(() => undefined)}>إعادة المحاولة</button>
           </div>
         ) : null}
-        {!loading && !loadError && visibleRows.length === 0 ? <p>لا توجد سجلات لهذا الشهر أو لم تطابق البحث.</p> : null}
+        {!loading && !loadError && visibleRows.length === 0 ? <p>لا توجد سجلات في الفترة المحددة أو لم تطابق الفلاتر.</p> : null}
       </section>
     </QmsPage>
   );

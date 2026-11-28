@@ -10,6 +10,7 @@ import {
   normalizeInjectionQualityRecord,
 } from '../modules/quality/domain/incomingReceipt.ts';
 import {
+  filterInjectionRecordsByCriteria,
   filterInjectionRecordsByDateRange,
   isMissingFirestoreIndexError,
 } from '../modules/quality/domain/injectionRange.ts';
@@ -32,6 +33,15 @@ assert.deepEqual(INJECTION_SHIFTS, ['نهاري', 'ليلي']);
 assert.equal(normalizeInjectionShift(' شيفت   نهاري '), 'نهاري');
 assert.equal(normalizeInjectionShift('شيفت ليلي'), 'ليلي');
 assert.equal(record.acceptedQuantity + record.rejectedQuantity, record.totalQuantity);
+const criteriaRecords = [
+  { ...record, shift: 'شيفت نهاري', acceptedQuantity: 100, rejectedQuantity: 0 },
+  { ...record, shift: 'ليلي', acceptedQuantity: 0, rejectedQuantity: 80 },
+  { ...record, shift: 'نهاري', acceptedQuantity: 30, rejectedQuantity: 10 },
+];
+assert.equal(filterInjectionRecordsByCriteria(criteriaRecords, 'نهاري', 'all').length, 2);
+assert.equal(filterInjectionRecordsByCriteria(criteriaRecords, 'all', 'accepted').length, 2);
+assert.equal(filterInjectionRecordsByCriteria(criteriaRecords, 'all', 'rejected').length, 2);
+assert.equal(filterInjectionRecordsByCriteria(criteriaRecords, 'all', 'both').length, 1);
 assert.equal(isMissingFirestoreIndexError({
   code: 'failed-precondition',
   message: 'The query requires an index.',
@@ -133,6 +143,10 @@ assert.match(injectionPage, /إدارة أرقام الماكينات/);
 assert.match(injectionPage, /— اختر رقم الماكينة —/);
 assert.match(injectionPage, /— اختر الوردية —/);
 assert.match(injectionPage, /INJECTION_SHIFTS\.map/);
+assert.match(injectionPage, /تطبيق الفترة/);
+assert.match(injectionPage, /من تاريخ/);
+assert.match(injectionPage, /إلى تاريخ/);
+assert.match(injectionPage, /حالة الكميات/);
 assert.match(injectionPage, /تحديد كل سجلات الحقن المعروضة/);
 assert.match(injectionPage, /حذف المحدد/);
 assert.match(injectionPage, /quality\.records\.delete/);
