@@ -330,7 +330,29 @@ await assertFails(incomingManager.collection('quality_injection_machines').doc('
   tenantId: 'tenantB',
 }));
 await assertSucceeds(incomingManager.collection('quality_injection_machines').doc('machine-12').update({ isActive: false }));
-await assertFails(incomingManager.collection('quality_injection_machines').doc('machine-12').delete());
+await assertFails(incomingViewer.collection('quality_injection_machines').doc('machine-12').delete());
+await assertSucceeds(incomingManager.collection('quality_injection_machines').doc('machine-12').delete());
+
+const injectionItem = {
+  tenantId: 'tenantA',
+  name: 'فانوس مفرغ',
+  nameKey: 'فانوس مفرغ',
+  isActive: true,
+};
+await assertSucceeds(incomingManager.collection('quality_injection_items').doc('item-1').set(injectionItem));
+await assertSucceeds(incomingViewer.collection('quality_injection_items').doc('item-1').get());
+await assertFails(stranger.collection('quality_injection_items').doc('item-1').get());
+await assertFails(incomingViewer.collection('quality_injection_items').doc('item-2').set({
+  ...injectionItem,
+  name: 'نجمة مفرغة',
+  nameKey: 'نجمة مفرغة',
+}));
+await assertFails(incomingManager.collection('quality_injection_items').doc('item-other-tenant').set({
+  ...injectionItem,
+  tenantId: 'tenantB',
+}));
+await assertFails(incomingViewer.collection('quality_injection_items').doc('item-1').delete());
+await assertSucceeds(incomingManager.collection('quality_injection_items').doc('item-1').delete());
 
 await assertSucceeds(viewer.collection('quality_saved_filters').doc('mine').set({
   tenantId: 'tenantA',
