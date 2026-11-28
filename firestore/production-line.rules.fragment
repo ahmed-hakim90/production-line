@@ -2645,9 +2645,14 @@
     match /quality_injection_records/{docId} {
       allow read: if pl_qualityRead();
       allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.shift in ['نهاري', 'ليلي']
         && pl_qualityInjectionRecordValid();
       allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
         && pl_qualityCanIncoming()
+        && (
+          request.resource.data.shift in ['نهاري', 'ليلي']
+          || request.resource.data.shift == resource.data.shift
+        )
         && pl_qualityInjectionRecordValid()
         && request.resource.data.tenantId == resource.data.tenantId;
       allow delete: if pl_qualityRead() && pl_qualityCanDelete();

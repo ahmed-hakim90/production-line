@@ -68,13 +68,23 @@ export function injectionMachineNumberKey(value: unknown): string {
   return normalizeInjectionMachineNumber(value).toLocaleLowerCase();
 }
 
+export const INJECTION_SHIFTS = ['نهاري', 'ليلي'] as const;
+
+export function normalizeInjectionShift(value: unknown): string {
+  const shift = String(value ?? '').trim().replace(/\s+/g, ' ');
+  const withoutPrefix = shift.replace(/^(?:الشيفت|شيفت|الوردية|وردية)\s*/, '');
+  if (['نهاري', 'نهارية', 'نهاريه', 'صباحي', 'صباحية'].includes(withoutPrefix)) return 'نهاري';
+  if (['ليلي', 'ليلية', 'ليليه', 'مسائي', 'مسائية'].includes(withoutPrefix)) return 'ليلي';
+  return shift;
+}
+
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
-function requireDate(value: string): string {
+function requireDate(value: string, label = 'تاريخ الاستلام'): string {
   const date = value.trim();
   const parsed = ISO.test(date) ? new Date(`${date}T00:00:00.000Z`) : null;
   if (!parsed || Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
-    throw new Error('تاريخ الاستلام غير صالح');
+    throw new Error(`${label} غير صالح`);
   }
   return date;
 }
@@ -86,13 +96,13 @@ function requireInteger(value: unknown, label: string): number {
   return number;
 }
 
-export function excelSerialToIsoDate(value: unknown): string {
+export function excelSerialToIsoDate(value: unknown, label = 'تاريخ الاستلام'): string {
   if (typeof value === 'string' && ISO.test(value.trim())) return value.trim();
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
   }
   const serial = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(serial) || serial < 1) throw new Error('تاريخ الاستلام غير صالح');
+  if (!Number.isFinite(serial) || serial < 1) throw new Error(`${label} غير صالح`);
   const utc = new Date(Date.UTC(1899, 11, 30) + Math.floor(serial) * 86_400_000);
   return utc.toISOString().slice(0, 10);
 }
@@ -304,10 +314,10 @@ export function normalizeInjectionQualityRecord(data: {
   acceptedQuantity?: unknown;
   rejectedQuantity?: unknown;
   notes?: unknown;
-}): InjectionQualityInput {
+}, options: { allowLegacyShift?: boolean } = {}): InjectionQualityInput {
   const machineNumber = String(data.machineNumber ?? '').trim();
   const itemName = String(data.itemName ?? '').trim();
-  const shift = String(data.shift ?? '').trim();
+  const shift = normalizeInjectionShift(data.shift);
   const notes = String(data.notes ?? '').trim();
   if (!machineNumber || machineNumber.length > 80) throw new Error('رقم الماكينة مطلوب وبحد أقصى 80 حرفًا');
   if (!itemName || itemName.length > 150) throw new Error('اسم الصنف مطلوب وبحد أقصى 150 حرفًا');
@@ -318,6 +328,9 @@ export function normalizeInjectionQualityRecord(data: {
   const rejectedQuantity = requireInteger(data.rejectedQuantity, 'الكمية المرفوضة');
   if (acceptedQuantity + rejectedQuantity !== totalQuantity) {
     throw new Error('إجمالي الكمية يجب أن يساوي مجموع الكمية المقبولة والمرفوضة');
+  }
+  if (!INJECTION_SHIFTS.some((option) => option === shift) && !options.allowLegacyShift) {
+    throw new Error('اختر الوردية النهارية أو الليلية');
   }
   return {
     machineNumber,
@@ -362,33 +375,44 @@ const INJECTION_HEADERS: Record<string, keyof InjectionQualityInput> = {
 function injectionSheetDate(value: unknown): string {
   if (typeof value === 'string') {
     const text = value.trim();
-    const dayFirst = /^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/.exec(text);
+    const dayFirst = /^(\d{1,2})[/. -](\d{1,2})[/. -]?(\d{4})$/.exec(text);
     if (dayFirst) {
       const [, day, month, year] = dayFirst;
-      return requireDate(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`);
+      return requireDate(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`, 'تاريخ الإنتاج');
     }
   }
-  return requireDate(excelSerialToIsoDate(value));
+  return requireDate(excelSerialToIsoDate(value, 'تاريخ الإنتاج'), 'تاريخ الإنتاج');
 }
 
 export function injectionRowsFromSheet(rows: Array<Record<string, unknown>>): InjectionQualityInput[] {
   if (rows.length === 0) throw new Error('لم يتم العثور على سجلات صالحة للاستيراد');
-  if (rows.length > 400) throw new Error('الحد الأقصى للاستيراد في المرة الواحدة هو 400 سجل');
-  return rows.map((row, index) => {
+  const parsedRows: InjectionQualityInput[] = [];
+  rows.forEach((row, index) => {
     const mapped: Record<string, unknown> = {};
     Object.entries(row).forEach(([header, value]) => {
       const key = header.trim().replace(/\s+/g, ' ');
       const field = INJECTION_HEADERS[key];
       if (!field) return;
-      mapped[field] = field === 'date' ? injectionSheetDate(value) : value;
+      mapped[field] = value;
     });
+    const hasData = Object.entries(mapped).some(([field, value]) => {
+      if (value == null || String(value).trim() === '') return false;
+      return !['totalQuantity', 'acceptedQuantity', 'rejectedQuantity'].includes(field) || Number(value) !== 0;
+    });
+    if (!hasData) return;
     try {
-      return normalizeInjectionQualityRecord(mapped);
+      parsedRows.push(normalizeInjectionQualityRecord({
+        ...mapped,
+        date: injectionSheetDate(mapped.date),
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'سجل غير صالح';
       throw new Error(`الصف ${index + 2}: ${message}`);
     }
   });
+  if (parsedRows.length === 0) throw new Error('لم يتم العثور على سجلات صالحة للاستيراد');
+  if (parsedRows.length > 400) throw new Error('الحد الأقصى للاستيراد في المرة الواحدة هو 400 سجل');
+  return parsedRows;
 }
 
 export function summarizeCartons(rows: Array<Pick<CartonReceiptInput, 'supplier' | 'totalQuantity' | 'totalItems' | 'acceptedItems' | 'rejectedItems'> & { shipmentCount?: number }>) {

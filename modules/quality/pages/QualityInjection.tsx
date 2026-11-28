@@ -3,13 +3,12 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { usePermission } from '@/utils/permissions';
 import { monthBounds } from '../domain/qualityAnalytics';
-import { injectionRowsFromSheet, type InjectionQualityInput } from '../domain/incomingReceipt';
+import { INJECTION_SHIFTS, injectionRowsFromSheet, normalizeInjectionShift, type InjectionQualityInput } from '../domain/incomingReceipt';
 import { localDateIso } from '../domain/time';
-import type { QualityInjectionMachine, QualityInjectionRecord, QualityShiftOption } from '../model';
+import type { QualityInjectionMachine, QualityInjectionRecord } from '../model';
 import { QmsPage } from '../qms/QmsChrome';
 import { qualityUserMessage } from '../services/qualityGateway';
 import { qualityInjectionService } from '../services/qualityIncomingService';
-import { qualitySettingsService } from '../services/qualitySettingsService';
 
 const emptyRecord = {
   machineNumber: '',
@@ -27,8 +26,9 @@ export const QualityInjection: React.FC = () => {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [query, setQuery] = useState('');
   const [rows, setRows] = useState<QualityInjectionRecord[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [indexFallback, setIndexFallback] = useState(false);
   const [machines, setMachines] = useState<QualityInjectionMachine[]>([]);
-  const [shifts, setShifts] = useState<QualityShiftOption[]>([]);
   const [form, setForm] = useState<InjectionQualityInput>({ ...emptyRecord, date: today });
   const [editingId, setEditingId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -38,24 +38,29 @@ export const QualityInjection: React.FC = () => {
   const [machineDraft, setMachineDraft] = useState('');
   const [machineSaving, setMachineSaving] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [loadError, setLoadError] = useState('');
   const canManage = can('quality.incoming.manage');
+  const canDelete = can('quality.records.delete');
   const quantityMismatch = form.totalQuantity !== form.acceptedQuantity + form.rejectedQuantity;
   const activeMachines = machines.filter((machine) => machine.isActive !== false);
   const editingRow = editingId ? rows.find((row) => row.id === editingId) : undefined;
+  const editingLegacyShift = editingRow !== undefined
+    && !INJECTION_SHIFTS.some((shift) => shift === normalizeInjectionShift(editingRow.shift));
   const selectedInactiveMachine = editingRow?.machineNumber === form.machineNumber
     && !activeMachines.some((machine) => machine.name === form.machineNumber);
-  const selectedInactiveShift = editingRow?.shift === form.shift
-    && !shifts.some((shift) => shift.name === form.shift);
   const machineValid = activeMachines.some((machine) => machine.name === form.machineNumber) || selectedInactiveMachine;
-  const shiftValid = shifts.some((shift) => shift.name === form.shift) || selectedInactiveShift;
+  const shiftValid = INJECTION_SHIFTS.some((shift) => shift === form.shift);
 
   const load = async () => {
     setLoadError('');
+    setIndexFallback(false);
     setLoading(true);
     try {
       const range = monthBounds(month);
-      setRows(await qualityInjectionService.listRange(range.from, range.to));
+      const result = await qualityInjectionService.listRange(range.from, range.to);
+      setRows(result.records);
+      setIndexFallback(result.usedFallback);
     } catch (error) {
       setLoadError(qualityUserMessage(error, 'تعذر تحميل سجلات متابعة جودة قسم الحقن.'));
       throw error;
@@ -73,12 +78,8 @@ export const QualityInjection: React.FC = () => {
     setOptionsReady(false);
     setOptionsError('');
     try {
-      const [nextMachines, nextShifts] = await Promise.all([
-        qualityInjectionService.listMachines(true),
-        qualitySettingsService.listShifts(),
-      ]);
+      const nextMachines = await qualityInjectionService.listMachines(true);
       setMachines(nextMachines);
-      setShifts(nextShifts);
       setOptionsReady(true);
     } catch (error) {
       setOptionsError(qualityUserMessage(error, 'تعذر تحميل قوائم الماكينات والورديات.'));
@@ -92,6 +93,11 @@ export const QualityInjection: React.FC = () => {
     void loadOptions().catch(() => undefined);
   }, []);
 
+  const resetForm = () => {
+    setEditingId('');
+    setForm({ ...emptyRecord, date: today });
+  };
+
   const visibleRows = useMemo(() => {
     const text = query.trim().toLocaleLowerCase();
     return rows
@@ -104,10 +110,65 @@ export const QualityInjection: React.FC = () => {
     accepted: totals.accepted + row.acceptedQuantity,
     rejected: totals.rejected + row.rejectedQuantity,
   }), { records: 0, total: 0, accepted: 0, rejected: 0 });
+  const selectedVisibleRows = visibleRows.filter((row) => selectedIds.includes(row.id));
+  const allVisibleSelected = visibleRows.length > 0 && selectedVisibleRows.length === visibleRows.length;
 
-  const resetForm = () => {
-    setEditingId('');
-    setForm({ ...emptyRecord, date: today });
+  const toggleVisibleSelection = () => {
+    const visibleIds = new Set(visibleRows.map((row) => row.id));
+    if (allVisibleSelected) {
+      setSelectedIds((current) => current.filter((id) => !visibleIds.has(id)));
+      return;
+    }
+    const next = [...new Set([...selectedIds, ...visibleIds])];
+    if (next.length > 400) {
+      toast.error('يمكن تحديد 400 سجل كحد أقصى للحذف في المرة الواحدة.');
+      return;
+    }
+    setSelectedIds(next);
+  };
+
+  const deleteOne = async (row: QualityInjectionRecord) => {
+    if (!window.confirm(`حذف سجل الماكينة «${row.machineNumber}» للصنف «${row.itemName}» بتاريخ ${row.date}؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    setDeleting(true);
+    try {
+      await qualityInjectionService.remove(row.id);
+      setRows((current) => current.filter((item) => item.id !== row.id));
+      setSelectedIds((current) => current.filter((id) => id !== row.id));
+      if (editingId === row.id) resetForm();
+      toast.success('تم حذف سجل متابعة الحقن.');
+      try {
+        await load();
+      } catch {
+        toast.error('تم الحذف، لكن تعذر تحديث القائمة. حدّث الصفحة للتحقق.');
+      }
+    } catch (error) {
+      toast.error(qualityUserMessage(error, 'تعذر حذف سجل الحقن.'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const deleteSelected = async () => {
+    const ids = selectedVisibleRows.map((row) => row.id);
+    if (ids.length === 0) return;
+    if (!window.confirm(`حذف ${ids.length} سجلًا محددًا؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    setDeleting(true);
+    try {
+      const count = await qualityInjectionService.removeMany(ids);
+      setRows((current) => current.filter((row) => !ids.includes(row.id)));
+      setSelectedIds([]);
+      if (ids.includes(editingId)) resetForm();
+      toast.success(`تم حذف ${count} سجل من متابعة الحقن.`);
+      try {
+        await load();
+      } catch {
+        toast.error('تم الحذف، لكن تعذر تحديث القائمة. حدّث الصفحة للتحقق.');
+      }
+    } catch (error) {
+      toast.error(qualityUserMessage(error, 'تعذر حذف السجلات المحددة.'));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const save = async () => {
@@ -196,7 +257,7 @@ export const QualityInjection: React.FC = () => {
       machineNumber: row.machineNumber,
       itemName: row.itemName,
       date: row.date,
-      shift: row.shift,
+      shift: normalizeInjectionShift(row.shift),
       totalQuantity: row.totalQuantity,
       acceptedQuantity: row.acceptedQuantity,
       rejectedQuantity: row.rejectedQuantity,
@@ -212,14 +273,14 @@ export const QualityInjection: React.FC = () => {
       <div className="qms-row" style={{ marginBottom: 12 }}>
         <label>
           <span className="qms-label">الشهر</span>
-          <input className="qms-input" type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+          <input className="qms-input" type="month" value={month} onChange={(event) => { setSelectedIds([]); setMonth(event.target.value); }} />
         </label>
         <label>
           <span className="qms-label">بحث</span>
           <input
             className="qms-input"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => { setSelectedIds([]); setQuery(event.target.value); }}
             placeholder="رقم الماكينة أو الصنف أو الوردية"
           />
         </label>
@@ -316,9 +377,9 @@ export const QualityInjection: React.FC = () => {
               onChange={(event) => setForm({ ...form, shift: event.target.value })}
             >
               <option value="">— اختر الوردية —</option>
-              {selectedInactiveShift ? <option value={form.shift}>{form.shift} — غير نشطة</option> : null}
-              {shifts.map((shift) => <option key={shift.id} value={shift.name}>{shift.name}</option>)}
+              {INJECTION_SHIFTS.map((shift) => <option key={shift} value={shift}>{shift}</option>)}
             </select>
+            {editingLegacyShift ? <small className="qms-muted">الوردية المسجلة لهذا السجل لا تطابق الخيارين؛ اختر «نهاري» أو «ليلي» لحفظ التعديل.</small> : null}
           </label>
           <label>
             <span className="qms-label">إجمالي الكمية</span>
@@ -339,7 +400,6 @@ export const QualityInjection: React.FC = () => {
         </div>
         {optionsError ? <p className="qms-error" role="alert">{optionsError}</p> : null}
         {!optionsLoading && optionsReady && activeMachines.length === 0 ? <p className="qms-muted">أضف أرقام الماكينات من قسم «إدارة أرقام الماكينات» أولاً.</p> : null}
-        {!optionsLoading && optionsReady && shifts.length === 0 ? <p className="qms-muted">لا توجد ورديات نشطة. أضف وردية من إعدادات الموارد البشرية أولاً.</p> : null}
         {quantityMismatch ? (
           <p className="qms-error" role="alert">
             الإجمالي ({form.totalQuantity}) لا يساوي المقبول ({form.acceptedQuantity}) + المرفوض ({form.rejectedQuantity}).
@@ -364,9 +424,34 @@ export const QualityInjection: React.FC = () => {
       </div>
 
       <section className="qms-card qms-table-wrap">
+        {indexFallback ? (
+          <p className="qms-error" role="status">
+            الفهرس الشهري لمتابعة الحقن لم يُنشأ بعد. تُعرض سجلات هذه الشركة لهذا الشهر مؤقتًا بطريقة بديلة.
+            اطلب من مسؤول Firebase إنشاء فهرس مركب للمجموعة quality_injection_records بالترتيب tenantId ثم date.
+          </p>
+        ) : null}
+        {canDelete && selectedVisibleRows.length > 0 ? (
+          <div className="qms-row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
+            <span className="qms-muted">تم تحديد {selectedVisibleRows.length} سجل (الحد الأقصى للحذف الجماعي: 400).</span>
+            <button type="button" className="qms-btn qms-btn-ghost" disabled={deleting || saving} onClick={() => void deleteSelected()}>
+              {deleting ? 'جارٍ الحذف…' : `حذف المحدد (${selectedVisibleRows.length})`}
+            </button>
+          </div>
+        ) : null}
         <table className="qms-table">
           <thead>
             <tr>
+              {canDelete ? (
+                <th>
+                  <input
+                    type="checkbox"
+                    aria-label="تحديد كل سجلات الحقن المعروضة"
+                    checked={allVisibleSelected}
+                    disabled={loading || deleting || visibleRows.length === 0}
+                    onChange={toggleVisibleSelection}
+                  />
+                </th>
+              ) : null}
               <th>رقم الماكينة</th>
               <th>اسم الصنف</th>
               <th>التاريخ</th>
@@ -377,12 +462,31 @@ export const QualityInjection: React.FC = () => {
               <th>كمية المقبول</th>
               <th>كمية المرفوض</th>
               <th>ملاحظات</th>
-              {canManage ? <th>الإجراءات</th> : null}
+              {canManage || canDelete ? <th>الإجراءات</th> : null}
             </tr>
           </thead>
           <tbody>
             {visibleRows.map((row) => (
               <tr key={row.id}>
+                {canDelete ? (
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`تحديد سجل ${row.machineNumber} للصنف ${row.itemName} بتاريخ ${row.date}`}
+                      checked={selectedIds.includes(row.id)}
+                      disabled={deleting}
+                      onChange={() => {
+                        if (selectedIds.includes(row.id)) {
+                          setSelectedIds((current) => current.filter((id) => id !== row.id));
+                        } else if (selectedIds.length >= 400) {
+                          toast.error('يمكن تحديد 400 سجل كحد أقصى للحذف في المرة الواحدة.');
+                        } else {
+                          setSelectedIds((current) => [...current, row.id]);
+                        }
+                      }}
+                    />
+                  </td>
+                ) : null}
                 <td>{row.machineNumber}</td>
                 <td>{row.itemName}</td>
                 <td>{row.date}</td>
@@ -393,7 +497,12 @@ export const QualityInjection: React.FC = () => {
                 <td>{row.acceptedQuantity}</td>
                 <td>{row.rejectedQuantity}</td>
                 <td>{row.notes || '—'}</td>
-                {canManage ? <td><button type="button" className="qms-btn qms-btn-ghost" onClick={() => startEditing(row)}>تعديل</button></td> : null}
+                {canManage || canDelete ? (
+                  <td>
+                    {canManage ? <button type="button" className="qms-btn qms-btn-ghost" disabled={deleting} onClick={() => startEditing(row)}>تعديل</button> : null}
+                    {canDelete ? <button type="button" className="qms-btn qms-btn-ghost" disabled={deleting} onClick={() => void deleteOne(row)}>حذف</button> : null}
+                  </td>
+                ) : null}
               </tr>
             ))}
           </tbody>

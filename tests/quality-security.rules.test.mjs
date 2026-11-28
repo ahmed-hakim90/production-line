@@ -52,7 +52,11 @@ await set('roles', 'tenantA-incoming-viewer', {
 });
 await set('roles', 'tenantA-incoming-manager', {
   tenantId: 'tenantA',
-  permissions: { 'quality.incoming.view': true, 'quality.incoming.manage': true },
+  permissions: {
+    'quality.incoming.view': true,
+    'quality.incoming.manage': true,
+    'quality.records.delete': true,
+  },
 });
 await set('roles', 'tenantA-manager', {
   tenantId: 'tenantA',
@@ -280,7 +284,7 @@ const injectionRecord = {
   machineNumber: 'ماكينة رقم 1',
   itemName: 'فانوس 47',
   date: '2026-11-25',
-  shift: 'شيفت ليلي',
+  shift: 'ليلي',
   totalQuantity: 840,
   acceptedQuantity: 840,
   rejectedQuantity: 0,
@@ -295,11 +299,17 @@ await assertFails(legacy.collection('quality_injection_records').doc('injection-
   ...injectionRecord,
   tenantId: 'tenantB',
 }));
+await assertFails(legacy.collection('quality_injection_records').doc('injection-invalid-shift').set({
+  ...injectionRecord,
+  shift: 'وردية ثالثة',
+}));
 await assertSucceeds(incomingViewer.collection('quality_injection_records').doc('injection-valid').get());
 await assertFails(incomingViewer.collection('quality_injection_records').doc('injection-valid').update({
   ...injectionRecord,
   totalQuantity: 900,
 }));
+await assertFails(incomingViewer.collection('quality_injection_records').doc('injection-valid').delete());
+await assertSucceeds(incomingManager.collection('quality_injection_records').doc('injection-valid').delete());
 await assertFails(stranger.collection('quality_injection_records').doc('injection-valid').get());
 
 const injectionMachine = {

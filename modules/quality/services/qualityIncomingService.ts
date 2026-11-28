@@ -1,6 +1,7 @@
 import { addDoc, deleteDoc, doc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/services/firebase';
-import { injectionMachineNumberKey, normalizeCartonReceipt, normalizeInjectionMachineNumber, normalizeInjectionQualityRecord, normalizePlasticReceipt, prepareCartonImport, type CartonReceiptInput, type InjectionQualityInput, type PlasticReceiptInput } from '../domain/incomingReceipt';
+import { injectionMachineNumberKey, normalizeCartonReceipt, normalizeInjectionMachineNumber, normalizeInjectionQualityRecord, normalizeInjectionShift, normalizePlasticReceipt, prepareCartonImport, type CartonReceiptInput, type InjectionQualityInput, type PlasticReceiptInput } from '../domain/incomingReceipt';
+import { filterInjectionRecordsByDateRange, isMissingFirestoreIndexError } from '../domain/injectionRange';
 import type { QualityCartonReceipt, QualityInjectionMachine, QualityInjectionRecord, QualityNamedReason, QualityPlasticReceipt } from '../model';
 import {
   QMS_COLLECTIONS,
@@ -278,22 +279,39 @@ export const qualityInjectionService = {
     });
   },
 
-  async listRange(from: string, to: string): Promise<QualityInjectionRecord[]> {
+  async listRange(from: string, to: string): Promise<{ records: QualityInjectionRecord[]; usedFallback: boolean }> {
     assertQualityPermission('quality.incoming.view');
     if (to < from) throw new Error('نطاق التاريخ غير صالح.');
-    return listByTenantDateRange<QualityInjectionRecord>(
-      QMS_COLLECTIONS.INJECTION_RECORDS,
-      activeTenantId(),
-      'date',
-      from,
-      to,
-    );
+    const tenantId = activeTenantId();
+    try {
+      return {
+        records: await listByTenantDateRange<QualityInjectionRecord>(
+          QMS_COLLECTIONS.INJECTION_RECORDS,
+          tenantId,
+          'date',
+          from,
+          to,
+        ),
+        usedFallback: false,
+      };
+    } catch (error) {
+      if (!isMissingFirestoreIndexError(error)) throw error;
+      const tenantRecords = await listByTenant<QualityInjectionRecord>(QMS_COLLECTIONS.INJECTION_RECORDS, tenantId);
+      return {
+        records: filterInjectionRecordsByDateRange(tenantRecords, from, to),
+        usedFallback: true,
+      };
+    }
   },
 
   async save(input: InjectionQualityInput & { id?: string }): Promise<void> {
     assertQualityPermission('quality.incoming.manage');
-    const record = normalizeInjectionQualityRecord(input);
-    if (input.id) await readQualityDoc<QualityInjectionRecord>(QMS_COLLECTIONS.INJECTION_RECORDS, input.id);
+    const previous = input.id
+      ? await readQualityDoc<QualityInjectionRecord>(QMS_COLLECTIONS.INJECTION_RECORDS, input.id)
+      : null;
+    const shift = normalizeInjectionShift(input.shift);
+    const allowLegacyShift = previous != null && normalizeInjectionShift(previous.shift) === shift;
+    const record = normalizeInjectionQualityRecord({ ...input, shift }, { allowLegacyShift });
     const actor = currentQualityActor();
     const payload = stampTenant({
       moduleSource: 'qms' as const,
@@ -341,5 +359,28 @@ export const qualityInjectionService = {
     await batch.commit();
     await auditQuality('QUALITY_INCOMING_RECEIPT', 'استيراد متابعة جودة قسم الحقن', { count: prepared.length });
     return prepared.length;
+  },
+
+  async remove(id: string): Promise<void> {
+    assertQualityPermission('quality.records.delete');
+    await readQualityDoc<QualityInjectionRecord>(QMS_COLLECTIONS.INJECTION_RECORDS, id);
+    await deleteDoc(qmsDoc(QMS_COLLECTIONS.INJECTION_RECORDS, id));
+    await auditQuality('QUALITY_INCOMING_RECEIPT', 'حذف سجل متابعة جودة قسم الحقن', { recordId: id });
+  },
+
+  async removeMany(ids: string[]): Promise<number> {
+    assertQualityPermission('quality.records.delete');
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) throw new Error('حدد سجلًا واحدًا على الأقل للحذف.');
+    if (uniqueIds.length > 400) throw new Error('يمكن حذف 400 سجل كحد أقصى في المرة الواحدة.');
+    if (!db) throw new Error('خدمة البيانات غير متاحة.');
+    await Promise.all(uniqueIds.map((id) => readQualityDoc<QualityInjectionRecord>(QMS_COLLECTIONS.INJECTION_RECORDS, id)));
+    const batch = writeBatch(db);
+    uniqueIds.forEach((id) => batch.delete(qmsDoc(QMS_COLLECTIONS.INJECTION_RECORDS, id)));
+    await batch.commit();
+    await auditQuality('QUALITY_INCOMING_RECEIPT', 'حذف مجموعة من سجلات متابعة جودة قسم الحقن', {
+      count: uniqueIds.length,
+    });
+    return uniqueIds.length;
   },
 };
