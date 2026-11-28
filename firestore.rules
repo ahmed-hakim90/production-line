@@ -2710,7 +2710,30 @@ service cloud.firestore {
         && request.resource.data.nameKey == resource.data.nameKey
         && request.resource.data.isActive is bool
         && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if false;
+      allow delete: if pl_qualityRead() && pl_qualityCanIncoming();
+    }
+
+    match /quality_injection_items/{docId} {
+      allow read: if pl_qualityRead();
+      allow create: if pl_qualityCreate() && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 160
+        && request.resource.data.isActive is bool;
+      allow update: if (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
+        && pl_qualityCanIncoming()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 150
+        && request.resource.data.nameKey is string
+        && request.resource.data.nameKey.size() > 0
+        && request.resource.data.nameKey.size() <= 160
+        && request.resource.data.isActive is bool
+        && request.resource.data.tenantId == resource.data.tenantId;
+      allow delete: if pl_qualityRead() && pl_qualityCanIncoming();
     }
 
     match /quality_injection_records/{docId} {

@@ -140,6 +140,10 @@ assert.match(routes, /path: '\/quality\/injection', permission: 'quality\.incomi
 assert.match(menu, /quality-injection[\s\S]{0,150}متابعة جودة قسم الحقن/);
 const injectionPage = readFileSync(new URL('../modules/quality/pages/QualityInjection.tsx', import.meta.url), 'utf8');
 assert.match(injectionPage, /إدارة أرقام الماكينات/);
+assert.match(injectionPage, /إدارة أصناف الحقن/);
+assert.match(injectionPage, /— اختر الصنف —/);
+assert.match(injectionPage, /removeManyMachines/);
+assert.match(injectionPage, /onRemoveMany/);
 assert.match(injectionPage, /— اختر رقم الماكينة —/);
 assert.match(injectionPage, /— اختر الوردية —/);
 assert.match(injectionPage, /INJECTION_SHIFTS\.map/);

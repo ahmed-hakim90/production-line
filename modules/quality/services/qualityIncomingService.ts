@@ -1,6 +1,7 @@
 import { addDoc, deleteDoc, doc, serverTimestamp, setDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { db } from '@/services/firebase';
 import { injectionMachineNumberKey, normalizeCartonReceipt, normalizeInjectionMachineNumber, normalizeInjectionQualityRecord, normalizeInjectionShift, normalizePlasticReceipt, prepareCartonImport, type CartonReceiptInput, type InjectionQualityInput, type PlasticReceiptInput } from '../domain/incomingReceipt';
+import { namedCatalogKey, normalizeNamedCatalogLabel } from '../domain/namedCatalog';
 import { filterInjectionRecordsByDateRange, isMissingFirestoreIndexError } from '../domain/injectionRange';
 import type { QualityCartonReceipt, QualityInjectionMachine, QualityInjectionRecord, QualityNamedReason, QualityPlasticReceipt } from '../model';
 import {
@@ -277,6 +278,88 @@ export const qualityInjectionService = {
     await auditQuality('QUALITY_INCOMING_RECEIPT', isActive ? 'تفعيل رقم ماكينة لمتابعة الحقن' : 'إيقاف رقم ماكينة لمتابعة الحقن', {
       machineNumber: current.name,
     });
+  },
+
+  async renameMachine(machineId: string, value: string): Promise<void> {
+    assertQualityPermission('quality.incoming.manage');
+    const name = normalizeInjectionMachineNumber(value);
+    const nameKey = injectionMachineNumberKey(name);
+    const tenantId = activeTenantId();
+    const rows = await listByTenant<QualityInjectionMachine>(QMS_COLLECTIONS.INJECTION_MACHINES, tenantId);
+    if (rows.some((machine) => machine.id !== machineId && machine.nameKey === nameKey)) {
+      throw new Error('رقم الماكينة موجود بالفعل في القائمة.');
+    }
+    await updateDoc(qmsDoc(QMS_COLLECTIONS.INJECTION_MACHINES, machineId), {
+      name,
+      nameKey,
+      updatedAt: serverTimestamp(),
+      updatedByUid: currentQualityActor().uid,
+      updatedByName: currentQualityActor().name,
+    });
+  },
+
+  async removeMachine(machineId: string): Promise<void> {
+    assertQualityPermission('quality.incoming.manage');
+    await readQualityDoc<QualityInjectionMachine>(QMS_COLLECTIONS.INJECTION_MACHINES, machineId);
+    await deleteDoc(qmsDoc(QMS_COLLECTIONS.INJECTION_MACHINES, machineId));
+  },
+
+  async removeManyMachines(machineIds: string[]): Promise<number> {
+    assertQualityPermission('quality.incoming.manage');
+    if (machineIds.length === 0) return 0;
+    if (machineIds.length > 400) throw new Error('الحد الأقصى للحذف الجماعي هو 400 رقم ماكينة.');
+    if (!db) throw new Error('خدمة البيانات غير متاحة.');
+    const uniqueIds = [...new Set(machineIds)];
+    await Promise.all(uniqueIds.map((id) => readQualityDoc<QualityInjectionMachine>(QMS_COLLECTIONS.INJECTION_MACHINES, id)));
+    const batch = writeBatch(db);
+    uniqueIds.forEach((id) => batch.delete(qmsDoc(QMS_COLLECTIONS.INJECTION_MACHINES, id)));
+    await batch.commit();
+    return uniqueIds.length;
+  },
+
+  async listItems(): Promise<QualityNamedReason[]> {
+    assertQualityPermission('quality.incoming.view');
+    const rows = await listByTenant<QualityNamedReason>(QMS_COLLECTIONS.INJECTION_ITEMS, activeTenantId());
+    return rows.sort((left, right) => left.name.localeCompare(right.name, 'ar'));
+  },
+
+  async ensureDefaultItems(): Promise<void> {
+    assertQualityPermission('quality.incoming.manage');
+    if (!db) throw new Error('خدمة البيانات غير متاحة.');
+    const defaults = [
+      'رمضان كريم', 'فانوس 47', 'فانوس 70', 'هلال فانوس كبير', 'هلال * نجمة نيو',
+      'فانوس اوبال P.P', 'قاعدة 666', 'بودى 666', 'هلال * نجمة ميدور', 'هلال فانوس جديد',
+      'نجمة مدورة', 'نجمة فاكيوم', 'دائرة استيكر', 'فانوس استيكر', 'جامع كريستال',
+      'بيفورم', 'جراب مكوة', 'قاعدة رمضان كريم PS', 'وش رمضان كريم جديد', 'هلال * نحمتين',
+      'هلال * جامع', 'هلال استيكر جديد 49', 'فانوس 49 استيكر', 'هلال * جامع * نجمة نيو',
+      'هلال * فانوس * نجمة', 'هلال P.P جديد', 'وش جريل 852', 'قاعدة جريل 852',
+      'وش جريل 303', 'قاعدة جريل 303', 'وش جريل 907', 'قاعدة جريل 907',
+      'هلال * نجمة مدورة', 'نجمة مفرغة', 'فانوس مفرغ', 'فانوس استيكر 49',
+      'وش رمضان كريم', 'فانوس رمضان كريم', 'قاعدة فانوس ستارة',
+    ];
+    const tenantId = activeTenantId();
+    const existing = await listByTenant<QualityNamedReason>(QMS_COLLECTIONS.INJECTION_ITEMS, tenantId);
+    const existingKeys = new Set(existing.map((item) => item.nameKey));
+    const actor = currentQualityActor();
+    const batch = writeBatch(db);
+    for (const value of defaults) {
+      const name = normalizeNamedCatalogLabel(value, 'اكتب اسم الصنف.', 150);
+      const nameKey = namedCatalogKey(name);
+      if (existingKeys.has(nameKey)) continue;
+      const id = `${tenantId}__${encodeURIComponent(nameKey)}`;
+      batch.set(qmsDoc(QMS_COLLECTIONS.INJECTION_ITEMS, id), stampTenant({
+        name,
+        nameKey,
+        isActive: true,
+        createdAt: serverTimestamp(),
+        createdByUid: actor.uid,
+        createdByName: actor.name,
+        updatedAt: serverTimestamp(),
+        updatedByUid: actor.uid,
+        updatedByName: actor.name,
+      }));
+    }
+    await batch.commit();
   },
 
   async listRange(from: string, to: string): Promise<{ records: QualityInjectionRecord[]; usedFallback: boolean }> {

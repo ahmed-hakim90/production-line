@@ -5,10 +5,12 @@ import { usePermission } from '@/utils/permissions';
 import { monthBounds } from '../domain/qualityAnalytics';
 import { INJECTION_SHIFTS, injectionRowsFromSheet, normalizeInjectionShift, type InjectionQualityInput } from '../domain/incomingReceipt';
 import { localDateIso } from '../domain/time';
-import type { QualityInjectionMachine, QualityInjectionRecord } from '../model';
+import type { QualityInjectionMachine, QualityInjectionRecord, QualityNamedReason } from '../model';
 import { QmsPage } from '../qms/QmsChrome';
 import { qualityUserMessage } from '../services/qualityGateway';
 import { qualityInjectionService } from '../services/qualityIncomingService';
+import { qualityInjectionItemService } from '../services/qualityCatalogService';
+import { QualityNameCatalog } from '../components/QualityNameCatalog';
 import { filterInjectionRecordsByCriteria, type InjectionQuantityFilter, type InjectionShiftFilter } from '../domain/injectionRange';
 
 const emptyRecord = {
@@ -35,6 +37,10 @@ export const QualityInjection: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [indexFallback, setIndexFallback] = useState(false);
   const [machines, setMachines] = useState<QualityInjectionMachine[]>([]);
+  const [items, setItems] = useState<QualityNamedReason[]>([]);
+  const [selectedMachineIds, setSelectedMachineIds] = useState<string[]>([]);
+  const [editingMachineId, setEditingMachineId] = useState('');
+  const [editingMachineName, setEditingMachineName] = useState('');
   const [form, setForm] = useState<InjectionQualityInput>({ ...emptyRecord, date: today });
   const [editingId, setEditingId] = useState('');
   const [loading, setLoading] = useState(true);
@@ -52,12 +58,16 @@ export const QualityInjection: React.FC = () => {
   const dateRangeChanged = dateFrom !== appliedRange.from || dateTo !== appliedRange.to;
   const quantityMismatch = form.totalQuantity !== form.acceptedQuantity + form.rejectedQuantity;
   const activeMachines = machines.filter((machine) => machine.isActive !== false);
+  const activeItems = items.filter((item) => item.isActive !== false);
   const editingRow = editingId ? rows.find((row) => row.id === editingId) : undefined;
   const editingLegacyShift = editingRow !== undefined
     && !INJECTION_SHIFTS.some((shift) => shift === normalizeInjectionShift(editingRow.shift));
   const selectedInactiveMachine = editingRow?.machineNumber === form.machineNumber
     && !activeMachines.some((machine) => machine.name === form.machineNumber);
+  const selectedInactiveItem = editingRow?.itemName === form.itemName
+    && !activeItems.some((item) => item.name === form.itemName);
   const machineValid = activeMachines.some((machine) => machine.name === form.machineNumber) || selectedInactiveMachine;
+  const itemValid = activeItems.some((item) => item.name === form.itemName) || selectedInactiveItem;
   const shiftValid = INJECTION_SHIFTS.some((shift) => shift === form.shift);
 
   const load = async () => {
@@ -85,8 +95,13 @@ export const QualityInjection: React.FC = () => {
     setOptionsReady(false);
     setOptionsError('');
     try {
-      const nextMachines = await qualityInjectionService.listMachines(true);
+      if (canManage) await qualityInjectionService.ensureDefaultItems();
+      const [nextMachines, nextItems] = await Promise.all([
+        qualityInjectionService.listMachines(true),
+        qualityInjectionService.listItems(),
+      ]);
       setMachines(nextMachines);
+      setItems(nextItems);
       setOptionsReady(true);
     } catch (error) {
       setOptionsError(qualityUserMessage(error, 'تعذر تحميل قوائم الماكينات والورديات.'));
@@ -364,46 +379,146 @@ export const QualityInjection: React.FC = () => {
       </div>
 
       {canManage ? (
-        <details className="qms-card" style={{ marginBottom: 12 }}>
-          <summary className="qms-label" style={{ cursor: 'pointer' }}>
-            إدارة أرقام الماكينات ({activeMachines.length} نشطة)
-          </summary>
-          <div className="qms-row" style={{ marginTop: 10 }}>
-            <label>
-              <span className="qms-label">رقم ماكينة جديد</span>
-              <input
-                className="qms-input"
-                maxLength={80}
-                value={machineDraft}
-                onChange={(event) => setMachineDraft(event.target.value)}
-                placeholder="مثال: 1"
-              />
-            </label>
-            <button
-              type="button"
-              className="qms-btn qms-btn-primary"
-              disabled={machineSaving || !machineDraft.trim()}
-              onClick={() => void saveMachineNumber()}
-            >
-              {machineSaving ? 'جارٍ الحفظ…' : 'إضافة ماكينة'}
-            </button>
-          </div>
-          {optionsError ? (
-            <div role="alert">
-              <p className="qms-error">{optionsError}</p>
-              <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void loadOptions().catch(() => undefined)}>إعادة تحميل القوائم</button>
-            </div>
-          ) : null}
-          {machines.length === 0 && !optionsLoading && !optionsError ? <p className="qms-muted">لم تُضف أرقام ماكينات بعد.</p> : null}
-          {machines.map((machine) => (
-            <div key={machine.id} className="qms-row" style={{ justifyContent: 'space-between', marginTop: 8 }}>
-              <span>{machine.name}{machine.isActive === false ? ' — موقوفة' : ''}</span>
-              <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void toggleMachine(machine)}>
-                {machine.isActive === false ? 'تفعيل' : 'إيقاف'}
+        <>
+          <details className="qms-card" style={{ marginBottom: 12 }}>
+            <summary className="qms-label" style={{ cursor: 'pointer' }}>
+              إدارة أرقام الماكينات ({activeMachines.length} نشطة) <span aria-hidden="true">▾</span>
+            </summary>
+            <div className="qms-row" style={{ marginTop: 10 }}>
+              <label>
+                <span className="qms-label">رقم ماكينة جديد</span>
+                <input
+                  className="qms-input"
+                  maxLength={80}
+                  value={machineDraft}
+                  onChange={(event) => setMachineDraft(event.target.value)}
+                  placeholder="مثال: 1"
+                />
+              </label>
+              <button
+                type="button"
+                className="qms-btn qms-btn-primary"
+                disabled={machineSaving || !machineDraft.trim()}
+                onClick={() => void saveMachineNumber()}
+              >
+                {machineSaving ? 'جارٍ الحفظ…' : 'إضافة ماكينة'}
               </button>
             </div>
-          ))}
-        </details>
+            {selectedMachineIds.length > 0 ? (
+              <div className="qms-row" style={{ justifyContent: 'space-between', marginTop: 10 }}>
+                <span className="qms-muted">تم تحديد {selectedMachineIds.length} رقم ماكينة</span>
+                <button type="button" className="qms-btn qms-btn-ghost" disabled={machineSaving} onClick={async () => {
+                  if (!window.confirm(`حذف ${selectedMachineIds.length} رقم ماكينة محددًا؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+                  setMachineSaving(true);
+                  try {
+                    await qualityInjectionService.removeManyMachines(selectedMachineIds);
+                    setSelectedMachineIds([]);
+                    await loadOptions();
+                    toast.success('تم حذف أرقام الماكينات المحددة.');
+                  } catch (error) {
+                    toast.error(qualityUserMessage(error, 'تعذر حذف أرقام الماكينات.'));
+                  } finally {
+                    setMachineSaving(false);
+                  }
+                }}>حذف المحدد ({selectedMachineIds.length})</button>
+              </div>
+            ) : null}
+            {optionsError ? (
+              <div role="alert">
+                <p className="qms-error">{optionsError}</p>
+                <button type="button" className="qms-btn qms-btn-ghost" onClick={() => void loadOptions().catch(() => undefined)}>إعادة تحميل القوائم</button>
+              </div>
+            ) : null}
+            {machines.length === 0 && !optionsLoading && !optionsError ? <p className="qms-muted">لم تُضف أرقام ماكينات بعد.</p> : null}
+            {machines.map((machine) => (
+              <div key={machine.id} className="qms-row" style={{ alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+                <div className="qms-row" style={{ alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    aria-label={`تحديد رقم الماكينة ${machine.name}`}
+                    checked={selectedMachineIds.includes(machine.id)}
+                    disabled={machineSaving}
+                    onChange={() => setSelectedMachineIds((current) =>
+                      current.includes(machine.id)
+                        ? current.filter((id) => id !== machine.id)
+                        : [...current, machine.id],
+                    )}
+                  />
+                  {editingMachineId === machine.id ? (
+                    <input
+                      className="qms-input"
+                      maxLength={80}
+                      value={editingMachineName}
+                      onChange={(event) => setEditingMachineName(event.target.value)}
+                    />
+                  ) : (
+                    <span>{machine.name}{machine.isActive === false ? ' — موقوفة' : ''}</span>
+                  )}
+                </div>
+                <div className="qms-row">
+                  {editingMachineId === machine.id ? (
+                    <button type="button" className="qms-btn qms-btn-ghost" disabled={machineSaving || !editingMachineName.trim()} onClick={async () => {
+                      setMachineSaving(true);
+                      try {
+                        await qualityInjectionService.renameMachine(machine.id, editingMachineName);
+                        setEditingMachineId('');
+                        await loadOptions();
+                        toast.success('تم تعديل رقم الماكينة.');
+                      } catch (error) {
+                        toast.error(qualityUserMessage(error, 'تعذر تعديل رقم الماكينة.'));
+                      } finally {
+                        setMachineSaving(false);
+                      }
+                    }}>حفظ</button>
+                  ) : (
+                    <button type="button" className="qms-btn qms-btn-ghost" disabled={machineSaving} onClick={() => {
+                      setEditingMachineId(machine.id);
+                      setEditingMachineName(machine.name);
+                    }}>تعديل</button>
+                  )}
+                  <button type="button" className="qms-btn qms-btn-ghost" disabled={machineSaving} onClick={() => void toggleMachine(machine)}>
+                    {machine.isActive === false ? 'تفعيل' : 'إيقاف'}
+                  </button>
+                  <button type="button" className="qms-btn qms-btn-ghost" disabled={machineSaving} onClick={async () => {
+                    if (!window.confirm(`حذف رقم الماكينة «${machine.name}»؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+                    setMachineSaving(true);
+                    try {
+                      await qualityInjectionService.removeMachine(machine.id);
+                      setSelectedMachineIds((current) => current.filter((id) => id !== machine.id));
+                      await loadOptions();
+                      toast.success('تم حذف رقم الماكينة.');
+                    } catch (error) {
+                      toast.error(qualityUserMessage(error, 'تعذر حذف رقم الماكينة.'));
+                    } finally {
+                      setMachineSaving(false);
+                    }
+                  }}>حذف</button>
+                </div>
+              </div>
+            ))}
+          </details>
+
+          <details className="qms-card" style={{ marginBottom: 12 }}>
+            <summary className="qms-label" style={{ cursor: 'pointer' }}>
+              إدارة أصناف الحقن ({activeItems.length} نشطة) <span aria-hidden="true">▾</span>
+            </summary>
+            <div style={{ marginTop: 10 }}>
+              <QualityNameCatalog
+                title=""
+                placeholder="اسم صنف الحقن"
+                emptyLabel="لا توجد أصناف محفوظة بعد."
+                maxLength={150}
+                names={items}
+                canManage={canManage}
+                onCreate={(name) => qualityInjectionItemService.create(name).then(loadOptions)}
+                onRename={(id, name) => qualityInjectionItemService.rename(id, name).then(loadOptions)}
+                onRemove={(id) => qualityInjectionItemService.remove(id).then(loadOptions)}
+                onRemoveMany={(ids) => qualityInjectionItemService.removeMany(ids).then(async () => loadOptions()).then(() => undefined)}
+                onSetActive={(id, isActive) => qualityInjectionItemService.setActive(id, isActive).then(loadOptions)}
+              />
+            </div>
+          </details>
+        </>
       ) : null}
 
       <section className="qms-card" style={{ marginBottom: 12 }}>
@@ -424,7 +539,16 @@ export const QualityInjection: React.FC = () => {
           </label>
           <label>
             <span className="qms-label">اسم الصنف</span>
-            <input className="qms-input" maxLength={150} value={form.itemName} onChange={(event) => setForm({ ...form, itemName: event.target.value })} />
+            <select
+              className="qms-input"
+              value={form.itemName}
+              disabled={optionsLoading || !optionsReady || saving}
+              onChange={(event) => setForm({ ...form, itemName: event.target.value })}
+            >
+              <option value="">— اختر الصنف —</option>
+              {selectedInactiveItem ? <option value={form.itemName}>{form.itemName} — موقوف</option> : null}
+              {activeItems.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+            </select>
           </label>
           <label>
             <span className="qms-label">التاريخ</span>
@@ -468,7 +592,7 @@ export const QualityInjection: React.FC = () => {
           </p>
         ) : null}
         <div className="qms-row" style={{ marginTop: 10 }}>
-          <button type="button" className="qms-btn qms-btn-primary" disabled={saving || !canManage || quantityMismatch || !optionsReady || !machineValid || !shiftValid} onClick={() => void save()}>
+          <button type="button" className="qms-btn qms-btn-primary" disabled={saving || !canManage || quantityMismatch || !optionsReady || !machineValid || !itemValid || !shiftValid} onClick={() => void save()}>
             {saving ? 'جارٍ الحفظ…' : editingId ? 'حفظ التعديل' : 'إضافة السجل'}
           </button>
           {editingId ? (

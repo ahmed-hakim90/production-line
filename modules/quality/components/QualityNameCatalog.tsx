@@ -14,6 +14,7 @@ export function QualityNameCatalog({
   onRename,
   onRemove,
   onSetActive,
+  onRemoveMany,
 }: {
   title: string;
   placeholder: string;
@@ -25,11 +26,13 @@ export function QualityNameCatalog({
   onRename: (id: string, name: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onSetActive?: (id: string, isActive: boolean) => Promise<void>;
+  onRemoveMany?: (ids: string[]) => Promise<void>;
 }) {
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState('');
   const [editingName, setEditingName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
@@ -58,9 +61,35 @@ export function QualityNameCatalog({
           })}
         >إضافة</button>
       </div>
+      {onRemoveMany && selectedIds.length > 0 ? (
+        <div className="qms-row" style={{ justifyContent: 'space-between', marginTop: 8 }}>
+          <span className="qms-muted">تم تحديد {selectedIds.length}</span>
+          <button type="button" className="qms-btn qms-btn-ghost" disabled={busy} onClick={() => {
+            if (!window.confirm(`حذف ${selectedIds.length} عنصرًا محددًا؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+            void run(async () => {
+              await onRemoveMany(selectedIds);
+              setSelectedIds([]);
+              toast.success('تم حذف العناصر المحددة');
+            });
+          }}>حذف المحدد ({selectedIds.length})</button>
+        </div>
+      ) : null}
       <ul>
         {names.map((reason) => (
           <li key={reason.id} className="qms-row">
+            {onRemoveMany ? (
+              <input
+                type="checkbox"
+                aria-label={`تحديد ${reason.name}`}
+                checked={selectedIds.includes(reason.id)}
+                disabled={busy}
+                onChange={() => setSelectedIds((current) =>
+                  current.includes(reason.id)
+                    ? current.filter((id) => id !== reason.id)
+                    : [...current, reason.id],
+                )}
+              />
+            ) : null}
             {editingId === reason.id ? (
               <input className="qms-input" maxLength={maxLength} value={editingName} onChange={(event) => setEditingName(event.target.value)} />
             ) : <span>{reason.name}{reason.isActive === false ? ' (موقوف)' : ''}</span>}
@@ -85,6 +114,7 @@ export function QualityNameCatalog({
             ) : null}
             {canManage ? (
               <button type="button" className="qms-btn qms-btn-ghost" disabled={busy} onClick={() => void run(async () => {
+                if (!window.confirm(`حذف «${reason.name}» من القائمة؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
                 await onRemove(reason.id);
                 toast.success('تم الحذف من القائمة');
               })}>حذف</button>

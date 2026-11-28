@@ -1,4 +1,5 @@
-import { addDoc, deleteDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, deleteDoc, getDocs, query, serverTimestamp, updateDoc, where, writeBatch } from 'firebase/firestore';
+import { db } from '@/services/firebase';
 import { namedCatalogKey, normalizeNamedCatalogLabel, normalizeSecondSortReturn } from '../domain/namedCatalog';
 import type { QualityNamedReason, QualitySecondSortReturn } from '../model';
 import {
@@ -95,6 +96,19 @@ function nameCatalog(spec: CatalogSpec) {
       const current = await readQualityDoc<QualityNamedReason>(spec.collectionName, id);
       await deleteDoc(qmsDoc(spec.collectionName, id));
       await auditQuality(spec.auditAction, `${spec.auditLabel}: حذف`, { id, name: current.name });
+    },
+
+    async removeMany(ids: string[]): Promise<number> {
+      assertQualityPermission(spec.manage);
+      if (ids.length === 0) return 0;
+      if (ids.length > 400) throw new Error('الحد الأقصى للحذف الجماعي هو 400 عنصر.');
+      const uniqueIds = [...new Set(ids)];
+      await Promise.all(uniqueIds.map((id) => readQualityDoc<QualityNamedReason>(spec.collectionName, id)));
+      if (!db) throw new Error('خدمة البيانات غير متاحة.');
+      const batch = writeBatch(db);
+      uniqueIds.forEach((id) => batch.delete(qmsDoc(spec.collectionName, id)));
+      await batch.commit();
+      return uniqueIds.length;
     },
 
     async setActive(id: string, isActive: boolean): Promise<void> {
@@ -229,6 +243,18 @@ export const qualityPlasticItemService = nameCatalog({
   duplicateMessage: 'الصنف موجود بالفعل.',
   auditAction: 'QUALITY_INCOMING_CATALOG',
   auditLabel: 'صنف بلاستيك',
+  maxLength: 150,
+  trackActive: true,
+});
+
+export const qualityInjectionItemService = nameCatalog({
+  collectionName: QMS_COLLECTIONS.INJECTION_ITEMS,
+  view: 'quality.incoming.view',
+  manage: 'quality.incoming.manage',
+  emptyMessage: 'اكتب اسم الصنف.',
+  duplicateMessage: 'الصنف موجود بالفعل.',
+  auditAction: 'QUALITY_INCOMING_CATALOG',
+  auditLabel: 'صنف حقن',
   maxLength: 150,
   trackActive: true,
 });
